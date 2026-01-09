@@ -10,7 +10,7 @@ Backend desarrollado con Spring Boot siguiendo arquitectura hexagonal (Ports & A
 
 ## Clonar repositorio
 - git clone https://github.com/WilliamsBD8/sigcon-backend.git
-- cd backend
+- cd sigcon-backend
 
 ## Ejecutar con Docker (recomendado)
 - ./mvnw clean package -DskipTests
