@@ -22,13 +22,14 @@ public class DataInitializer {
     CommandLineRunner initData() {
         return args -> {
 
-            // Crear permisos base (EJEMPLOO)
-            Permission verDocumentos = createPermission("VER_DOCUMENTOS_ESTUDIANTE");
+            // Crear permisos base
+            Permission viewRoles = createPermission("VIEW_ROLES");
+            Permission createRoles = createPermission("CREATE_ROLE");
 
 
 
             // Crear roles y asignar permisos
-            createRole("SUPERADMIN", Set.of(verDocumentos));
+            createRole("SUPERADMIN", Set.of(viewRoles, createRoles));
 
             createRole("USER", Set.of());
 

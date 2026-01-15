@@ -8,6 +8,7 @@ import com.sigcon.backend.users.domain.model.BlackListedToken;
 import com.sigcon.backend.users.domain.model.PasswordResetToken;
 import com.sigcon.backend.users.domain.model.Role;
 import com.sigcon.backend.users.domain.model.User;
+import com.sigcon.backend.users.domain.model.enums.Status;
 import com.sigcon.backend.users.domain.repository.BlackListedTokenRepository;
 import com.sigcon.backend.users.domain.repository.PasswordResetTokenRepository;
 import com.sigcon.backend.users.domain.repository.RoleRepository;
@@ -67,6 +68,7 @@ public class AuthService {
                 .email(email.toLowerCase())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .roles(Set.of(role))
+                .status(Status.ACTIVE)
                 .creationDate(LocalDateTime.now())
                 .lastUpdateDate(LocalDateTime.now())
                 .build();
@@ -92,7 +94,7 @@ public class AuthService {
 
         } catch (AuthenticationException e) {
             return ResponseEntity.badRequest()
-                    .body("Credenciales incorrectas. Por favor, verifica tu correo institucional y contraseña.");
+                    .body("Credenciales incorrectas. Por favor, verifica tu correo electrónico y contraseña.");
         }
     }
 
