@@ -1,5 +1,6 @@
 package com.sigcon.backend.users.domain.model;
 
+import com.sigcon.backend.users.domain.model.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -49,6 +50,9 @@ public class User implements UserDetails {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles;
+
+    @Enumerated(EnumType.STRING)
+    private Status status;
 
     private LocalDateTime creationDate;
 
@@ -103,6 +107,6 @@ public class User implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return this.status == Status.ACTIVE;
     }
 }

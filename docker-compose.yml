@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   backend:
     build: .
@@ -31,6 +33,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   pgadmin:
     image: dpage/pgadmin4
@@ -42,3 +46,15 @@ services:
       PGADMIN_DEFAULT_PASSWORD: admin
     depends_on:
       - db
+
+  adminer:
+    image: adminer
+    container_name: backend-adminer
+    restart: always
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
