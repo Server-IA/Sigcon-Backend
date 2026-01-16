@@ -1,0 +1,14 @@
+package com.sigcon.backend.parameters.application;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class UpdateParameterRequest {
+    private String colorValue; // Formato hexadecimal (ej: #FF5733 o FF5733)
+}
