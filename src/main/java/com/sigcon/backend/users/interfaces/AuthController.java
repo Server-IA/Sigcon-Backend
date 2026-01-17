@@ -1,7 +1,7 @@
 package com.sigcon.backend.users.interfaces;
 
-import com.sigcon.backend.users.application.AuthRequest;
-import com.sigcon.backend.users.application.ResetPasswordRequest;
+import com.sigcon.backend.users.application.auth.AuthRequest;
+import com.sigcon.backend.users.application.auth.ResetPasswordRequest;
 import com.sigcon.backend.users.domain.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

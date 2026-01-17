@@ -1,4 +1,4 @@
-package com.sigcon.backend.users.application;
+package com.sigcon.backend.users.application.role;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,4 +14,5 @@ import java.util.Set;
 public class RoleRequest {
     private String name;
     private Set<Long> permissionIds;
+    private String status;
 }
