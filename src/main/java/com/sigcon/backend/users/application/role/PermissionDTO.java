@@ -11,9 +11,10 @@ import java.util.Set;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class RoleRequest {
-    private Long id;
+public class PermissionDTO {
+
     private String name;
-    private Set<Long> permissionIds;
-    private String status;
+
+    private Set<Long> roleIds;
+
 }

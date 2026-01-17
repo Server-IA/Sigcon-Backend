@@ -22,6 +22,12 @@ public class UserController {
         return userService.getUsers(request, pageable);
     }
 
+    @GetMapping
+    public ResponseEntity<?> getUserInfo() {
+        return userService.getUserInfo();
+    }
+
+
     @PutMapping("/updateInfo")
     public ResponseEntity<?> updateInfo(@RequestBody UserDTO request){
         return userService.updateInfo(request);

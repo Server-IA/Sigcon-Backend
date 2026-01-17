@@ -86,6 +86,31 @@ public class UserService {
         return value == null || value.trim().isEmpty();
     }
 
+    public ResponseEntity<?> getUserInfo() {
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String email = auth.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        UserDTO response = new UserDTO();
+        response.setId(user.getId());
+        response.setName(user.getName());
+        response.setLastname(user.getLastname());
+        response.setEmail(user.getEmail());
+        response.setRole(user.getRoles().toString());
+        response.setStatus(user.getStatus());
+        response.setRoles(
+                user.getRoles()
+                        .stream()
+                        .map(Role::getName)
+                        .collect(Collectors.toSet())
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
     public ResponseEntity<?> updateInfo(UserDTO request) {
 
         if (request == null) {
