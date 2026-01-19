@@ -1,4 +1,4 @@
-package com.sigcon.backend.users.application;
+package com.sigcon.backend.users.application.role;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +11,10 @@ import java.util.Set;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class RoleRequest {
+public class PermissionDTO {
+
     private String name;
-    private Set<Long> permissionIds;
+
+    private Set<Long> roleIds;
+
 }

@@ -1,4 +1,4 @@
-package com.sigcon.backend.users.application;
+package com.sigcon.backend.users.application.auth;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

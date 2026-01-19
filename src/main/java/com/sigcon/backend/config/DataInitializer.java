@@ -2,6 +2,7 @@ package com.sigcon.backend.config;
 
 import com.sigcon.backend.users.domain.model.Permission;
 import com.sigcon.backend.users.domain.model.Role;
+import com.sigcon.backend.users.domain.model.enums.Status;
 import com.sigcon.backend.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.users.domain.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,13 +26,23 @@ public class DataInitializer {
             // Crear permisos base
             Permission viewRoles = createPermission("VIEW_ROLES");
             Permission createRoles = createPermission("CREATE_ROLE");
+            Permission updateRole = createPermission("UPDATE_ROLE");
+            Permission deleteRole = createPermission("DELETE_ROLE");
+            Permission assignRole = createPermission("ASSIGN_ROLE");
+            Permission viewUsers = createPermission("VIEW_USERS");
+            Permission updateUser = createPermission("UPDATE_USER");
+            Permission deleteUser = createPermission("DELETE_USER");
+            Permission createPermission = createPermission("CREATE_PERMISSION");
+            Permission viewPermissions = createPermission("VIEW_PERMISSIONS");
+            Permission assignPermission = createPermission("ASSIGN_PERMISSION");
+            Permission removePermission = createPermission("REMOVE_PERMISSION");
+
 
 
 
             // Crear roles y asignar permisos
-            createRole("SUPERADMIN", Set.of(viewRoles, createRoles));
-
-            createRole("USER", Set.of());
+            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission));
+            createOrUpdateRole("USER", Set.of());
 
 
 
@@ -45,14 +56,18 @@ public class DataInitializer {
                 ));
     }
 
-    private void createRole(String name,Set<Permission> permissions) {
-        roleRepository.findByName(name)
-                .orElseGet(() -> roleRepository.save(
-                        Role.builder()
-                                .name(name)
-                                .permissions(permissions)
-                                .build()
-                ));
+    private void createOrUpdateRole(String name, Set<Permission> permissions) {
+
+        Role role = roleRepository.findByName(name).orElseGet(() -> Role.builder().name(name).build());
+        role.setPermissions(permissions);
+
+
+        if (role.getStatus() == null) {
+            role.setStatus(Status.ACTIVE);
+        }
+
+        roleRepository.save(role);
     }
+
 
 }

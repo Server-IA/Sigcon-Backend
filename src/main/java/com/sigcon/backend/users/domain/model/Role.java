@@ -1,5 +1,6 @@
 package com.sigcon.backend.users.domain.model;
 
+import com.sigcon.backend.users.domain.model.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,4 +30,7 @@ public class Role {
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
     private Set<Permission> permissions;
+
+    @Enumerated(EnumType.STRING)
+    private Status status;
 }
