@@ -2,8 +2,8 @@ package com.sigcon.backend.users.domain.service;
 
 import com.sigcon.backend.config.EmailService;
 import com.sigcon.backend.security.JwtService;
-import com.sigcon.backend.users.application.AuthRequest;
-import com.sigcon.backend.users.application.ResetPasswordRequest;
+import com.sigcon.backend.users.application.auth.AuthRequest;
+import com.sigcon.backend.users.application.auth.ResetPasswordRequest;
 import com.sigcon.backend.users.domain.model.BlackListedToken;
 import com.sigcon.backend.users.domain.model.PasswordResetToken;
 import com.sigcon.backend.users.domain.model.Role;
