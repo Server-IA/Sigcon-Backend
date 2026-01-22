@@ -37,12 +37,13 @@ public class DataInitializer {
             Permission assignPermission = createPermission("ASSIGN_PERMISSION");
             Permission removePermission = createPermission("REMOVE_PERMISSION");
             Permission createChartOfAccount = createPermission("CREATE_CHART_OF_ACCOUNT");
+            Permission viewChartOfAccount = createPermission("VIEW_CHART_OF_ACCOUNT");
 
 
 
 
             // Crear roles y asignar permisos
-            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount));
+            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount));
             createOrUpdateRole("USER", Set.of());
 
 

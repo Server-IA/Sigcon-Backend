@@ -9,6 +9,8 @@ import com.sigcon.backend.accounting_lists.domain.model.enums.AccountStatus;
 import com.sigcon.backend.accounting_lists.domain.repository.ChartOfAccountRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -100,6 +102,32 @@ public class ChartOfAccountService {
         if (request.getNature() == null) {
             throw new IllegalArgumentException("Naturaleza de la cuenta no válida");
         }
+    }
+
+
+
+    public Page<ChartOfAccount> searchChartOfAccounts(ChartOfAccountDTO request, Pageable pageable) {
+
+        if (chartOfAccountRepository.count() == 0) {
+            throw new IllegalStateException("No existen cuentas registradas en el catálogo PUC");
+        }
+
+        Page<ChartOfAccount> result =
+                chartOfAccountRepository.searchChartOfAccounts(
+                        request.getCode(),
+                        request.getName(),
+                        request.getAccountClass(),
+                        request.getLevel(),
+                        request.getNature(),
+                        request.getStatus(),
+                        pageable
+                );
+
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException("No existen cuentas con estos criterios");
+        }
+
+        return result;
     }
 
 
