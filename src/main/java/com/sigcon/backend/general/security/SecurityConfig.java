@@ -11,6 +11,11 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
 
 @Configuration
 @EnableMethodSecurity
@@ -21,6 +26,55 @@ public class SecurityConfig {
     private final AuthenticationProvider authenticationProvider;
     private final BlackListFilter blackListFilter;
 
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        
+        // Orígenes permitidos
+        configuration.setAllowedOrigins(Arrays.asList(
+                "http://localhost:5173",  // Vite default port
+                "http://localhost:3000",  // React default port
+                "http://localhost:5174",  // Vite alternate port
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000",
+                "http://157.245.186.245:8000",  // Development environment
+                "https://api.example.com"  // Production (ajustar según necesidad)
+        ));
+        
+        // Métodos HTTP permitidos
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        
+        // Headers permitidos
+        configuration.setAllowedHeaders(Arrays.asList(
+                "Authorization",
+                "Content-Type",
+                "X-Requested-With",
+                "Accept",
+                "Origin",
+                "Access-Control-Request-Method",
+                "Access-Control-Request-Headers"
+        ));
+        
+        // Headers expuestos al cliente
+        configuration.setExposedHeaders(Arrays.asList(
+                "Authorization",
+                "Content-Type",
+                "Access-Control-Allow-Origin",
+                "Access-Control-Allow-Credentials"
+        ));
+        
+        // Permitir credenciales (cookies, auth headers)
+        configuration.setAllowCredentials(true);
+        
+        // Tiempo de cache para preflight requests
+        configuration.setMaxAge(3600L);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        
+        return source;
+    }
 
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
@@ -40,6 +94,7 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authorize ->
                         authorize
                                 .requestMatchers("/auth/**").permitAll()
