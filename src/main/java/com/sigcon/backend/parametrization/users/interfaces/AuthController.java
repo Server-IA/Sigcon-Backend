@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -27,12 +29,23 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody AuthRequest request) {
         authService.sendResetPasswordLink(request);
-        return ResponseEntity.ok("Se envió un enlace de recuperación al correo institucional ingresado.");
+        return ResponseEntity.ok(
+                Map.of(
+                        "success", true,
+                        "message", "Si el correo electrónico existe en nuestro sistema, se ha enviado un enlace para restablecer la contraseña."
+                )
+        );
     }
+
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
-        return ResponseEntity.ok("Tu contraseña fue actualizada correctamente.");
+        return ResponseEntity.ok(
+                Map.of(
+                        "success", true,
+                        "message", "La contraseña se ha restablecido correctamente."
+                )
+        );
     }
 
     @PostMapping("/logout")

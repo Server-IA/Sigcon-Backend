@@ -23,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,7 +48,9 @@ public class AuthService {
                 request.getEmail().isEmpty() ||
                 request.getPassword().isEmpty()) {
 
-            return ResponseEntity.badRequest().body("Todos los campos son obligatorios (nombre, apellido, correo y contraseña)");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false,
+                            "message", "Todos los campos son obligatorios(nombre, apellido, correo electrónico y contraseña)."));
         }
 
 
@@ -55,7 +58,9 @@ public class AuthService {
 
 
         if (userRepository.existsByEmail(email)) {
-            return ResponseEntity.badRequest().body("Este correo ya está en uso");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false,
+                            "message", "El correo electrónico ya está registrado. Por favor, utiliza otro correo."));
         }
 
         Role role = roleRepository.findByName("USER")
@@ -77,7 +82,10 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
 
-        return ResponseEntity.ok(token);
+        return ResponseEntity.ok(
+                Map.of("success", true,
+                        "token", token
+        ));
     }
 
     public ResponseEntity<?> login(AuthRequest request){
@@ -90,11 +98,18 @@ public class AuthService {
 
             String token = jwtService.generateToken(user);
 
-            return ResponseEntity.ok(token);
+            return ResponseEntity.ok(
+                    Map.of("success", true,
+                            "token", token
+                    )
+            );
 
         } catch (AuthenticationException e) {
             return ResponseEntity.badRequest()
-                    .body("Credenciales incorrectas. Por favor, verifica tu correo electrónico y contraseña.");
+                    .body(
+                            Map.of("success", false,
+                                    "message", "Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña.")
+                    );
         }
     }
 
@@ -112,7 +127,7 @@ public class AuthService {
                 .build();
         tokenRepository.save(resetToken);
 
-        String resetLink = "http://localhost:8080/auth/reset-password?token=" + token; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
+        String resetLink = "http://localhost:5173/reset-password"; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
 
         String subject = "Restablecimiento de contraseña - SIGCON";
         String message = """
@@ -122,13 +137,15 @@ public class AuthService {
                 
                 Haz clic en el siguiente enlace para continuar:
                 %s
+                Tu token de restablecimiento de contraseña es: %s
                 
-                Este enlace expirará en 15 minutos.
+                
+                Este enlace expirará en 10 minutos.
                 
                 Si no fuiste tú, ignora este mensaje.
                 
                 Equipo SIGCON
-                """.formatted(user.getName(), resetLink);
+                """.formatted(user.getName(), resetLink, token);
 
         emailService.sendEmail(user.getEmail(), subject, message);
 
@@ -152,15 +169,30 @@ public class AuthService {
 
     public ResponseEntity<?> logout(String token){
         if (token == null || token.isEmpty()) {
-            return ResponseEntity.badRequest().body("Token no proporcionado.");
+            return ResponseEntity.badRequest().body(
+                    Map.of(
+                            "success", false,
+                            "message", "Token no proporcionado para cerrar sesión."
+                    )
+            );
         }
 
         if (!blackListedTokenRepository.existsByToken(token)) {
             BlackListedToken blackListedToken = BlackListedToken.builder().token(token).build();
             blackListedTokenRepository.save(blackListedToken);
-            return ResponseEntity.ok("Cierre de sesión exitoso.");
+            return ResponseEntity.ok(
+                    Map.of(
+                            "success", true,
+                            "message", "Cierre de sesión exitoso."
+                    )
+            );
         } else {
-            return ResponseEntity.badRequest().body("El token ya ha sido invalidado.");
+            return ResponseEntity.badRequest().body(
+                    Map.of(
+                            "success", false,
+                            "message", "El token ya ha sido invalidado."
+                    )
+            );
         }
     }
 

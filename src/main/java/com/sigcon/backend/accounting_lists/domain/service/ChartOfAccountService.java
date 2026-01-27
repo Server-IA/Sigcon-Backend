@@ -105,7 +105,6 @@ public class ChartOfAccountService {
     }
 
 
-
     public Page<ChartOfAccount> searchChartOfAccounts(ChartOfAccountDTO request, Pageable pageable) {
 
         if (chartOfAccountRepository.count() == 0) {
