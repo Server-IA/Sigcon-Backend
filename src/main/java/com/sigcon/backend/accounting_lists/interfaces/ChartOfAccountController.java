@@ -79,22 +79,4 @@ public class ChartOfAccountController {
         }
     }
 
-    @GetMapping
-    @PreAuthorize( "hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT')")
-    public ResponseEntity<?> searchChartOfAccounts(@ModelAttribute ChartOfAccountDTO request, Pageable pageable) {
-        try {
-            Page<ChartOfAccount> result =
-                    chartOfAccountService.searchChartOfAccounts(request, pageable);
-
-            return ResponseEntity.ok(result);
-
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.ok(e.getMessage());
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error al consultar datos, intente nuevamente");
-        }
-    }
-
 }
