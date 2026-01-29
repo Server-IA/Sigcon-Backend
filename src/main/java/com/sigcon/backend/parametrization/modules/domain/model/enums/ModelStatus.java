@@ -1,6 +1,6 @@
 package com.sigcon.backend.parametrization.modules.domain.model.enums;
 
-public enum Status {
+public enum ModelStatus {
     ACTIVE,
     INACTIVE
 }

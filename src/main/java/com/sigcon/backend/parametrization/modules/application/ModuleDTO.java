@@ -1,6 +1,9 @@
 package com.sigcon.backend.parametrization.modules.application;
 
-import com.sigcon.backend.parametrization.modules.domain.model.enums.Status;
+import java.util.List;
+
+import com.sigcon.backend.parametrization.menu.Menu;
+import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,6 +23,8 @@ public class ModuleDTO {
     private String url;
     private String icon;
     private Integer position;
-    private Status status;
+    private ModelStatus status;
+
+    private List<Menu> menus;
 
 }

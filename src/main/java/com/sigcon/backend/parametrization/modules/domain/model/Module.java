@@ -1,6 +1,6 @@
 package com.sigcon.backend.parametrization.modules.domain.model;
 
-import com.sigcon.backend.parametrization.modules.domain.model.enums.Status;
+import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
@@ -25,8 +25,7 @@ public class Module {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @NotNull
+    
     @Column(unique = true)
     @NotBlank(message = "El nombre es obligatorio")
     private String name;
@@ -34,18 +33,17 @@ public class Module {
     @Nullable
     private String description;
 
-    @NotNull
     @NotBlank(message = "La URL es obligatoria")
     private String url;
 
     @Nullable
     private String icon;
 
-    @NotNull
+    @NotNull(message = "La posición es obligatoria")
     @Min(value = 1, message = "La posición debe ser mayor a 0")
     private Integer position = 1;
 
     @Builder.Default
-    private Status status = Status.ACTIVE;
+    private ModelStatus status = ModelStatus.ACTIVE;
 
 }

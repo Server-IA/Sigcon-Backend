@@ -5,7 +5,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
-import com.sigcon.backend.parametrization.modules.domain.model.enums.Status;
+import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +17,7 @@ import org.springframework.data.domain.Pageable;
 public interface ModuleRepository extends JpaRepository<Module, Long> {
 
     Optional<Module> findByName(String name);
-    List<Module> findAllByStatus(Status status);
+    List<Module> findAllByStatus(ModelStatus status);
 
     @Query("""
         SELECT m
@@ -30,13 +31,26 @@ public interface ModuleRepository extends JpaRepository<Module, Long> {
     """)
 
     Page<Module> searchModules(
-        @Param("name") String name,
-        @Param("description") String description,
-        @Param("url") String url,
-        @Param("icon") String icon,
-        @Param("position") Integer position,
-        @Param("status") Status status,
+        String name,
+        String description,
+        String url,
+        String icon,
+        Integer position,
+        ModelStatus status,
         Pageable pageable
     );
-    boolean existsByName(String name);
+    
+    @Query(value = """
+        SELECT DISTINCT m.*
+        FROM modules m
+        WHERE m.status = :status
+          AND EXISTS (
+                SELECT 1
+                FROM menus menu
+                WHERE menu.module_id = m.id
+                    AND menu.status = :menuStatus
+          )
+        ORDER BY m.position ASC
+    """, nativeQuery = true)
+    List<Module> findActiveModulesWithActiveMenus(ModelStatus status, MenuStatus menuStatus);
 }
