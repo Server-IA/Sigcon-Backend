@@ -6,6 +6,7 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
 import com.sigcon.backend.parametrization.modules.domain.service.ModuleService;
 
@@ -21,13 +22,20 @@ public class ModuleController {
     private final ModuleService moduleService;
 
     @PostMapping
-    public ResponseEntity<?> getModules(@RequestBody(required = false) ModuleDTO request, Pageable pageable) {
-        return moduleService.getModulesPaged(request, pageable);
+    public ResponseEntity<?> getModules(
+        @RequestBody ModuleDataTableRequest dtRequest
+    ) {
+        return moduleService.getModulesPaged(dtRequest);
     }
 
     @PostMapping("/store")
     public ResponseEntity<?> storeModule(@Valid @RequestBody Module request, BindingResult bindingResult) {
         return moduleService.storeModule(request, bindingResult);
+    }
+
+    @GetMapping("/menu")
+    public ResponseEntity<?> getModulesMenu() {
+        return moduleService.getModulesMenu();
     }
 
 }

@@ -1,53 +1,30 @@
 package com.sigcon.backend.parametrization.menu;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+
 public class Menu {
 
     private Long id;
     private String label;
     private String icon;
     private String path;
-    private Integer order;
+    private Integer menuOrder;
     private Long parentId;
-    private Boolean active;
-
-    public Menu(Long id, String label, String icon, String path, Integer order, Long parentId, Boolean active) {
-        this.id = id;
-        this.label = label;
-        this.icon = icon;
-        this.path = path;
-        this.order = order;
-        this.parentId = parentId;
-        this.active = active;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public String getIcon() {
-        return icon;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public Integer getOrder() {
-        return order;
-    }
-
-    public Long getParentId() {
-        return parentId;
-    }
-
-    public Boolean getActive() {
-        return active;
-    }
-
-    
-    
+    private Long moduleId;
+    private MenuStatus status;
+    private List<Menu> childrens = new ArrayList<>();
+    private String component;
 }

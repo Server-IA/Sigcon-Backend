@@ -3,19 +3,22 @@ package com.sigcon.backend.parametrization.modules.domain.service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+import com.sigcon.backend.parametrization.menu.service.MenuService;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
+import com.sigcon.backend.parametrization.modules.domain.model.DataTableResponse;
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
-import com.sigcon.backend.parametrization.modules.domain.model.enums.Status;
+import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 
 import jakarta.validation.Valid;
@@ -26,28 +29,77 @@ import lombok.RequiredArgsConstructor;
 public class ModuleService {
 
     private final ModuleRepository moduleRepository;
+    private final MenuService menuService;
 
-    public ResponseEntity<?> getModulesPaged(ModuleDTO request, Pageable pageable) {
+    public ResponseEntity<?> getModulesPaged(ModuleDataTableRequest request) {
         try {
-
+    
+            int start  = Math.max(0, request.getStart());
+            int length = request.getLength();
+    
             Page<Module> modules;
-
-            if (request == null || noFilters(request)) {
-                modules = moduleRepository.findAll(pageable);
-            } else {
-                modules = moduleRepository.searchModules(
+    
+            // 🔥 CASO: traer TODOS los registros
+            if (length == -1) {
+    
+                List<Module> all = noFilters(request)
+                    ? moduleRepository.findAll()
+                    : moduleRepository.searchModules(
+                        request.getName(),
+                        request.getDescription(),
+                        request.getUrl(),
+                        request.getIcon(),
+                        request.getPosition(),
+                        parseStatus(request.getStatus()),
+                        Pageable.unpaged()
+                    ).getContent();
+    
+                return ResponseEntity.ok(
+                    DataTableResponse.from(all, request.getDraw())
+                );
+            }
+    
+            // 🔹 paginación normal
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
+            Pageable pageable = PageRequest.of(page, safeLength);
+    
+            modules = noFilters(request)
+                ? moduleRepository.findAll(pageable)
+                : moduleRepository.searchModules(
                     request.getName(),
                     request.getDescription(),
                     request.getUrl(),
                     request.getIcon(),
                     request.getPosition(),
-                    request.getStatus(),
+                    parseStatus(request.getStatus()),
                     pageable
                 );
-            }
+    
+            return ResponseEntity.ok(
+                DataTableResponse.from(modules, request.getDraw())
+            );
+    
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error al obtener los módulos");
+        }
+    }
+    
 
-            Page<ModuleDTO> response = modules.map(module -> {
-                return ModuleDTO.builder()
+    public ResponseEntity<?> getModules(ModuleDTO request) {
+        try {
+            List<Module> modules = moduleRepository.findAllByStatus(ModelStatus.ACTIVE);
+            return ResponseEntity.ok(modules);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error al obtener los módulos");
+        }
+    }
+
+    public ResponseEntity<?> getModulesMenu() {
+        try {
+            List<Module> modules = moduleRepository.findActiveModulesWithActiveMenus(ModelStatus.ACTIVE, MenuStatus.ACTIVE);
+            List<ModuleDTO> moduleDTOs = modules.stream()
+                .map(module -> ModuleDTO.builder()
                     .id(module.getId())
                     .name(module.getName())
                     .description(module.getDescription())
@@ -55,22 +107,15 @@ public class ModuleService {
                     .icon(module.getIcon())
                     .position(module.getPosition())
                     .status(module.getStatus())
-                    .build();
-            });
+                    .menus(
+                        menuService.getMenusByModuleId(module.getId())
+                    )
+                    .build())
+                .toList();
 
-            return ResponseEntity.ok(response);
-
+            return ResponseEntity.ok(moduleDTOs);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error al obtener los módulos");
-        }
-    }
-
-    public ResponseEntity<?> getModules(ModuleDTO request) {
-        try {
-            List<Module> modules = moduleRepository.findAllByStatus(Status.ACTIVE);
-            return ResponseEntity.ok(modules);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error al obtener los módulos");
+            return ResponseEntity.badRequest().body("Error al obtener los módulos del menú");
         }
     }
 
@@ -99,7 +144,7 @@ public class ModuleService {
         }
     }
     
-    private boolean noFilters(ModuleDTO request) {
+    private boolean noFilters(ModuleDataTableRequest request) {
         return isBlank(request.getName())
                 && isBlank(request.getDescription())
                 && isBlank(request.getUrl())
@@ -110,5 +155,16 @@ public class ModuleService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private ModelStatus parseStatus(String statusStr) {
+        if (statusStr == null || statusStr.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return ModelStatus.valueOf(statusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }
