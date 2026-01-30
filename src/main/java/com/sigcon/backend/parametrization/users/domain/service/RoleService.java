@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -47,11 +48,15 @@ public class RoleService {
     public ResponseEntity<?> createRole(RoleRequest request) {
 
         if (request.getName() == null || request.getName().isBlank()) {
-            return ResponseEntity.badRequest().body("El nombre del rol es obligatorio");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El nombre del rol es obligatorio")
+            );
         }
 
         if (roleRepository.findByName(request.getName()).isPresent()) {
-            return ResponseEntity.badRequest().body("El rol ya existe.");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El rol ya existe.")
+            );
         }
 
         Set<Permission> permissions = Set.of();
@@ -69,19 +74,28 @@ public class RoleService {
 
         roleRepository.save(role);
 
-        return ResponseEntity.ok("Rol creado exitosamente");
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Rol creado exitosamente")
+        );
     }
 
     public ResponseEntity<?> updateRole(Long id, RoleRequest request){
+
         if (request.getName() == null || request.getName().isBlank()) {
-            return ResponseEntity.badRequest().body("El nombre del rol es obligatorio");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El nombre del rol es obligatorio")
+            );
         }
 
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
-        if (roleRepository.findByName(request.getName()).isPresent() && !role.getName().equalsIgnoreCase(request.getName())) {
-            return ResponseEntity.badRequest().body("El rol ya existe.");
+        if (roleRepository.findByName(request.getName()).isPresent()
+                && !role.getName().equalsIgnoreCase(request.getName())) {
+
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El rol ya existe.")
+            );
         }
 
         Set<Permission> permissions = Set.of();
@@ -95,10 +109,11 @@ public class RoleService {
         role.setPermissions(permissions);
         role.setStatus(Status.valueOf(request.getStatus()));
 
-
         roleRepository.save(role);
 
-        return ResponseEntity.ok("Rol actualizado exitosamente");
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Rol actualizado exitosamente")
+        );
     }
 
     public ResponseEntity<?> deleteRole(Long id) {
@@ -107,19 +122,25 @@ public class RoleService {
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
         if (role.getStatus() == Status.INACTIVE) {
-            return ResponseEntity.badRequest().body("El rol ya se encuentra inactivo");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El rol ya se encuentra inactivo")
+            );
         }
 
         boolean hasUsers = !userRepository.findAllByRoles_Name(role.getName()).isEmpty();
 
         if (hasUsers) {
-            return ResponseEntity.badRequest().body("No se puede eliminar el rol porque está asociado a usuarios");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "No se puede eliminar el rol porque está asociado a usuarios")
+            );
         }
 
         role.setStatus(Status.INACTIVE);
         roleRepository.save(role);
 
-        return ResponseEntity.ok("Rol eliminado exitosamente");
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Rol eliminado exitosamente")
+        );
     }
 
     public ResponseEntity<?> assignRoleToUser(UpdateUserRole request){
@@ -135,21 +156,29 @@ public class RoleService {
         user.setLastUpdateDate(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok("Rol asignado correctamente al usuario.");
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Rol asignado correctamente al usuario.")
+        );
     }
 
     public ResponseEntity<?> createPermission(PermissionDTO request){
 
         if (request == null || request.getName() == null || request.getName().isBlank()) {
-            return ResponseEntity.badRequest().body("El nombre del permiso es obligatorio");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El nombre del permiso es obligatorio")
+            );
         }
 
         if (permissionRepository.findByName(request.getName()).isPresent()) {
-            return ResponseEntity.badRequest().body("El permiso ya existe.");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "El permiso ya existe.")
+            );
         }
 
         Permission permission = permissionRepository.findByName(request.getName())
-                .orElseGet(() -> permissionRepository.save(Permission.builder().name(request.getName()).build()));
+                .orElseGet(() -> permissionRepository.save(
+                        Permission.builder().name(request.getName()).build()
+                ));
 
         if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
             Set<Role> roles = roleRepository.findAllById(request.getRoleIds())
@@ -163,8 +192,9 @@ public class RoleService {
 
         permissionRepository.save(permission);
 
-        return ResponseEntity.ok("Permiso creado exitosamente");
-
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Permiso creado exitosamente")
+        );
     }
 
     public ResponseEntity<?> getPermissions(Pageable pageable) {
@@ -173,7 +203,9 @@ public class RoleService {
             Page<Permission> permissions = permissionRepository.findAll(pageable);
 
             if (permissions.isEmpty()) {
-                return ResponseEntity.ok("No se encontraron permisos");
+                return ResponseEntity.ok(
+                        Map.of("success", true, "message", "No se encontraron permisos")
+                );
             }
 
             return ResponseEntity.ok(permissions);
@@ -181,7 +213,7 @@ public class RoleService {
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error al cargar permisos");
+                    .body(Map.of("success", false, "message", "Error al cargar permisos"));
         }
     }
 
@@ -196,12 +228,17 @@ public class RoleService {
         );
 
         if (permissions.isEmpty()) {
-            throw new IllegalArgumentException("No se encontraron permisos válidos");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "No se encontraron permisos válidos")
+            );
         }
 
         role.getPermissions().addAll(permissions);
         roleRepository.save(role);
-        return null;
+
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Permisos asignados correctamente al rol")
+        );
     }
 
     @Transactional
@@ -212,7 +249,9 @@ public class RoleService {
                     .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
             if (role.getPermissions().isEmpty()) {
-                return ResponseEntity.badRequest().body("El rol no tiene permisos asignados");
+                return ResponseEntity.badRequest().body(
+                        Map.of("success", false, "message", "El rol no tiene permisos asignados")
+                );
             }
 
             role.getPermissions().removeIf(
@@ -221,14 +260,18 @@ public class RoleService {
 
             roleRepository.save(role);
 
-            return ResponseEntity.ok("Permisos removidos correctamente del rol");
+            return ResponseEntity.ok(
+                    Map.of("success", true, "message", "Permisos removidos correctamente del rol")
+            );
 
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", e.getMessage())
+            );
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error al remover permisos del rol");
+                    .body(Map.of("success", false, "message", "Error al remover permisos del rol"));
         }
     }
 
