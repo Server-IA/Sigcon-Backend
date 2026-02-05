@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/roles")
 @RequiredArgsConstructor
@@ -74,13 +76,19 @@ public class RoleController {
 
         try {
             roleService.assignPermissions(request);
-            return ResponseEntity.ok("Permisos asignados correctamente al rol");
+            return ResponseEntity.ok(
+                    Map.of("success", true, "message", "Permisos asignados correctamente al rol")
+            );
 
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", e.getMessage())
+            );
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al asignar permisos al rol");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    Map.of("success", false, "message", "Error al asignar permisos al rol")
+            );
         }
     }
 
@@ -89,10 +97,5 @@ public class RoleController {
     public ResponseEntity<?> removePermissions(@RequestBody RoleRequest request) {
         return roleService.removePermissions(request);
     }
-
-
-
-
-
 
 }

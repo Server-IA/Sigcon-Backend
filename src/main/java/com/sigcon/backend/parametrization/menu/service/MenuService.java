@@ -1,20 +1,216 @@
 package com.sigcon.backend.parametrization.menu.service;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import com.sigcon.backend.parametrization.menu.port.in.MenuUseCase;
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
+import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
+import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.ErrorRespondJson;
+
+import jakarta.validation.Valid;
+
 import com.sigcon.backend.parametrization.menu.Menu;
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuDataTableRequest;
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
 public class MenuService implements MenuUseCase {
     private final MenuRepositoryPort menuRepositoryPort;
+    private final ModuleRepository moduleRepository;
 
-    public MenuService(MenuRepositoryPort menuRepositoryPort) {
+    public MenuService(MenuRepositoryPort menuRepositoryPort, ModuleRepository moduleRepository) {
         this.menuRepositoryPort = menuRepositoryPort;
+        this.moduleRepository = moduleRepository;
     }
 
     @Override
-    public List<Menu> getActiveMenus() {
-        return menuRepositoryPort.findActiveMenus();
+    public ResponseEntity<?> getMenusDataTable  (MenuDataTableRequest request) {
+
+        try{
+
+
+            int start  = Math.max(0, request.getStart());
+            int length = request.getLength();
+    
+            Page<Menu> menus;
+    
+            if (length == -1) {
+                List<Menu> all = noFilters(request)
+                    ? menuRepositoryPort.findMenusAllAndDeletedAtIsNull(Pageable.unpaged()).getContent()
+                    : menuRepositoryPort.findMenusAllFiltersAndDeletedAtIsNull(
+                        request.getLabel(),
+                        request.getDescription(),
+                        request.getUrl(),
+                        request.getIcon(),
+                        request.getPosition(),
+                        parseStatus(request.getStatus()),
+                        request.getModuleId(),
+                        request.getParentId(),
+                        Pageable.unpaged()
+                    ).getContent();
+    
+                List<Menu> menusResponse = all.stream()
+                    .map(menu -> Menu.builder()
+                        .id(menu.getId())
+                        .label(menu.getLabel())
+                        .parent(
+                            menu.getParentId() == null ? null : menuRepositoryPort.findMenuById(menu.getParentId())
+                                .map(menuParent -> Menu.builder()
+                                    .id(menuParent.getId())
+                                    .label(menuParent.getLabel())
+                                    .build())
+                                .orElse(null)
+                        )
+                        .module(
+                            moduleRepository.findById(menu.getModuleId())
+                            .orElse(null)
+                        )
+                        .path(menu.getPath())
+                        .icon(menu.getIcon())
+                        .menuOrder(menu.getMenuOrder())
+                        .status(menu.getStatus())
+                        .component(menu.getComponent())
+                        .deletedAt(menu.getDeletedAt())
+                        .createdAt(menu.getCreatedAt())
+                        .updatedAt(menu.getUpdatedAt())
+                        .build())
+                    .toList();
+    
+                return ResponseEntity.ok(DataTableResponse.from(menusResponse, request.getDraw()));
+            }
+    
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
+            Pageable pageable = PageRequest.of(page, safeLength);
+    
+            menus = noFilters(request)
+                ? menuRepositoryPort.findMenusAllAndDeletedAtIsNull(pageable)
+                : menuRepositoryPort.findMenusAllFiltersAndDeletedAtIsNull(
+                    request.getLabel(),
+                    request.getDescription(),
+                    request.getUrl(),
+                    request.getIcon(),
+                    request.getPosition(),
+                    parseStatus(request.getStatus()),
+                    request.getModuleId(),
+                    request.getParentId(),
+                    pageable);
+    
+            List<Menu> menusResponse = menus.getContent().stream()
+                .map(menu -> Menu.builder()
+                    .id(menu.getId())
+                    .label(menu.getLabel())
+                    .path(menu.getPath())
+                    .icon(menu.getIcon())
+                    .menuOrder(menu.getMenuOrder())
+                    .status(menu.getStatus())
+                    .component(menu.getComponent())
+                    .parent(
+                        menu.getParentId() == null ?
+                            null : menuRepositoryPort.findMenuById(menu.getParentId())
+                            .map(menuParent -> Menu.builder()
+                                .id(menuParent.getId())
+                                .label(menuParent.getLabel())
+                                .build())
+                            .orElse(null)
+                    )
+                    .module(
+                        moduleRepository.findById(menu.getModuleId())
+                        .orElse(null)
+                    )   
+                    .menuOrder(menu.getMenuOrder())
+                    .status(menu.getStatus())
+                    .build())
+                .toList();
+    
+            return ResponseEntity.ok(DataTableResponse.from(menusResponse, request.getDraw()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+    
+    @Override
+    public List<Menu> getMenusByModuleId(Long moduleId) {
+        return menuRepositoryPort.findMenusByModuleId(moduleId).values().stream()
+            .flatMap(List::stream)
+            .toList();
+    }
+
+    @Override
+    public ResponseEntity<?> saveMenu(
+        @Valid @RequestBody MenuEntity menuEntity, BindingResult bindingResult) {
+
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+
+        try {
+            MenuEntity savedMenu = menuRepositoryPort.saveMenu(menuEntity);
+            return ResponseEntity.ok(savedMenu);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity<?> updateMenu(
+        @Valid @RequestBody MenuEntity menuEntity, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+        try{
+
+            menuRepositoryPort.findMenuById(menuEntity.getId())
+                .orElseThrow(() -> new RuntimeException("Menú no encontrado"));
+
+            MenuEntity respond = menuRepositoryPort.updateMenu(menuEntity);
+            return ResponseEntity.ok(respond);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+        }
+    }
+
+    @Override
+    public Optional<MenuEntity> findMenuByLabel(String label) {
+        return menuRepositoryPort.findMenuByLabel(label);
+    }
+
+    @Override
+    public Optional<Menu> findMenuById(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return menuRepositoryPort.findMenuById(id);
+    }
+
+    @Override
+    public boolean noFilters(MenuDataTableRequest request) {
+        return request.getLabel() == null && request.getDescription() == null && request.getUrl() == null && request.getIcon() == null && request.getPosition() == null && request.getStatus() == null;
+    }
+
+    private MenuStatus parseStatus(String statusStr) {
+        if (statusStr == null || statusStr.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return MenuStatus.valueOf(statusStr.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

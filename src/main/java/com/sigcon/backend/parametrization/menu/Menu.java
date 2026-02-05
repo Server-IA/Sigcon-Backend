@@ -1,53 +1,34 @@
 package com.sigcon.backend.parametrization.menu;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+import com.sigcon.backend.parametrization.modules.domain.model.Module;
+
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+
 public class Menu {
 
     private Long id;
     private String label;
     private String icon;
     private String path;
-    private Integer order;
+    private Integer menuOrder;
     private Long parentId;
-    private Boolean active;
-
-    public Menu(Long id, String label, String icon, String path, Integer order, Long parentId, Boolean active) {
-        this.id = id;
-        this.label = label;
-        this.icon = icon;
-        this.path = path;
-        this.order = order;
-        this.parentId = parentId;
-        this.active = active;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public String getIcon() {
-        return icon;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public Integer getOrder() {
-        return order;
-    }
-
-    public Long getParentId() {
-        return parentId;
-    }
-
-    public Boolean getActive() {
-        return active;
-    }
-
-    
-    
+    private Menu parent;
+    private Long moduleId;
+    private Module module;
+    private MenuStatus status;
+    private String component;
+    private LocalDateTime deletedAt;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

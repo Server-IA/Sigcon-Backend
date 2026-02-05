@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
@@ -26,6 +27,7 @@ public class Role {
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "roles_permissions",
+            uniqueConstraints = @UniqueConstraint(columnNames = {"role_id", "permission_id"}),
             joinColumns = @JoinColumn(name = "role_id"),
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
@@ -33,4 +35,24 @@ public class Role {
 
     @Enumerated(EnumType.STRING)
     private Status status;
+
+    @Column(nullable = false)
+    private LocalDateTime created_at; 
+
+    @Column(nullable = false)
+    private LocalDateTime updated_at;
+
+    @Column(nullable = true)   
+    private LocalDateTime deleted_at;
+
+    @PrePersist
+    protected void onCreate() {
+        this.created_at = LocalDateTime.now();
+        this.updated_at = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updated_at = LocalDateTime.now();
+    }
 }

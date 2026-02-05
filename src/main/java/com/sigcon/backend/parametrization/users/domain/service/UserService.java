@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -31,7 +32,6 @@ public class UserService {
         try {
             Page<User> users;
 
-
             if (request == null || noFilters(request)) {
                 users = userRepository.findAll(pageable);
             } else {
@@ -46,9 +46,10 @@ public class UserService {
             }
 
             if (users.isEmpty()) {
-                return ResponseEntity.ok("No se encontraron usuarios");
+                return ResponseEntity.ok(
+                        Map.of("success", true, "message", "No se encontraron usuarios")
+                );
             }
-
 
             Page<UserDTO> response = users.map(user -> {
                 UserDTO dto = new UserDTO();
@@ -72,7 +73,10 @@ public class UserService {
             e.printStackTrace();
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error al cargar usuarios, intente nuevamente");
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Error al cargar usuarios, intente nuevamente"
+                    ));
         }
     }
     private boolean noFilters(UserDTO dto) {
@@ -99,7 +103,6 @@ public class UserService {
         response.setName(user.getName());
         response.setLastname(user.getLastname());
         response.setEmail(user.getEmail());
-        response.setRole(user.getRoles().toString());
         response.setStatus(user.getStatus());
         response.setRoles(
                 user.getRoles()
@@ -114,7 +117,9 @@ public class UserService {
     public ResponseEntity<?> updateInfo(UserDTO request) {
 
         if (request == null) {
-            return ResponseEntity.badRequest().body("Datos inválidos");
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", "Datos inválidos")
+            );
         }
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -122,7 +127,6 @@ public class UserService {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
 
         if (request.getName() != null) {
             user.setName(request.getName());
@@ -139,17 +143,22 @@ public class UserService {
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
-        user.setLastUpdateDate( LocalDateTime.now());
+
+        user.setUpdated_at(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok("Información actualizada correctamente");
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Información actualizada correctamente")
+        );
     }
     public ResponseEntity<?> updateUser(Long id, UserDTO request){
 
         Optional<User> userOpt = userRepository.findById(id);
 
         if (userOpt.isEmpty()) {
-            return ResponseEntity.status(404).body("Usuario no encontrado");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                    Map.of("success", false, "message", "Usuario no encontrado")
+            );
         }
 
         User user = userOpt.get();
@@ -174,11 +183,12 @@ public class UserService {
             user.setStatus(request.getStatus());
         }
 
-        user.setLastUpdateDate( LocalDateTime.now());
+        user.setUpdated_at(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok("Información del usuario actualizada correctamente");
-
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Información del usuario actualizada correctamente")
+        );
     }
 
     public ResponseEntity<?> deleteUser(Long id){
@@ -186,21 +196,20 @@ public class UserService {
         Optional<User> userOpt = userRepository.findById(id);
 
         if (userOpt.isEmpty()) {
-            return ResponseEntity.status(404).body("Usuario no encontrado");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                    Map.of("success", false, "message", "Usuario no encontrado")
+            );
         }
 
         User user = userOpt.get();
         user.setStatus(Status.INACTIVE);
-        user.setLastUpdateDate( LocalDateTime.now());
+        user.setUpdated_at(LocalDateTime.now());
+        user.setDeleted_at(LocalDateTime.now());
         userRepository.save(user);
-        return ResponseEntity.ok("Usuario eliminado correctamente");
 
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Usuario eliminado correctamente")
+        );
     }
-
-
-
-
-
-
 
 }

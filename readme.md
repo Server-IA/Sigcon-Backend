@@ -14,7 +14,7 @@ Backend desarrollado con Spring Boot siguiendo arquitectura hexagonal (Ports & A
 
 ## Ejecutar con Docker (recomendado)
 - ./mvnw clean package -DskipTests
-- docker-compose up --build
+- docker-compose up --build -d
 
 ## Verificar estado
 GET http://localhost:8080
