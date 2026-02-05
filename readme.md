@@ -13,11 +13,7 @@ Backend desarrollado con Spring Boot siguiendo arquitectura hexagonal (Ports & A
 - cd sigcon-backend
 
 ## Ejecutar con Docker (recomendado)
-<<<<<<< HEAD
 - ./mvnw clean package -DskipTests
-=======
-- mvn clean package -DskipTests 
->>>>>>> 105d2fb9ac5238992584f1f3871d4fe6195f767a
 - docker-compose up --build -d
 
 ## Verificar estado
