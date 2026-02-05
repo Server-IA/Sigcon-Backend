@@ -28,6 +28,7 @@ public interface ModuleRepository extends JpaRepository<Module, Long> {
           AND (:icon IS NULL OR m.icon ILIKE CONCAT('%', :icon, '%'))
           AND (:position IS NULL OR m.position = :position)
           AND (:status IS NULL OR m.status = :status)
+          AND (m.deleted_at IS NULL)
     """)
 
     Page<Module> searchModules(
@@ -44,6 +45,7 @@ public interface ModuleRepository extends JpaRepository<Module, Long> {
         SELECT DISTINCT m.*
         FROM modules m
         WHERE m.status = :status
+          AND m.deleted_at IS NULL
           AND EXISTS (
                 SELECT 1
                 FROM menus menu
@@ -53,4 +55,12 @@ public interface ModuleRepository extends JpaRepository<Module, Long> {
         ORDER BY m.position ASC
     """, nativeQuery = true)
     List<Module> findActiveModulesWithActiveMenus(ModelStatus status, MenuStatus menuStatus);
+
+    boolean existsByName(String name);
+
+    boolean existsByNameAndIdNot(String name, Long id);
+
+    @Query(value = "SELECT m.* FROM modules m WHERE m.deleted_at IS NULL", nativeQuery = true)
+    Page<Module> findAllAndDeletedAtIsNull(Pageable pageable);
+    
 }
