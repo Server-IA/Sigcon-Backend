@@ -144,7 +144,7 @@ public class UserService {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
 
-        user.setLastUpdateDate(LocalDateTime.now());
+        user.setUpdated_at(LocalDateTime.now());
         userRepository.save(user);
 
         return ResponseEntity.ok(
@@ -183,7 +183,7 @@ public class UserService {
             user.setStatus(request.getStatus());
         }
 
-        user.setLastUpdateDate(LocalDateTime.now());
+        user.setUpdated_at(LocalDateTime.now());
         userRepository.save(user);
 
         return ResponseEntity.ok(
@@ -203,7 +203,8 @@ public class UserService {
 
         User user = userOpt.get();
         user.setStatus(Status.INACTIVE);
-        user.setLastUpdateDate(LocalDateTime.now());
+        user.setUpdated_at(LocalDateTime.now());
+        user.setDeleted_at(LocalDateTime.now());
         userRepository.save(user);
 
         return ResponseEntity.ok(

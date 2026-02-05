@@ -5,10 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.LocalDateTime;
 
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+import com.sigcon.backend.parametrization.modules.domain.model.Module;
 
 @Data
 @Builder
@@ -23,8 +23,12 @@ public class Menu {
     private String path;
     private Integer menuOrder;
     private Long parentId;
+    private Menu parent;
     private Long moduleId;
+    private Module module;
     private MenuStatus status;
-    private List<Menu> childrens = new ArrayList<>();
     private String component;
+    private LocalDateTime deletedAt;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

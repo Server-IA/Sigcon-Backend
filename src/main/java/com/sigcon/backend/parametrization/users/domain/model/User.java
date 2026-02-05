@@ -53,10 +53,23 @@ public class User implements UserDetails {
     @Enumerated(EnumType.STRING)
     private Status status;
 
-    private LocalDateTime creationDate;
+    private LocalDateTime created_at;
 
-    private LocalDateTime lastUpdateDate;
+    private LocalDateTime updated_at;
 
+    @Column(nullable = true)
+    private LocalDateTime deleted_at;
+
+    @PrePersist
+    protected void onCreate() {
+        this.created_at = LocalDateTime.now();
+        this.updated_at = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updated_at = LocalDateTime.now();
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

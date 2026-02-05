@@ -33,6 +33,16 @@ public class ModuleController {
         return moduleService.storeModule(request, bindingResult);
     }
 
+    @PutMapping("/update")
+    public ResponseEntity<?> updateModule(@Valid @RequestBody Module request, BindingResult bindingResult) {
+        return moduleService.updateModule(request, bindingResult);
+    }
+
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<?> deleteModule(@PathVariable Long id) {
+        return moduleService.deleteModule(id);
+    }
+
     @GetMapping("/menu")
     public ResponseEntity<?> getModulesMenu() {
         return moduleService.getModulesMenu();

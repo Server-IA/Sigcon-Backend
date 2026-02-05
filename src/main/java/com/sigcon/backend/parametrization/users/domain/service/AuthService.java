@@ -74,8 +74,6 @@ public class AuthService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .roles(Set.of(role))
                 .status(Status.ACTIVE)
-                .creationDate(LocalDateTime.now())
-                .lastUpdateDate(LocalDateTime.now())
                 .build();
 
         userRepository.save(user);

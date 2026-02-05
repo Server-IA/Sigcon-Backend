@@ -1,5 +1,10 @@
 package com.sigcon.backend.parametrization.modules.domain.model;
 
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 
 import jakarta.persistence.*;
@@ -45,5 +50,20 @@ public class Module {
 
     @Builder.Default
     private ModelStatus status = ModelStatus.ACTIVE;
+
+    @Column(name = "created_at")
+    @Temporal(TemporalType.TIMESTAMP)
+    @CreationTimestamp
+    private LocalDateTime created_at = LocalDateTime.now();
+
+    @Column(name = "updated_at")
+    @Temporal(TemporalType.TIMESTAMP)
+    @UpdateTimestamp
+    private LocalDateTime updated_at = LocalDateTime.now();
+
+    @Column(name = "deleted_at")
+    @Temporal(TemporalType.TIMESTAMP)
+    @Nullable
+    private LocalDateTime deleted_at;
 
 }

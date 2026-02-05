@@ -1,13 +1,10 @@
-package com.sigcon.backend.parametrization.modules.domain.model;
+package com.sigcon.backend.utils;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.data.domain.Page;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 

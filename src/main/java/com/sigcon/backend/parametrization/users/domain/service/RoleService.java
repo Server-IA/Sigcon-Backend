@@ -153,7 +153,7 @@ public class RoleService {
 
         user.getRoles().clear();
         user.getRoles().add(role);
-        user.setLastUpdateDate(LocalDateTime.now());
+        user.setUpdated_at(LocalDateTime.now());
         userRepository.save(user);
 
         return ResponseEntity.ok(

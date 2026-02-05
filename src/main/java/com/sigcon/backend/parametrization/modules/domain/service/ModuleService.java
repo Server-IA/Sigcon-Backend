@@ -1,5 +1,7 @@
 package com.sigcon.backend.parametrization.modules.domain.service;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,10 +18,10 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 import com.sigcon.backend.parametrization.menu.service.MenuService;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
-import com.sigcon.backend.parametrization.modules.domain.model.DataTableResponse;
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
+import com.sigcon.backend.utils.DataTableResponse;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,7 +45,7 @@ public class ModuleService {
             if (length == -1) {
     
                 List<Module> all = noFilters(request)
-                    ? moduleRepository.findAll()
+                    ? moduleRepository.findAllAndDeletedAtIsNull(Pageable.unpaged()).getContent()
                     : moduleRepository.searchModules(
                         request.getName(),
                         request.getDescription(),
@@ -65,7 +67,7 @@ public class ModuleService {
             Pageable pageable = PageRequest.of(page, safeLength);
     
             modules = noFilters(request)
-                ? moduleRepository.findAll(pageable)
+                ? moduleRepository.findAllAndDeletedAtIsNull(pageable)
                 : moduleRepository.searchModules(
                     request.getName(),
                     request.getDescription(),
@@ -132,17 +134,118 @@ public class ModuleService {
                     return err;
                 })
                 .toList();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("title", "Error de validación");
+            response.put("errors", errors);
     
-            return ResponseEntity.badRequest().body(errors);
+            return ResponseEntity.badRequest().body(response);
         }
 
         try {
+            if (moduleRepository.existsByName(request.getName())) {
+
+                Map<String, String> fieldError = new HashMap<>();
+                fieldError.put("field", "name");
+                fieldError.put("message", "El nombre del módulo ya existe");
+            
+                List<Map<String, String>> errors = new ArrayList<>();
+                errors.add(fieldError);
+            
+                Map<String, Object> response = new HashMap<>();
+                response.put("title", "Error de validación");
+                response.put("errors", errors);
+            
+                return ResponseEntity.badRequest().body(response);
+            }
             Module module = moduleRepository.save(request);
             return ResponseEntity.ok(module);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error al guardar el módulo");
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("title", "Error interno");
+            response.put("message", "Error al guardar el módulo");
+
+            return ResponseEntity.badRequest().body(response);
         }
     }
+
+    public ResponseEntity<?> updateModule(
+        @Valid @RequestBody Module request,
+        BindingResult bindingResult){
+        try {
+            if (moduleRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
+                Map<String, String> fieldError = new HashMap<>();
+                fieldError.put("field", "name");
+                fieldError.put("message", "El nombre del módulo ya existe");
+
+                List<Map<String, String>> errors = new ArrayList<>();
+                errors.add(fieldError);
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("title", "Error de validación");
+                response.put("errors", errors);
+
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            if (bindingResult.hasErrors()) {
+                List<Map<String, String>> errors = bindingResult.getFieldErrors()
+                    .stream()
+                    .map(error -> {
+                        Map<String, String> err = new HashMap<>();
+                        err.put("field", error.getField());
+                        err.put("message", error.getDefaultMessage());
+                        return err;
+                    })
+                    .toList();
+    
+                Map<String, Object> response = new HashMap<>();
+                response.put("title", "Error de validación");
+                response.put("errors", errors);
+        
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            Module module = moduleRepository.findById(request.getId())
+                .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+
+            module.setName(request.getName());
+            module.setDescription(request.getDescription());   
+            module.setUrl(request.getUrl());
+            module.setIcon(request.getIcon());
+            module.setPosition(request.getPosition());   
+            module.setStatus(request.getStatus());
+            // module.setUpdatedAt(LocalDateTime.now());
+            module = moduleRepository.save(module);
+            return ResponseEntity.ok(module);
+        }catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("title", "Error interno");
+            response.put("message", "Error al guardar el módulo");
+
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    public ResponseEntity<?> deleteModule(Long id) {
+        try {
+            Module module = moduleRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+            module.setDeleted_at(LocalDateTime.now());
+            module = moduleRepository.save(module);
+            return ResponseEntity.ok(module);
+        }
+        catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("title", "Error interno");
+            response.put("message", e.getMessage());
+
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    // Utils
     
     private boolean noFilters(ModuleDataTableRequest request) {
         return isBlank(request.getName())
