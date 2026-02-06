@@ -6,9 +6,6 @@ services:
     container_name: backend-api
     ports:
       - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host}:${backend_port}/${backend_database}
       SPRING_DATASOURCE_USERNAME: ${backend_user}
