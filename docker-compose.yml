@@ -6,13 +6,10 @@ services:
     container_name: backend-api
     ports:
       - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/backend
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host}:${backend_port}/${backend_database}
+      SPRING_DATASOURCE_USERNAME: ${backend_user}
+      SPRING_DATASOURCE_PASSWORD: ${backend_password}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: "true"
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
@@ -22,23 +19,23 @@ services:
         limits:
           memory: 384M
 
-  db:
-    image: postgres:15
-    container_name: backend-db
-    restart: always
-    environment:
-      POSTGRES_DB: backend
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  # db:
+  #   image: postgres:15
+  #   container_name: backend-db
+  #   restart: always
+  #   environment:
+  #     POSTGRES_DB: backend
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   ports:
+  #     - "5432:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
 
   # pgadmin:
   #   image: dpage/pgadmin4
@@ -51,14 +48,14 @@ services:
   #   depends_on:
   #     - db
 
-  adminer:
-    image: adminer
-    container_name: backend-adminer
-    restart: always
-    ports:
-      - "8081:8080"
-    depends_on:
-      - db
+  # adminer:
+  #   image: adminer
+  #   container_name: backend-adminer
+  #   restart: always
+  #   ports:
+  #     - "8081:8080"
+    # depends_on:
+    #   - db
 
 volumes:
   postgres_data:
