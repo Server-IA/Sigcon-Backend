@@ -7,6 +7,7 @@ import com.sigcon.backend.parametrization.users.domain.model.Permission;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
+import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
@@ -177,7 +178,12 @@ public class RoleService {
 
         Permission permission = permissionRepository.findByName(request.getName())
                 .orElseGet(() -> permissionRepository.save(
-                        Permission.builder().name(request.getName()).build()
+                        Permission.builder()
+                        .name(request.getName())
+                        .type(request.getType())
+                        .description(request.getDescription())
+                        .menu_id(request.getMenuId())
+                        .build()
                 ));
 
         if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
