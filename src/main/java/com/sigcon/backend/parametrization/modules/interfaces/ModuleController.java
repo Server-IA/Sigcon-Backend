@@ -35,7 +35,7 @@ public class ModuleController {
 
     @PutMapping("/update")
     public ResponseEntity<?> updateModule(@Valid @RequestBody Module request, BindingResult bindingResult) {
-        return moduleService.updateModule(request, bindingResult);
+        return moduleService.updateModule(request, bindingResult); 
     }
 
     @DeleteMapping("/delete/{id}")
