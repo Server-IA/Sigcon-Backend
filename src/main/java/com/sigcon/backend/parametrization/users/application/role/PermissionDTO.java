@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 import java.util.Set;
 
+import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
+
 @Data
 @Builder
 @AllArgsConstructor
@@ -14,6 +16,13 @@ import java.util.Set;
 public class PermissionDTO {
 
     private String name;
+
+    private Long menuId;
+
+    private TypePermits type;
+
+    private String description;
+
 
     private Set<Long> roleIds;
 

@@ -2,6 +2,7 @@ package com.sigcon.backend.parametrization.users.domain.model;
 
 import java.time.LocalDateTime;
 
+import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 
 import jakarta.persistence.*;
@@ -20,6 +21,10 @@ public class Permission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    
+    @ManyToOne
+    @JoinColumn(name = "menu_id", nullable = true)
+    private Long menu_id;
 
     @Column(nullable = false, unique = true)
     private String name;
