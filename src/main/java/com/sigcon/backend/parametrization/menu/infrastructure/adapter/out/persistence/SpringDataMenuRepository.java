@@ -73,5 +73,19 @@ public interface SpringDataMenuRepository extends JpaRepository<MenuEntity, Long
         ORDER BY m.menu_order ASC
         """, nativeQuery = true)
     List<MenuEntity> findMenusByParentId(Long parentId, MenuStatus status);
+
+    @Query(value = """
+        SELECT m.*
+          FROM menus m
+          WHERE m.path = :path AND m.deleted_at IS NULL
+        """, nativeQuery = true)
+    Optional<MenuEntity> findMenusByPath(String path);
+
+    @Query(value = """
+        SELECT m.*
+          FROM menus m
+          WHERE m.component = :component AND m.deleted_at IS NULL
+        """, nativeQuery = true)
+    Optional<MenuEntity> findMenusByComponent(String component);
 }
     

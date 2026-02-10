@@ -174,4 +174,34 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     public MenuEntity findById(Long id) {
         return repository.findById(id).orElse(null);
     }
+
+    @Override
+    public Optional<MenuEntity> findMenuByPath(String path) {
+        return repository.findMenusByPath(path).map(e -> MenuEntity.builder()
+            .id(e.getId())
+            .label(e.getLabel())
+            .icon(e.getIcon())
+            .path(e.getPath())
+            .menuOrder(e.getMenuOrder())
+            .parentId(e.getParentId())
+            .moduleId(e.getModuleId())
+            .status(e.getStatus())
+            .component(e.getComponent())
+            .build());
+    }
+
+    @Override
+    public Optional<MenuEntity> findMenuByComponent(String component) {
+        return repository.findMenusByComponent(component).map(e -> MenuEntity.builder()
+            .id(e.getId())
+            .label(e.getLabel())
+            .icon(e.getIcon())
+            .path(e.getPath())
+            .menuOrder(e.getMenuOrder())
+            .parentId(e.getParentId())
+            .moduleId(e.getModuleId())
+            .status(e.getStatus())
+            .component(e.getComponent())
+            .build());
+    }
 }
