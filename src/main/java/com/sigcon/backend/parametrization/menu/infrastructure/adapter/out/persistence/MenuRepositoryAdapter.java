@@ -170,4 +170,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .build();
     }
 
+    @Override
+    public MenuEntity findById(Long id) {
+        return repository.findById(id).orElse(null);
+    }
 }

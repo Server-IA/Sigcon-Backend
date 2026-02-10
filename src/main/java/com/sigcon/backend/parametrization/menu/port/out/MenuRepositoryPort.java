@@ -33,6 +33,8 @@ public interface MenuRepositoryPort {
     MenuEntity saveMenu(MenuEntity menuEntity);
     Optional<MenuEntity> findMenuByLabel(String label);
     Optional<Menu> findMenuById(Long id);
+
+    MenuEntity findById(Long id);
     
     Map<Long, List<Menu>> findMenusByParentId(Long parentId);
 

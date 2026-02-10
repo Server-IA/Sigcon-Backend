@@ -1,5 +1,8 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 
+import com.sigcon.backend.parametrization.menu.Menu;
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
+import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.role.RoleRequest;
 import com.sigcon.backend.parametrization.users.application.role.UpdateUserRole;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,6 +36,7 @@ public class RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
+    private final MenuRepositoryPort menuRepository;
 
     public Page<Role> getRoles(String name, Pageable pageable) { //solo muestra los activos (o sea los no eliminados)
 
@@ -176,13 +181,17 @@ public class RoleService {
             );
         }
 
+        MenuEntity menu = request.getMenu_id() == null
+                ? null
+                : menuRepository.findById(request.getMenu_id());
+
         Permission permission = permissionRepository.findByName(request.getName())
                 .orElseGet(() -> permissionRepository.save(
                         Permission.builder()
                         .name(request.getName())
                         .type(request.getType())
                         .description(request.getDescription())
-                        .menu_id(request.getMenuId())
+                        .menu(menu)
                         .build()
                 ));
 

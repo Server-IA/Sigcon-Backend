@@ -3,6 +3,7 @@ package com.sigcon.backend.parametrization.users.domain.model;
 import java.time.LocalDateTime;
 
 import com.sigcon.backend.parametrization.menu.Menu;
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 
 import jakarta.persistence.*;
@@ -22,9 +23,9 @@ public class Permission {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "menu_id", nullable = true)
-    private Long menu_id;
+    private MenuEntity menu;
 
     @Column(nullable = false, unique = true)
     private String name;

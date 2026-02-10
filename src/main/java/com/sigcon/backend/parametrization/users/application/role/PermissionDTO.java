@@ -17,7 +17,7 @@ public class PermissionDTO {
 
     private String name;
 
-    private Long menuId;
+    private Long menu_id;
 
     private TypePermits type;
 
