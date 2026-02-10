@@ -42,6 +42,10 @@ public class User implements UserDetails {
     @NotNull
     private String password;
 
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String avatar;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "users_roles",

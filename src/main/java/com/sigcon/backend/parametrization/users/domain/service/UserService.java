@@ -39,6 +39,7 @@ public class UserService {
                         request.getName(),
                         request.getLastname(),
                         request.getEmail(),
+                        request.getAvatar(),
                         request.getRole(),
                         request.getStatus(),
                         pageable
@@ -57,6 +58,7 @@ public class UserService {
                 dto.setName(user.getName());
                 dto.setLastname(user.getLastname());
                 dto.setEmail(user.getEmail());
+                dto.setAvatar(user.getAvatar());
                 dto.setStatus(user.getStatus());
                 dto.setRoles(
                         user.getRoles()
@@ -103,6 +105,7 @@ public class UserService {
         response.setName(user.getName());
         response.setLastname(user.getLastname());
         response.setEmail(user.getEmail());
+        response.setAvatar(user.getAvatar());
         response.setStatus(user.getStatus());
         response.setRoles(
                 user.getRoles()
@@ -140,6 +143,10 @@ public class UserService {
             user.setEmail(request.getEmail());
         }
 
+        if (request.getAvatar() != null) {
+            user.setAvatar(request.getAvatar());
+        }
+
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
@@ -174,6 +181,10 @@ public class UserService {
         if (request.getEmail() != null) {
             user.setEmail(request.getEmail());
         }
+
+        if (request.getAvatar() != null) {
+            user.setAvatar(request.getAvatar());
+        }        
 
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));

@@ -24,6 +24,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
         WHERE (:name IS NULL OR u.name ILIKE CONCAT('%', :name, '%'))
           AND (:lastname IS NULL OR u.lastname ILIKE CONCAT('%', :lastname, '%'))
           AND (:email IS NULL OR u.email ILIKE CONCAT('%', :email, '%'))
+          AND (:avatar IS NULL OR u.avatar = :avatar)
           AND (:role IS NULL OR r.name = :role)
           AND (:status IS NULL OR u.status = :status)
     """)
@@ -31,6 +32,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             @Param("name") String name,
             @Param("lastname") String lastname,
             @Param("email") String email,
+            @Param("avatar") String avatar,
             @Param("role") String role,
             @Param("status") Status status,
             Pageable pageable
