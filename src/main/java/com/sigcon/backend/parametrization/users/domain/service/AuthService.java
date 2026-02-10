@@ -72,6 +72,7 @@ public class AuthService {
                 .lastname(request.getLastname())
                 .email(email.toLowerCase())
                 .password(passwordEncoder.encode(request.getPassword()))
+                .avatar(request.getAvatar())
                 .roles(Set.of(role))
                 .status(Status.ACTIVE)
                 .build();
