@@ -32,6 +32,8 @@ public interface MenuRepositoryPort {
     Map<Long, List<Menu>> findMenusByModuleId(Long moduleId);
     MenuEntity saveMenu(MenuEntity menuEntity);
     Optional<MenuEntity> findMenuByLabel(String label);
+    Optional<MenuEntity> findMenuByPath(String path);
+    Optional<MenuEntity> findMenuByComponent(String component);
     Optional<Menu> findMenuById(Long id);
 
     MenuEntity findById(Long id);

@@ -1,5 +1,6 @@
 package com.sigcon.backend.parametrization.menu.service;
 
+import java.lang.StackWalker.Option;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -160,6 +161,25 @@ public class MenuService implements MenuUseCase {
         }
 
         try {
+
+            if(menuEntity.getLabel() != null) {
+                if(menuRepositoryPort.findMenuByLabel(menuEntity.getLabel()).isPresent()) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El nombre del menú ya existe"));
+                }
+            }
+
+            if(menuEntity.getPath() != null) {
+                if(menuRepositoryPort.findMenuByPath(menuEntity.getPath()).isPresent()) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("La URL ya existe"));
+                }
+            }
+
+            if(menuEntity.getComponent() != null) {
+                if(menuRepositoryPort.findMenuByComponent(menuEntity.getComponent()).isPresent()) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El componente ya existe"));
+                }
+            }
+
             MenuEntity savedMenu = menuRepositoryPort.saveMenu(menuEntity);
             return ResponseEntity.ok(savedMenu);
         } catch (Exception e) {
@@ -175,8 +195,29 @@ public class MenuService implements MenuUseCase {
         }
         try{
 
-            menuRepositoryPort.findMenuById(menuEntity.getId())
-                .orElseThrow(() -> new RuntimeException("Menú no encontrado"));
+            Optional<Menu> menu = menuRepositoryPort.findMenuById(menuEntity.getId());
+            if(menu == null) {  
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Menú no encontrado"));
+            }
+
+            if(!menu.get().getLabel().equals(menuEntity.getLabel())) {
+                if(menuRepositoryPort.findMenuByLabel(menuEntity.getLabel()).isPresent()) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El nombre del menú ya existe"));
+                }
+            }
+
+            if(!menu.get().getPath().equals(menuEntity.getPath())) {
+                if(menuRepositoryPort.findMenuByPath(menuEntity.getPath()).isPresent()) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("La URL ya existe"));
+                }
+            }
+            
+            if(!menu.get().getComponent().equals(menuEntity.getComponent())) {
+                if(menuRepositoryPort.findMenuByComponent(menuEntity.getComponent()).isPresent()) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El componente ya existe"));
+                }
+            }
+
 
             MenuEntity respond = menuRepositoryPort.updateMenu(menuEntity);
             return ResponseEntity.ok(respond);
