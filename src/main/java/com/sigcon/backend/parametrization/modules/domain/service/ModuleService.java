@@ -45,8 +45,8 @@ public class ModuleService {
 
     public ResponseEntity<?> getModulesPaged(DataTableRequest request) {
         try {
-    
-            int start  = Math.max(0, request.getStart());
+
+            int start = Math.max(0, request.getStart());
             int length = request.getLength();
 
             int safeLength = length <= 0 ? 10 : length;
@@ -82,7 +82,6 @@ public class ModuleService {
             );
         }
     }
-    
 
     public ResponseEntity<?> getModules(ModuleDTO request) {
         try {
@@ -99,19 +98,18 @@ public class ModuleService {
             List<Module> modules = moduleRepository.findActiveModulesWithActiveMenus(ModelStatus.ACTIVE, MenuStatus.ACTIVE);
 
             List<ModuleDTO> moduleDTOs = modules.stream()
-                .map(module -> ModuleDTO.builder()
-                    .id(module.getId())
-                    .name(module.getName())
-                    .description(module.getDescription())
-                    .url(module.getUrl())
-                    .icon(module.getIcon())
-                    .position(module.getPosition())
-                    .status(module.getStatus())
-                    .menus(
-                        menuService.getMenusByModuleId(module.getId())
-                    )
-                    .build())
-                .toList();
+                    .map(module -> ModuleDTO.builder()
+                            .id(module.getId())
+                            .name(module.getName())
+                            .description(module.getDescription())
+                            .url(module.getUrl())
+                            .icon(module.getIcon())
+                            .position(module.getPosition())
+                            .status(module.getStatus())
+                            .menus(
+                                    menuService.getMenusByModuleId(module.getId()))
+                            .build())
+                    .toList();
 
             return ResponseEntity.ok(moduleDTOs);
         } catch (Exception e) {
@@ -120,23 +118,23 @@ public class ModuleService {
     }
 
     public ResponseEntity<?> storeModule(
-        @Valid @RequestBody Module request,
-        BindingResult bindingResult) {
+            @Valid @RequestBody Module request,
+            BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             List<Map<String, String>> errors = bindingResult.getFieldErrors()
-                .stream()
-                .map(error -> {
-                    Map<String, String> err = new HashMap<>();
-                    err.put("field", error.getField());
-                    err.put("message", error.getDefaultMessage());
-                    return err;
-                })
-                .toList();
+                    .stream()
+                    .map(error -> {
+                        Map<String, String> err = new HashMap<>();
+                        err.put("field", error.getField());
+                        err.put("message", error.getDefaultMessage());
+                        return err;
+                    })
+                    .toList();
 
             Map<String, Object> response = new HashMap<>();
             response.put("title", "Error de validación");
             response.put("errors", errors);
-    
+
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -146,14 +144,14 @@ public class ModuleService {
                 Map<String, String> fieldError = new HashMap<>();
                 fieldError.put("field", "name");
                 fieldError.put("message", "El nombre del módulo ya existe");
-            
+
                 List<Map<String, String>> errors = new ArrayList<>();
                 errors.add(fieldError);
-            
+
                 Map<String, Object> response = new HashMap<>();
                 response.put("title", "Error de validación");
                 response.put("errors", errors);
-            
+
                 return ResponseEntity.badRequest().body(response);
             }
             Module module = moduleRepository.save(request);
@@ -169,8 +167,8 @@ public class ModuleService {
     }
 
     public ResponseEntity<?> updateModule(
-        @Valid @RequestBody Module request,
-        BindingResult bindingResult){
+            @Valid @RequestBody Module request,
+            BindingResult bindingResult) {
         try {
             if (moduleRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
                 Map<String, String> fieldError = new HashMap<>();
@@ -189,35 +187,35 @@ public class ModuleService {
 
             if (bindingResult.hasErrors()) {
                 List<Map<String, String>> errors = bindingResult.getFieldErrors()
-                    .stream()
-                    .map(error -> {
-                        Map<String, String> err = new HashMap<>();
-                        err.put("field", error.getField());
-                        err.put("message", error.getDefaultMessage());
-                        return err;
-                    })
-                    .toList();
-    
+                        .stream()
+                        .map(error -> {
+                            Map<String, String> err = new HashMap<>();
+                            err.put("field", error.getField());
+                            err.put("message", error.getDefaultMessage());
+                            return err;
+                        })
+                        .toList();
+
                 Map<String, Object> response = new HashMap<>();
                 response.put("title", "Error de validación");
                 response.put("errors", errors);
-        
+
                 return ResponseEntity.badRequest().body(response);
             }
 
             Module module = moduleRepository.findById(request.getId())
-                .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+                    .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
 
             module.setName(request.getName());
-            module.setDescription(request.getDescription());   
+            module.setDescription(request.getDescription());
             module.setUrl(request.getUrl());
             module.setIcon(request.getIcon());
-            module.setPosition(request.getPosition());   
+            module.setPosition(request.getPosition());
             module.setStatus(request.getStatus());
             // module.setUpdatedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
             return ResponseEntity.ok(module);
-        }catch (Exception e) {
+        } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("title", "Error interno");
             response.put("message", "Error al guardar el módulo");
@@ -229,12 +227,11 @@ public class ModuleService {
     public ResponseEntity<?> deleteModule(Long id) {
         try {
             Module module = moduleRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+                    .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
             module.setDeleted_at(LocalDateTime.now());
             module = moduleRepository.save(module);
             return ResponseEntity.ok(module);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             Map<String, Object> response = new HashMap<>();
             response.put("title", "Error interno");
             response.put("message", e.getMessage());
@@ -244,7 +241,7 @@ public class ModuleService {
     }
 
     // Utils
-    
+
     private boolean noFilters(ModuleDataTableRequest request) {
         return isBlank(request.getName())
                 && isBlank(request.getDescription())

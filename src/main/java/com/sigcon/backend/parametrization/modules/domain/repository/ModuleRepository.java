@@ -17,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 public interface ModuleRepository extends JpaRepository<Module, Long>, JpaSpecificationExecutor<Module> {
 
     Optional<Module> findByName(String name);
+
     List<Module> findAllByStatus(ModelStatus status);
 
     @Query(value = """
@@ -32,15 +33,14 @@ public interface ModuleRepository extends JpaRepository<Module, Long>, JpaSpecif
     """, nativeQuery = true)
 
     Page<Module> searchModules(
-        String name,
-        String description,
-        String url,
-        String icon,
-        Integer position,
-        ModelStatus status,
-        Pageable pageable
-    );
-    
+            String name,
+            String description,
+            String url,
+            String icon,
+            Integer position,
+            ModelStatus status,
+            Pageable pageable);
+
     @Query(value = """
         SELECT DISTINCT m.*
         FROM modules m
@@ -63,5 +63,5 @@ public interface ModuleRepository extends JpaRepository<Module, Long>, JpaSpecif
 
     @Query(value = "SELECT m.* FROM modules m WHERE m.deleted_at IS NULL", nativeQuery = true)
     Page<Module> findAllAndDeletedAtIsNull(Pageable pageable);
-    
+
 }
