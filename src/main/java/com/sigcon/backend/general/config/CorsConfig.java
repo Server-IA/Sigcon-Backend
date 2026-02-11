@@ -22,7 +22,9 @@ public class CorsConfig {
             "http://165.22.166.82:5173/",
             "http://138.197.202.104:5173/",
             "${CORS_ALLOWED_ORIGINS:http://localhost:3000}",
-            "http://localhost:3000"
+            "http://localhost:3000",
+            "https://www.inmero.co",
+            "https://www.inmero.co/sigcon"
         ));
 
 
