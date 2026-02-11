@@ -1,5 +1,14 @@
 package com.sigcon.backend.parametrization.parameters.domain.service;
 
+import com.sigcon.backend.parametrization.parameters.domain.model.ParameterDataTableRequest;
+import com.sigcon.backend.utils.DataTableResponse;
+import org.springframework.validation.BindingResult;
+import jakarta.validation.Valid;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import org.springframework.data.domain.PageRequest;
+
 import com.sigcon.backend.parametrization.parameters.application.CreateParameterRequest;
 import com.sigcon.backend.parametrization.parameters.application.ParameterResponse;
 import com.sigcon.backend.parametrization.parameters.application.UpdateParameterRequest;
@@ -44,7 +53,8 @@ public class ParameterService {
                     .map(this::mapToResponse)
                     .collect(Collectors.toList());
 
-            Page<ParameterResponse> responsePage = new PageImpl<>(responses, pageable, userParametersPage.getTotalElements());
+            Page<ParameterResponse> responsePage = new PageImpl<>(responses, pageable,
+                    userParametersPage.getTotalElements());
 
             return ResponseEntity.ok(responsePage);
         } catch (Exception e) {
@@ -244,4 +254,194 @@ public class ParameterService {
                 .lastUpdateDate(userParameter.getLastUpdateDate())
                 .build();
     }
+
+    /**
+     * PA-RF-25: Visualizar parámetros del sistema (DataTables + filtros)
+     */
+    public ResponseEntity<?> getSystemParametersPaged(ParameterDataTableRequest request) {
+        try {
+            int start = Math.max(0, request.getStart());
+            int length = request.getLength();
+
+            // Caso: traer TODOS
+            if (length == -1) {
+                List<Parameter> all = noFilters(request)
+                        ? parameterRepository.findAllNotDeleted(Pageable.unpaged()).getContent()
+                        : parameterRepository.searchParameters(
+                                emptyToNull(request.getName()),
+                                emptyToNull(request.getValue()),
+                                emptyToNull(request.getCategory()),
+                                request.getActive(),
+                                Pageable.unpaged()).getContent();
+
+                if (!noFilters(request) && all.isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("title", "Sin resultados");
+                    response.put("message", "No se encontraron parámetros con los criterios ingresados");
+                    return ResponseEntity.ok(response);
+                }
+
+                return ResponseEntity.ok(DataTableResponse.from(all, request.getDraw()));
+            }
+
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
+            Pageable pageable = PageRequest.of(page, safeLength);
+
+            Page<Parameter> parameters = noFilters(request)
+                    ? parameterRepository.findAllNotDeleted(pageable)
+                    : parameterRepository.searchParameters(
+                            emptyToNull(request.getName()),
+                            emptyToNull(request.getValue()),
+                            emptyToNull(request.getCategory()),
+                            request.getActive(),
+                            pageable);
+
+            if (!noFilters(request) && parameters.getTotalElements() == 0) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("title", "Sin resultados");
+                response.put("message", "No se encontraron parámetros con los criterios ingresados");
+                return ResponseEntity.ok(response);
+            }
+
+            return ResponseEntity.ok(DataTableResponse.from(parameters, request.getDraw()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body("No se pudo cargar la lista de parámetros. Intente nuevamente o contacte al administrador");
+        }
+    }
+
+    /**
+     * PA-RF-26: Crear parámetro del sistema
+     */
+    public ResponseEntity<?> storeSystemParameter(@Valid Parameter request, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(buildValidationErrors(bindingResult));
+        }
+
+        try {
+            if (parameterRepository.existsByName(request.getName())) {
+                return ResponseEntity.badRequest().body(buildFieldError("name", "El parámetro ya existe"));
+            }
+
+            request.setId(null);
+            request.setDeletedAt(null);
+
+            Parameter saved = parameterRepository.save(request);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body("No se pudo crear el parámetro. Intente nuevamente o contacte al administrador");
+        }
+    }
+
+    /**
+     * PA-RF-27: Editar parámetro del sistema
+     */
+    public ResponseEntity<?> updateSystemParameter(@Valid Parameter request, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(buildValidationErrors(bindingResult));
+        }
+
+        try {
+            Parameter parameter = parameterRepository.findById(request.getId())
+                    .orElse(null);
+
+            if (parameter == null || parameter.getDeletedAt() != null) {
+                return ResponseEntity.badRequest().body("El parámetro seleccionado no existe");
+            }
+
+            if (parameterRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
+                return ResponseEntity.badRequest()
+                        .body(buildFieldError("name", "El nombre ingresado ya existe en otro parámetro"));
+            }
+
+            parameter.setName(request.getName());
+            parameter.setDescription(request.getDescription());
+            parameter.setValue(request.getValue());
+            parameter.setCategory(request.getCategory());
+            parameter.setActive(request.getActive());
+
+            Parameter saved = parameterRepository.save(parameter);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body("No se pudo actualizar el parámetro. Intente nuevamente o contacte al administrador");
+        }
+    }
+
+    /**
+     * PA-RF-28: Eliminar parámetro del sistema (eliminación lógica)
+     */
+    public ResponseEntity<?> deleteSystemParameter(Long id) {
+        try {
+            Parameter parameter = parameterRepository.findById(id).orElse(null);
+
+            if (parameter == null || parameter.getDeletedAt() != null) {
+                return ResponseEntity.badRequest()
+                        .body("El parámetro seleccionado no existe o ya fue eliminado");
+            }
+
+            parameter.setDeletedAt(LocalDateTime.now());
+            parameterRepository.save(parameter);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("title", "OK");
+            response.put("message", "Parámetro eliminado correctamente");
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body("No se pudo eliminar el parámetro. Intente nuevamente o contacte al administrador");
+        }
+    }
+
+    // ===== Helpers (mismo estilo que Modules) =====
+
+    private boolean noFilters(ParameterDataTableRequest request) {
+        return isBlank(request.getName())
+                && isBlank(request.getValue())
+                && isBlank(request.getCategory())
+                && request.getActive() == null;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private String emptyToNull(String value) {
+        return isBlank(value) ? null : value;
+    }
+
+    private Map<String, Object> buildValidationErrors(BindingResult bindingResult) {
+        List<Map<String, String>> errors = bindingResult.getFieldErrors()
+                .stream()
+                .map(error -> {
+                    Map<String, String> err = new HashMap<>();
+                    err.put("field", error.getField());
+                    err.put("message", error.getDefaultMessage());
+                    return err;
+                })
+                .toList();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("title", "Error de validación");
+        response.put("errors", errors);
+        return response;
+    }
+
+    private Map<String, Object> buildFieldError(String field, String message) {
+        Map<String, String> fieldError = new HashMap<>();
+        fieldError.put("field", field);
+        fieldError.put("message", message);
+
+        List<Map<String, String>> errors = new ArrayList<>();
+        errors.add(fieldError);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("title", "Error de validación");
+        response.put("errors", errors);
+        return response;
+    }
+
 }

@@ -1,5 +1,10 @@
 package com.sigcon.backend.parametrization.parameters.interfaces;
 
+import com.sigcon.backend.parametrization.parameters.domain.model.Parameter;
+import com.sigcon.backend.parametrization.parameters.domain.model.ParameterDataTableRequest;
+import org.springframework.validation.BindingResult;
+import jakarta.validation.Valid;
+
 import com.sigcon.backend.parametrization.parameters.application.CreateParameterRequest;
 import com.sigcon.backend.parametrization.parameters.application.UpdateParameterRequest;
 import com.sigcon.backend.parametrization.parameters.domain.service.ParameterService;
@@ -8,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,6 +22,43 @@ import org.springframework.web.bind.annotation.*;
 public class ParameterController {
 
     private final ParameterService parameterService;
+
+    /**
+     * PA-RF-25: Visualización de parámetros del sistema (DataTables)
+     * POST /api/parameters
+     */
+
+    @PostMapping
+    public ResponseEntity<?> getSystemParameters(@RequestBody ParameterDataTableRequest dtRequest) {
+        return parameterService.getSystemParametersPaged(dtRequest);
+    }
+
+    /**
+     * PA-RF-26: Crear parámetro del sistema
+     * POST /api/parameters/store
+     */
+    @PostMapping("/store")
+    public ResponseEntity<?> storeSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
+        return parameterService.storeSystemParameter(request, bindingResult);
+    }
+
+    /**
+     * PA-RF-27: Editar parámetro del sistema
+     * PUT /api/parameters/update
+     */
+    @PutMapping("/update")
+    public ResponseEntity<?> updateSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
+        return parameterService.updateSystemParameter(request, bindingResult);
+    }
+
+    /**
+     * PA-RF-28: Eliminar parámetro del sistema (lógico)
+     * DELETE /api/parameters/delete/{id}
+     */
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<?> deleteSystemParameter(@PathVariable Long id) {
+        return parameterService.deleteSystemParameter(id);
+    }
 
     /**
      * PA-RF-29: Visualización de parámetros por usuario
@@ -27,12 +70,12 @@ public class ParameterController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "asc") String sortDir) {
-        
-        Sort sort = sortDir.equalsIgnoreCase("desc") 
+
+        Sort sort = sortDir.equalsIgnoreCase("desc")
                 ? Sort.by(sortBy).descending()
                 : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        
+
         return parameterService.getUserParameters(pageable);
     }
 
