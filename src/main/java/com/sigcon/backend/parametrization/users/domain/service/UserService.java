@@ -5,9 +5,16 @@ import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.utils.ErrorRespondJson;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -26,33 +33,28 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final DataTableSpecificationBuilder<User> userSpecificationBuilder =
+            new DataTableSpecificationBuilder<>();
 
-    public ResponseEntity<?> getUsers(UserDTO request, Pageable pageable) {
+    public ResponseEntity<?> getUsers(DataTableRequest request) {
 
         try {
-            Page<User> users;
+            int start  = Math.max(0, request.getStart());
+            int length = request.getLength();
 
-            if (request == null || noFilters(request)) {
-                users = userRepository.findAll(pageable);
-            } else {
-                users = userRepository.searchUsers(
-                        request.getName(),
-                        request.getLastname(),
-                        request.getEmail(),
-                        request.getAvatar(),
-                        request.getRole(),
-                        request.getStatus(),
-                        pageable
-                );
-            }
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
 
-            if (users.isEmpty()) {
-                return ResponseEntity.ok(
-                        Map.of("success", true, "message", "No se encontraron usuarios")
-                );
-            }
+            Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
 
-            Page<UserDTO> response = users.map(user -> {
+            Specification<User> spec = userSpecificationBuilder.build(request)
+                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+
+            Page<User> users =  userRepository.findAll(spec, pageable);
+
+            Page<UserDTO> data = users.map(user -> {
                 UserDTO dto = new UserDTO();
                 dto.setId(user.getId());
                 dto.setName(user.getName());
@@ -69,16 +71,18 @@ public class UserService {
                 return dto;
             });
 
-            return ResponseEntity.ok(response);
+            DataTableResponse<UserDTO> response = DataTableResponse.from(data, request.getDraw());
+            response.setRecordsTotal(data.getTotalElements());
+            response.setRecordsFiltered(data.getTotalElements());
+
+            System.out.println("Response users: " + response);
+            
+            return ResponseEntity.ok(
+                response
+            );
 
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of(
-                            "success", false,
-                            "message", "Error al cargar usuarios, intente nuevamente"
-                    ));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Error al obtener los usuarios"));
         }
     }
     private boolean noFilters(UserDTO dto) {
@@ -88,6 +92,7 @@ public class UserService {
                 && isBlank(dto.getRole())
                 && dto.getStatus() == null;
     }
+
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
     }

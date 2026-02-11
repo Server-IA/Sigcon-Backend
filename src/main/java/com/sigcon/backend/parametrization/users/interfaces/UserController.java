@@ -1,9 +1,9 @@
 package com.sigcon.backend.parametrization.users.interfaces;
 
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
+import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.parametrization.users.domain.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -17,8 +17,8 @@ public class UserController {
 
     @PostMapping("/getUsers")
     @PreAuthorize("hasAuthority('PERM_VIEW_USERS')")
-    public ResponseEntity<?> getUsers(@RequestBody(required = false) UserDTO request, Pageable pageable) {
-        return userService.getUsers(request, pageable);
+    public ResponseEntity<?> getUsers(@RequestBody(required = false) DataTableRequest request) {
+        return userService.getUsers(request);
     }
 
     @GetMapping

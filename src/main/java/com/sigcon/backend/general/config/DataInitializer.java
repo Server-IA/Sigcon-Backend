@@ -47,8 +47,11 @@ public class DataInitializer {
 
             // Crear menús base
 
-            createOrUpdateMenu("Modulos", "modules", "ri-function-ai-line", 1, null, moduleId, "MODULOS");
-            createOrUpdateMenu("Menus", "menus", "ri-play-list-add-line", 2, null, moduleId, "MENUS");
+            createOrUpdateMenu("Perfil", "perfil", "ri-user-line", 1, null, moduleId, "PERFIL");
+            createOrUpdateMenu("Modulos", "modules", "ri-list-settings-fill", 2, null, moduleId, "MODULOS");
+            createOrUpdateMenu("Menus", "menus", "ri-play-list-add-line", 3, null, moduleId, "MENUS");
+            createOrUpdateMenu("Permisos", "permisos", "ri-menu-2-fill", 1, null, moduleId, "PERMISOS");
+            createOrUpdateMenu("Roles", "roles", "ri-menu-2-fill", 1, null, moduleId, "ROLES");
 
             // Crear permisos base
             Permission viewRoles = createPermission("VIEW_ROLES", "Permiso para ver roles", TypePermits.READ);
@@ -65,18 +68,18 @@ public class DataInitializer {
             Permission removePermission = createPermission("REMOVE_PERMISSION", "Permiso para eliminar permisos", TypePermits.DELETE);
             Permission createChartOfAccount = createPermission("CREATE_CHART_OF_ACCOUNT", "Permiso para crear cuentas de contabilidad", TypePermits.CREATE);
             Permission viewChartOfAccount = createPermission("VIEW_CHART_OF_ACCOUNT", "Permiso para ver cuentas de contabilidad", TypePermits.READ);
-
+            Permission viewMenus = createPermission("VIEW_MENUS", "Permiso para ver menús", TypePermits.READ);
 
 
 
             // Crear roles y asignar permisos
             createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount));
-            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount));
+            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus));
             createOrUpdateRole("USER", Set.of());
 
             // Crear usuarios
 
-            createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount));
+            createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus));
 
 
 

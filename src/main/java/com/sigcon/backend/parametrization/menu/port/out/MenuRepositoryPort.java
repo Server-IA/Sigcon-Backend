@@ -7,28 +7,17 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import com.sigcon.backend.parametrization.menu.Menu;
-import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuDataTableRequest;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+import com.sigcon.backend.utils.DataTableRequest;
 
 public interface MenuRepositoryPort {
 
-    Page<Menu> findMenusAllAndDeletedAtIsNull(Pageable pageable);
+    Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable);
 
-    Page<Menu> findMenusAllFiltersAndDeletedAtIsNull(
-        String label,
-        String description,
-        String url,
-        String icon,
-        Integer position,
-        MenuStatus menuStatus,
-        Long moduleId,
-        Long parentId,
-        Pageable pageable);
-
-    boolean noFilters(MenuDataTableRequest request);
     Map<Long, List<Menu>> findMenusByModuleId(Long moduleId);
     MenuEntity saveMenu(MenuEntity menuEntity);
     Optional<MenuEntity> findMenuByLabel(String label);
@@ -41,4 +30,5 @@ public interface MenuRepositoryPort {
     Map<Long, List<Menu>> findMenusByParentId(Long parentId);
 
     MenuEntity updateMenu(MenuEntity menuEntity);
+    MenuEntity deleteMenu(Long id);
 }

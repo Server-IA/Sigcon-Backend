@@ -1,8 +1,5 @@
 package com.sigcon.backend.parametrization.users.domain.service;
-
-import com.sigcon.backend.parametrization.menu.Menu;
-import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
-import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.role.RoleRequest;
 import com.sigcon.backend.parametrization.users.application.role.UpdateUserRole;
@@ -10,22 +7,28 @@ import com.sigcon.backend.parametrization.users.domain.model.Permission;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
-import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.utils.ErrorRespondJson;
+
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -36,19 +39,55 @@ public class RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
-    private final MenuRepositoryPort menuRepository;
 
-    public Page<Role> getRoles(String name, Pageable pageable) { //solo muestra los activos (o sea los no eliminados)
+    private final DataTableSpecificationBuilder<Role> roleSpecificationBuilder =
+        new DataTableSpecificationBuilder<>();
 
-        if (name == null || name.isBlank()) {
-            return roleRepository.findByStatus(Status.ACTIVE, pageable);
+    private final DataTableSpecificationBuilder<Permission> permissionSpecificationBuilder =
+        new DataTableSpecificationBuilder<>();
+
+    public ResponseEntity<?> getRoles(DataTableRequest request) {
+
+        try {
+            int start  = Math.max(0, request.getStart());
+            int length = request.getLength();
+
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
+
+            Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
+
+            Specification<Role> spec = roleSpecificationBuilder.build(request)
+                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+
+            Page<Role> roles = roleRepository.findAll(spec, pageable);
+
+            Page<RoleRequest> data = roles.map(role -> {
+                RoleRequest dto = new RoleRequest();
+                dto.setId(role.getId());
+                dto.setName(role.getName());
+                dto.setPermissionIds(
+                    role.getPermissions().stream().map(Permission::getId).collect(Collectors.toSet())
+                );
+                dto.setPermissions(
+                    role.getPermissions().stream().map(permission -> PermissionDTO.builder()
+                        .name(permission.getName())
+                        .type(permission.getType())
+                        .description(permission.getDescription())
+                        .build()).collect(Collectors.toList()));
+                dto.setStatus(role.getStatus().name());
+                return dto;
+            });
+
+            return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Error al obtener los roles"));
         }
 
-        return roleRepository.findByNameContainingIgnoreCaseAndStatus(
-                name,
-                Status.ACTIVE,
-                pageable
-        );
+        // return roleRepository.findAllAndDeletedAtIsNull(request.getPageable());
     }
 
     public ResponseEntity<?> createRole(RoleRequest request) {
@@ -181,17 +220,12 @@ public class RoleService {
             );
         }
 
-        MenuEntity menu = request.getMenu_id() == null
-                ? null
-                : menuRepository.findById(request.getMenu_id());
-
         Permission permission = permissionRepository.findByName(request.getName())
                 .orElseGet(() -> permissionRepository.save(
                         Permission.builder()
                         .name(request.getName())
                         .type(request.getType())
                         .description(request.getDescription())
-                        .menu(menu)
                         .build()
                 ));
 
@@ -212,23 +246,35 @@ public class RoleService {
         );
     }
 
-    public ResponseEntity<?> getPermissions(Pageable pageable) {
+    public ResponseEntity<?> getPermissions(DataTableRequest request) {
 
         try {
-            Page<Permission> permissions = permissionRepository.findAll(pageable);
 
-            if (permissions.isEmpty()) {
-                return ResponseEntity.ok(
-                        Map.of("success", true, "message", "No se encontraron permisos")
-                );
-            }
+            int start  = Math.max(0, request.getStart());
+            int length = request.getLength();
 
-            return ResponseEntity.ok(permissions);
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
+
+            Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
+
+            Specification<Permission> spec = permissionSpecificationBuilder.build(request)
+                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+
+            Page<Permission> permissions = permissionRepository.findAll(spec, pageable);
+
+            Page<PermissionDTO> data = permissions.map(permission -> PermissionDTO.builder()
+                .name(permission.getName())
+                .type(permission.getType())
+                .description(permission.getDescription())
+                .build());
+
+            return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
 
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("success", false, "message", "Error al cargar permisos"));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Error al obtener los permisos"));
         }
     }
 
@@ -289,6 +335,15 @@ public class RoleService {
                     .body(Map.of("success", false, "message", "Error al remover permisos del rol"));
         }
     }
+
+    private PermissionDTO toDTO(Permission permission) {
+        return PermissionDTO.builder()
+            .name(permission.getName())
+            .type(permission.getType())
+            .description(permission.getDescription())
+            .build();
+    }
+    
 
 
 
