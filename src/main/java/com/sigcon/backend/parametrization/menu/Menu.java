@@ -6,9 +6,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 
 @Data
 @Builder
@@ -28,6 +30,8 @@ public class Menu {
     private Module module;
     private MenuStatus status;
     private String component;
+    private List<PermissionDTO> permissions;
+    private List<Menu> childrens;
     private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

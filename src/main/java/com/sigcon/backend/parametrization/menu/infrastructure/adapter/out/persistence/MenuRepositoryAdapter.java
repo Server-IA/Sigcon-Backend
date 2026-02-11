@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
 import com.sigcon.backend.parametrization.menu.Menu;
@@ -20,31 +21,15 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     public MenuRepositoryAdapter(SpringDataMenuRepository repository) {
         this.repository = repository;
     }
-
+    
     @Override
-    public Page<Menu> findMenusAllAndDeletedAtIsNull(Pageable pageable) {
-        return repository.findMenusAllAndDeletedAtIsNull(pageable)
-            .map(this::entityToMenu);
-    }
-
-    @Override
-    public Page<Menu> findMenusAllFiltersAndDeletedAtIsNull(
-        String label,
-        String description,
-        String url,
-        String icon,
-        Integer position,
-        MenuStatus menuStatus,
-        Long moduleId,
-        Long parentId,
-        Pageable pageable) {
-        return repository.findMenusAllFiltersAndDeletedAtIsNull(label, description, url, icon, position, menuStatus, moduleId, parentId, pageable)
-            .map(this::entityToMenu);
+    public Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable) {
+        return repository.findAll(spec, pageable);
     }
 
     @Override
     public Map<Long, List<Menu>> findMenusByModuleId(Long moduleId) {
-        return repository.findMenusByModule(moduleId, MenuStatus.ACTIVE).stream()
+        return repository.findMenusByModuleId(moduleId, MenuStatus.ACTIVE).stream()
             .map(this::entityToMenu)
             .collect(Collectors.groupingBy(Menu::getModuleId));
     }
@@ -67,9 +52,9 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .moduleId(e.getModuleId())
             .status(e.getStatus())
             .component(e.getComponent())
-            .deletedAt(e.getDeletedAt())
-            .createdAt(e.getCreatedAt())
-            .updatedAt(e.getUpdatedAt())
+            .deletedAt(e.getDeleted_at())
+            .createdAt(e.getCreated_at())
+            .updatedAt(e.getUpdated_at())
             .build();
     }
 
@@ -130,15 +115,10 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .moduleId(m.getModuleId())
             .status(m.getStatus())
             .component(m.getComponent())
-            .deletedAt(m.getDeletedAt())
-            .createdAt(m.getCreatedAt())
-            .updatedAt(m.getUpdatedAt())
+            .deletedAt(m.getDeleted_at())
+            .createdAt(m.getCreated_at())
+            .updatedAt(m.getUpdated_at())
             .build());
-    }
-
-    @Override
-    public boolean noFilters(MenuDataTableRequest request) {
-        return request.getLabel() == null && request.getDescription() == null && request.getUrl() == null && request.getIcon() == null && request.getPosition() == null && request.getStatus() == null;
     }
 
     @Override
@@ -153,7 +133,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .moduleId(menuEntity.getModuleId())
             .status(menuEntity.getStatus())
             .component(menuEntity.getComponent())
-            .updatedAt(LocalDateTime.now())
+            .updated_at(LocalDateTime.now())
             .build());
 
         return MenuEntity.builder()
@@ -166,7 +146,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .moduleId(saved.getModuleId())
             .status(saved.getStatus())
             .component(saved.getComponent())
-            .updatedAt(saved.getUpdatedAt())
+            .updated_at(saved.getUpdated_at())
             .build();
     }
 
@@ -203,5 +183,15 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .status(e.getStatus())
             .component(e.getComponent())
             .build());
+    }
+
+    @Override
+    public MenuEntity deleteMenu(Long id) {
+        MenuEntity menu = findById(id);
+        if(menu == null) {
+            throw new RuntimeException("Menú no encontrado");
+        }
+        menu.setDeleted_at(LocalDateTime.now());
+        return repository.save(menu);
     }
 }

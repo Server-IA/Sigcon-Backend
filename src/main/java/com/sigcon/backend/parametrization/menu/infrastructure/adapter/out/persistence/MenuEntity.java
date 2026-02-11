@@ -11,9 +11,13 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.validator.constraints.UniqueElements;
 
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+
+import io.micrometer.common.lang.Nullable;
 
 @Entity
 @Table(name = "menus")
@@ -53,16 +57,26 @@ public class MenuEntity {
     @Column(name = "status")
     private MenuStatus status = MenuStatus.ACTIVE   ;
 
-    @Column(name = "component", unique = true)
+    @Column(name = "component")
     @NotBlank(message = "El componente es obligatorio")
     private String component;
 
     @Column(name = "created_at")
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Temporal(TemporalType.TIMESTAMP)
+    @CreationTimestamp
+    private LocalDateTime created_at = LocalDateTime.now();
 
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    @Temporal(TemporalType.TIMESTAMP)
+    @UpdateTimestamp
+    private LocalDateTime updated_at = LocalDateTime.now();
 
     @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
+    @Temporal(TemporalType.TIMESTAMP)
+    @Nullable
+    private LocalDateTime deleted_at;
+
+
+
+
 }

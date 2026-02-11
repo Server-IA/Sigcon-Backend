@@ -22,10 +22,6 @@ public class Permission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "menu_id", nullable = true)
-    private MenuEntity menu;
 
     @Column(nullable = false, unique = true)
     private String name;

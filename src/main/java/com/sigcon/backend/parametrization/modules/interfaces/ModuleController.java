@@ -9,6 +9,7 @@ import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
 import com.sigcon.backend.parametrization.modules.domain.service.ModuleService;
+import com.sigcon.backend.utils.DataTableRequest;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +24,7 @@ public class ModuleController {
 
     @PostMapping
     public ResponseEntity<?> getModules(
-        @RequestBody ModuleDataTableRequest dtRequest
+        @RequestBody(required = false) DataTableRequest dtRequest
     ) {
         return moduleService.getModulesPaged(dtRequest);
     }

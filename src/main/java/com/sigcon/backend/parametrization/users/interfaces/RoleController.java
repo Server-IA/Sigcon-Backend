@@ -1,10 +1,13 @@
 package com.sigcon.backend.parametrization.users.interfaces;
 
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.role.RoleRequest;
 import com.sigcon.backend.parametrization.users.application.role.UpdateUserRole;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.service.RoleService;
+import com.sigcon.backend.utils.DataTableRequest;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,16 +25,10 @@ public class RoleController {
 
     private final RoleService roleService;
 
-    @GetMapping
+    @PostMapping("/getRoles")
     @PreAuthorize("hasAuthority('PERM_VIEW_ROLES')")
-    public ResponseEntity<Page<Role>> getRoles(@RequestParam(required = false) String name, Pageable pageable) {
-        Page<Role> roles = roleService.getRoles(name, pageable);
-
-        if (roles.isEmpty()) {
-            return ResponseEntity.noContent().build();
-        }
-
-        return ResponseEntity.ok(roles);
+    public ResponseEntity<?> getRoles(@RequestBody(required = false) DataTableRequest request) {
+        return roleService.getRoles(request);
     }
 
 
@@ -65,10 +62,10 @@ public class RoleController {
         return roleService.createPermission(request);
     }
 
-    @GetMapping("/permissions")
+    @PostMapping("/permissions")
     @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS')")
-    public ResponseEntity<?> getPermissions(Pageable pageable) {
-        return roleService.getPermissions(pageable);
+    public ResponseEntity<?> getPermissions(@RequestBody(required = false) DataTableRequest dtRequest) {
+        return roleService.getPermissions(dtRequest);
     }
 
     @PostMapping("/assign-permissions")

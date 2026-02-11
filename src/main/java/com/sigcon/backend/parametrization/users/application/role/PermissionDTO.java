@@ -17,12 +17,9 @@ public class PermissionDTO {
 
     private String name;
 
-    private Long menu_id;
-
     private TypePermits type;
 
     private String description;
-
 
     private Set<Long> roleIds;
 

@@ -6,17 +6,16 @@ import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 import com.sigcon.backend.parametrization.menu.port.in.MenuUseCase;
+import com.sigcon.backend.utils.DataTableRequest;
 
 import jakarta.validation.Valid;
 
-import com.sigcon.backend.parametrization.menu.Menu;
-import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuDataTableRequest;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.*;
 
 
 @RestController
@@ -31,8 +30,9 @@ public class MenuController {
     }
 
     @PostMapping("/datatable")
+    @PreAuthorize("hasAuthority('PERM_VIEW_MENUS')")
     public ResponseEntity<?> getMenusDataTable(
-        @RequestBody MenuDataTableRequest request
+        @RequestBody(required = false) DataTableRequest request
     ) {
         return menuUseCase.getMenusDataTable(request);
     }
@@ -45,6 +45,11 @@ public class MenuController {
     @PutMapping("/update")
     public ResponseEntity<?> updateMenu(@Valid @RequestBody MenuEntity menu, BindingResult bindingResult) {
         return menuUseCase.updateMenu(menu, bindingResult);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteMenu(@PathVariable Long id) {
+        return menuUseCase.deleteMenu(id);
     }
 
 }

@@ -1,8 +1,8 @@
 package com.sigcon.backend.parametrization.modules.domain.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 import com.sigcon.backend.parametrization.modules.domain.model.Module;
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
@@ -14,22 +14,22 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-public interface ModuleRepository extends JpaRepository<Module, Long> {
+public interface ModuleRepository extends JpaRepository<Module, Long>, JpaSpecificationExecutor<Module> {
 
     Optional<Module> findByName(String name);
     List<Module> findAllByStatus(ModelStatus status);
 
-    @Query("""
-        SELECT m
-        FROM Module m
-        WHERE (:name IS NULL OR m.name ILIKE CONCAT('%', :name, '%'))
-          AND (:description IS NULL OR m.description ILIKE CONCAT('%', :description, '%'))
-          AND (:url IS NULL OR m.url ILIKE CONCAT('%', :url, '%'))
-          AND (:icon IS NULL OR m.icon ILIKE CONCAT('%', :icon, '%'))
-          AND (:position IS NULL OR m.position = :position)
-          AND (:status IS NULL OR m.status = :status)
-          AND (m.deleted_at IS NULL)
-    """)
+    @Query(value = """
+        SELECT *
+        FROM modules m
+        WHERE (NULLIF(:name, '') IS NULL OR m.name ILIKE CONCAT('%', :name, '%'))
+        AND (NULLIF(:description, '') IS NULL OR m.description ILIKE CONCAT('%', :description, '%'))
+        AND (NULLIF(:url, '') IS NULL OR m.url ILIKE CONCAT('%', :url, '%'))
+        AND (NULLIF(:icon, '') IS NULL OR m.icon ILIKE CONCAT('%', :icon, '%'))
+        AND (:position IS NULL OR m.position = :position)
+        AND (:status IS NULL OR m.status = :status)
+        AND m.deleted_at IS NULL
+    """, nativeQuery = true)
 
     Page<Module> searchModules(
         String name,
@@ -50,7 +50,8 @@ public interface ModuleRepository extends JpaRepository<Module, Long> {
                 SELECT 1
                 FROM menus menu
                 WHERE menu.module_id = m.id
-                    AND menu.status = :menuStatus
+                AND menu.status = :menuStatus
+                AND menu.deleted_at IS NULL
           )
         ORDER BY m.position ASC
     """, nativeQuery = true)
