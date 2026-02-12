@@ -37,17 +37,21 @@ public class MenuController {
         return menuUseCase.getMenusDataTable(request);
     }
 
+
     @PostMapping("store")
+    @PreAuthorize("hasAuthority('PERM_CREATE_MENUS')")
     public ResponseEntity<?> storeMenu(@Valid @RequestBody MenuEntity menu, BindingResult bindingResult) {
         return menuUseCase.saveMenu(menu, bindingResult);
     }
 
     @PutMapping("/update")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_MENUS')")
     public ResponseEntity<?> updateMenu(@Valid @RequestBody MenuEntity menu, BindingResult bindingResult) {
         return menuUseCase.updateMenu(menu, bindingResult);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('PERM_DELETE_MENUS')")
     public ResponseEntity<?> deleteMenu(@PathVariable Long id) {
         return menuUseCase.deleteMenu(id);
     }

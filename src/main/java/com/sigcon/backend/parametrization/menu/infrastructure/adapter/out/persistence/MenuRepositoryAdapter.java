@@ -28,8 +28,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     }
 
     @Override
-    public Map<Long, List<Menu>> findMenusByModuleId(Long moduleId) {
-        return repository.findMenusByModuleId(moduleId, MenuStatus.ACTIVE).stream()
+    public Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List roles) {
+        return repository.findMenusByModuleIdAndRoles(moduleId, roles, MenuStatus.ACTIVE).stream()
             .map(this::entityToMenu)
             .collect(Collectors.groupingBy(Menu::getModuleId));
     }

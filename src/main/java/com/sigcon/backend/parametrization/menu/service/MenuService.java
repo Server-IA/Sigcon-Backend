@@ -2,6 +2,7 @@ package com.sigcon.backend.parametrization.menu.service;
 
 import java.lang.StackWalker.Option;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -15,35 +16,46 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import com.sigcon.backend.parametrization.menu.port.in.MenuUseCase;
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
+import com.sigcon.backend.parametrization.users.domain.model.Role;
+import com.sigcon.backend.parametrization.users.domain.model.User;
+import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 
 import jakarta.validation.Valid;
+import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
 
 import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuDataTableRequest;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
+
+@RequiredArgsConstructor
+
 public class MenuService implements MenuUseCase {
     private final MenuRepositoryPort menuRepositoryPort;
     private final ModuleRepository moduleRepository;
+    private final UserRepository userRepository;
 
     private final DataTableSpecificationBuilder<MenuEntity> menuSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
-    public MenuService(MenuRepositoryPort menuRepositoryPort, ModuleRepository moduleRepository) {
-        this.menuRepositoryPort = menuRepositoryPort;
-        this.moduleRepository = moduleRepository;
-    }
+    // public MenuService(MenuRepositoryPort menuRepositoryPort, ModuleRepository moduleRepository) {
+    //     this.menuRepositoryPort = menuRepositoryPort;
+    //     this.moduleRepository = moduleRepository;
+    // }
 
     @Override
     public ResponseEntity<?> getMenusDataTable  (DataTableRequest request) {
@@ -100,7 +112,21 @@ public class MenuService implements MenuUseCase {
     
     @Override
     public List<Menu> getMenusByModuleId(Long moduleId) {
-        return menuRepositoryPort.findMenusByModuleId(moduleId).values().stream()
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String email = auth.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        List<Long> roleIds = user.getRoles().stream()
+            .map(Role::getId)
+            .collect(Collectors.toList());
+
+        System.out.println("---------------------------- Lista de roles -------------------------");
+        System.out.println(roleIds);
+
+        return menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds).values().stream()
             .flatMap(List::stream)
             .toList();
     }
