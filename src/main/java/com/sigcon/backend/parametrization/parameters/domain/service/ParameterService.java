@@ -359,12 +359,12 @@ public class ParameterService {
         }
 
         try {
-            if (parameterRepository.existsByName(request.getName())) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El parámetro ya existe"));
+            if (parameterRepository.existsByNameAndCategoryAndDeletedAtIsNull(request.getName(), request.getCategory())) {
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe"));
             }
 
             request.setId(null);
-            request.setDeleted_at(null);
+            request.setDeletedAt(null);
 
             Parameter saved = parameterRepository.save(request);
             return ResponseEntity.ok(saved);
@@ -386,15 +386,15 @@ public class ParameterService {
             Parameter parameter = parameterRepository.findById(request.getId())
                     .orElse(null);
 
-            if (parameter == null || parameter.getDeleted_at() != null) {
+            if (parameter == null || parameter.getDeletedAt() != null) {
                 return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage("El parámetro seleccionado no existe o ya fue eliminado")
                 );
             }
 
-            if (parameterRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
+            if (parameterRepository.existsByNameAndCategoryAndIdNot(request.getName(), request.getCategory(), request.getId())) {
                 return ResponseEntity.badRequest()
-                        .body(buildFieldError("name", "El nombre ingresado ya existe en otro parámetro"));
+                        .body(ErrorRespondJson.getErrorRespondMessage("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe"));
             }
 
             parameter.setName(request.getName());
@@ -419,12 +419,12 @@ public class ParameterService {
         try {
             Parameter parameter = parameterRepository.findById(id).orElse(null);
 
-            if (parameter == null || parameter.getDeleted_at() != null) {
+            if (parameter == null || parameter.getDeletedAt() != null) {
                 return ResponseEntity.badRequest()
                         .body("El parámetro seleccionado no existe o ya fue eliminado");
             }
 
-            parameter.setDeleted_at(LocalDateTime.now());
+            parameter.setDeletedAt(LocalDateTime.now());
             parameterRepository.save(parameter);
 
             Map<String, Object> response = new HashMap<>();
