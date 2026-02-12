@@ -1,10 +1,12 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 
 import com.sigcon.backend.general.storage.AvatarStorageService;
+import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
+import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
@@ -24,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -34,7 +37,11 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PermissionRepository permissionRepository;
+    
     private final AvatarStorageService avatarStorageService;
+    private final DataTableSpecificationBuilder<User> userSpecificationBuilder =
+            new DataTableSpecificationBuilder<>();
 
     public ResponseEntity<?> getUsers(DataTableRequest request) {
 
@@ -117,6 +124,18 @@ public class UserService {
                         .stream()
                         .map(Role::getName)
                         .collect(Collectors.toSet())
+        );
+
+        response.setPermissions(
+            permissionRepository.findByUserID(user.getId())
+                .stream()
+                .map(permission -> new PermissionDTO(
+                    permission.getName(),
+                    permission.getType(),
+                    permission.getDescription(),
+                    null
+                ))
+                .collect(Collectors.toList())
         );
 
         return ResponseEntity.ok(response);
