@@ -9,8 +9,11 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.SpringDataMenuRepository;
 
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
+import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 
 @Configuration
+
+
 public class BeanConfig {
     @Bean
     public MenuRepositoryPort menuRepositoryPort(SpringDataMenuRepository repo) {
@@ -18,7 +21,7 @@ public class BeanConfig {
     }
 
     @Bean
-    public MenuService menuService(MenuRepositoryPort port, ModuleRepository moduleRepository) {
-        return new MenuService(port, moduleRepository);
+    public MenuService menuService(MenuRepositoryPort port, ModuleRepository moduleRepository, UserRepository userRepository) {
+        return new MenuService(port, moduleRepository, userRepository);
     }
 }

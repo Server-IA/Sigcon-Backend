@@ -22,6 +22,9 @@ import java.util.Set;
 import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
+import com.sigcon.backend.parametrization.menuPermissions.application.MenuPermissionsDTO;
+import com.sigcon.backend.parametrization.menuPermissions.domain.model.MenuPermissionsEntity;
+import com.sigcon.backend.parametrization.menuPermissions.domain.repository.MenuPermissionsRepository;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
@@ -36,6 +39,7 @@ public class DataInitializer {
     private final MenuRepositoryPort menuRepositoryPort;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MenuPermissionsRepository menuPermissionsRepository;
     
     @Bean
     CommandLineRunner initData() {
@@ -52,6 +56,7 @@ public class DataInitializer {
             createOrUpdateMenu("Menus", "menus", "ri-play-list-add-line", 3, null, moduleId, "MENUS");
             createOrUpdateMenu("Permisos", "permisos", "ri-menu-2-fill", 1, null, moduleId, "PERMISOS");
             createOrUpdateMenu("Roles", "roles", "ri-menu-2-fill", 1, null, moduleId, "ROLES");
+            createOrUpdateMenu("Permisos Menu", "menu-permissions", null, 5, null, moduleId, "MENUSPERMISSIONS");
 
             // Crear permisos base
             Permission viewRoles = createPermission("VIEW_ROLES", "Permiso para ver roles", TypePermits.READ);
@@ -74,17 +79,23 @@ public class DataInitializer {
             Permission updateParameter = createPermission("UPDATE_PARAMETER", "Permiso para actualizar parámetros", TypePermits.UPDATE);
             Permission deleteParameter = createPermission("DELETE_PARAMETER", "Permiso para eliminar parámetros", TypePermits.DELETE);
 
+            Permission viewMenuPermissions = createPermission("VIEW_MENU_PERMISSIONS", "Permiso para ver permisos de menús", TypePermits.READ);
+            Permission createMenuPermissions = createPermission("CREATE_MENU_PERMISSIONS", "Permiso para crear permisos de menús", TypePermits.CREATE);
+            Permission updateMenuPermissions = createPermission("UPDATE_MENU_PERMISSIONS", "Permiso para actualizar permisos de menús", TypePermits.UPDATE);
+            Permission deleteMenuPermissions = createPermission("DELETE_MENU_PERMISSIONS", "Permiso para eliminar permisos de menús", TypePermits.DELETE);
 
             // Crear roles y asignar permisos
             createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount));
-            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus, createParameter, viewParameter, updateParameter, deleteParameter));
+            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount,
+                viewMenus, createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
             createOrUpdateRole("USER", Set.of());
 
             // Crear usuarios
 
-            createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus, createParameter, viewParameter, updateParameter, deleteParameter));
+            createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus,
+                createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
 
-
+            createMenuPermissions(6L, 1L);
 
         };
     }
@@ -155,6 +166,19 @@ public class DataInitializer {
                 .status(Status.ACTIVE)
                 .build());
         userRepository.save(user);
+    }
+
+    private void createMenuPermissions(Long menu_id, Long role_id){
+        MenuEntity menu = menuRepositoryPort.findById(menu_id);
+
+        Role role = roleRepository.findById(role_id).orElseGet(null);
+
+        MenuPermissionsEntity entity = MenuPermissionsEntity.builder()
+            .menu(menu)
+            .role(role)
+            .build();
+
+        menuPermissionsRepository.save(entity);
     }
 
 }

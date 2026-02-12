@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-
+import org.hibernate.mapping.Array;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -18,7 +18,7 @@ public interface MenuRepositoryPort {
 
     Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable);
 
-    Map<Long, List<Menu>> findMenusByModuleId(Long moduleId);
+    Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List roles);
     MenuEntity saveMenu(MenuEntity menuEntity);
     Optional<MenuEntity> findMenuByLabel(String label);
     Optional<MenuEntity> findMenuByPath(String path);
