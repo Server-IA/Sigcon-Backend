@@ -11,6 +11,9 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import com.sigcon.backend.parametrization.parameters.domain.model.enums.CategoryParameter;
+import com.sigcon.backend.parametrization.parameters.domain.model.enums.StatusParameter;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -26,33 +29,46 @@ public class Parameter {
     private Long id;
 
     @Column(nullable = false, unique = true)
-    @NotBlank(message = "El nombre es obligatorio")
+    @NotNull(message = "El nombre es obligatorio")
     private String name;
 
     @Column(length = 500)
     private String description;
 
-    // HU-25: valor del parámetro (ej: #FF5733, DARK, etc.)
-    @Column(nullable = false)
-    @NotBlank(message = "El valor es obligatorio")
-    private String value;
-
     // HU-25: categoría (ej: Colores, Tema, etc.)
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    @NotBlank(message = "La categoría es obligatoria")
-    private String category;
+    @NotNull(message = "La categoría es obligatoria")
+    private CategoryParameter category;
 
     // Estado (activo/inactivo)
     @Column(nullable = false)
     @NotNull(message = "El estado es obligatorio")
-    private Boolean active;
+    @Enumerated(EnumType.STRING)
+    private StatusParameter status = StatusParameter.ACTIVE;
 
     @CreationTimestamp
-    private LocalDateTime creationDate;
+    private LocalDateTime created_at;
 
     @UpdateTimestamp
-    private LocalDateTime lastUpdateDate;
+    private LocalDateTime updated_at;
 
     // HU-28: eliminación lógica
-    private LocalDateTime deletedAt;
+    private LocalDateTime deleted_at;
+
+    @PrePersist
+    protected void onCreate() {
+        this.created_at = LocalDateTime.now();
+        this.updated_at = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updated_at = LocalDateTime.now();
+    }
+
+    @PreRemove
+    protected void onDelete() {
+        this.deleted_at = LocalDateTime.now();
+    }
 }
