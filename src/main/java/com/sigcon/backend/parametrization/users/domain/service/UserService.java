@@ -1,5 +1,6 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 
+import com.sigcon.backend.general.storage.AvatarStorageService;
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -33,8 +34,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final DataTableSpecificationBuilder<User> userSpecificationBuilder =
-            new DataTableSpecificationBuilder<>();
+    private final AvatarStorageService avatarStorageService;
 
     public ResponseEntity<?> getUsers(DataTableRequest request) {
 
@@ -148,8 +148,8 @@ public class UserService {
             user.setEmail(request.getEmail());
         }
 
-        if (request.getAvatar() != null) {
-            user.setAvatar(request.getAvatar());
+        if (request.getAvatar() != null && !request.getAvatar().isBlank()) {
+            user.setAvatar(resolveAvatarFilename(request.getAvatar(), user.getAvatar()));
         }
 
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
@@ -187,8 +187,8 @@ public class UserService {
             user.setEmail(request.getEmail());
         }
 
-        if (request.getAvatar() != null) {
-            user.setAvatar(request.getAvatar());
+        if (request.getAvatar() != null && !request.getAvatar().isBlank()) {
+            user.setAvatar(resolveAvatarFilename(request.getAvatar(), user.getAvatar()));
         }        
 
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
@@ -226,6 +226,18 @@ public class UserService {
         return ResponseEntity.ok(
                 Map.of("success", true, "message", "Usuario eliminado correctamente")
         );
+    }
+
+    private String resolveAvatarFilename(String avatarValue, String previousAvatarFilename) {
+        if (looksLikeBase64Image(avatarValue)) {
+            return avatarStorageService.saveBase64Avatar(avatarValue, previousAvatarFilename);
+        }
+        return avatarValue;
+    }
+
+    private boolean looksLikeBase64Image(String avatarValue) {
+        String normalized = avatarValue.trim().toLowerCase();
+        return normalized.startsWith("data:image/") || normalized.length() > 255;
     }
 
 }
