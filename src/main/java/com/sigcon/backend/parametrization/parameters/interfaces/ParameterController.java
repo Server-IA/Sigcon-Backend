@@ -31,7 +31,7 @@ public class ParameterController {
      */
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETERS')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETER')")
     public ResponseEntity<?> getSystemParameters(@RequestBody(required = false) DataTableRequest dtRequest) {
         return parameterService.getSystemParametersPaged(dtRequest);
     }
