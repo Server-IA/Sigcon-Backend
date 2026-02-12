@@ -39,6 +39,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final PermissionRepository permissionRepository;
     
+    
     private final AvatarStorageService avatarStorageService;
     private final DataTableSpecificationBuilder<User> userSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
