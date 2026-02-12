@@ -1,7 +1,11 @@
 package com.sigcon.backend.parametrization.parameters.domain.service;
 
 import com.sigcon.backend.parametrization.parameters.domain.model.ParameterDataTableRequest;
+import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.utils.ErrorRespondJson;
+
 import org.springframework.validation.BindingResult;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
@@ -10,17 +14,24 @@ import java.util.Map;
 import org.springframework.data.domain.PageRequest;
 
 import com.sigcon.backend.parametrization.parameters.application.CreateParameterRequest;
+import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
 import com.sigcon.backend.parametrization.parameters.application.ParameterResponse;
 import com.sigcon.backend.parametrization.parameters.application.UpdateParameterRequest;
+import com.sigcon.backend.parametrization.parameters.application.UserParameterDTO;
 import com.sigcon.backend.parametrization.parameters.domain.model.Parameter;
 import com.sigcon.backend.parametrization.parameters.domain.model.UserParameter;
+import com.sigcon.backend.parametrization.parameters.domain.model.enums.CategoryParameter;
 import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
 import com.sigcon.backend.parametrization.parameters.domain.repository.UserParameterRepository;
+import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.parametrization.users.domain.model.User;
+import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,29 +48,74 @@ public class ParameterService {
 
     private final ParameterRepository parameterRepository;
     private final UserParameterRepository userParameterRepository;
+    private final UserRepository userRepository;
+
+    private final DataTableSpecificationBuilder<Parameter> parameterSpecificationBuilder =
+    new DataTableSpecificationBuilder<>();
+
+    private final DataTableSpecificationBuilder<UserParameter> userParameterSpecificationBuilder =
+    new DataTableSpecificationBuilder<>();
 
     /**
      * PA-RF-29: Visualización de parámetros por usuario
      */
-    public ResponseEntity<?> getUserParameters(Pageable pageable) {
+    public ResponseEntity<?> getUserParameters(DataTableRequest dtRequest) {
         try {
+
             User user = getAuthenticatedUser();
+
             if (user == null) {
                 return ResponseEntity.badRequest().body("Debe iniciar sesión para visualizar sus parámetros.");
             }
 
-            Page<UserParameter> userParametersPage = userParameterRepository.findByUser(user, pageable);
-            List<ParameterResponse> responses = userParametersPage.getContent().stream()
-                    .map(this::mapToResponse)
-                    .collect(Collectors.toList());
+            // dtRequest.getColumns().add(new DataTableRequest.DataTableColumn(
+            //     "user_id", "", true, true, 
+            //     new DataTableRequest.DataTableSearch(user.getId().toString(), false)
+            // ));
 
-            Page<ParameterResponse> responsePage = new PageImpl<>(responses, pageable,
-                    userParametersPage.getTotalElements());
+            int start = Math.max(0, dtRequest.getStart());
+            int length = dtRequest.getLength();
 
-            return ResponseEntity.ok(responsePage);
+            int safeLength = length <= 0 ? 10 : length;
+            int page = start / safeLength;
+
+            Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
+
+            Specification<UserParameter> spec = userParameterSpecificationBuilder.build(dtRequest)
+            .and((root, query, cb) -> cb.equal(root.get("user").get("id"), user.getId()))
+            .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+            
+            System.out.println("user id: " + user.getId().toString());
+            
+            Page<UserParameter> parameters = userParameterRepository.findAll(spec, pageable);
+
+            
+
+            return ResponseEntity.ok(
+                DataTableResponse.from(parameters.map(userParameter -> UserParameterDTO.builder()
+                    .id(userParameter.getId())
+                    .user(UserDTO.builder()
+                        .id(user.getId())
+                        .name(user.getName())
+                        .email(user.getEmail())
+                        .build())
+                    .parameter_id(userParameter.getParameter().getId())
+                    .value(userParameter.getValue())
+                    .parameter(ParameterDTO.builder()
+                        .id(userParameter.getParameter().getId())
+                        .name(userParameter.getParameter().getName())
+                        .category(userParameter.getParameter().getCategory())
+                        .status(userParameter.getParameter().getStatus())
+                        .build())
+                    .created_at(userParameter.getCreated_at())
+                    .updated_at(userParameter.getUpdated_at())
+                    .build()), dtRequest.getDraw())
+            );
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudieron cargar los parámetros. Intente nuevamente o contacte al administrador.");
+                    .body(e.getMessage());
         }
     }
 
@@ -100,9 +156,9 @@ public class ParameterService {
             UserParameter userParameter = UserParameter.builder()
                     .user(user)
                     .parameter(parameter)
-                    .colorValue(validatedColor)
-                    .creationDate(LocalDateTime.now())
-                    .lastUpdateDate(LocalDateTime.now())
+                    .value(validatedColor)
+                    .created_at(LocalDateTime.now())
+                    .updated_at(LocalDateTime.now())
                     .build();
 
             userParameterRepository.save(userParameter);
@@ -149,8 +205,8 @@ public class ParameterService {
             }
 
             // Actualizar el color
-            userParameter.setColorValue(validatedColor);
-            userParameter.setLastUpdateDate(LocalDateTime.now());
+            userParameter.setValue(validatedColor);
+            userParameter.setUpdated_at(LocalDateTime.now());
             userParameterRepository.save(userParameter);
 
             return ResponseEntity.ok("Parámetro actualizado correctamente.");
@@ -182,7 +238,8 @@ public class ParameterService {
                     .orElseThrow(() -> new RuntimeException("No tiene un color asignado para este parámetro."));
 
             // Eliminar la asignación
-            userParameterRepository.delete(userParameter);
+            userParameter.setDeleted_at(LocalDateTime.now());
+            userParameterRepository.save(userParameter);
 
             return ResponseEntity.ok("Parámetro eliminado correctamente.");
         } catch (RuntimeException e) {
@@ -197,11 +254,12 @@ public class ParameterService {
      * Método auxiliar para obtener el usuario autenticado
      */
     private User getAuthenticatedUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof User) {
-            return (User) authentication.getPrincipal();
-        }
-        return null;
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String email = auth.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElse(null);
+        return user;
     }
 
     /**
@@ -243,71 +301,52 @@ public class ParameterService {
     /**
      * Método auxiliar para mapear UserParameter a ParameterResponse
      */
-    private ParameterResponse mapToResponse(UserParameter userParameter) {
-        return ParameterResponse.builder()
-                .id(userParameter.getId())
-                .parameterId(userParameter.getParameter().getId())
-                .parameterName(userParameter.getParameter().getName())
-                .parameterDescription(userParameter.getParameter().getDescription())
-                .colorValue(userParameter.getColorValue())
-                .creationDate(userParameter.getCreationDate())
-                .lastUpdateDate(userParameter.getLastUpdateDate())
-                .build();
-    }
+    // private ParameterResponse mapToResponse(UserParameter userParameter) {
+    //     return ParameterResponse.builder()
+    //             .id(userParameter.getId())
+    //             .parameterId(userParameter.getParameter().getId())
+    //             .parameterName(userParameter.getParameter().getName())
+    //             .parameterDescription(userParameter.getParameter().getDescription())
+    //             .value(userParameter.getValue())
+    //             .creationDate(userParameter.getCreationDate())
+    //             .lastUpdateDate(userParameter.getLastUpdateDate())
+    //             .build();
+    // }
 
     /**
      * PA-RF-25: Visualizar parámetros del sistema (DataTables + filtros)
      */
-    public ResponseEntity<?> getSystemParametersPaged(ParameterDataTableRequest request) {
+    public ResponseEntity<?> getSystemParametersPaged(DataTableRequest request) {
         try {
+            
             int start = Math.max(0, request.getStart());
             int length = request.getLength();
 
-            // Caso: traer TODOS
-            if (length == -1) {
-                List<Parameter> all = noFilters(request)
-                        ? parameterRepository.findAllNotDeleted(Pageable.unpaged()).getContent()
-                        : parameterRepository.searchParameters(
-                                emptyToNull(request.getName()),
-                                emptyToNull(request.getValue()),
-                                emptyToNull(request.getCategory()),
-                                request.getActive(),
-                                Pageable.unpaged()).getContent();
-
-                if (!noFilters(request) && all.isEmpty()) {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("title", "Sin resultados");
-                    response.put("message", "No se encontraron parámetros con los criterios ingresados");
-                    return ResponseEntity.ok(response);
-                }
-
-                return ResponseEntity.ok(DataTableResponse.from(all, request.getDraw()));
-            }
-
             int safeLength = length <= 0 ? 10 : length;
             int page = start / safeLength;
-            Pageable pageable = PageRequest.of(page, safeLength);
 
-            Page<Parameter> parameters = noFilters(request)
-                    ? parameterRepository.findAllNotDeleted(pageable)
-                    : parameterRepository.searchParameters(
-                            emptyToNull(request.getName()),
-                            emptyToNull(request.getValue()),
-                            emptyToNull(request.getCategory()),
-                            request.getActive(),
-                            pageable);
+            Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
 
-            if (!noFilters(request) && parameters.getTotalElements() == 0) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("title", "Sin resultados");
-                response.put("message", "No se encontraron parámetros con los criterios ingresados");
-                return ResponseEntity.ok(response);
-            }
+            Specification<Parameter> spec = parameterSpecificationBuilder.build(request)
+                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
 
-            return ResponseEntity.ok(DataTableResponse.from(parameters, request.getDraw()));
+            Page<Parameter> parameters = parameterRepository.findAll(spec, pageable);
+            
+            return ResponseEntity.ok(
+                DataTableResponse.from(parameters.map(parameter -> ParameterDTO.builder()
+                    .id(parameter.getId())
+                    .name(parameter.getName())
+                    .category(parameter.getCategory())
+                    .status(parameter.getStatus())
+                    .build()), request.getDraw())
+            );
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo cargar la lista de parámetros. Intente nuevamente o contacte al administrador");
+                    .body(
+                        ErrorRespondJson.getErrorRespondMessage(e.getMessage())
+                    );
         }
     }
 
@@ -316,22 +355,22 @@ public class ParameterService {
      */
     public ResponseEntity<?> storeSystemParameter(@Valid Parameter request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
-            return ResponseEntity.badRequest().body(buildValidationErrors(bindingResult));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
         try {
             if (parameterRepository.existsByName(request.getName())) {
-                return ResponseEntity.badRequest().body(buildFieldError("name", "El parámetro ya existe"));
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El parámetro ya existe"));
             }
 
             request.setId(null);
-            request.setDeletedAt(null);
+            request.setDeleted_at(null);
 
             Parameter saved = parameterRepository.save(request);
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo crear el parámetro. Intente nuevamente o contacte al administrador");
+                    .body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
         }
     }
 
@@ -347,8 +386,10 @@ public class ParameterService {
             Parameter parameter = parameterRepository.findById(request.getId())
                     .orElse(null);
 
-            if (parameter == null || parameter.getDeletedAt() != null) {
-                return ResponseEntity.badRequest().body("El parámetro seleccionado no existe");
+            if (parameter == null || parameter.getDeleted_at() != null) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage("El parámetro seleccionado no existe o ya fue eliminado")
+                );
             }
 
             if (parameterRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
@@ -358,15 +399,16 @@ public class ParameterService {
 
             parameter.setName(request.getName());
             parameter.setDescription(request.getDescription());
-            parameter.setValue(request.getValue());
             parameter.setCategory(request.getCategory());
-            parameter.setActive(request.getActive());
+            parameter.setStatus(request.getStatus());
 
             Parameter saved = parameterRepository.save(parameter);
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo actualizar el parámetro. Intente nuevamente o contacte al administrador");
+                    .body(
+                        ErrorRespondJson.getErrorRespondMessage(e.getMessage())
+                    );
         }
     }
 
@@ -377,12 +419,12 @@ public class ParameterService {
         try {
             Parameter parameter = parameterRepository.findById(id).orElse(null);
 
-            if (parameter == null || parameter.getDeletedAt() != null) {
+            if (parameter == null || parameter.getDeleted_at() != null) {
                 return ResponseEntity.badRequest()
                         .body("El parámetro seleccionado no existe o ya fue eliminado");
             }
 
-            parameter.setDeletedAt(LocalDateTime.now());
+            parameter.setDeleted_at(LocalDateTime.now());
             parameterRepository.save(parameter);
 
             Map<String, Object> response = new HashMap<>();
@@ -397,13 +439,6 @@ public class ParameterService {
     }
 
     // ===== Helpers (mismo estilo que Modules) =====
-
-    private boolean noFilters(ParameterDataTableRequest request) {
-        return isBlank(request.getName())
-                && isBlank(request.getValue())
-                && isBlank(request.getCategory())
-                && request.getActive() == null;
-    }
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();

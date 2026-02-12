@@ -8,6 +8,8 @@ import jakarta.validation.Valid;
 import com.sigcon.backend.parametrization.parameters.application.CreateParameterRequest;
 import com.sigcon.backend.parametrization.parameters.application.UpdateParameterRequest;
 import com.sigcon.backend.parametrization.parameters.domain.service.ParameterService;
+import com.sigcon.backend.utils.DataTableRequest;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,7 +31,8 @@ public class ParameterController {
      */
 
     @PostMapping
-    public ResponseEntity<?> getSystemParameters(@RequestBody ParameterDataTableRequest dtRequest) {
+    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETERS')")
+    public ResponseEntity<?> getSystemParameters(@RequestBody(required = false) DataTableRequest dtRequest) {
         return parameterService.getSystemParametersPaged(dtRequest);
     }
 
@@ -38,6 +41,7 @@ public class ParameterController {
      * POST /api/parameters/store
      */
     @PostMapping("/store")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PARAMETER')")
     public ResponseEntity<?> storeSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
         return parameterService.storeSystemParameter(request, bindingResult);
     }
@@ -47,6 +51,7 @@ public class ParameterController {
      * PUT /api/parameters/update
      */
     @PutMapping("/update")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PARAMETER')")
     public ResponseEntity<?> updateSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
         return parameterService.updateSystemParameter(request, bindingResult);
     }
@@ -56,6 +61,7 @@ public class ParameterController {
      * DELETE /api/parameters/delete/{id}
      */
     @DeleteMapping("/delete/{id}")
+    @PreAuthorize("hasAuthority('PERM_DELETE_PARAMETER')")
     public ResponseEntity<?> deleteSystemParameter(@PathVariable Long id) {
         return parameterService.deleteSystemParameter(id);
     }
@@ -64,26 +70,16 @@ public class ParameterController {
      * PA-RF-29: Visualización de parámetros por usuario
      * GET /api/parameters/user
      */
-    @GetMapping("/user")
-    public ResponseEntity<?> getUserParameters(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "id") String sortBy,
-            @RequestParam(defaultValue = "asc") String sortDir) {
-
-        Sort sort = sortDir.equalsIgnoreCase("desc")
-                ? Sort.by(sortBy).descending()
-                : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
-
-        return parameterService.getUserParameters(pageable);
+    @PostMapping("/user")
+    public ResponseEntity<?> getUserParameters(@RequestBody(required = false) DataTableRequest dtRequest) {
+        return parameterService.getUserParameters(dtRequest);
     }
 
     /**
      * PA-RF-30: Asignación / Creación de parámetros por usuario
      * POST /api/parameters/user
      */
-    @PostMapping("/user")
+    @PostMapping("/user/create")
     public ResponseEntity<?> createUserParameter(@RequestBody CreateParameterRequest request) {
         return parameterService.createUserParameter(request);
     }

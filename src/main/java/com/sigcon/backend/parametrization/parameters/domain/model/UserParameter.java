@@ -31,10 +31,26 @@ public class UserParameter {
     @JoinColumn(name = "parameter_id", nullable = false)
     private Parameter parameter;
 
-    @Column(name = "color_value", length = 7, nullable = false)
-    private String colorValue; // Formato hexadecimal (ej: #FF5733)
+    @Column(name = "value", nullable = false)
+    private String value; // Formato hexadecimal (ej: #FF5733)
 
-    private LocalDateTime creationDate;
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime created_at;
 
-    private LocalDateTime lastUpdateDate;
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updated_at;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deleted_at;
+
+    @PrePersist
+    public void prePersist() {
+        this.created_at = LocalDateTime.now();
+        this.updated_at = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updated_at = LocalDateTime.now();
+    }
 }
