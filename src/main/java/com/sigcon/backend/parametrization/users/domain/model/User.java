@@ -42,8 +42,7 @@ public class User implements UserDetails {
     @NotNull
     private String password;
 
-    @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 255)
     private String avatar;
 
     @ManyToMany(fetch = FetchType.EAGER)

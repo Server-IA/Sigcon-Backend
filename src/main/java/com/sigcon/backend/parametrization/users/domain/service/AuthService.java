@@ -2,6 +2,7 @@ package com.sigcon.backend.parametrization.users.domain.service;
 
 import com.sigcon.backend.general.config.EmailService;
 import com.sigcon.backend.general.security.JwtService;
+import com.sigcon.backend.general.storage.AvatarStorageService;
 import com.sigcon.backend.parametrization.users.application.auth.AuthRequest;
 import com.sigcon.backend.parametrization.users.application.auth.ResetPasswordRequest;
 import com.sigcon.backend.parametrization.users.domain.model.BlackListedToken;
@@ -39,6 +40,7 @@ public class AuthService {
     private final EmailService emailService;
     private final BlackListedTokenRepository blackListedTokenRepository;
     private final RoleRepository roleRepository;
+    private final AvatarStorageService avatarStorageService;
 
     public ResponseEntity<?> register(AuthRequest request) {
 
@@ -65,7 +67,10 @@ public class AuthService {
 
         Role role = roleRepository.findByName("USER")
                 .orElseThrow(() -> new RuntimeException("El rol USER no existe en la base de datos."));
-
+        String avatarFilename = null;
+        if (request.getAvatar() != null && !request.getAvatar().isBlank()) {
+            avatarFilename = resolveAvatarFilename(request.getAvatar());
+        }
 
         User user = User.builder()
                 .name(request.getName())
@@ -193,6 +198,14 @@ public class AuthService {
                     )
             );
         }
+    }
+
+    private String resolveAvatarFilename(String avatarValue) {
+        String normalized = avatarValue.trim().toLowerCase();
+        if (normalized.startsWith("data:image/") || normalized.length() > 255) {
+            return avatarStorageService.saveBase64Avatar(avatarValue, null);
+        }
+        return avatarValue;
     }
 
 }
