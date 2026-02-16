@@ -35,6 +35,6 @@ public interface PermissionRepository extends JpaRepository<Permission, Long>, J
 
     Optional<Permission> findByCode(String code);
 
-    
+    Optional<Permission> findByCodeNotId(String code, Long id);
 
 }
