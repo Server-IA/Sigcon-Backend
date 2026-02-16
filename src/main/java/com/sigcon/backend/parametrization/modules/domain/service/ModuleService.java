@@ -99,6 +99,8 @@ public class ModuleService {
     public ResponseEntity<?> getModulesMenu() {
         try {
 
+            
+
             List<Module> modules = moduleRepository.findActiveModulesWithActiveMenus(ModelStatus.ACTIVE, MenuStatus.ACTIVE);
 
             List<ModuleDTO> moduleDTOs = modules.stream()
