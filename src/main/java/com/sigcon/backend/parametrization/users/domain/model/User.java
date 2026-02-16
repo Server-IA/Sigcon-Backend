@@ -87,7 +87,7 @@ public class User implements UserDetails {
                     Stream<GrantedAuthority> permissionAuthorities =
                             role.getPermissions()
                                     .stream()
-                                    .map(permission -> new SimpleGrantedAuthority("PERM_" + permission.getName()));
+                                    .map(permission -> new SimpleGrantedAuthority("PERM_" + permission.getCode()));
 
                     return Stream.concat(roleAuthority, permissionAuthorities);
                 })

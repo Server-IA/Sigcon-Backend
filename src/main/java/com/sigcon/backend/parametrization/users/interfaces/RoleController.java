@@ -1,27 +1,39 @@
 package com.sigcon.backend.parametrization.users.interfaces;
 
-import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.role.RoleRequest;
 import com.sigcon.backend.parametrization.users.application.role.UpdateUserRole;
-import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.service.RoleService;
 import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.ErrorRespondJson;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/roles")
 @RequiredArgsConstructor
 public class RoleController {
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleJsonParseError(HttpMessageNotReadableException ex) {
+
+        Throwable rootCause = ex.getMostSpecificCause();
+
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(rootCause.getMessage())));
+    }
+
 
     private final RoleService roleService;
 
@@ -58,13 +70,19 @@ public class RoleController {
 
     @PostMapping("/createPermission")
     @PreAuthorize("hasAuthority('PERM_CREATE_PERMISSION')")
-    public ResponseEntity<?> createPermission(@RequestBody PermissionDTO request) {
-        return roleService.createPermission(request);
+    public ResponseEntity<?> createPermission(@Valid @RequestBody PermissionDTO request, BindingResult bindingResult) {
+        return roleService.createPermission(request, bindingResult);
+    }
+
+    @PutMapping("/updatePermission/{id}")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION')")
+    public ResponseEntity<?> updatePermission(@PathVariable Long id, @Valid @RequestBody PermissionDTO request, BindingResult bindingResult) {
+        return roleService.updatePermission(id, request, bindingResult);
     }
 
     @PostMapping("/permissions")
     @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS')")
-    public ResponseEntity<?> getPermissions(@RequestBody(required = false) DataTableRequest dtRequest) {
+    public ResponseEntity<?> getPermissions(@RequestBody DataTableRequest dtRequest) {
         return roleService.getPermissions(dtRequest);
     }
 

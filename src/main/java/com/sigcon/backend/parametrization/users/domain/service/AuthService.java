@@ -14,6 +14,9 @@ import com.sigcon.backend.parametrization.users.domain.repository.BlackListedTok
 import com.sigcon.backend.parametrization.users.domain.repository.PasswordResetTokenRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,7 +27,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -102,17 +107,17 @@ public class AuthService {
 
             String token = jwtService.generateToken(user);
 
+            Map<String, Object> response = new HashMap<String, Object>();
+            response.put("token", token);
+
             return ResponseEntity.ok(
-                    Map.of("success", true,
-                            "token", token
-                    )
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña."), Optional.of(response))
             );
 
         } catch (AuthenticationException e) {
             return ResponseEntity.badRequest()
                     .body(
-                            Map.of("success", false,
-                                    "message", "Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña.")
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña."))
                     );
         }
     }

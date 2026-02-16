@@ -19,6 +19,9 @@ public class DataTableRequest {
     // ===== Filtros =====
     private List<DataTableColumn> columns;
 
+    // ===== Filtro Global =====
+    private DataTableSearch search;
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -29,12 +32,12 @@ public class DataTableRequest {
         private boolean orderable;
         private DataTableSearch search;
     }
-    
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
     public static class DataTableSearch {
         private String value;
         private boolean regex;
-    }
+    } 
 }

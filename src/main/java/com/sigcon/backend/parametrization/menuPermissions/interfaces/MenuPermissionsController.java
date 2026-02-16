@@ -1,5 +1,7 @@
 package com.sigcon.backend.parametrization.menuPermissions.interfaces;
 
+import java.util.Optional;
+
 import org.springframework.data.repository.query.Param;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,6 +16,7 @@ import com.sigcon.backend.parametrization.menuPermissions.domain.service.MenuPer
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.ErrorRespondJson;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,17 +40,17 @@ public class MenuPermissionsController {
         try{
             return menuPermissionsService.getMenuPermissions(dtRequest);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
     @PostMapping("/store")
     @PreAuthorize("hasAuthority('PERM_CREATE_MENU_PERMISSIONS')")
-    public ResponseEntity<?> storeMenuPermission(@RequestBody MenuPermissionsDTO request, BindingResult bindingResult) {
+    public ResponseEntity<?> storeMenuPermission(@Valid @RequestBody MenuPermissionsDTO request, BindingResult bindingResult) {
         try{
             return menuPermissionsService.storeMenuPermission(request, bindingResult);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -57,7 +60,7 @@ public class MenuPermissionsController {
         try{
             return menuPermissionsService.updateMenuPermission(request, bindingResult);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -67,7 +70,7 @@ public class MenuPermissionsController {
         try{
             return menuPermissionsService.deleteMenuPermission(id);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 

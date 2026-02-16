@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -30,6 +31,7 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -78,7 +80,7 @@ public class ModuleService {
     
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(e.getMessage())
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
         }
     }
@@ -86,9 +88,11 @@ public class ModuleService {
     public ResponseEntity<?> getModules(ModuleDTO request) {
         try {
             List<Module> modules = moduleRepository.findAllByStatus(ModelStatus.ACTIVE);
-            return ResponseEntity.ok(modules);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulos obtenidos correctamente"), Optional.of(modules))
+            );
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error al obtener los módulos");
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los módulos")));
         }
     }
 
@@ -113,9 +117,10 @@ public class ModuleService {
                             .build())
                     .toList();
 
-            return ResponseEntity.ok(moduleDTOs);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulos obtenidos correctamente"), Optional.of(moduleDTOs)));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -123,48 +128,22 @@ public class ModuleService {
             @Valid @RequestBody Module request,
             BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
-            List<Map<String, String>> errors = bindingResult.getFieldErrors()
-                    .stream()
-                    .map(error -> {
-                        Map<String, String> err = new HashMap<>();
-                        err.put("field", error.getField());
-                        err.put("message", error.getDefaultMessage());
-                        return err;
-                    })
-                    .toList();
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("title", "Error de validación");
-            response.put("errors", errors);
-
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
         try {
             if (moduleRepository.existsByName(request.getName())) {
-
-                Map<String, String> fieldError = new HashMap<>();
-                fieldError.put("field", "name");
-                fieldError.put("message", "El nombre del módulo ya existe");
-
-                List<Map<String, String>> errors = new ArrayList<>();
-                errors.add(fieldError);
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("title", "Error de validación");
-                response.put("errors", errors);
-
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del módulo ya existe"))
+                );
             }
             Module module = moduleRepository.save(request);
-            return ResponseEntity.ok(module);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo creado correctamente"), Optional.of(module)));
         } catch (Exception e) {
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("title", "Error interno");
-            response.put("message", "Error al guardar el módulo");
-
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar el módulo"))
+            );
         }
     }
 
@@ -173,36 +152,15 @@ public class ModuleService {
             BindingResult bindingResult) {
         try {
             if (moduleRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
-                Map<String, String> fieldError = new HashMap<>();
-                fieldError.put("field", "name");
-                fieldError.put("message", "El nombre del módulo ya existe");
-
-                List<Map<String, String>> errors = new ArrayList<>();
-                errors.add(fieldError);
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("title", "Error de validación");
-                response.put("errors", errors);
-
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del módulo ya existe"))
+                );
             }
 
             if (bindingResult.hasErrors()) {
-                List<Map<String, String>> errors = bindingResult.getFieldErrors()
-                        .stream()
-                        .map(error -> {
-                            Map<String, String> err = new HashMap<>();
-                            err.put("field", error.getField());
-                            err.put("message", error.getDefaultMessage());
-                            return err;
-                        })
-                        .toList();
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("title", "Error de validación");
-                response.put("errors", errors);
-
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondJson(bindingResult)
+                );
             }
 
             Module module = moduleRepository.findById(request.getId())
@@ -216,13 +174,12 @@ public class ModuleService {
             module.setStatus(request.getStatus());
             // module.setUpdatedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
-            return ResponseEntity.ok(module);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo actualizado correctamente"), Optional.of(module)));
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("title", "Error interno");
-            response.put("message", "Error al guardar el módulo");
-
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al actualizar el módulo"))
+            );
         }
     }
 
@@ -232,13 +189,12 @@ public class ModuleService {
                     .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
             module.setDeleted_at(LocalDateTime.now());
             module = moduleRepository.save(module);
-            return ResponseEntity.ok(module);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo eliminado correctamente"), Optional.of(module)));
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("title", "Error interno");
-            response.put("message", e.getMessage());
-
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar el módulo"))
+            );
         }
     }
 
