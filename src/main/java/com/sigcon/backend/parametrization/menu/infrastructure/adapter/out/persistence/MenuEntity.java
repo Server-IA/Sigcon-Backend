@@ -58,7 +58,6 @@ public class MenuEntity {
     private MenuStatus status = MenuStatus.ACTIVE   ;
 
     @Column(name = "component")
-    @NotBlank(message = "El componente es obligatorio")
     private String component;
 
     @Column(name = "created_at")

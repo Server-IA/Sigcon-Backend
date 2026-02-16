@@ -12,6 +12,7 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -80,17 +81,15 @@ public class UserService {
             });
 
             DataTableResponse<UserDTO> response = DataTableResponse.from(data, request.getDraw());
-            response.setRecordsTotal(data.getTotalElements());
-            response.setRecordsFiltered(data.getTotalElements());
-
-            System.out.println("Response users: " + response);
+            // response.setRecordsTotal(data.getTotalElements());
+            // response.setRecordsFiltered(data.getTotalElements());
             
             return ResponseEntity.ok(
                 response
             );
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Error al obtener los usuarios"));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los usuarios")));
         }
     }
     private boolean noFilters(UserDTO dto) {
@@ -131,22 +130,28 @@ public class UserService {
             permissionRepository.findByUserID(user.getId())
                 .stream()
                 .map(permission -> new PermissionDTO(
+                    null,
                     permission.getName(),
+                    permission.getCode(),
                     permission.getType(),
+                    null,
+                    null,
                     permission.getDescription(),
                     null
                 ))
                 .collect(Collectors.toList())
         );
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario obtenida correctamente"), Optional.of(response))
+        );
     }
 
     public ResponseEntity<?> updateInfo(UserDTO request) {
 
         if (request == null) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "Datos inválidos")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Datos inválidos"))
             );
         }
 
@@ -180,7 +185,7 @@ public class UserService {
         userRepository.save(user);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Información actualizada correctamente")
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información actualizada correctamente"), Optional.of(user))
         );
     }
     public ResponseEntity<?> updateUser(Long id, UserDTO request){
@@ -189,7 +194,7 @@ public class UserService {
 
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    Map.of("success", false, "message", "Usuario no encontrado")
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario no encontrado"))
             );
         }
 
@@ -223,7 +228,7 @@ public class UserService {
         userRepository.save(user);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Información del usuario actualizada correctamente")
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario actualizada correctamente"), Optional.of(user))
         );
     }
 
@@ -233,7 +238,7 @@ public class UserService {
 
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    Map.of("success", false, "message", "Usuario no encontrado")
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario no encontrado"))
             );
         }
 
@@ -244,7 +249,7 @@ public class UserService {
         userRepository.save(user);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Usuario eliminado correctamente")
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"), Optional.of(user))
         );
     }
 

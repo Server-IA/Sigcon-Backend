@@ -1,5 +1,7 @@
 package com.sigcon.backend.utils;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -17,13 +19,21 @@ public class DataTableResponse<T> {
     private long recordsTotal;
     private long recordsFiltered;
     private List<T> data;
+    private Boolean success;
+    private Integer code;
+    private String message;
+    private String timestamp;
 
     public static <T> DataTableResponse<T> from(Page<T> page, int draw) {
         return new DataTableResponse<>(
             draw,
             page.getTotalElements(),
             page.getTotalElements(),
-            page.getContent()
+            page.getContent(),
+            true,
+            200,
+            "Operación realizada correctamente",
+            LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         );
     }
 
@@ -32,7 +42,11 @@ public class DataTableResponse<T> {
             draw,
             data.size(),
             data.size(),
-            data
+            data,
+            true,
+            200,
+            "Operación realizada correctamente",
+            LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         );
     }
 }

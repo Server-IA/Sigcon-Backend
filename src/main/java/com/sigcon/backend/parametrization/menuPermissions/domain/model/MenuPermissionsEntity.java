@@ -14,7 +14,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreRemove;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -24,6 +23,7 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "menu_permissions")
+
 @Data
 @Builder
 @AllArgsConstructor

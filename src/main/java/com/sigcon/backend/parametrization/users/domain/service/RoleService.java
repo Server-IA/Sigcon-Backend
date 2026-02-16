@@ -1,5 +1,6 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
+import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.role.RoleRequest;
 import com.sigcon.backend.parametrization.users.application.role.UpdateUserRole;
@@ -7,6 +8,10 @@ import com.sigcon.backend.parametrization.users.domain.model.Permission;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
+import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
+import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
+import com.sigcon.backend.parametrization.modules.domain.model.Module;
+
 import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
@@ -14,8 +19,10 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
 
 import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,11 +31,14 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,6 +49,7 @@ public class RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
+    private final ModuleRepository moduleRepository;
 
     private final DataTableSpecificationBuilder<Role> roleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
@@ -84,7 +95,7 @@ public class RoleService {
             return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Error al obtener los roles"));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los roles")));
         }
 
         // return roleRepository.findAllAndDeletedAtIsNull(request.getPageable());
@@ -94,13 +105,13 @@ public class RoleService {
 
         if (request.getName() == null || request.getName().isBlank()) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El nombre del rol es obligatorio")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del rol es obligatorio"))
             );
         }
 
         if (roleRepository.findByName(request.getName()).isPresent()) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El rol ya existe.")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
             );
         }
 
@@ -120,7 +131,7 @@ public class RoleService {
         roleRepository.save(role);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Rol creado exitosamente")
+            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(role))
         );
     }
 
@@ -128,7 +139,7 @@ public class RoleService {
 
         if (request.getName() == null || request.getName().isBlank()) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El nombre del rol es obligatorio")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del rol es obligatorio"))
             );
         }
 
@@ -139,7 +150,7 @@ public class RoleService {
                 && !role.getName().equalsIgnoreCase(request.getName())) {
 
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El rol ya existe.")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
             );
         }
 
@@ -157,7 +168,7 @@ public class RoleService {
         roleRepository.save(role);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Rol actualizado exitosamente")
+            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol actualizado exitosamente"), Optional.of(role))
         );
     }
 
@@ -166,9 +177,9 @@ public class RoleService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
-        if (role.getStatus() == Status.INACTIVE) {
+        if (role.getDeleted_at() != null) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El rol ya se encuentra inactivo")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya se encuentra eliminado"))
             );
         }
 
@@ -176,15 +187,15 @@ public class RoleService {
 
         if (hasUsers) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "No se puede eliminar el rol porque está asociado a usuarios")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("No se puede eliminar el rol porque está asociado a usuarios"))
             );
         }
 
-        role.setStatus(Status.INACTIVE);
+        role.setDeleted_at(LocalDateTime.now());
         roleRepository.save(role);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Rol eliminado exitosamente")
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol eliminado exitosamente"), Optional.of(role))
         );
     }
 
@@ -206,44 +217,52 @@ public class RoleService {
         );
     }
 
-    public ResponseEntity<?> createPermission(PermissionDTO request){
+    public ResponseEntity<?> createPermission(PermissionDTO request, BindingResult bindingResult){
 
-        if (request == null || request.getName() == null || request.getName().isBlank()) {
-            return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El nombre del permiso es obligatorio")
-            );
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
-        if (permissionRepository.findByName(request.getName()).isPresent()) {
-            return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "El permiso ya existe.")
-            );
-        }
+        try{
 
-        Permission permission = permissionRepository.findByName(request.getName())
-                .orElseGet(() -> permissionRepository.save(
-                        Permission.builder()
-                        .name(request.getName())
-                        .type(request.getType())
-                        .description(request.getDescription())
-                        .build()
-                ));
+            Optional<Permission> optionalPermission = permissionRepository.findByCode(request.getCode());
 
-        if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
-            Set<Role> roles = roleRepository.findAllById(request.getRoleIds())
-                    .stream().collect(Collectors.toSet());
-
-            for (Role role : roles) {
-                role.getPermissions().add(permission);
-                roleRepository.save(role);
+            if (optionalPermission.isPresent()) {
+                throw new RuntimeException("El código del permiso ya existe");
             }
+            
+            Module module = moduleRepository.findById(request.getModuleId())
+                .orElseThrow(() -> new RuntimeException("El módulo no existe"));
+
+            Permission permission = permissionRepository.save(
+                Permission.builder()
+                    .name(request.getName())
+                    .code(request.getCode())
+                    .type(request.getType())
+                    .description(request.getDescription())
+                    .module(module)
+                    .build()
+            );
+    
+            if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+                Set<Role> roles = roleRepository.findAllById(request.getRoleIds())
+                        .stream().collect(Collectors.toSet());
+    
+                for (Role role : roles) {
+                    role.getPermissions().add(permission);
+                    roleRepository.save(role);
+                }
+            }
+    
+            permissionRepository.save(permission);
+    
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso creado exitosamente"), Optional.of(permission))
+            );
+
+        }catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
-
-        permissionRepository.save(permission);
-
-        return ResponseEntity.ok(
-                Map.of("success", true, "message", "Permiso creado exitosamente")
-        );
     }
 
     public ResponseEntity<?> getPermissions(DataTableRequest request) {
@@ -265,17 +284,52 @@ public class RoleService {
 
             Page<Permission> permissions = permissionRepository.findAll(spec, pageable);
 
-            Page<PermissionDTO> data = permissions.map(permission -> PermissionDTO.builder()
-                .name(permission.getName())
-                .type(permission.getType())
-                .description(permission.getDescription())
-                .build());
+            Page<PermissionDTO> data = permissions.map(this::toDTO);
 
             return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("Error al obtener los permisos"));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los permisos")));
         }
+    }
+
+    public ResponseEntity<?> updatePermission(Long id, PermissionDTO request, BindingResult bindingResult){
+        try{
+            if (bindingResult.hasErrors()) {
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+            }
+
+            Optional<Permission> optionalPermission = permissionRepository.findById(id);
+
+            if (!optionalPermission.isPresent()) {
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Permiso no encontrado")));
+            }
+
+            Permission permission = optionalPermission.get();
+            Optional<Permission> searchCode = permissionRepository.findByCode(request.getCode());
+
+            if (searchCode.isPresent() && !searchCode.get().getId().equals(permission.getId())) {
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El código del permiso ya existe")));
+            }
+
+            Module module = moduleRepository.findById(request.getModuleId()).orElseThrow(() -> new RuntimeException("El módulo no existe"));
+
+            permission.setName(request.getName());
+            permission.setCode(request.getCode());
+            permission.setType(request.getType());
+            permission.setDescription(request.getDescription());
+            permission.setModule(module);
+            permission.setUpdated_at(LocalDateTime.now());
+            permissionRepository.save(permission);
+
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso actualizado exitosamente"), Optional.of(permission))
+            );
+
+        }catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+
     }
 
     @Transactional
@@ -290,7 +344,7 @@ public class RoleService {
 
         if (permissions.isEmpty()) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", "No se encontraron permisos válidos")
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("No se encontraron permisos válidos"))
             );
         }
 
@@ -298,7 +352,7 @@ public class RoleService {
         roleRepository.save(role);
 
         return ResponseEntity.ok(
-                Map.of("success", true, "message", "Permisos asignados correctamente al rol")
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos asignados correctamente al rol"), Optional.of(role))
         );
     }
 
@@ -311,7 +365,7 @@ public class RoleService {
 
             if (role.getPermissions().isEmpty()) {
                 return ResponseEntity.badRequest().body(
-                        Map.of("success", false, "message", "El rol no tiene permisos asignados")
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol no tiene permisos asignados"))
                 );
             }
 
@@ -322,29 +376,36 @@ public class RoleService {
             roleRepository.save(role);
 
             return ResponseEntity.ok(
-                    Map.of("success", true, "message", "Permisos removidos correctamente del rol")
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos removidos correctamente del rol"), Optional.of(role))
             );
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", e.getMessage())
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
         } catch (Exception e) {
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("success", false, "message", "Error al remover permisos del rol"));
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al remover permisos del rol"))
+            );
         }
     }
 
     private PermissionDTO toDTO(Permission permission) {
         return PermissionDTO.builder()
+            .id(permission.getId())
             .name(permission.getName())
+            .code(permission.getCode())
             .type(permission.getType())
-            .description(permission.getDescription())
-            .build();
+                .description(permission.getDescription())
+                .roleIds(
+                    roleRepository.findAllByPermissions_Id(permission.getId()).stream().map(Role::getId).collect(Collectors.toSet())
+                )
+                .module(
+                    ModuleDTO.builder()
+                        .id(permission.getModule().getId())
+                        .name(permission.getModule().getName())
+                        .build()
+                )
+                .build();
     }
-    
-
-
-
 }
