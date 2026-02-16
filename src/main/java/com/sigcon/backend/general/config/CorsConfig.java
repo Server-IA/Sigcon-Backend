@@ -24,7 +24,9 @@ public class CorsConfig {
             "${CORS_ALLOWED_ORIGINS:http://localhost:3000}",
             "http://localhost:3000",
             "https://www.inmero.co",
-            "https://www.inmero.co/sigcon"
+            "https://www.inmero.co/sigcon",
+            "https://inmero.co/sigcon",
+            "https://inmero.co"
         ));
 
 
