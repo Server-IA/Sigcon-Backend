@@ -306,7 +306,7 @@ public class RoleService {
             }
 
             Permission permission = optionalPermission.get();
-            Optional<Permission> searchCode = permissionRepository.findByCodeNotId(request.getCode(), permission.getId());
+            Optional<Permission> searchCode = permissionRepository.findByCodeAndIdNot(request.getCode(), permission.getId());
 
             if (searchCode.isPresent()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El código del permiso ya existe")));
