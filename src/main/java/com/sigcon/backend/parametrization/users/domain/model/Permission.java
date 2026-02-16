@@ -2,7 +2,7 @@ package com.sigcon.backend.parametrization.users.domain.model;
 
 import java.time.LocalDateTime;
 
-import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 
 import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 
@@ -24,9 +24,9 @@ public class Permission {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "module_id")
-    private Module module;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "module_id", nullable = false)
+    private ModuleEntity module;
 
     @Column(unique = true)
     @NotNull(message = "El nombre del permiso es obligatorio")

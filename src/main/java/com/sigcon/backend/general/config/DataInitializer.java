@@ -1,6 +1,7 @@
 package com.sigcon.backend.general.config;
 
-import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 
@@ -127,8 +128,8 @@ public class DataInitializer {
     }
 
     private Long createOrUpdateModule(String name, String description, String url, String icon, int position) {
-        Module module = moduleRepository.findByName(name)
-                .orElseGet(() -> Module.builder()
+        ModuleEntity module = moduleRepository.findByName(name)
+                .orElseGet(() -> ModuleEntity.builder()
                         .name(name)
                         .url(url)
                         .position(position)
@@ -146,14 +147,22 @@ public class DataInitializer {
     }
 
     private void createOrUpdateMenu(String label, String url, String icon, int menuOrder, Long parentId, Long moduleId, String component) {
+        
+        ModuleEntity module = moduleRepository.findById(moduleId).orElseThrow(() -> new RuntimeException("El módulo no existe"));
+
         MenuEntity menu = menuRepositoryPort.findMenuByLabel(label)
             .orElseGet(() -> MenuEntity.builder()
                 .label(label)
                 .icon(icon)
                 .path(url)
                 .menuOrder(menuOrder)
-                .parentId(parentId)
-                .moduleId(moduleId)
+                .parent(parentId != null ? MenuEntity.builder()
+                    .id(parentId)
+                        .label(label)
+                        .icon(icon)
+                        .build()
+                    : null)
+                .module(module)
                 .status(MenuStatus.ACTIVE)
                 .component(component)
                 .build());

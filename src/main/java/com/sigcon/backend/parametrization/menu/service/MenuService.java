@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 import com.sigcon.backend.parametrization.menu.port.in.MenuUseCase;
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
+import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -74,17 +75,21 @@ public class MenuService implements MenuUseCase {
                     .menuOrder(menu.getMenuOrder())
                     .status(menu.getStatus())
                     .parent(
-                        menu.getParentId() == null ?
-                            null : menuRepositoryPort.findMenuById(menu.getParentId())
-                            .map(menuParent -> Menu.builder()
-                                .id(menuParent.getId())
-                                .label(menuParent.getLabel())
-                                .build())
-                            .orElse(null)
+                        null != menu.getParent() ?
+                            Menu.builder()
+                                .id(menu.getParent().getId())
+                                .label(menu.getParent().getLabel())
+                                .icon(menu.getParent().getIcon())
+                                .build()
+                            : null
                     )
                     .module(
-                        moduleRepository.findById(menu.getModuleId())
-                        .orElse(null)
+                        null != menu.getModule() ?
+                            ModuleDTO.builder()
+                                .id(menu.getModule().getId())
+                                .name(menu.getModule().getName())
+                                .build()
+                            : null
                     )   
                     .menuOrder(menu.getMenuOrder())
                     .status(menu.getStatus())

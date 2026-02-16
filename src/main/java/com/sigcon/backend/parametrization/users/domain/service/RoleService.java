@@ -10,7 +10,7 @@ import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
-import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 
 import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
@@ -231,7 +231,7 @@ public class RoleService {
                 throw new RuntimeException("El código del permiso ya existe");
             }
             
-            Module module = moduleRepository.findById(request.getModuleId())
+            ModuleEntity module = moduleRepository.findById(request.getModuleId())
                 .orElseThrow(() -> new RuntimeException("El módulo no existe"));
 
             Permission permission = permissionRepository.save(
@@ -312,7 +312,7 @@ public class RoleService {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El código del permiso ya existe")));
             }
 
-            Module module = moduleRepository.findById(request.getModuleId()).orElseThrow(() -> new RuntimeException("El módulo no existe"));
+            ModuleEntity module = moduleRepository.findById(request.getModuleId()).orElseThrow(() -> new RuntimeException("El módulo no existe"));
 
             permission.setName(request.getName());
             permission.setCode(request.getCode());

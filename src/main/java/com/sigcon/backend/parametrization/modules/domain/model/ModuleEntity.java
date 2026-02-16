@@ -25,7 +25,7 @@ import lombok.Builder.Default;
 @AllArgsConstructor
 @NoArgsConstructor
 
-public class Module {
+public class ModuleEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
