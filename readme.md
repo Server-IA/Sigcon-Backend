@@ -13,7 +13,6 @@ Backend desarrollado con Spring Boot siguiendo arquitectura hexagonal (Ports & A
 - cd sigcon-backend
 
 ## Ejecutar con Docker (recomendado)
-- ./mvnw clean package -DskipTests
 - docker-compose up --build -d
 
 ## Verificar estado
@@ -21,3 +20,8 @@ GET http://localhost:8080
 
 ## Detener
 docker-compose down
+
+## Instalacion en Mac
+
+- Modificar el archivo Dockerfile
+- FROM eclipse-temurin:17-jdk-alpine -> FROM eclipse-temurin:17-jdk

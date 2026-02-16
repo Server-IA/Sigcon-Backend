@@ -33,4 +33,8 @@ public interface PermissionRepository extends JpaRepository<Permission, Long>, J
     """, nativeQuery = true)
     List<Permission> findByUserID(Long userID);
 
+    Optional<Permission> findByCode(String code);
+
+    
+
 }

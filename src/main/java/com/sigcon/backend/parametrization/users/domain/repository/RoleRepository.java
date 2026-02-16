@@ -6,7 +6,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface RoleRepository extends JpaRepository<Role,Long>, JpaSpecificationExecutor<Role> {
@@ -19,4 +21,12 @@ public interface RoleRepository extends JpaRepository<Role,Long>, JpaSpecificati
             Status status,
             Pageable pageable
     );
+
+    @Query(value = """
+        SELECT r.*
+        FROM roles_permissions rp
+        LEFT JOIN roles r ON rp.role_id = r.id
+        WHERE rp.permission_id = :permissionId
+    """, nativeQuery = true)
+    List<Role> findAllByPermissions_Id(Long permissionId);
 }

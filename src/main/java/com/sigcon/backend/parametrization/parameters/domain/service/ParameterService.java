@@ -5,12 +5,15 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
 
 import org.springframework.validation.BindingResult;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+
 import org.springframework.data.domain.PageRequest;
 
 import com.sigcon.backend.parametrization.parameters.application.CreateParameterRequest;
@@ -163,12 +166,13 @@ public class ParameterService {
 
             userParameterRepository.save(userParameter);
 
-            return ResponseEntity.ok("Parámetro asignado correctamente.");
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro asignado correctamente"), Optional.of(userParameter)));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo asignar el parámetro. Intente nuevamente o contacte al administrador.");
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("No se pudo asignar el parámetro. Intente nuevamente o contacte al administrador.")));
         }
     }
 
@@ -209,12 +213,13 @@ public class ParameterService {
             userParameter.setUpdated_at(LocalDateTime.now());
             userParameterRepository.save(userParameter);
 
-            return ResponseEntity.ok("Parámetro actualizado correctamente.");
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.of(userParameter)));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo actualizar el parámetro. Intente nuevamente o contacte al administrador.");
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("No se pudo actualizar el parámetro. Intente nuevamente o contacte al administrador.")));
         }
     }
 
@@ -241,12 +246,13 @@ public class ParameterService {
             userParameter.setDeleted_at(LocalDateTime.now());
             userParameterRepository.save(userParameter);
 
-            return ResponseEntity.ok("Parámetro eliminado correctamente.");
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro eliminado correctamente"), Optional.of(userParameter)));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo eliminar el parámetro. Intente nuevamente o contacte al administrador.");
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("No se pudo eliminar el parámetro. Intente nuevamente o contacte al administrador.")));
         }
     }
 
@@ -299,21 +305,6 @@ public class ParameterService {
     }
 
     /**
-     * Método auxiliar para mapear UserParameter a ParameterResponse
-     */
-    // private ParameterResponse mapToResponse(UserParameter userParameter) {
-    //     return ParameterResponse.builder()
-    //             .id(userParameter.getId())
-    //             .parameterId(userParameter.getParameter().getId())
-    //             .parameterName(userParameter.getParameter().getName())
-    //             .parameterDescription(userParameter.getParameter().getDescription())
-    //             .value(userParameter.getValue())
-    //             .creationDate(userParameter.getCreationDate())
-    //             .lastUpdateDate(userParameter.getLastUpdateDate())
-    //             .build();
-    // }
-
-    /**
      * PA-RF-25: Visualizar parámetros del sistema (DataTables + filtros)
      */
     public ResponseEntity<?> getSystemParametersPaged(DataTableRequest request) {
@@ -345,7 +336,7 @@ public class ParameterService {
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(
-                        ErrorRespondJson.getErrorRespondMessage(e.getMessage())
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
                     );
         }
     }
@@ -360,17 +351,18 @@ public class ParameterService {
 
         try {
             if (parameterRepository.existsByNameAndCategoryAndDeletedAtIsNull(request.getName(), request.getCategory())) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe"));
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe")));
             }
 
             request.setId(null);
             request.setDeletedAt(null);
 
             Parameter saved = parameterRepository.save(request);
-            return ResponseEntity.ok(saved);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro creado correctamente"), Optional.of(saved)));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(e.getMessage()));
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -388,13 +380,13 @@ public class ParameterService {
 
             if (parameter == null || parameter.getDeletedAt() != null) {
                 return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage("El parámetro seleccionado no existe o ya fue eliminado")
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro seleccionado no existe o ya fue eliminado"))
                 );
             }
 
             if (parameterRepository.existsByNameAndCategoryAndIdNot(request.getName(), request.getCategory(), request.getId())) {
                 return ResponseEntity.badRequest()
-                        .body(ErrorRespondJson.getErrorRespondMessage("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe"));
+                        .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe")));
             }
 
             parameter.setName(request.getName());
@@ -403,11 +395,12 @@ public class ParameterService {
             parameter.setStatus(request.getStatus());
 
             Parameter saved = parameterRepository.save(parameter);
-            return ResponseEntity.ok(saved);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.of(saved)));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(
-                        ErrorRespondJson.getErrorRespondMessage(e.getMessage())
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
                     );
         }
     }
@@ -421,7 +414,7 @@ public class ParameterService {
 
             if (parameter == null || parameter.getDeletedAt() != null) {
                 return ResponseEntity.badRequest()
-                        .body("El parámetro seleccionado no existe o ya fue eliminado");
+                        .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro seleccionado no existe o ya fue eliminado")));
             }
 
             parameter.setDeletedAt(LocalDateTime.now());
@@ -430,11 +423,12 @@ public class ParameterService {
             Map<String, Object> response = new HashMap<>();
             response.put("title", "OK");
             response.put("message", "Parámetro eliminado correctamente");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro eliminado correctamente"), Optional.of(parameter)));
 
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body("No se pudo eliminar el parámetro. Intente nuevamente o contacte al administrador");
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("No se pudo eliminar el parámetro. Intente nuevamente o contacte al administrador")));
         }
     }
 

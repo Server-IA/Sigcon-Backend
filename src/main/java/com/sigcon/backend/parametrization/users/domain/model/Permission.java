@@ -2,11 +2,12 @@ package com.sigcon.backend.parametrization.users.domain.model;
 
 import java.time.LocalDateTime;
 
-import com.sigcon.backend.parametrization.menu.Menu;
-import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
+import com.sigcon.backend.parametrization.modules.domain.model.Module;
+
 import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,11 +24,21 @@ public class Permission {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @ManyToOne
+    @JoinColumn(name = "module_id")
+    private Module module;
+
+    @Column(unique = true)
+    @NotNull(message = "El nombre del permiso es obligatorio")
     private String name;
+
+    @Column(unique = true, nullable = false)
+    @NotNull(message = "El código del permiso es obligatorio")
+    private String code;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @NotNull(message = "El tipo de permiso es obligatorio")
     private TypePermits type;
 
     @Column(nullable = false)
