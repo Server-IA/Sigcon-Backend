@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
-import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 
 @Data
@@ -27,7 +27,7 @@ public class Menu {
     private Long parentId;
     private Menu parent;
     private Long moduleId;
-    private Module module;
+    private ModuleDTO module;
     private MenuStatus status;
     private String component;
     private List<PermissionDTO> permissions;

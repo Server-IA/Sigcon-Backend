@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
-import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.modules.domain.service.ModuleService;
 import com.sigcon.backend.utils.DataTableRequest;
 
@@ -30,12 +30,12 @@ public class ModuleController {
     }
 
     @PostMapping("/store")
-    public ResponseEntity<?> storeModule(@Valid @RequestBody Module request, BindingResult bindingResult) {
+    public ResponseEntity<?> storeModule(@Valid @RequestBody ModuleEntity request, BindingResult bindingResult) {
         return moduleService.storeModule(request, bindingResult);
     }
 
     @PutMapping("/update")
-    public ResponseEntity<?> updateModule(@Valid @RequestBody Module request, BindingResult bindingResult) {
+    public ResponseEntity<?> updateModule(@Valid @RequestBody ModuleEntity request, BindingResult bindingResult) {
         return moduleService.updateModule(request, bindingResult); 
     }
 

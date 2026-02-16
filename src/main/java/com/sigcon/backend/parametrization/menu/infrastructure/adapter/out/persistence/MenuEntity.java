@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.validator.constraints.UniqueElements;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
@@ -47,12 +48,13 @@ public class MenuEntity {
     @Min(value = 1, message = "La posición debe ser mayor a 0")
     private Integer menuOrder = 1;
     
-    @Column(name = "parent_id")
-    private Long parentId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id", nullable = true)
+    private MenuEntity parent;
 
-    @Column(name = "module_id")
-    @NotNull(message = "El modulo es obligatorio")
-    private Long moduleId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "module_id", nullable = false)
+    private ModuleEntity module;
 
     @Column(name = "status")
     private MenuStatus status = MenuStatus.ACTIVE   ;

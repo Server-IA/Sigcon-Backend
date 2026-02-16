@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
+import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
@@ -31,14 +32,14 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     public Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List roles) {
         return repository.findMenusByModuleIdAndRoles(moduleId, roles, MenuStatus.ACTIVE).stream()
             .map(this::entityToMenu)
-            .collect(Collectors.groupingBy(Menu::getModuleId));
+            .collect(Collectors.groupingBy(menu -> menu.getModuleId() != null ? menu.getModuleId() : 0L));
     }
 
     @Override
     public Map<Long, List<Menu>> findMenusByParentId(Long parentId) {
         return repository.findMenusByParentId(parentId, MenuStatus.ACTIVE).stream()
             .map(this::entityToMenu)
-            .collect(Collectors.groupingBy(Menu::getParentId));
+            .collect(Collectors.groupingBy(menu -> menu.getParentId() != null ? menu.getParentId() : 0L));
     }
 
     private Menu entityToMenu(MenuEntity e) {
@@ -48,8 +49,23 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(e.getIcon())
             .path(e.getPath())
             .menuOrder(e.getMenuOrder())
-            .parentId(e.getParentId())
-            .moduleId(e.getModuleId())
+            .parentId(e.getParent() != null ? e.getParent().getId() : null)
+            .parent(
+                null != e.getParent() ?
+                    Menu.builder()
+                        .id(e.getParent().getId())
+                        .label(e.getParent().getLabel())
+                        .icon(e.getParent().getIcon())
+                        .build()
+                    : null)
+            .moduleId(e.getModule() != null ? e.getModule().getId() : null)
+            .module(
+                null != e.getModule() ?
+                    ModuleDTO.builder()
+                    .id(e.getModule().getId())
+                    .name(e.getModule().getName())
+                    .build()
+                    : null)
             .status(e.getStatus())
             .component(e.getComponent())
             .deletedAt(e.getDeleted_at())
@@ -67,8 +83,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
                 .icon(menuEntity.getIcon())
                 .path(menuEntity.getPath())
                 .menuOrder(menuEntity.getMenuOrder())
-                .parentId(menuEntity.getParentId())
-                .moduleId(menuEntity.getModuleId())
+                .parent(menuEntity.getParent())
+                .module(menuEntity.getModule())
                 .status(menuEntity.getStatus())
                 .component(menuEntity.getComponent())
                 .build()
@@ -81,8 +97,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(saved.getIcon())
             .path(saved.getPath())
             .menuOrder(saved.getMenuOrder())
-            .parentId(saved.getParentId())
-            .moduleId(saved.getModuleId())
+            .parent(saved.getParent())
+            .module(saved.getModule())
             .status(saved.getStatus())
             .component(saved.getComponent())
             .build();
@@ -96,8 +112,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(e.getIcon())
             .path(e.getPath())
             .menuOrder(e.getMenuOrder())
-            .parentId(e.getParentId())
-            .moduleId(e.getModuleId())
+            .parent(e.getParent())
+            .module(e.getModule())
             .status(e.getStatus())
             .component(e.getComponent())
             .build()); 
@@ -111,8 +127,15 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(m.getIcon())
             .path(m.getPath())
             .menuOrder(m.getMenuOrder())
-            .parentId(m.getParentId())
-            .moduleId(m.getModuleId())
+            .parent(Menu.builder()
+                .id(m.getParent().getId())
+                .label(m.getParent().getLabel())
+                .icon(m.getParent().getIcon())
+                .build())
+            .module(ModuleDTO.builder()
+                .id(m.getModule().getId())
+                .name(m.getModule().getName())
+                .build())
             .status(m.getStatus())
             .component(m.getComponent())
             .deletedAt(m.getDeleted_at())
@@ -129,8 +152,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(menuEntity.getIcon())
             .path(menuEntity.getPath())
             .menuOrder(menuEntity.getMenuOrder())
-            .parentId(menuEntity.getParentId())
-            .moduleId(menuEntity.getModuleId())
+            .parent(menuEntity.getParent())
+            .module(menuEntity.getModule())
             .status(menuEntity.getStatus())
             .component(menuEntity.getComponent())
             .updated_at(LocalDateTime.now())
@@ -142,8 +165,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(saved.getIcon())
             .path(saved.getPath())
             .menuOrder(saved.getMenuOrder())
-            .parentId(saved.getParentId())
-            .moduleId(saved.getModuleId())
+            .parent(saved.getParent())
+            .module(saved.getModule())
             .status(saved.getStatus())
             .component(saved.getComponent())
             .updated_at(saved.getUpdated_at())
@@ -163,8 +186,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(e.getIcon())
             .path(e.getPath())
             .menuOrder(e.getMenuOrder())
-            .parentId(e.getParentId())
-            .moduleId(e.getModuleId())
+            .parent(e.getParent())
+            .module(e.getModule())
             .status(e.getStatus())
             .component(e.getComponent())
             .build());
@@ -178,8 +201,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(e.getIcon())
             .path(e.getPath())
             .menuOrder(e.getMenuOrder())
-            .parentId(e.getParentId())
-            .moduleId(e.getModuleId())
+            .parent(e.getParent())
+            .module(e.getModule())
             .status(e.getStatus())
             .component(e.getComponent())
             .build());

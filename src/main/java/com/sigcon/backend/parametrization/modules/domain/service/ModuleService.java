@@ -22,7 +22,7 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 import com.sigcon.backend.parametrization.menu.service.MenuService;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleDataTableRequest;
-import com.sigcon.backend.parametrization.modules.domain.model.Module;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -42,7 +42,7 @@ public class ModuleService {
 
     private final ModuleRepository moduleRepository;
     private final MenuService menuService;
-    private final DataTableSpecificationBuilder<Module> moduleSpecificationBuilder =
+    private final DataTableSpecificationBuilder<ModuleEntity> moduleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
     public ResponseEntity<?> getModulesPaged(DataTableRequest request) {
@@ -58,10 +58,10 @@ public class ModuleService {
                 ? Pageable.unpaged()
                 : PageRequest.of(page, safeLength);
 
-            Specification<Module> spec = moduleSpecificationBuilder.build(request)
+            Specification<ModuleEntity> spec = moduleSpecificationBuilder.build(request)
                 .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
 
-            Page<Module> modules = moduleRepository.findAll(spec, pageable);
+            Page<ModuleEntity> modules = moduleRepository.findAll(spec, pageable);
     
             return ResponseEntity.ok(
                 DataTableResponse.from(modules.map(module -> ModuleDTO.builder()
@@ -87,7 +87,7 @@ public class ModuleService {
 
     public ResponseEntity<?> getModules(ModuleDTO request) {
         try {
-            List<Module> modules = moduleRepository.findAllByStatus(ModelStatus.ACTIVE);
+            List<ModuleEntity> modules = moduleRepository.findAllByStatus(ModelStatus.ACTIVE);
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulos obtenidos correctamente"), Optional.of(modules))
             );
@@ -101,7 +101,7 @@ public class ModuleService {
 
             
 
-            List<Module> modules = moduleRepository.findActiveModulesWithActiveMenus(ModelStatus.ACTIVE, MenuStatus.ACTIVE);
+            List<ModuleEntity> modules = moduleRepository.findActiveModulesWithActiveMenus(ModelStatus.ACTIVE, MenuStatus.ACTIVE);
 
             List<ModuleDTO> moduleDTOs = modules.stream()
                     .map(module -> ModuleDTO.builder()
@@ -125,7 +125,7 @@ public class ModuleService {
     }
 
     public ResponseEntity<?> storeModule(
-            @Valid @RequestBody Module request,
+            @Valid @RequestBody ModuleEntity request,
             BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -137,7 +137,7 @@ public class ModuleService {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del módulo ya existe"))
                 );
             }
-            Module module = moduleRepository.save(request);
+            ModuleEntity module = moduleRepository.save(request);
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo creado correctamente"), Optional.of(module)));
         } catch (Exception e) {
@@ -148,7 +148,7 @@ public class ModuleService {
     }
 
     public ResponseEntity<?> updateModule(
-            @Valid @RequestBody Module request,
+            @Valid @RequestBody ModuleEntity request,
             BindingResult bindingResult) {
         try {
             if (moduleRepository.existsByNameAndIdNot(request.getName(), request.getId())) {
@@ -163,7 +163,7 @@ public class ModuleService {
                 );
             }
 
-            Module module = moduleRepository.findById(request.getId())
+            ModuleEntity module = moduleRepository.findById(request.getId())
                     .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
 
             module.setName(request.getName());
@@ -185,7 +185,7 @@ public class ModuleService {
 
     public ResponseEntity<?> deleteModule(Long id) {
         try {
-            Module module = moduleRepository.findById(id)
+            ModuleEntity module = moduleRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
             module.setDeleted_at(LocalDateTime.now());
             module = moduleRepository.save(module);
