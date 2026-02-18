@@ -52,32 +52,44 @@ public class DataTableSpecificationBuilder<T> {
                         }
                     }
     
-                    /* -------- ENUM -------- */
                     else if (type.isEnum()) {
-    
+
                         Object[] enumConstants = type.getEnumConstants();
-    
+                        Predicate enumGlobalPredicate = cb.disjunction();
+                    
                         for (Object constant : enumConstants) {
-    
                             String enumName = constant.toString();
-    
+                    
                             if (regex) {
                                 if (enumName.toLowerCase().contains(globalValue.toLowerCase())) {
-                                    globalPredicate = cb.or(
-                                            globalPredicate,
-                                            cb.equal(path, constant)
-                                    );
+                                    enumGlobalPredicate = cb.or(enumGlobalPredicate, cb.equal(path, constant));
                                 }
                             } else {
                                 if (enumName.equalsIgnoreCase(globalValue)) {
-                                    globalPredicate = cb.or(
-                                            globalPredicate,
-                                            cb.equal(path, constant)
-                                    );
+                                    enumGlobalPredicate = cb.or(enumGlobalPredicate, cb.equal(path, constant));
                                 }
                             }
                         }
+                    
+                        globalPredicate = cb.or(globalPredicate, enumGlobalPredicate);
                     }
+                    
+                    /* -------- NUMERIC / BOOLEAN -------- */
+                    else if(type.equals(Long.class) || type.equals(Integer.class)) {
+                        if(regex) {
+                            // Convertir número a texto para LIKE en Postgres
+                            globalPredicate = cb.or(
+                                globalPredicate,
+                                cb.like(cb.concat("", path.as(String.class)), "%" + globalValue + "%")
+                            );
+                        } else {
+                            globalPredicate = cb.or(
+                                globalPredicate,
+                                cb.equal(path, convertValue(globalValue, type))
+                            );
+                        }
+                    }
+
                 }
     
                 predicate = cb.and(predicate, globalPredicate);
@@ -140,41 +152,45 @@ public class DataTableSpecificationBuilder<T> {
                     }
     
                     /* -------- ENUM -------- */
-                    else if (type.isEnum()) {
-    
-                        Object[] enumConstants = type.getEnumConstants();
-    
-                        for (Object constant : enumConstants) {
-    
-                            String enumName = constant.toString();
-    
-                            if (regex) {
-                                if (enumName.toLowerCase().contains(searchValue.toLowerCase())) {
-                                    predicate = cb.and(
-                                            predicate,
-                                            cb.equal(path, constant)
-                                    );
-                                }
-                            } else {
-                                if (enumName.equalsIgnoreCase(searchValue)) {
-                                    predicate = cb.and(
-                                            predicate,
-                                            cb.equal(path, constant)
-                                    );
-                                }
-                            }
-                        }
-                    }
+else if (type.isEnum()) {
+
+    Object[] enumConstants = type.getEnumConstants();
+    Predicate enumPredicate = cb.disjunction(); // OR
+
+    for (Object constant : enumConstants) {
+        String enumName = constant.toString();
+
+        if (regex) {
+            if (enumName.toLowerCase().contains(searchValue.toLowerCase())) {
+                enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
+            }
+        } else {
+            if (enumName.equalsIgnoreCase(searchValue)) {
+                enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
+            }
+        }
+    }
+
+    predicate = cb.and(predicate, enumPredicate);
+}
+
     
                     /* -------- NUMERIC / BOOLEAN -------- */
                     else {
     
                         Object convertedValue = convertValue(searchValue, type);
-    
-                        predicate = cb.and(
-                                predicate,
-                                cb.equal(path, convertedValue)
-                        );
+
+                        if(regex) {
+                            predicate = cb.and(
+                                    predicate,
+                                    cb.like(path.as(String.class), "%" + convertedValue + "%")
+                            );
+                        } else {
+                            predicate = cb.and(
+                                    predicate,
+                                    cb.equal(path, convertedValue)  
+                            );
+                        }
                     }
                 }
             }
