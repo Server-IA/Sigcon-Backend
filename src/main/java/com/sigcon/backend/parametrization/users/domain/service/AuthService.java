@@ -18,6 +18,8 @@ import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -46,6 +48,9 @@ public class AuthService {
     private final BlackListedTokenRepository blackListedTokenRepository;
     private final RoleRepository roleRepository;
     private final AvatarStorageService avatarStorageService;
+
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
 
     public ResponseEntity<?> register(AuthRequest request) {
 
@@ -138,7 +143,6 @@ public class AuthService {
                     .build();
             tokenRepository.save(resetToken);
 
-            String frontendUrl = System.getenv("FRONTEND_URL");
             String resetLink = frontendUrl + "/reset-password/" + token; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
 
             String subject = "Restablecimiento de contraseña - SIGCON";
