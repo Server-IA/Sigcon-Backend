@@ -13,11 +13,16 @@ import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
 import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.Value;
+
+import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import com.sigcon.backend.parametrization.menu.Menu;
@@ -30,9 +35,13 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 
+import jakarta.transaction.Transactional;
+
 @Configuration
 @RequiredArgsConstructor
-public class DataInitializer {
+@Profile("DEVELOPMENT")
+@Transactional
+public class DataInitializer implements CommandLineRunner {
 
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
@@ -42,9 +51,8 @@ public class DataInitializer {
     private final PasswordEncoder passwordEncoder;
     private final MenuPermissionsRepository menuPermissionsRepository;
     
-    @Bean
-    CommandLineRunner initData() {
-        return args -> {
+    @Override
+    public void run(String... args) {
 
             // Crear módulos base para la aplicación
             Long moduleId = createOrUpdateModule("Parametrización", "Gestión de parámetros del sistema", "parametrizacion", "bx-cog", 1);
@@ -86,19 +94,21 @@ public class DataInitializer {
             Permission deleteMenuPermissions = createPermission("Eliminar permisos de menús", "Permiso para eliminar permisos de menús", TypePermits.DELETE, "DELETE_MENU_PERMISSIONS", moduleId);
 
             // Crear roles y asignar permisos
-            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount));
-            createOrUpdateRole("SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount,
-                viewMenus, createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
-            createOrUpdateRole("USER", Set.of());
+            createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount)));
+            createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount,
+                viewMenus, createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions)));
+            createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
             // Crear usuarios
 
             createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus,
                 createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
 
-            createMenuPermissions(6L, 1L);
-
-        };
+            createMenuPermissions("Menus", "SUPERADMIN");
+            createMenuPermissions("Permisos", "SUPERADMIN");
+            createMenuPermissions("Roles", "SUPERADMIN");
+            createMenuPermissions("Permisos Menu", "SUPERADMIN");
+        
     }
 
     private Permission createPermission(String name, String description, TypePermits type, String code, Long moduleId) {
@@ -114,16 +124,11 @@ public class DataInitializer {
                 ));
     }
 
-    private void createOrUpdateRole(String name, Set<Permission> permissions) {
+    private void createOrUpdateRole(String name, HashSet<Permission> permissions) {
 
         Role role = roleRepository.findByName(name).orElseGet(() -> Role.builder().name(name).build());
         role.setPermissions(permissions);
-
-
-        if (role.getStatus() == null) {
-            role.setStatus(Status.ACTIVE);
-        }
-
+        role.setStatus(Status.ACTIVE);
         roleRepository.save(role);
     }
 
@@ -131,17 +136,12 @@ public class DataInitializer {
         ModuleEntity module = moduleRepository.findByName(name)
                 .orElseGet(() -> ModuleEntity.builder()
                         .name(name)
+                        .description(description)
                         .url(url)
+                        .icon(icon)
                         .position(position)
                         .status(ModelStatus.ACTIVE)
                         .build());
-        module.setDescription(description);
-        module.setIcon(icon);
-        module.setUrl(url);
-        module.setPosition(position);
-        if (module.getStatus() == null) {
-            module.setStatus(ModelStatus.ACTIVE);
-        }
         moduleRepository.save(module);
         return module.getId();
     }
@@ -149,6 +149,7 @@ public class DataInitializer {
     private void createOrUpdateMenu(String label, String url, String icon, int menuOrder, Long parentId, Long moduleId, String component) {
         
         ModuleEntity module = moduleRepository.findById(moduleId).orElseThrow(() -> new RuntimeException("El módulo no existe"));
+        MenuEntity menuEntity = parentId != null ? menuRepositoryPort.findById(parentId) : null;
 
         MenuEntity menu = menuRepositoryPort.findMenuByLabel(label)
             .orElseGet(() -> MenuEntity.builder()
@@ -156,16 +157,12 @@ public class DataInitializer {
                 .icon(icon)
                 .path(url)
                 .menuOrder(menuOrder)
-                .parent(parentId != null ? MenuEntity.builder()
-                    .id(parentId)
-                        .label(label)
-                        .icon(icon)
-                        .build()
-                    : null)
-                .module(module)
                 .status(MenuStatus.ACTIVE)
                 .component(component)
-                .build());
+                .parent(menuEntity)
+                .module(module)
+                .build()
+            );
     
         menuRepositoryPort.saveMenu(menu);
     }
@@ -183,17 +180,22 @@ public class DataInitializer {
         userRepository.save(user);
     }
 
-    private void createMenuPermissions(Long menu_id, Long role_id){
-        MenuEntity menu = menuRepositoryPort.findById(menu_id);
+    private void createMenuPermissions(String menuLabel, String roleName){
 
-        Role role = roleRepository.findById(role_id).orElseGet(null);
-
-        MenuPermissionsEntity entity = MenuPermissionsEntity.builder()
-            .menu(menu)
-            .role(role)
-            .build();
-
-        menuPermissionsRepository.save(entity);
+        MenuEntity menu = menuRepositoryPort.findMenuByLabel(menuLabel)
+            .orElseThrow(() -> new RuntimeException("Menu not found"));
+    
+        Role role = roleRepository.findByName(roleName)
+            .orElseThrow(() -> new RuntimeException("Role not found"));
+    
+        MenuPermissionsEntity menuPermissions =
+            menuPermissionsRepository.findByMenuAndRoleAndDeletedAtIsNull(menu, role)
+            .orElseGet(() -> MenuPermissionsEntity.builder()
+                .menu(menu)
+                .role(role)
+                .build());
+    
+        menuPermissionsRepository.save(menuPermissions);
     }
 
 }

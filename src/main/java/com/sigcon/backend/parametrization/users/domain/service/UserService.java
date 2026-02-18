@@ -1,6 +1,10 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 
 import com.sigcon.backend.general.storage.AvatarStorageService;
+import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
+import com.sigcon.backend.parametrization.parameters.application.UserParameterDTO;
+import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
+import com.sigcon.backend.parametrization.parameters.domain.repository.UserParameterRepository;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
@@ -39,7 +43,8 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final PermissionRepository permissionRepository;
-    
+    private final ParameterRepository parameterRepository;
+    private final UserParameterRepository userParameterRepository;
     
     private final AvatarStorageService avatarStorageService;
     private final DataTableSpecificationBuilder<User> userSpecificationBuilder =
@@ -142,6 +147,33 @@ public class UserService {
                 .collect(Collectors.toList())
         );
 
+        List<ParameterDTO> parameters = parameterRepository.findAll()
+                .stream()
+                .map(parameter -> new ParameterDTO(
+                    null,
+                    parameter.getName(),
+                    parameter.getValue(),
+                    userParameterRepository.findByUserAndParameter(user, parameter)
+                        .map(userParameter -> new UserParameterDTO(
+                            null,
+                            null,
+                            null,
+                            userParameter.getValue(),
+                            null,
+                            null,
+                            null,
+                            null
+                        )).orElse(null),
+                    parameter.getCategory(),
+                    parameter.getStatus(),
+                    null,
+                    null,
+                    null
+                ))
+                .collect(Collectors.toList());
+
+        response.setParameters(parameters);
+
         return ResponseEntity.ok(
             SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario obtenida correctamente"), Optional.of(response))
         );
@@ -184,8 +216,18 @@ public class UserService {
         user.setUpdated_at(LocalDateTime.now());
         userRepository.save(user);
 
+        UserDTO userDTO = new UserDTO();
+        userDTO.setId(user.getId());
+        userDTO.setName(user.getName());
+        userDTO.setLastname(user.getLastname());
+        userDTO.setEmail(user.getEmail());
+        userDTO.setAvatar(user.getAvatar());
+        userDTO.setStatus(user.getStatus());
+        userDTO.setRoles(user.getRoles().stream().map(Role::getName).collect(Collectors.toSet()));
+        userDTO.setPermissions(permissionRepository.findByUserID(user.getId()).stream().map(permission -> new PermissionDTO(null, permission.getName(), permission.getCode(), permission.getType(), null, null, permission.getDescription(), null)).collect(Collectors.toList()));
+
         return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información actualizada correctamente"), Optional.of(user))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información actualizada correctamente"), Optional.of(userDTO))
         );
     }
     public ResponseEntity<?> updateUser(Long id, UserDTO request){
