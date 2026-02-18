@@ -16,6 +16,8 @@ services:
       SPRING_JPA_SHOW_SQL: "true"
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
       SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: "true"
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-PRODUCTION}
+      FRONTEND_URL: ${FRONTEND_URL:-https://inmero.co/sigcon}
     deploy:
       resources:
         limits:

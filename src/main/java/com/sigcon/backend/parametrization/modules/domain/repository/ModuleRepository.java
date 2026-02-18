@@ -55,7 +55,7 @@ public interface ModuleRepository extends JpaRepository<ModuleEntity, Long>, Jpa
           )
         ORDER BY m.position ASC
     """, nativeQuery = true)
-    List<ModuleEntity> findActiveModulesWithActiveMenus(ModelStatus status, MenuStatus menuStatus);
+    List<ModuleEntity> findActiveModulesWithActiveMenus(String status, String menuStatus);
 
     boolean existsByName(String name);
 

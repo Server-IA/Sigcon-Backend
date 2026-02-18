@@ -88,14 +88,14 @@ public class RoleService {
                         .type(permission.getType())
                         .description(permission.getDescription())
                         .build()).collect(Collectors.toList()));
-                dto.setStatus(role.getStatus().name());
+                dto.setStatus(parseStatus(role.getStatus()));
                 return dto;
             });
 
             return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los roles")));
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
 
         // return roleRepository.findAllAndDeletedAtIsNull(request.getPageable());
@@ -109,7 +109,7 @@ public class RoleService {
             );
         }
 
-        if (roleRepository.findByName(request.getName()).isPresent()) {
+        if (roleRepository.findByName(request.getName().toUpperCase()).isPresent()) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
             );
@@ -130,8 +130,10 @@ public class RoleService {
 
         roleRepository.save(role);
 
+        RoleRequest roleDTO = toRequest(role);
+
         return ResponseEntity.ok(
-            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(role))
+            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(roleDTO))
         );
     }
 
@@ -167,8 +169,10 @@ public class RoleService {
 
         roleRepository.save(role);
 
+        RoleRequest roleDTO = toRequest(role);
+
         return ResponseEntity.ok(
-            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol actualizado exitosamente"), Optional.of(role))
+            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol actualizado exitosamente"), Optional.of(roleDTO))
         );
     }
 
@@ -194,8 +198,10 @@ public class RoleService {
         role.setDeleted_at(LocalDateTime.now());
         roleRepository.save(role);
 
+        RoleRequest roleDTO = toRequest(role);
+
         return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol eliminado exitosamente"), Optional.of(role))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol eliminado exitosamente"), Optional.of(roleDTO))
         );
     }
 
@@ -255,9 +261,11 @@ public class RoleService {
             }
     
             permissionRepository.save(permission);
+
+            PermissionDTO permissionDTO = toDTO(permission);
     
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso creado exitosamente"), Optional.of(permission))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso creado exitosamente"), Optional.of(permissionDTO))
             );
 
         }catch (Exception e) {
@@ -321,9 +329,11 @@ public class RoleService {
             permission.setModule(module);
             permission.setUpdated_at(LocalDateTime.now());
             permissionRepository.save(permission);
+            
+            PermissionDTO permissionDTO = toDTO(permission);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso actualizado exitosamente"), Optional.of(permission))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso actualizado exitosamente"), Optional.of(permissionDTO))
             );
 
         }catch (Exception e) {
@@ -407,5 +417,19 @@ public class RoleService {
                         .build()
                 )
                 .build();
+    }
+
+    private RoleRequest toRequest(Role role) {
+        return RoleRequest.builder()
+            .id(role.getId())
+            .name(role.getName())
+            .permissionIds(role.getPermissions().stream().map(Permission::getId).collect(Collectors.toSet()))
+            .permissions(role.getPermissions().stream().map(this::toDTO).collect(Collectors.toList()))
+            .status(role.getStatus().name())
+            .build();
+    }
+
+    private String parseStatus(Status status) {
+        return status.name();
     }
 }

@@ -32,6 +32,9 @@ public class Parameter {
     @NotNull(message = "El nombre es obligatorio")
     private String name;
 
+    @Column(nullable = true)
+    private String value;
+
     @Column(length = 500)
     private String description;
 

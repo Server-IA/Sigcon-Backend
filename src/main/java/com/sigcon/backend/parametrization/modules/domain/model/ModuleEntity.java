@@ -49,6 +49,7 @@ public class ModuleEntity {
     private Integer position = 1;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
     private ModelStatus status = ModelStatus.ACTIVE;
 
     @Column(name = "created_at")

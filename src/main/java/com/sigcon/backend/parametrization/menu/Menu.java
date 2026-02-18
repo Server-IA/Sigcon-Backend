@@ -24,10 +24,13 @@ public class Menu {
     private String icon;
     private String path;
     private Integer menuOrder;
+
     private Long parentId;
     private Menu parent;
+
     private Long moduleId;
     private ModuleDTO module;
+    
     private MenuStatus status;
     private String component;
     private List<PermissionDTO> permissions;

@@ -101,7 +101,7 @@ public class ModuleService {
 
             
 
-            List<ModuleEntity> modules = moduleRepository.findActiveModulesWithActiveMenus(ModelStatus.ACTIVE, MenuStatus.ACTIVE);
+            List<ModuleEntity> modules = moduleRepository.findActiveModulesWithActiveMenus(parseStatus(ModelStatus.ACTIVE), parseStatus(MenuStatus.ACTIVE));
 
             List<ModuleDTO> moduleDTOs = modules.stream()
                     .map(module -> ModuleDTO.builder()
@@ -222,5 +222,13 @@ public class ModuleService {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    private String parseStatus(MenuStatus status) {
+        return status.name();
+    }
+
+    private String parseStatus(ModelStatus status) {
+        return status.name();
     }
 }

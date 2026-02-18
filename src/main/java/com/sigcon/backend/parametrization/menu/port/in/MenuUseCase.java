@@ -17,12 +17,12 @@ public interface MenuUseCase {
 
     ResponseEntity<?> getMenusDataTable(DataTableRequest request);
     List<Menu> getMenusByModuleId(Long moduleId);
-    ResponseEntity<?> saveMenu(MenuEntity menuEntity, BindingResult bindingResult);
+    ResponseEntity<?> saveMenu(Menu menu, BindingResult bindingResult);
     Optional<MenuEntity> findMenuByLabel(String label);
     
     Optional<Menu> findMenuById(Long id);
 
-    ResponseEntity<?> updateMenu(MenuEntity menuEntity, BindingResult bindingResult);
+    ResponseEntity<?> updateMenu(Menu menu, BindingResult bindingResult);
     ResponseEntity<?> deleteMenu(Long id);
 
     Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable);
