@@ -143,7 +143,7 @@ public class AuthService {
                     .build();
             tokenRepository.save(resetToken);
 
-        String resetLink = "http://localhost:5173/reset-password"; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
+            String resetLink = frontendUrl + "/reset-password/" + token; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
 
             String subject = "Restablecimiento de contraseña - SIGCON";
             String message = """
