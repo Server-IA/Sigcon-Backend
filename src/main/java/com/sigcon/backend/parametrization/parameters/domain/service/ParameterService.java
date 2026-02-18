@@ -167,7 +167,7 @@ public class ParameterService {
             userParameterRepository.save(userParameter);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro asignado correctamente"), Optional.of(userParameter)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro asignado correctamente"), Optional.empty()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
@@ -214,7 +214,7 @@ public class ParameterService {
             userParameterRepository.save(userParameter);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.of(userParameter)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.empty()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
@@ -247,7 +247,7 @@ public class ParameterService {
             userParameterRepository.save(userParameter);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro eliminado correctamente"), Optional.of(userParameter)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro eliminado correctamente"), Optional.empty()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
@@ -321,7 +321,7 @@ public class ParameterService {
                 : PageRequest.of(page, safeLength);
 
             Specification<Parameter> spec = parameterSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
             Page<Parameter> parameters = parameterRepository.findAll(spec, pageable);
             
