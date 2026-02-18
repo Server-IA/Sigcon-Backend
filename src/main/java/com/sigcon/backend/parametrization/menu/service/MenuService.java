@@ -1,5 +1,6 @@
 package com.sigcon.backend.parametrization.menu.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import com.sigcon.backend.parametrization.menu.port.in.MenuUseCase;
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -122,7 +124,7 @@ public class MenuService implements MenuUseCase {
 
     @Override
     public ResponseEntity<?> saveMenu(
-        @Valid @RequestBody MenuEntity menuEntity, BindingResult bindingResult) {
+        @Valid @RequestBody Menu menu, BindingResult bindingResult) {
 
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -130,27 +132,63 @@ public class MenuService implements MenuUseCase {
 
         try {
 
-            if(menuEntity.getLabel() != null) {
-                if(menuRepositoryPort.findMenuByLabel(menuEntity.getLabel()).isPresent()) {
+            if(menu.getLabel() != null) {
+                if(menuRepositoryPort.findMenuByLabel(menu.getLabel()).isPresent()) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del menú ya existe")));
                 }
             }
 
-            if(menuEntity.getPath() != null) {
-                if(menuRepositoryPort.findMenuByPath(menuEntity.getPath()).isPresent()) {
+            if(menu.getPath() != null) {
+                if(menuRepositoryPort.findMenuByPath(menu.getPath()).isPresent()) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La URL ya existe")));
                 }
             }
 
-            if(menuEntity.getComponent() != null) {
-                if(menuRepositoryPort.findMenuByComponent(menuEntity.getComponent()).isPresent()) {
+            if(menu.getComponent() != null) {
+                if(menuRepositoryPort.findMenuByComponent(menu.getComponent()).isPresent()) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El componente ya existe")));
                 }
             }
 
-            MenuEntity savedMenu = menuRepositoryPort.saveMenu(menuEntity);
+            if(menu.getParentId() != null) {
+                Menu parent = menuRepositoryPort.findMenuById(menu.getParentId()).orElseThrow(() -> new RuntimeException("Menú padre no encontrado"));
+                if(parent.getDeletedAt() != null) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El menú padre ya se encuentra eliminado")));
+                }
+                menu.setParent(parent);
+            }
+
+            if(menu.getModuleId() != null) {
+                ModuleEntity module = moduleRepository.findById(menu.getModuleId()).orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+                if(module.getDeleted_at() != null) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El módulo ya se encuentra eliminado")));
+                }
+                menu.setModule(ModuleDTO.builder()
+                    .id(module.getId())
+                    .build());
+            }
+
+            MenuEntity menuEntity = MenuEntity.builder()
+                .label(menu.getLabel())
+                .icon(menu.getIcon())
+                .path(menu.getPath())
+                .menuOrder(menu.getMenuOrder())
+                .parent(menu.getParent() != null ? MenuEntity.builder()
+                    .id(menu.getParentId())
+                    .build() : null)
+                .module(ModuleEntity.builder()
+                    .id(menu.getModuleId())
+                    .build())
+                .status(menu.getStatus())
+                .component(menu.getComponent())
+                .deleted_at(menu.getDeletedAt())
+                .created_at(menu.getCreatedAt())
+                .updated_at(menu.getUpdatedAt())
+                .build();
+
+            menuRepositoryPort.saveMenu(menuEntity);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú creado correctamente"), Optional.of(savedMenu)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú creado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
@@ -158,38 +196,56 @@ public class MenuService implements MenuUseCase {
 
     @Override
     public ResponseEntity<?> updateMenu(
-        @Valid @RequestBody MenuEntity menuEntity, BindingResult bindingResult) {
+        @Valid @RequestBody Menu menu, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
         try{
 
-            Optional<Menu> menu = menuRepositoryPort.findMenuById(menuEntity.getId());
-            if(menu == null) {  
+            MenuEntity menuEntity = menuRepositoryPort.findById(menu.getId());
+            if(menuEntity == null) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Menú no encontrado")));
             }
 
-            if(!menu.get().getLabel().equals(menuEntity.getLabel())) {
-                if(menuRepositoryPort.findMenuByLabel(menuEntity.getLabel()).isPresent()) {
+            if(!menuEntity.getLabel().equals(menu.getLabel())) {
+                if(menuRepositoryPort.findMenuByLabel(menu.getLabel()).isPresent()) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del menú ya existe")));
                 }
             }
 
-            if(!menu.get().getPath().equals(menuEntity.getPath())) {
-                if(menuRepositoryPort.findMenuByPath(menuEntity.getPath()).isPresent()) {
+            if(!menuEntity.getPath().equals(menu.getPath())) {
+                if(menuRepositoryPort.findMenuByPath(menu.getPath()).isPresent()) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La URL ya existe")));
                 }
             }
             
-            if(!menu.get().getComponent().equals(menuEntity.getComponent())) {
-                if(menuRepositoryPort.findMenuByComponent(menuEntity.getComponent()).isPresent()) {
+            if(!menuEntity.getComponent().equals(menu.getComponent())) {
+                if(menuRepositoryPort.findMenuByComponent(menu.getComponent()).isPresent()) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El componente ya existe")));
                 }
             }
 
-            MenuEntity respond = menuRepositoryPort.updateMenu(menuEntity);
+            menuEntity.setLabel(menu.getLabel());
+            menuEntity.setIcon(menu.getIcon());
+            menuEntity.setPath(menu.getPath());
+            menuEntity.setMenuOrder(menu.getMenuOrder());
+            menuEntity.setParent(
+                menu.getParentId() != null ? MenuEntity.builder()
+                    .id(menu.getParentId())
+                    .build() : null);
+                    
+            menuEntity.setModule(
+                menu.getModuleId() != null ? ModuleEntity.builder()
+                    .id(menu.getModuleId())
+                    .build() : null);
+
+            menuEntity.setStatus(menu.getStatus());
+            menuEntity.setComponent(menu.getComponent());
+            menuEntity.setUpdated_at(LocalDateTime.now());
+
+            menuRepositoryPort.updateMenu(menuEntity);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú actualizado correctamente"), Optional.of(respond)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú actualizado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }

@@ -12,6 +12,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
+import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
@@ -30,14 +31,14 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
 
     @Override
     public Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List roles) {
-        return repository.findMenusByModuleIdAndRoles(moduleId, roles, MenuStatus.ACTIVE).stream()
+        return repository.findMenusByModuleIdAndRoles(moduleId, roles, parseStatus(MenuStatus.ACTIVE)).stream()
             .map(this::entityToMenu)
             .collect(Collectors.groupingBy(menu -> menu.getModuleId() != null ? menu.getModuleId() : 0L));
     }
 
     @Override
     public Map<Long, List<Menu>> findMenusByParentId(Long parentId) {
-        return repository.findMenusByParentId(parentId, MenuStatus.ACTIVE).stream()
+        return repository.findMenusByParentId(parentId, parseStatus(MenuStatus.ACTIVE)).stream()
             .map(this::entityToMenu)
             .collect(Collectors.groupingBy(menu -> menu.getParentId() != null ? menu.getParentId() : 0L));
     }
@@ -75,33 +76,29 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     }
 
     @Override
-    public MenuEntity saveMenu(MenuEntity menuEntity) {
+    public MenuEntity saveMenu(MenuEntity menu) {
         MenuEntity saved = repository.save(
             MenuEntity.builder()
-                .id(menuEntity.getId())
-                .label(menuEntity.getLabel())
-                .icon(menuEntity.getIcon())
-                .path(menuEntity.getPath())
-                .menuOrder(menuEntity.getMenuOrder())
-                .parent(menuEntity.getParent())
-                .module(menuEntity.getModule())
-                .status(menuEntity.getStatus())
-                .component(menuEntity.getComponent())
+                .id(menu.getId())
+                .label(menu.getLabel())
+                .icon(menu.getIcon())
+                .path(menu.getPath())
+                .menuOrder(menu.getMenuOrder())
+                .parent(menu.getParent() != null ? MenuEntity.builder()
+                    .id(menu.getParent().getId())
+                    .build() : null)
+                .module(menu.getModule() != null ? ModuleEntity.builder()
+                    .id(menu.getModule().getId())
+                    .name(menu.getModule().getName())
+                    .build() : null)
+                .status(menu.getStatus())
+                .component(menu.getComponent())
+                .created_at(menu.getCreated_at() != null ? menu.getCreated_at() : LocalDateTime.now())
+                .updated_at(menu.getUpdated_at() != null ? menu.getUpdated_at() : LocalDateTime.now())
                 .build()
-
         );
         
-        return MenuEntity.builder()
-            .id(saved.getId())
-            .label(saved.getLabel())
-            .icon(saved.getIcon())
-            .path(saved.getPath())
-            .menuOrder(saved.getMenuOrder())
-            .parent(saved.getParent())
-            .module(saved.getModule())
-            .status(saved.getStatus())
-            .component(saved.getComponent())
-            .build();
+        return saved;
     }
 
     @Override
@@ -216,5 +213,9 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
         }
         menu.setDeleted_at(LocalDateTime.now());
         return repository.save(menu);
+    }
+
+    private String parseStatus(MenuStatus status) {
+        return status.name();
     }
 }

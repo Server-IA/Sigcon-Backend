@@ -57,6 +57,7 @@ public class MenuEntity {
     private ModuleEntity module;
 
     @Column(name = "status")
+    @Enumerated(EnumType.STRING)
     private MenuStatus status = MenuStatus.ACTIVE   ;
 
     @Column(name = "component")

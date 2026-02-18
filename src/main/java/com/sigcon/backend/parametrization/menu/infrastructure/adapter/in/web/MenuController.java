@@ -10,6 +10,7 @@ import com.sigcon.backend.utils.DataTableRequest;
 
 import jakarta.validation.Valid;
 
+import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 
 import org.springframework.http.ResponseEntity;
@@ -40,13 +41,13 @@ public class MenuController {
 
     @PostMapping("store")
     @PreAuthorize("hasAuthority('PERM_CREATE_MENUS')")
-    public ResponseEntity<?> storeMenu(@Valid @RequestBody MenuEntity menu, BindingResult bindingResult) {
+    public ResponseEntity<?> storeMenu(@Valid @RequestBody Menu menu, BindingResult bindingResult) {
         return menuUseCase.saveMenu(menu, bindingResult);
     }
 
     @PutMapping("/update")
     @PreAuthorize("hasAuthority('PERM_UPDATE_MENUS')")
-    public ResponseEntity<?> updateMenu(@Valid @RequestBody MenuEntity menu, BindingResult bindingResult) {
+    public ResponseEntity<?> updateMenu(@Valid @RequestBody Menu menu, BindingResult bindingResult) {
         return menuUseCase.updateMenu(menu, bindingResult);
     }
 

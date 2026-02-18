@@ -20,6 +20,7 @@ public class ParameterDTO {
     private Long id;
     private String name;
     private String value;
+    private UserParameterDTO userParameter;
     private CategoryParameter category;
     private StatusParameter status;
     private LocalDateTime created_at;

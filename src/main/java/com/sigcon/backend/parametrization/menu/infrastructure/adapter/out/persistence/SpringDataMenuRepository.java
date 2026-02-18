@@ -27,7 +27,7 @@ public interface SpringDataMenuRepository extends JpaRepository<MenuEntity, Long
       AND mp.deleted_at IS NULL
       ORDER BY m.menu_order ASC
       """, nativeQuery = true)
-    List<MenuEntity> findMenusByModuleIdAndRoles(Long moduleId, List roles, MenuStatus status);
+    List<MenuEntity> findMenusByModuleIdAndRoles(Long moduleId, List roles, String status);
 
     @Query(value = """
         SELECT * FROM menus m WHERE m.label = :label AND m.deleted_at IS NULL
@@ -42,7 +42,7 @@ public interface SpringDataMenuRepository extends JpaRepository<MenuEntity, Long
           WHERE m.parent_id = :parentId AND m.status = :status AND m.deleted_at IS NULL
         ORDER BY m.menu_order ASC
         """, nativeQuery = true)
-    List<MenuEntity> findMenusByParentId(Long parentId, MenuStatus status);
+    List<MenuEntity> findMenusByParentId(Long parentId, String status);
 
     @Query(value = """
         SELECT m.*

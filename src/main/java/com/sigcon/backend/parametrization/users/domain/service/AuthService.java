@@ -111,10 +111,11 @@ public class AuthService {
             response.put("token", token);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña."), Optional.of(response))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Inicio de sesión exitoso."), Optional.of(response))
             );
 
         } catch (AuthenticationException e) {
+
             return ResponseEntity.badRequest()
                     .body(
                         ErrorRespondJson.getErrorRespondMessage(Optional.of("Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña."))
@@ -123,40 +124,74 @@ public class AuthService {
     }
 
     public void sendResetPasswordLink(AuthRequest request){
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("No se encontró un usuario con el correo proporcionado."));
+        try {
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new RuntimeException("No se encontró un usuario con el correo proporcionado."));
 
-        String token = UUID.randomUUID().toString();
+            String token = UUID.randomUUID().toString();
 
-        PasswordResetToken resetToken = PasswordResetToken.builder()
-                .token(token)
-                .user(user)
-                .expiryDate(LocalDateTime.now().plusMinutes(10))
-                .used(false)
-                .build();
-        tokenRepository.save(resetToken);
+            PasswordResetToken resetToken = PasswordResetToken.builder()
+                    .token(token)
+                    .user(user)
+                    .expiryDate(LocalDateTime.now().plusMinutes(10))
+                    .used(false)
+                    .build();
+            tokenRepository.save(resetToken);
 
-        String resetLink = "http://localhost:5173/reset-password"; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
+            String frontendUrl = System.getenv("FRONTEND_URL");
+            String resetLink = frontendUrl + "/reset-password/" + token; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
 
-        String subject = "Restablecimiento de contraseña - SIGCON";
-        String message = """
-                Hola %s,
-                
-                Recibimos una solicitud para restablecer tu contraseña.
-                
-                Haz clic en el siguiente enlace para continuar:
-                %s
-                Tu token de restablecimiento de contraseña es: %s
-                
-                
-                Este enlace expirará en 10 minutos.
-                
-                Si no fuiste tú, ignora este mensaje.
-                
-                Equipo SIGCON
-                """.formatted(user.getName(), resetLink, token);
+            String subject = "Restablecimiento de contraseña - SIGCON";
+            String message = """
+                <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Restablecimiento de contraseña</title>
+                    </head>
+                    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+                        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 30px; border-radius: 8px;">
+                            
+                            <h2 style="color: #333;">Hola %s,</h2>
 
-        emailService.sendEmail(user.getEmail(), subject, message);
+                            <p>
+                                Recibimos una solicitud para restablecer tu contraseña.
+                            </p>
+
+                            <p>
+                                Haz clic en el siguiente botón para continuar:
+                            </p>
+
+                            <p style="text-align: center;">
+                                <a href="%s" target="_blank"
+                                style="display: inline-block; padding: 12px 20px; background-color: #007bff; 
+                                color: #ffffff; text-decoration: none; border-radius: 5px;">
+                                Restablecer contraseña
+                                </a>
+                            </p>
+
+                            <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                                Si no solicitaste este cambio, puedes ignorar este mensaje.
+                            </p>
+
+                            <hr style="margin: 30px 0;">
+
+                            <p style="font-size: 12px; color: #999;">
+                                Este enlace expirará en 10 minutos por razones de seguridad.
+                            </p>
+
+                            <p style="font-size: 12px; color: #999;">
+                                Equipo SIGCON
+                            </p>
+
+                        </div>
+                    </body>
+                </html>
+            """.formatted(user.getName(), resetLink);
+            emailService.sendEmail(user.getEmail(), subject, message);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
 
     }
 
@@ -169,6 +204,23 @@ public class AuthService {
         }
 
         User user = resetToken.getUser();
+
+        if (request.getNewPassword().isEmpty() || request.getNewPassword().length() < 6) {
+            throw new RuntimeException("La contraseña debe tener al menos 6 caracteres.");
+        }
+        if (!request.getNewPassword().matches(".*[A-Z].*")) {
+            throw new RuntimeException("La contraseña debe tener una letra mayúscula.");
+        }
+        if (!request.getNewPassword().matches(".*[a-z].*")) {
+            throw new RuntimeException("La contraseña debe tener una letra minúscula.");
+        }
+        if (!request.getNewPassword().matches(".*[0-9].*")) {
+            throw new RuntimeException("La contraseña debe tener un número.");
+        }
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new RuntimeException("La contraseña no puede ser la misma que la anterior.");
+        }
+
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
@@ -179,10 +231,7 @@ public class AuthService {
     public ResponseEntity<?> logout(String token){
         if (token == null || token.isEmpty()) {
             return ResponseEntity.badRequest().body(
-                    Map.of(
-                            "success", false,
-                            "message", "Token no proporcionado para cerrar sesión."
-                    )
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Token no proporcionado para cerrar sesión."))
             );
         }
 
@@ -190,17 +239,11 @@ public class AuthService {
             BlackListedToken blackListedToken = BlackListedToken.builder().token(token).build();
             blackListedTokenRepository.save(blackListedToken);
             return ResponseEntity.ok(
-                    Map.of(
-                            "success", true,
-                            "message", "Cierre de sesión exitoso."
-                    )
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Cierre de sesión exitoso."), Optional.empty())
             );
         } else {
             return ResponseEntity.badRequest().body(
-                    Map.of(
-                            "success", false,
-                            "message", "El token ya ha sido invalidado."
-                    )
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El token ya ha sido invalidado."))
             );
         }
     }
