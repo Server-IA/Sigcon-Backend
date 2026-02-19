@@ -71,7 +71,7 @@ public class RoleService {
                 : PageRequest.of(page, safeLength);
 
             Specification<Role> spec = roleSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
             Page<Role> roles = roleRepository.findAll(spec, pageable);
 
@@ -102,39 +102,46 @@ public class RoleService {
     }
 
     public ResponseEntity<?> createRole(RoleRequest request) {
+        try{
 
-        if (request.getName() == null || request.getName().isBlank()) {
-            return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del rol es obligatorio"))
+            if (request.getName() == null || request.getName().isBlank()) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del rol es obligatorio"))
+                );
+            }
+    
+            if (roleRepository.findByNameAndDeletedAtIsNull(request.getName().toUpperCase()).isPresent()) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
+                );
+            }
+    
+            Set<Permission> permissions = Set.of();
+    
+            if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
+                permissions = permissionRepository.findAllById(request.getPermissionIds())
+                        .stream().collect(Collectors.toSet());
+            }
+    
+            Role role = Role.builder()
+                    .name(request.getName().toUpperCase())
+                    .permissions(permissions)
+                    .status(Status.ACTIVE)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+    
+            roleRepository.save(role);
+    
+            RoleRequest roleDTO = toRequest(role);
+    
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(roleDTO))
             );
+
+        }catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
-
-        if (roleRepository.findByName(request.getName().toUpperCase()).isPresent()) {
-            return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
-            );
-        }
-
-        Set<Permission> permissions = Set.of();
-
-        if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
-            permissions = permissionRepository.findAllById(request.getPermissionIds())
-                    .stream().collect(Collectors.toSet());
-        }
-
-        Role role = Role.builder()
-                .name(request.getName().toUpperCase())
-                .permissions(permissions)
-                .status(Status.ACTIVE)
-                .build();
-
-        roleRepository.save(role);
-
-        RoleRequest roleDTO = toRequest(role);
-
-        return ResponseEntity.ok(
-            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(roleDTO))
-        );
     }
 
     public ResponseEntity<?> updateRole(Long id, RoleRequest request){
@@ -148,7 +155,7 @@ public class RoleService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
-        if (roleRepository.findByName(request.getName()).isPresent()
+        if (roleRepository.findByNameAndDeletedAtIsNull(request.getName().toUpperCase()).isPresent()
                 && !role.getName().equalsIgnoreCase(request.getName())) {
 
             return ResponseEntity.badRequest().body(
@@ -181,7 +188,7 @@ public class RoleService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
-        if (role.getDeleted_at() != null) {
+        if (role.getDeletedAt() != null) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya se encuentra eliminado"))
             );
@@ -195,7 +202,7 @@ public class RoleService {
             );
         }
 
-        role.setDeleted_at(LocalDateTime.now());
+        role.setDeletedAt(LocalDateTime.now());
         roleRepository.save(role);
 
         RoleRequest roleDTO = toRequest(role);
@@ -215,7 +222,7 @@ public class RoleService {
 
         user.getRoles().clear();
         user.getRoles().add(role);
-        user.setUpdated_at(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
         return ResponseEntity.ok(

@@ -31,7 +31,6 @@ public class ModuleEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(unique = true)
     @NotBlank(message = "El nombre es obligatorio")
     private String name;
 
@@ -55,16 +54,26 @@ public class ModuleEntity {
     @Column(name = "created_at")
     @Temporal(TemporalType.TIMESTAMP)
     @CreationTimestamp
-    private LocalDateTime created_at = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(name = "updated_at")
     @Temporal(TemporalType.TIMESTAMP)
     @UpdateTimestamp
-    private LocalDateTime updated_at = LocalDateTime.now();
+    private LocalDateTime updatedAt = LocalDateTime.now();
 
     @Column(name = "deleted_at")
-    @Temporal(TemporalType.TIMESTAMP)
     @Nullable
-    private LocalDateTime deleted_at;
+    private LocalDateTime deletedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 
 }

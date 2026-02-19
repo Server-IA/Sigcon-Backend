@@ -29,4 +29,6 @@ public interface RoleRepository extends JpaRepository<Role,Long>, JpaSpecificati
         WHERE rp.permission_id = :permissionId
     """, nativeQuery = true)
     List<Role> findAllByPermissions_Id(Long permissionId);
+
+    Optional<Role> findByNameAndDeletedAtIsNull(String name);
 }

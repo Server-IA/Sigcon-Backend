@@ -28,7 +28,7 @@ public class Parameter {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     @NotNull(message = "El nombre es obligatorio")
     private String name;
 

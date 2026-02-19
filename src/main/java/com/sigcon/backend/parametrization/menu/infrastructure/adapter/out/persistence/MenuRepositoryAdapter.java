@@ -69,9 +69,9 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
                     : null)
             .status(e.getStatus())
             .component(e.getComponent())
-            .deletedAt(e.getDeleted_at())
-            .createdAt(e.getCreated_at())
-            .updatedAt(e.getUpdated_at())
+            .createdAt(e.getCreatedAt())
+            .updatedAt(e.getUpdatedAt())
+            .deletedAt(e.getDeletedAt())
             .build();
     }
 
@@ -93,8 +93,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
                     .build() : null)
                 .status(menu.getStatus())
                 .component(menu.getComponent())
-                .created_at(menu.getCreated_at() != null ? menu.getCreated_at() : LocalDateTime.now())
-                .updated_at(menu.getUpdated_at() != null ? menu.getUpdated_at() : LocalDateTime.now())
+                .createdAt(menu.getCreatedAt() != null ? menu.getCreatedAt() : LocalDateTime.now())
+                .updatedAt(menu.getUpdatedAt() != null ? menu.getUpdatedAt() : LocalDateTime.now())
                 .build()
         );
         
@@ -135,9 +135,9 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
                 .build())
             .status(m.getStatus())
             .component(m.getComponent())
-            .deletedAt(m.getDeleted_at())
-            .createdAt(m.getCreated_at())
-            .updatedAt(m.getUpdated_at())
+            .createdAt(m.getCreatedAt())
+            .updatedAt(m.getUpdatedAt())
+            .deletedAt(m.getDeletedAt())
             .build());
     }
 
@@ -153,7 +153,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .module(menuEntity.getModule())
             .status(menuEntity.getStatus())
             .component(menuEntity.getComponent())
-            .updated_at(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
             .build());
 
         return MenuEntity.builder()
@@ -166,7 +166,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .module(saved.getModule())
             .status(saved.getStatus())
             .component(saved.getComponent())
-            .updated_at(saved.getUpdated_at())
+            .updatedAt(saved.getUpdatedAt())
             .build();
     }
 
@@ -211,7 +211,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
         if(menu == null) {
             throw new RuntimeException("Menú no encontrado");
         }
-        menu.setDeleted_at(LocalDateTime.now());
+        menu.setDeletedAt(LocalDateTime.now());
         return repository.save(menu);
     }
 

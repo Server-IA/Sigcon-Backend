@@ -63,9 +63,11 @@ public class DataInitializer implements CommandLineRunner {
             createOrUpdateMenu("Perfil", "perfil", "ri-user-line", 1, null, moduleId, "PERFIL");
             createOrUpdateMenu("Modulos", "modules", "ri-list-settings-fill", 2, null, moduleId, "MODULOS");
             createOrUpdateMenu("Menus", "menus", "ri-play-list-add-line", 3, null, moduleId, "MENUS");
-            createOrUpdateMenu("Permisos", "permisos", "ri-menu-2-fill", 1, null, moduleId, "PERMISSIONS");
-            createOrUpdateMenu("Roles", "roles", "ri-menu-2-fill", 1, null, moduleId, "ROLES");
-            createOrUpdateMenu("Permisos Menu", "menu-permissions", null, 5, null, moduleId, "MENUSPERMISSIONS");
+            createOrUpdateMenu("Permisos", "permisos", "ri-menu-2-fill", 4, null, moduleId, "PERMISSIONS");
+            createOrUpdateMenu("Roles", "roles", "ri-menu-2-fill", 5, null, moduleId, "ROLES");
+            createOrUpdateMenu("Usuarios", "users", null, 6, null, moduleId, "USERS");
+            createOrUpdateMenu("Parámetros", "parameters", null, 7, null, moduleId, "PARAMETERS");
+            createOrUpdateMenu("Permisos Menu", "menu-permissions", null, 8, null, moduleId, "MENUSPERMISSIONS");
 
             // Crear permisos base
             Permission viewRoles = createPermission("Obtener roles", "Permiso para ver roles", TypePermits.READ, "VIEW_ROLES", moduleId);
@@ -73,16 +75,26 @@ public class DataInitializer implements CommandLineRunner {
             Permission updateRole = createPermission("Actualizar roles", "Permiso para actualizar roles", TypePermits.UPDATE, "UPDATE_ROLE", moduleId);
             Permission deleteRole = createPermission("Eliminar roles", "Permiso para eliminar roles", TypePermits.DELETE, "DELETE_ROLE", moduleId);
             Permission assignRole = createPermission("Asignar roles", "Permiso para asignar roles", TypePermits.CREATE, "ASSIGN_ROLE", moduleId);
+            
             Permission viewUsers = createPermission("Obtener usuarios", "Permiso para ver usuarios", TypePermits.READ, "VIEW_USERS", moduleId);
+            Permission createUsers = createPermission("Crear usuarios", "Permiso para crear usuarios", TypePermits.CREATE, "CREATE_USER", moduleId);
             Permission updateUser = createPermission("Actualizar usuarios", "Permiso para actualizar usuarios", TypePermits.UPDATE, "UPDATE_USER", moduleId);
             Permission deleteUser = createPermission("Eliminar usuarios", "Permiso para eliminar usuarios", TypePermits.DELETE, "DELETE_USER", moduleId);
+            
             Permission createPermission = createPermission("Crear permisos", "Permiso para crear permisos", TypePermits.CREATE, "CREATE_PERMISSION", moduleId);
+            Permission updatePermission = createPermission("Actualizar permisos", "Permiso para actualizar permisos", TypePermits.UPDATE, "UPDATE_PERMISSION", moduleId);
             Permission viewPermissions = createPermission("Obtener permisos", "Permiso para ver permisos", TypePermits.READ, "VIEW_PERMISSIONS", moduleId);
             Permission assignPermission = createPermission("Asignar permisos", "Permiso para asignar permisos", TypePermits.CREATE, "ASSIGN_PERMISSION", moduleId);
             Permission removePermission = createPermission("Eliminar permisos", "Permiso para eliminar permisos", TypePermits.DELETE, "REMOVE_PERMISSION", moduleId);
+            
             Permission createChartOfAccount = createPermission("Crear cuentas de contabilidad", "Permiso para crear cuentas de contabilidad", TypePermits.CREATE, "CREATE_CHART_OF_ACCOUNT", moduleId);
             Permission viewChartOfAccount = createPermission("Ver cuentas de contabilidad", "Permiso para ver cuentas de contabilidad", TypePermits.READ, "VIEW_CHART_OF_ACCOUNT", moduleId);
+            
             Permission viewMenus = createPermission("Ver menús", "Permiso para ver menús", TypePermits.READ, "VIEW_MENUS", moduleId);
+            Permission createMenus = createPermission("Crear menús", "Permiso para crear menús", TypePermits.CREATE, "CREATE_MENUS", moduleId);
+            Permission updateMenus = createPermission("Actualizar menús", "Permiso para actualizar menús", TypePermits.UPDATE, "UPDATE_MENUS", moduleId);
+            Permission deleteMenus = createPermission("Eliminar menús", "Permiso para eliminar menús", TypePermits.DELETE, "DELETE_MENUS", moduleId);
+            
             Permission createParameter = createPermission("Crear parámetros", "Permiso para crear parámetros", TypePermits.CREATE, "CREATE_PARAMETER", moduleId);
             Permission viewParameter = createPermission("Ver parámetros", "Permiso para ver parámetros", TypePermits.READ, "VIEW_PARAMETER", moduleId);
             Permission updateParameter = createPermission("Actualizar parámetros", "Permiso para actualizar parámetros", TypePermits.UPDATE, "UPDATE_PARAMETER", moduleId);
@@ -93,20 +105,41 @@ public class DataInitializer implements CommandLineRunner {
             Permission updateMenuPermissions = createPermission("Actualizar permisos de menús", "Permiso para actualizar permisos de menús", TypePermits.UPDATE, "UPDATE_MENU_PERMISSIONS", moduleId);
             Permission deleteMenuPermissions = createPermission("Eliminar permisos de menús", "Permiso para eliminar permisos de menús", TypePermits.DELETE, "DELETE_MENU_PERMISSIONS", moduleId);
 
+            // Permission createUser = createPermission("Crear usuarios", "Permiso para crear usuarios", TypePermits.CREATE, "CREATE_USER", moduleId);
+
             // Crear roles y asignar permisos
-            createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount)));
-            createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount,
-                viewMenus, createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions)));
+            createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of(
+                viewRoles, createRoles, updateRole, deleteRole, assignRole,
+                viewUsers, createUsers, updateUser, deleteUser,
+                createPermission, updatePermission, viewPermissions, assignPermission, removePermission,
+                createChartOfAccount, viewChartOfAccount,
+                viewMenus, createMenus, updateMenus, deleteMenus,
+                createParameter, viewParameter, updateParameter, deleteParameter,
+                viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions
+            )));
             createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
             // Crear usuarios
 
-            createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN", Set.of(viewRoles, createRoles, updateRole, deleteRole, assignRole, viewUsers, updateUser, deleteUser, createPermission, viewPermissions, assignPermission, removePermission, createChartOfAccount, viewChartOfAccount, viewMenus,
-                createParameter, viewParameter, updateParameter, deleteParameter, viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
+            createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN",
+            Set.of(
+                viewRoles, createRoles, updateRole, deleteRole, assignRole,
+                viewUsers, createUsers, updateUser, deleteUser,
+                createPermission, updatePermission, viewPermissions, assignPermission, removePermission,
+                createChartOfAccount, viewChartOfAccount,
+                viewMenus, createMenus, updateMenus, deleteMenus,
+                createParameter, viewParameter, updateParameter, deleteParameter,
+                viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
 
+            createMenuPermissions("Perfil", "SUPERADMIN");
+            createMenuPermissions("Perfil", "USER");
+
+            createMenuPermissions("Modulos", "SUPERADMIN");
             createMenuPermissions("Menus", "SUPERADMIN");
             createMenuPermissions("Permisos", "SUPERADMIN");
             createMenuPermissions("Roles", "SUPERADMIN");
+            createMenuPermissions("Usuarios", "SUPERADMIN");
+            createMenuPermissions("Parámetros", "SUPERADMIN");
             createMenuPermissions("Permisos Menu", "SUPERADMIN");
         
     }
@@ -126,7 +159,7 @@ public class DataInitializer implements CommandLineRunner {
 
     private void createOrUpdateRole(String name, HashSet<Permission> permissions) {
 
-        Role role = roleRepository.findByName(name).orElseGet(() -> Role.builder().name(name).build());
+        Role role = roleRepository.findByNameAndDeletedAtIsNull(name).orElseGet(() -> Role.builder().name(name).build());
         role.setPermissions(permissions);
         role.setStatus(Status.ACTIVE);
         roleRepository.save(role);
@@ -174,7 +207,7 @@ public class DataInitializer implements CommandLineRunner {
                 .lastname(lastname)
                 .email(email)
                 .password(passwordEncoder.encode(password))
-                .roles(Set.of(roleRepository.findByName(role).orElseThrow(() -> new RuntimeException("Role not found"))))
+                .roles(Set.of(roleRepository.findByNameAndDeletedAtIsNull(role).orElseThrow(() -> new RuntimeException("Role not found"))))
                 .status(Status.ACTIVE)
                 .build());
         userRepository.save(user);
@@ -185,7 +218,7 @@ public class DataInitializer implements CommandLineRunner {
         MenuEntity menu = menuRepositoryPort.findMenuByLabel(menuLabel)
             .orElseThrow(() -> new RuntimeException("Menu not found"));
     
-        Role role = roleRepository.findByName(roleName)
+        Role role = roleRepository.findByNameAndDeletedAtIsNull(roleName)
             .orElseThrow(() -> new RuntimeException("Role not found"));
     
         MenuPermissionsEntity menuPermissions =
