@@ -21,7 +21,7 @@ public class Role {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String name;
 
     @ManyToMany(fetch = FetchType.EAGER)
@@ -36,23 +36,23 @@ public class Role {
     @Enumerated(EnumType.STRING)
     private Status status;
 
-    @Column(nullable = false)
-    private LocalDateTime created_at; 
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt; 
 
-    @Column(nullable = false)
-    private LocalDateTime updated_at;
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
-    @Column(nullable = true)   
-    private LocalDateTime deleted_at;
+    @Column(name = "deleted_at", nullable = true)   
+    private LocalDateTime deletedAt;
 
     @PrePersist
     protected void onCreate() {
-        this.created_at = LocalDateTime.now();
-        this.updated_at = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        this.updated_at = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 }

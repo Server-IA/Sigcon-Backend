@@ -63,7 +63,7 @@ public class MenuService implements MenuUseCase {
                 : PageRequest.of(page, safeLength);
 
             Specification<MenuEntity> spec = menuSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
             Page<MenuEntity> menus = menuRepositoryPort.findAll(spec, pageable);
     
@@ -160,7 +160,7 @@ public class MenuService implements MenuUseCase {
 
             if(menu.getModuleId() != null) {
                 ModuleEntity module = moduleRepository.findById(menu.getModuleId()).orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
-                if(module.getDeleted_at() != null) {
+                if(module.getDeletedAt() != null) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El módulo ya se encuentra eliminado")));
                 }
                 menu.setModule(ModuleDTO.builder()
@@ -181,9 +181,9 @@ public class MenuService implements MenuUseCase {
                     .build())
                 .status(menu.getStatus())
                 .component(menu.getComponent())
-                .deleted_at(menu.getDeletedAt())
-                .created_at(menu.getCreatedAt())
-                .updated_at(menu.getUpdatedAt())
+                .deletedAt(menu.getDeletedAt())
+                .createdAt(menu.getCreatedAt())
+                .updatedAt(menu.getUpdatedAt())
                 .build();
 
             menuRepositoryPort.saveMenu(menuEntity);
@@ -241,7 +241,7 @@ public class MenuService implements MenuUseCase {
 
             menuEntity.setStatus(menu.getStatus());
             menuEntity.setComponent(menu.getComponent());
-            menuEntity.setUpdated_at(LocalDateTime.now());
+            menuEntity.setUpdatedAt(LocalDateTime.now());
 
             menuRepositoryPort.updateMenu(menuEntity);
             return ResponseEntity.ok(
@@ -286,7 +286,7 @@ public class MenuService implements MenuUseCase {
         try{
             MenuEntity respond = menuRepositoryPort.deleteMenu(id);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú eliminado correctamente"), Optional.of(respond)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú eliminado correctamente"), Optional.empty()));
 
         }
         catch (Exception e) {

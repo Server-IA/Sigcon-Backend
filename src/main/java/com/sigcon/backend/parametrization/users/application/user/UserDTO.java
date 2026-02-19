@@ -4,7 +4,8 @@ import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 
-
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,14 +20,18 @@ import java.util.Set;
 @AllArgsConstructor
 public class UserDTO {
 
+    @NotBlank(message = "El nombre es obligatorio")
     private String name;
+    @NotBlank(message = "El apellido es obligatorio")
     private String lastname;
+    @NotBlank(message = "El correo electrónico es obligatorio")
+    @Email(message = "El correo electrónico no es válido")
     private String email;
+
     private String password;
     private String avatar;
     private String role;
     private Status status;
-
 
     private Long id;
     private Set<String> roles;

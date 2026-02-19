@@ -66,17 +66,17 @@ public class MenuEntity {
     @Column(name = "created_at")
     @Temporal(TemporalType.TIMESTAMP)
     @CreationTimestamp
-    private LocalDateTime created_at = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(name = "updated_at")
     @Temporal(TemporalType.TIMESTAMP)
     @UpdateTimestamp
-    private LocalDateTime updated_at = LocalDateTime.now();
+    private LocalDateTime updatedAt = LocalDateTime.now();
 
     @Column(name = "deleted_at")
     @Temporal(TemporalType.TIMESTAMP)
     @Nullable
-    private LocalDateTime deleted_at;
+    private LocalDateTime deletedAt;
 
 
 
