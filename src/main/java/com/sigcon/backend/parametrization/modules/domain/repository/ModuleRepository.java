@@ -64,4 +64,6 @@ public interface ModuleRepository extends JpaRepository<ModuleEntity, Long>, Jpa
     @Query(value = "SELECT m.* FROM modules m WHERE m.deleted_at IS NULL", nativeQuery = true)
     Page<ModuleEntity> findAllAndDeletedAtIsNull(Pageable pageable);
 
+    boolean existsByNameAndDeletedAtIsNull(String name);
+
 }

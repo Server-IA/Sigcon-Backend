@@ -76,17 +76,20 @@ public class DataTableSpecificationBuilder<T> {
                     
                     /* -------- NUMERIC / BOOLEAN -------- */
                     else if(type.equals(Long.class) || type.equals(Integer.class)) {
-                        if(regex) {
-                            // Convertir número a texto para LIKE en Postgres
-                            globalPredicate = cb.or(
-                                globalPredicate,
-                                cb.like(cb.concat("", path.as(String.class)), "%" + globalValue + "%")
-                            );
-                        } else {
-                            globalPredicate = cb.or(
-                                globalPredicate,
-                                cb.equal(path, convertValue(globalValue, type))
-                            );
+                        if(globalValue.matches("\\d+")) {
+                            Object convertedValue = convertValue(globalValue, type);
+                            if(regex) {
+                                // Convertir número a texto para LIKE en Postgres
+                                globalPredicate = cb.or(
+                                    globalPredicate,
+                                    cb.like(cb.concat("", path.as(String.class)), "%" + convertedValue + "%")
+                                );
+                            } else {
+                                globalPredicate = cb.or(
+                                    globalPredicate,
+                                    cb.equal(path, convertedValue)
+                                );
+                            }
                         }
                     }
 
@@ -152,45 +155,47 @@ public class DataTableSpecificationBuilder<T> {
                     }
     
                     /* -------- ENUM -------- */
-else if (type.isEnum()) {
+                    else if (type.isEnum()) {
 
-    Object[] enumConstants = type.getEnumConstants();
-    Predicate enumPredicate = cb.disjunction(); // OR
+                        Object[] enumConstants = type.getEnumConstants();
+                        Predicate enumPredicate = cb.disjunction(); // OR
 
-    for (Object constant : enumConstants) {
-        String enumName = constant.toString();
+                        for (Object constant : enumConstants) {
+                            String enumName = constant.toString();
 
-        if (regex) {
-            if (enumName.toLowerCase().contains(searchValue.toLowerCase())) {
-                enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
-            }
-        } else {
-            if (enumName.equalsIgnoreCase(searchValue)) {
-                enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
-            }
-        }
-    }
+                            if (regex) {
+                                if (enumName.toLowerCase().contains(searchValue.toLowerCase())) {
+                                    enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
+                                }
+                            } else {
+                                if (enumName.equalsIgnoreCase(searchValue)) {
+                                    enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
+                                }
+                            }
+                        }
 
-    predicate = cb.and(predicate, enumPredicate);
-}
+                        predicate = cb.and(predicate, enumPredicate);
+                    }
 
     
                     /* -------- NUMERIC / BOOLEAN -------- */
                     else {
+                        if(searchValue.matches("\\d+")) {
+                            Object convertedValue = convertValue(searchValue, type);
     
-                        Object convertedValue = convertValue(searchValue, type);
-
-                        if(regex) {
-                            predicate = cb.and(
-                                    predicate,
-                                    cb.like(path.as(String.class), "%" + convertedValue + "%")
-                            );
-                        } else {
-                            predicate = cb.and(
-                                    predicate,
-                                    cb.equal(path, convertedValue)  
-                            );
+                            if(regex) {
+                                predicate = cb.and(
+                                        predicate,
+                                        cb.like(path.as(String.class), "%" + convertedValue + "%")
+                                );
+                            } else {
+                                predicate = cb.and(
+                                        predicate,
+                                        cb.equal(path, convertedValue)  
+                                );
+                            }
                         }
+    
                     }
                 }
             }
@@ -201,6 +206,9 @@ else if (type.isEnum()) {
     
 
     private Path<?> getPath(Root<T> root, String field) {
+        if(field.equals("roles")) {
+            return root.join("roles", JoinType.LEFT).get("name"); // filtramos por role.name
+        }
 
         if (!field.contains(".")) {
             return root.get(field);

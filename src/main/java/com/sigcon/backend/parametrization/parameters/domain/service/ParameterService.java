@@ -26,9 +26,13 @@ import com.sigcon.backend.parametrization.parameters.domain.model.UserParameter;
 import com.sigcon.backend.parametrization.parameters.domain.model.enums.CategoryParameter;
 import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
 import com.sigcon.backend.parametrization.parameters.domain.repository.UserParameterRepository;
+import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
+import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
+import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.parametrization.users.domain.service.UserService;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +56,7 @@ public class ParameterService {
     private final ParameterRepository parameterRepository;
     private final UserParameterRepository userParameterRepository;
     private final UserRepository userRepository;
+    private final PermissionRepository permissionRepository;
 
     private final DataTableSpecificationBuilder<Parameter> parameterSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
@@ -140,20 +145,26 @@ public class ParameterService {
             // Validar que no esté duplicado
             if (userParameterRepository.existsByUserAndParameter(user, parameter)) {
                 return ResponseEntity.badRequest()
-                        .body("Ya tiene un color asignado para este parámetro.");
+                        .body(
+                            ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro ya tiene un valor asignado."))
+                        );
             }
 
             // Validar color hexadecimal
             String validatedColor = validateHexColor(request.getColorValue());
             if (validatedColor == null) {
                 return ResponseEntity.badRequest()
-                        .body("El formato de hexadecimal no es válido");
+                        .body(
+                            ErrorRespondJson.getErrorRespondMessage(Optional.of("El formato de hexadecimal no es válido"))
+                        );
             }
 
             // Validar que el valor sea obligatorio
             if (validatedColor.isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body("El valor del color es obligatorio");
+                        .body(
+                            ErrorRespondJson.getErrorRespondMessage(Optional.of("El valor del color es obligatorio"))
+                        );
             }
 
             UserParameter userParameter = UserParameter.builder()
@@ -165,9 +176,12 @@ public class ParameterService {
                     .build();
 
             userParameterRepository.save(userParameter);
+            
+
+            UserDTO userDto = getUserDTO(user);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro asignado correctamente"), Optional.empty()));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro asignado correctamente"), Optional.of(userDto)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
@@ -184,7 +198,9 @@ public class ParameterService {
         try {
             User user = getAuthenticatedUser();
             if (user == null) {
-                return ResponseEntity.badRequest().body("Debe iniciar sesión para editar parámetros.");
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe iniciar sesión para editar parámetros."))
+                );
             }
 
             // Validar que el parámetro exista
@@ -199,13 +215,17 @@ public class ParameterService {
             String validatedColor = validateHexColor(request.getColorValue());
             if (validatedColor == null) {
                 return ResponseEntity.badRequest()
-                        .body("El formato de hexadecimal no es válido");
+                        .body(
+                            ErrorRespondJson.getErrorRespondMessage(Optional.of("El formato de hexadecimal no es válido"))
+                        );
             }
 
             // Validar que el valor sea obligatorio
             if (validatedColor.isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body("Por favor valide que los campos estén debidamente diligenciados.");
+                        .body(
+                            ErrorRespondJson.getErrorRespondMessage(Optional.of("Por favor valide que los campos estén debidamente diligenciados."))
+                        );
             }
 
             // Actualizar el color
@@ -213,8 +233,10 @@ public class ParameterService {
             userParameter.setUpdated_at(LocalDateTime.now());
             userParameterRepository.save(userParameter);
 
+            UserDTO userDto = getUserDTO(user);
+
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.empty()));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.of(userDto)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
@@ -471,6 +493,64 @@ public class ParameterService {
         response.put("title", "Error de validación");
         response.put("errors", errors);
         return response;
+    }
+
+    private UserDTO getUserDTO(User  user) {
+        return UserDTO.builder()
+            .id(user.getId())
+            .name(user.getName())
+            .lastname(user.getLastname())
+            .email(user.getEmail())
+            .avatar(user.getAvatar())
+            .status(user.getStatus())
+            .roles(
+                user.getRoles()
+                    .stream()
+                    .map(Role::getName)
+                    .collect(Collectors.toSet())
+                )
+                .permissions(
+                    permissionRepository.findByUserID(user.getId())
+                    .stream()
+                    .map(permission -> new PermissionDTO(
+                        null,
+                        permission.getName(),
+                        permission.getCode(),
+                        permission.getType(),
+                        null,
+                        null,
+                        permission.getDescription(),
+                        null
+                    ))
+                    .collect(Collectors.toList())
+                )
+                .parameters(
+                    parameterRepository.findAll()
+            .stream()
+            .map(p -> new ParameterDTO(
+                        null,
+                        p.getName(),
+                        p.getValue(),
+                        userParameterRepository.findByUserAndParameter(user, p)
+                            .map(up -> new UserParameterDTO(
+                                null,
+                                null,
+                                null,
+                                up.getValue(),
+                                null,
+                                null,
+                                null,
+                                null
+                            )).orElse(null),
+                        p.getCategory(),
+                        p.getStatus(),
+                        null,
+                        null,
+                        null
+                    ))
+                    .collect(Collectors.toList())
+                )
+                .build();
     }
 
 }

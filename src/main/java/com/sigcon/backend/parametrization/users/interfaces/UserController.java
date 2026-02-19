@@ -2,6 +2,9 @@ package com.sigcon.backend.parametrization.users.interfaces;
 
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.utils.DataTableRequest;
+
+import jakarta.validation.Valid;
+
 import com.sigcon.backend.parametrization.users.domain.service.UserService;
 import lombok.RequiredArgsConstructor;
 
@@ -16,6 +19,7 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -29,6 +33,12 @@ public class UserController {
     @PreAuthorize("hasAuthority('PERM_VIEW_USERS')")
     public ResponseEntity<?> getUsers(@RequestBody(required = false) DataTableRequest request) {
         return userService.getUsers(request);
+    }
+
+    @PostMapping("/store")
+    @PreAuthorize("hasAuthority('PERM_CREATE_USER')")
+    public ResponseEntity<?> store(@Valid @RequestBody UserDTO request, BindingResult bindingResult) {
+        return userService.store(request, bindingResult);
     }
 
     @GetMapping

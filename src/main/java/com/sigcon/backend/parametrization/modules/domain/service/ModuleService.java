@@ -59,7 +59,7 @@ public class ModuleService {
                 : PageRequest.of(page, safeLength);
 
             Specification<ModuleEntity> spec = moduleSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deleted_at")));
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
             Page<ModuleEntity> modules = moduleRepository.findAll(spec, pageable);
     
@@ -132,14 +132,14 @@ public class ModuleService {
         }
 
         try {
-            if (moduleRepository.existsByName(request.getName())) {
+            if (moduleRepository.existsByNameAndDeletedAtIsNull(request.getName())) {
                 return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del módulo ya existe"))
                 );
             }
-            ModuleEntity module = moduleRepository.save(request);
+            moduleRepository.save(request);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo creado correctamente"), Optional.of(module)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo creado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar el módulo"))
@@ -172,10 +172,10 @@ public class ModuleService {
             module.setIcon(request.getIcon());
             module.setPosition(request.getPosition());
             module.setStatus(request.getStatus());
-            // module.setUpdatedAt(LocalDateTime.now());
+            module.setUpdatedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo actualizado correctamente"), Optional.of(module)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo actualizado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al actualizar el módulo"))
@@ -187,10 +187,10 @@ public class ModuleService {
         try {
             ModuleEntity module = moduleRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
-            module.setDeleted_at(LocalDateTime.now());
+            module.setDeletedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo eliminado correctamente"), Optional.of(module)));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo eliminado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar el módulo"))
