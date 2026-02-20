@@ -163,7 +163,7 @@ public class RoleService {
             );
         }
 
-        Set<Permission> permissions = Set.of();
+        Set<Permission> permissions = new HashSet<>();
 
         if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
             permissions = permissionRepository.findAllById(request.getPermissionIds())
