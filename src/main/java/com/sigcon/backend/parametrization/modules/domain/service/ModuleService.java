@@ -92,7 +92,9 @@ public class ModuleService {
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulos obtenidos correctamente"), Optional.of(modules))
             );
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los módulos")));
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al obtener los módulos"))
+            );
         }
     }
 
@@ -178,7 +180,7 @@ public class ModuleService {
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo actualizado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al actualizar el módulo"))
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
         }
     }

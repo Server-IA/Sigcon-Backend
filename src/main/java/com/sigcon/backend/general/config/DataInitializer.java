@@ -39,7 +39,7 @@ import jakarta.transaction.Transactional;
 
 @Configuration
 @RequiredArgsConstructor
-@Profile("DEVELOPMENT")
+// @Profile("DEVELOPMENT")
 @Transactional
 public class DataInitializer implements CommandLineRunner {
 
