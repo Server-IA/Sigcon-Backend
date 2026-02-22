@@ -12,7 +12,7 @@ services:
     depends_on:
       - ${backend_host:-db}
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host:-db}:${backend_port_db_dev:-5432}/${backend_database:-backend}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host:-db}:${backend_port_db_dev:-5443}/${backend_database:-backend}
       SPRING_DATASOURCE_USERNAME: ${backend_user:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${backend_password:-postgres}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
