@@ -1,17 +1,15 @@
-version: "3.8"
-
 services:
   backend:
     build: .
     container_name: backend-api
     ports:
-      - "8080:8080"
+      - "${backend_port_api:-8080}:${backend_port_api:-8080}"
     depends_on:
       - db
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host}:${backend_port}/${backend_database}
-      SPRING_DATASOURCE_USERNAME: ${backend_user}
-      SPRING_DATASOURCE_PASSWORD: ${backend_password}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host:-db}:${backend_port:-5432}/${backend_database:-backend}
+      SPRING_DATASOURCE_USERNAME: ${backend_user:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${backend_password:-postgres}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: "true"
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
@@ -28,11 +26,11 @@ services:
     container_name: backend-db
     restart: always
     environment:
-      POSTGRES_DB: backend
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${backend_database:-backend}
+      POSTGRES_USER: ${backend_user:-postgres}
+      POSTGRES_PASSWORD: ${backend_password:-postgres}
     ports:
-      - "5432:5432"
+      - "${backend_port:-5432}:${backend_port:-5432}"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -57,7 +55,7 @@ services:
     container_name: backend-adminer
     restart: always
     ports:
-      - "8081:8080"
+      - "${backend_port_adminer:-8081}:${backend_port_api:-8080}"
     depends_on:
       - db
 

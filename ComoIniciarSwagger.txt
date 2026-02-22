@@ -1,0 +1,107 @@
+========================================
+  SIGCON BACKEND - SWAGGER CONFIGURADO
+========================================
+
+✅ Swagger/OpenAPI ha sido configurado exitosamente
+
+📋 INSTRUCCIONES RÁPIDAS
+========================
+
+OPCIÓN 1 - Script Automático (Más Fácil)
+-----------------------------------------
+En PowerShell, ejecuta:
+
+    .\run-dev-with-swagger.ps1
+
+Luego abre: http://localhost:8080/swagger-ui.html
+
+
+OPCIÓN 2 - Comando Manual
+--------------------------
+En PowerShell, ejecuta:
+
+    $env:SPRING_PROFILES_ACTIVE = "dev"
+    .\mvnw.cmd spring-boot:run
+
+Luego abre: http://localhost:8080/swagger-ui.html
+
+
+OPCIÓN 3 - Con Docker Compose
+------------------------------
+En terminal (CMD o PowerShell), ejecuta:
+
+    docker-compose -f docker-compose.dev.yml up --build
+
+Luego abre: http://localhost:8080/swagger-ui.html
+
+
+📖 URLs DISPONIBLES
+===================
+
+Swagger UI (Interfaz):     http://localhost:8080/swagger-ui.html
+API Docs JSON:             http://localhost:8080/v3/api-docs
+API Docs YAML:             http://localhost:8080/v3/api-docs.yaml
+Adminer (DB):              http://localhost:8081
+
+
+⚙️  REQUISITOS
+==============
+
+Para ejecución local (Opciones 1 y 2):
+- PostgreSQL corriendo en localhost:5432
+- Base de datos "backend" creada
+- Usuario: postgres / Password: postgres
+
+Para ejecución con Docker (Opción 3):
+- Docker Desktop instalado y corriendo
+- Puertos 8080, 8081 y 5432 disponibles
+
+
+🔧 CONFIGURACIÓN DE BASE DE DATOS
+==================================
+
+Si tu PostgreSQL tiene diferentes credenciales, configura antes de ejecutar:
+
+    $env:backend_host = "localhost"
+    $env:backend_port = "5432"
+    $env:backend_database = "backend"
+    $env:backend_user = "postgres"
+    $env:backend_password = "tu_password"
+
+
+📚 DOCUMENTACIÓN
+================
+
+Para más detalles, consulta:
+- SWAGGER-SETUP.md - Guía completa de Swagger
+- readme.md - Documentación general del proyecto
+
+
+🎯 SIGUIENTE PASO
+=================
+
+Una vez iniciada la aplicación, ve a:
+http://localhost:8080/swagger-ui.html
+
+Verás todos los endpoints disponibles y podrás probarlos interactivamente.
+
+
+⚠️  IMPORTANTE
+===============
+
+Swagger SOLO está habilitado en perfil "dev" por seguridad.
+En producción, la documentación NO estará disponible públicamente.
+
+
+📞 SOPORTE
+==========
+
+Si tienes problemas:
+1. Verifica que PostgreSQL esté corriendo
+2. Revisa que el puerto 8080 esté libre
+3. Consulta SWAGGER-SETUP.md para troubleshooting
+4. Revisa los logs en la consola
+
+========================================
+Listo para usar! 🚀
+========================================
