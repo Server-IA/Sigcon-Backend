@@ -18,6 +18,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChartOfAccountDTO {
+    private Long id;
 
     @Pattern(regexp = "^[\\w\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
     private String code;
