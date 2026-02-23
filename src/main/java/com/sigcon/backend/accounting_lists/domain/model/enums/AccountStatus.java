@@ -1,8 +1,6 @@
 package com.sigcon.backend.accounting_lists.domain.model.enums;
 
 public enum AccountStatus {
-
-    ACTIVE,
-    INACTIVE
-
+    ACTIVE,      //Activo
+    INACTIVE     //Inactivo
 }

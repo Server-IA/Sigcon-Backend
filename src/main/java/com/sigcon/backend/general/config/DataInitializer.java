@@ -89,7 +89,9 @@ public class DataInitializer implements CommandLineRunner {
             
             Permission createChartOfAccount = createPermission("Crear cuentas de contabilidad", "Permiso para crear cuentas de contabilidad", TypePermits.CREATE, "CREATE_CHART_OF_ACCOUNT", moduleId);
             Permission viewChartOfAccount = createPermission("Ver cuentas de contabilidad", "Permiso para ver cuentas de contabilidad", TypePermits.READ, "VIEW_CHART_OF_ACCOUNT", moduleId);
-            
+            Permission updateChartOfAccount = createPermission("Actualizar cuentas de contabilidad", "Permiso para actualizar cuentas de contabilidad", TypePermits.UPDATE, "UPDATE_CHART_OF_ACCOUNT", moduleId);
+            Permission deleteChartOfAccount = createPermission("Eliminar cuentas de contabilidad", "Permiso para eliminar cuentas de contabilidad", TypePermits.DELETE, "DELETE_CHART_OF_ACCOUNT", moduleId);
+
             Permission viewMenus = createPermission("Ver menús", "Permiso para ver menús", TypePermits.READ, "VIEW_MENUS", moduleId);
             Permission createMenus = createPermission("Crear menús", "Permiso para crear menús", TypePermits.CREATE, "CREATE_MENUS", moduleId);
             Permission updateMenus = createPermission("Actualizar menús", "Permiso para actualizar menús", TypePermits.UPDATE, "UPDATE_MENUS", moduleId);
@@ -112,7 +114,7 @@ public class DataInitializer implements CommandLineRunner {
                 viewRoles, createRoles, updateRole, deleteRole, assignRole,
                 viewUsers, createUsers, updateUser, deleteUser,
                 createPermission, updatePermission, viewPermissions, assignPermission, removePermission,
-                createChartOfAccount, viewChartOfAccount,
+                createChartOfAccount, viewChartOfAccount, updateChartOfAccount, deleteChartOfAccount,
                 viewMenus, createMenus, updateMenus, deleteMenus,
                 createParameter, viewParameter, updateParameter, deleteParameter,
                 viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions
@@ -126,7 +128,7 @@ public class DataInitializer implements CommandLineRunner {
                 viewRoles, createRoles, updateRole, deleteRole, assignRole,
                 viewUsers, createUsers, updateUser, deleteUser,
                 createPermission, updatePermission, viewPermissions, assignPermission, removePermission,
-                createChartOfAccount, viewChartOfAccount,
+                createChartOfAccount, viewChartOfAccount, updateChartOfAccount, deleteChartOfAccount,
                 viewMenus, createMenus, updateMenus, deleteMenus,
                 createParameter, viewParameter, updateParameter, deleteParameter,
                 viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions));
