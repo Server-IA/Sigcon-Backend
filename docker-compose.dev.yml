@@ -43,14 +43,14 @@ services:
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
 
-  adminer:
-    image: adminer
-    container_name: backend-dev-adminer
-    restart: always
-    ports:
-      - "${backend_port_adminer}:${backend_port_api}"
-    depends_on:
-      - ${backend_host:-db}
+  # adminer:
+  #   image: adminer
+  #   container_name: backend-dev-adminer
+  #   restart: always
+  #   ports:
+  #     - "${backend_port_adminer}:${backend_port_api}"
+  #   depends_on:
+  #     - ${backend_host:-db}
 
 volumes:
   postgres_data_dev:
