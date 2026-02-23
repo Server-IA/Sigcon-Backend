@@ -8,13 +8,13 @@ services:
     build: .
     container_name: backend-dev-api
     ports:
-      - "${backend_port_api:-8080}:${backend_port_api:-8080}"
-    depends_on:
-      - ${backend_host_dev:-db}
+      - "${backend_port_api}:${backend_port_api}"
+    # depends_on:
+    #   - ${backend_host} 
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host_dev:-db}:${backend_port_db_dev:-5443}/${backend_database:-backend}
-      SPRING_DATASOURCE_USERNAME: ${backend_user:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${backend_password:-postgres}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host}:${backend_port_db_dev}/${backend_database}
+      SPRING_DATASOURCE_USERNAME: ${backend_user}
+      SPRING_DATASOURCE_PASSWORD: ${backend_password}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       # SPRING_PROFILES_ACTIVE: dev  # Habilita Swagger
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
@@ -26,32 +26,32 @@ services:
         limits:
           memory: 512M  # Más memoria para desarrollo
 
-  db:
-    image: postgres:15
-    container_name: backend-dev-db
-    restart: always
-    environment:
-      POSTGRES_DB: ${backend_database:-backend}
-      POSTGRES_USER: ${backend_user:-postgres}
-      POSTGRES_PASSWORD: ${backend_password:-postgres}
-    ports:
-      - "${backend_port_db_dev:-5432}:${backend_port_db_dev:-5432}"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
+  # db:
+  #   image: postgres:15
+  #   container_name: backend-dev-db
+  #   restart: always
+  #   environment:
+  #     POSTGRES_DB: ${backend_database}
+  #     POSTGRES_USER: ${backend_user}
+  #     POSTGRES_PASSWORD: ${backend_password}
+  #   ports:
+  #     - "${backend_port_db_dev}:${backend_port_db_dev}"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   volumes:
+  #     - postgres_data_dev:/var/lib/postgresql/data
 
   # adminer:
   #   image: adminer
   #   container_name: backend-dev-adminer
   #   restart: always
   #   ports:
-  #     - "${backend_port_adminer:-8081}:${backend_port_api:-8080}"
+  #     - "${backend_port_adminer}:${backend_port_api}"
   #   depends_on:
-  #     - ${backend_host:-db}
+  #     - ${backend_host}
 
 volumes:
   postgres_data_dev:
