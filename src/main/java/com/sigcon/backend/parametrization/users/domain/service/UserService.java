@@ -352,5 +352,4 @@ public class UserService {
         String normalized = avatarValue.trim().toLowerCase();
         return normalized.startsWith("data:image/") || normalized.length() > 255;
     }
-
 }
