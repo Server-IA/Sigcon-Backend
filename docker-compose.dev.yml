@@ -9,12 +9,12 @@ services:
     container_name: backend-dev-api
     ports:
       - "${backend_port_api}:${backend_port_api}"
-    depends_on:
-      - ${backend_host}
+    # depends_on:
+    #   - ${backend_host}
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host}:${backend_port_db_dev}/${backend_database}
-      SPRING_DATASOURCE_USERNAME: ${backend_user:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${backend_password:-postgres}
+      SPRING_DATASOURCE_USERNAME: ${backend_user}
+      SPRING_DATASOURCE_PASSWORD: ${backend_password}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
       LOGGING_LEVEL_COM_SIGCON_BACKEND: DEBUG
