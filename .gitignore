@@ -35,3 +35,6 @@ build/
 
 .env
 uploads/
+
+docker-compose.dev.yml
+docker-compose.yml
