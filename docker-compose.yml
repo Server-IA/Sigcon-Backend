@@ -5,7 +5,7 @@ services:
     ports:
       - "${backend_port_api:-8080}:${backend_port_api:-8080}"
     depends_on:
-      - db
+      - ${backend_host:-158.69.200.27}
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host:-db}:${backend_port:-5432}/${backend_database:-backend}
       SPRING_DATASOURCE_USERNAME: ${backend_user:-postgres}
@@ -57,7 +57,7 @@ services:
     ports:
       - "${backend_port_adminer:-8081}:${backend_port_api:-8080}"
     depends_on:
-      - db
+      - ${backend_host:-158.69.200.27}
 
 volumes:
   postgres_data:
