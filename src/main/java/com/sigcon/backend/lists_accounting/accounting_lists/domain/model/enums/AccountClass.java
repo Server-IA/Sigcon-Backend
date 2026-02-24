@@ -1,4 +1,4 @@
-package com.sigcon.backend.accounting_lists.domain.model.enums;
+package com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums;
 
 public enum AccountClass {
 

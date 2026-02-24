@@ -1,16 +1,17 @@
-package com.sigcon.backend.accounting_lists.domain.repository;
+package com.sigcon.backend.lists_accounting.accounting_lists.domain.repository;
 
-import com.sigcon.backend.accounting_lists.domain.model.ChartOfAccount;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountLevel;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountNature;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
 
 @Repository
 public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, Long> {

@@ -1,11 +1,11 @@
-package com.sigcon.backend.accounting_lists.interfaces;
+package com.sigcon.backend.lists_accounting.accounting_lists.interfaces;
 
-import com.sigcon.backend.accounting_lists.application.ChartOfAccountResponseDTO;
-import com.sigcon.backend.accounting_lists.application.CreateChartOfAccountDTO;
-import com.sigcon.backend.accounting_lists.application.DeleteChartOfAccountDTO;
-import com.sigcon.backend.accounting_lists.application.UpdateChartOfAccountDTO;
-import com.sigcon.backend.accounting_lists.application.ViewChartOfAccountDTO;
-import com.sigcon.backend.accounting_lists.domain.service.ChartOfAccountService;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.CreateChartOfAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.DeleteChartOfAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.UpdateChartOfAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.ViewChartOfAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.service.ChartOfAccountService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.ErrorRespondJson;

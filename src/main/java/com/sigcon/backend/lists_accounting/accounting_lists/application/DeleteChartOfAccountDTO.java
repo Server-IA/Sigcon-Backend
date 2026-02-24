@@ -1,4 +1,4 @@
-package com.sigcon.backend.accounting_lists.application;
+package com.sigcon.backend.lists_accounting.accounting_lists.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
