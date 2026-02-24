@@ -1,10 +1,5 @@
-package com.sigcon.backend.accounting_lists.domain.model;
+package com.sigcon.backend.lists_accounting.accounting_lists.domain.model;
 
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountDeleted;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountLevel;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountNature;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,6 +19,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Where;
+
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountDeleted;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
 
 import java.time.LocalDateTime;
 

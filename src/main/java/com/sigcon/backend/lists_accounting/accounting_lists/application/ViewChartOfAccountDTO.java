@@ -1,9 +1,10 @@
-package com.sigcon.backend.accounting_lists.application;
+package com.sigcon.backend.lists_accounting.accounting_lists.application;
 
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountLevel;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountNature;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
