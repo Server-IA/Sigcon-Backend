@@ -1,9 +1,10 @@
-package com.sigcon.backend.accounting_lists.application;
+package com.sigcon.backend.lists_accounting.accounting_lists.application;
 
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountLevel;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountNature;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -18,6 +19,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChartOfAccountDTO {
+    private Long id;
 
     @Pattern(regexp = "^[\\w\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
     private String code;
