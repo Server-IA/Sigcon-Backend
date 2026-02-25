@@ -127,7 +127,7 @@ public class ModuleService {
     }
 
     public ResponseEntity<?> storeModule(
-            @Valid @RequestBody ModuleEntity request,
+            @Valid @RequestBody ModuleDTO request,
             BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -139,7 +139,19 @@ public class ModuleService {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del módulo ya existe"))
                 );
             }
-            moduleRepository.save(request);
+            if (moduleRepository.existsByUrlAndDeletedAtIsNull(request.getUrl())) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("La url del módulo ya existe"))
+                );
+            }
+            moduleRepository.save(ModuleEntity.builder()
+                .name(request.getName())
+                .description(request.getDescription())
+                .url(request.getUrl())
+                .icon(request.getIcon())
+                .position(request.getPosition())
+                .status(request.getStatus())
+                .build());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo creado correctamente"), Optional.empty()));
         } catch (Exception e) {
