@@ -30,7 +30,7 @@ public class ModuleController {
     }
 
     @PostMapping("/store")
-    public ResponseEntity<?> storeModule(@Valid @RequestBody ModuleEntity request, BindingResult bindingResult) {
+    public ResponseEntity<?> storeModule(@Valid @RequestBody ModuleDTO request, BindingResult bindingResult) {
         return moduleService.storeModule(request, bindingResult);
     }
 
