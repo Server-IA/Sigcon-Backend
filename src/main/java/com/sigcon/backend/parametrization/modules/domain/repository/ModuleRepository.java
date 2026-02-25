@@ -65,5 +65,6 @@ public interface ModuleRepository extends JpaRepository<ModuleEntity, Long>, Jpa
     Page<ModuleEntity> findAllAndDeletedAtIsNull(Pageable pageable);
 
     boolean existsByNameAndDeletedAtIsNull(String name);
+    boolean existsByUrlAndDeletedAtIsNull(String url);
 
 }

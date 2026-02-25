@@ -67,8 +67,7 @@ public class MenuService implements MenuUseCase {
 
             Page<MenuEntity> menus = menuRepositoryPort.findAll(spec, pageable);
     
-            List<Menu> menusResponse = menus.getContent().stream()
-                .map(menu -> Menu.builder()
+            Page<Menu> menusResponse = menus.map(menu -> Menu.builder()
                     .id(menu.getId())
                     .label(menu.getLabel())
                     .path(menu.getPath())
@@ -95,10 +94,11 @@ public class MenuService implements MenuUseCase {
                     )   
                     .menuOrder(menu.getMenuOrder())
                     .status(menu.getStatus())
-                    .build())
-                .toList();
+                    .build());
     
-            return ResponseEntity.ok(DataTableResponse.from(menusResponse, request.getDraw()));
+            return ResponseEntity.ok(DataTableResponse.from(
+                menusResponse
+                , request.getDraw()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
