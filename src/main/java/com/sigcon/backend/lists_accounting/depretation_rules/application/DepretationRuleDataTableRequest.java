@@ -1,4 +1,4 @@
-package com.sigcon.backend.depretation_rules.application;
+package com.sigcon.backend.lists_accounting.depretation_rules.application;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,8 +7,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
-import com.sigcon.backend.depretation_rules.domain.model.enums.DepretationStatus;
-import com.sigcon.backend.depretation_rules.domain.model.enums.DepretationType;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 

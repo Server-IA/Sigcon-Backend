@@ -1,4 +1,4 @@
-package com.sigcon.backend.depretation_rules.domain.service;
+package com.sigcon.backend.lists_accounting.depretation_rules.domain.service;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -7,18 +7,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 import org.springframework.security.core.Authentication;
 
-import com.sigcon.backend.accounting_lists.domain.repository.ChartOfAccountRepository;
-import com.sigcon.backend.depretation_rules.application.CreateDepretationRuleRequest;
-import com.sigcon.backend.depretation_rules.application.DepretationRuleResponse;
-import com.sigcon.backend.depretation_rules.application.UpdateDepretationRuleRequest;
-import com.sigcon.backend.depretation_rules.domain.model.DepretationRule;
-import com.sigcon.backend.depretation_rules.domain.model.enums.DepretationStatus;
-import com.sigcon.backend.depretation_rules.domain.model.enums.DepretationType;
-import com.sigcon.backend.depretation_rules.domain.repository.DepretationRuleRepository;
-import com.sigcon.backend.depretation_rules.exception.DuplicateDepretationRuleException;
-import com.sigcon.backend.depretation_rules.exception.InvalidDepretationRuleException;
-import com.sigcon.backend.accounting_lists.domain.model.ChartOfAccount;
-import com.sigcon.backend.accounting_lists.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.repository.ChartOfAccountRepository;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.CreateDepretationRuleRequest;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleResponse;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.UpdateDepretationRuleRequest;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
+import com.sigcon.backend.lists_accounting.depretation_rules.exception.DuplicateDepretationRuleException;
+import com.sigcon.backend.lists_accounting.depretation_rules.exception.InvalidDepretationRuleException;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
+import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 

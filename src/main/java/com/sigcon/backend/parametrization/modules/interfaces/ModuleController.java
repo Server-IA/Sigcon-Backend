@@ -35,7 +35,7 @@ public class ModuleController {
     }
 
     @PutMapping("/update")
-    public ResponseEntity<?> updateModule(@Valid @RequestBody ModuleEntity request, BindingResult bindingResult) {
+    public ResponseEntity<?> updateModule(@Valid @RequestBody ModuleDTO request, BindingResult bindingResult) {
         return moduleService.updateModule(request, bindingResult); 
     }
 

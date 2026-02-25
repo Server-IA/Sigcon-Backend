@@ -162,7 +162,7 @@ public class ModuleService {
     }
 
     public ResponseEntity<?> updateModule(
-            @Valid @RequestBody ModuleEntity request,
+            @Valid @RequestBody ModuleDTO request,
             BindingResult bindingResult) {
         try {
             if (moduleRepository.existsByNameAndIdNot(request.getName(), request.getId())) {

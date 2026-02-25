@@ -1,4 +1,4 @@
-package com.sigcon.backend.depretation_rules.domain.model;
+package com.sigcon.backend.lists_accounting.depretation_rules.domain.model;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -23,9 +23,9 @@ import jakarta.validation.constraints.NotNull;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import com.sigcon.backend.depretation_rules.application.DescriptionStructuredDTO;
-import com.sigcon.backend.depretation_rules.domain.model.enums.DepretationStatus;
-import com.sigcon.backend.depretation_rules.domain.model.enums.DepretationType;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.DescriptionStructuredDTO;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,4 +1,4 @@
-package com.sigcon.backend.depretation_rules.domain.model.enums;
+package com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums;
 
 public enum DepretationType { 
         LINEAR,                     //LINEAL

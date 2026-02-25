@@ -1,8 +1,8 @@
-package com.sigcon.backend.depretation_rules.interfaces;
+package com.sigcon.backend.lists_accounting.depretation_rules.interfaces;
 
-import com.sigcon.backend.depretation_rules.application.CreateDepretationRuleRequest;
-import com.sigcon.backend.depretation_rules.application.UpdateDepretationRuleRequest;
-import com.sigcon.backend.depretation_rules.domain.service.DepretationRuleService;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.CreateDepretationRuleRequest;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.UpdateDepretationRuleRequest;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.service.DepretationRuleService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.ErrorRespondJson;
 

@@ -1,4 +1,4 @@
-package com.sigcon.backend.depretation_rules.application;
+package com.sigcon.backend.lists_accounting.depretation_rules.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
