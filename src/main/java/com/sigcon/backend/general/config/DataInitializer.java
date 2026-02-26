@@ -60,6 +60,9 @@ public class DataInitializer implements CommandLineRunner {
 
         // Crear menús base
 
+        Long exchangeModuleId = createOrUpdateModule("Configuración Financiera", "Gestión de tasas de cambio", "exchange-rates",
+                "bx-dollar", 2);
+
         createOrUpdateMenu("Perfil", "perfil", "ri-user-line", 1, null, moduleId, "PERFIL");
         createOrUpdateMenu("Modulos", "modules", "ri-list-settings-fill", 2, null, moduleId, "MODULOS");
         createOrUpdateMenu("Menus", "menus", "ri-play-list-add-line", 3, null, moduleId, "MENUS");
@@ -68,6 +71,7 @@ public class DataInitializer implements CommandLineRunner {
         createOrUpdateMenu("Usuarios", "users", null, 6, null, moduleId, "USERS");
         createOrUpdateMenu("Parámetros", "parameters", null, 7, null, moduleId, "PARAMETERS");
         createOrUpdateMenu("Permisos Menu", "menu-permissions", null, 8, null, moduleId, "MENUSPERMISSIONS");
+        createOrUpdateMenu("Tasas de Cambio", "exchange-rates", "ri-exchange-dollar-line", 9, null, exchangeModuleId, "EXCHANGE_RATES");
 
         // Crear permisos base
         Permission viewRoles = createPermission("Obtener roles", "Permiso para ver roles", TypePermits.READ,
@@ -145,7 +149,14 @@ public class DataInitializer implements CommandLineRunner {
                 "Permiso para actualizar centros de costo", TypePermits.UPDATE, "UPDATE_COST_CENTER", moduleId);
         Permission deleteCostCenter = createPermission("Eliminar centros de costo",
                 "Permiso para eliminar centros de costo", TypePermits.DELETE, "DELETE_COST_CENTER", moduleId);
-
+        Permission viewExchangeRates = createPermission("Ver tasas de cambio", 
+                "Permiso para visualizar tasas de cambio", TypePermits.READ, "VIEW_EXCHANGE_RATE", exchangeModuleId);
+        Permission createExchangeRates = createPermission("Crear tasa de cambio", 
+        "Permiso para crear tasas de cambio", TypePermits.CREATE, "CREATE_EXCHANGE_RATE", exchangeModuleId);
+        Permission updateExchangeRates = createPermission("Actualizar tasa de cambio",
+        "Permiso para actualizar tasas de cambio", TypePermits.UPDATE, "UPDATE_EXCHANGE_RATE", exchangeModuleId);
+        Permission deleteExchangeRates = createPermission("Eliminar tasa de cambio",
+        "Permiso para eliminar tasas de cambio", TypePermits.DELETE, "DELETE_EXCHANGE_RATE", exchangeModuleId);
         // Permission createUser = createPermission("Crear usuarios", "Permiso para
         // crear usuarios", TypePermits.CREATE, "CREATE_USER", moduleId);
 
@@ -158,7 +169,8 @@ public class DataInitializer implements CommandLineRunner {
                 viewMenus, createMenus, updateMenus, deleteMenus,
                 createParameter, viewParameter, updateParameter, deleteParameter,
                 viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions,
-                viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter)));
+                viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,viewExchangeRates,
+                createExchangeRates, updateExchangeRates, deleteExchangeRates)));
         createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
         // Crear usuarios
@@ -184,6 +196,7 @@ public class DataInitializer implements CommandLineRunner {
         createMenuPermissions("Usuarios", "SUPERADMIN");
         createMenuPermissions("Parámetros", "SUPERADMIN");
         createMenuPermissions("Permisos Menu", "SUPERADMIN");
+        createMenuPermissions("Tasas de Cambio", "SUPERADMIN");
 
     }
 
