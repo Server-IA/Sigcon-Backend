@@ -159,6 +159,19 @@ public class DataInitializer implements CommandLineRunner {
         "Permiso para eliminar tasas de cambio", TypePermits.DELETE, "DELETE_EXCHANGE_RATE", exchangeModuleId);
         // Permission createUser = createPermission("Crear usuarios", "Permiso para
         // crear usuarios", TypePermits.CREATE, "CREATE_USER", moduleId);
+      
+      Permission viewCurrencyType = createPermission("Ver tipos de moneda",
+                                "Permiso para ver tipos de moneda", TypePermits.READ, "VIEW_CURRENCY_TYPE",
+                                moduleId);
+                Permission createCurrencyType = createPermission("Crear tipos de moneda",
+                                "Permiso para crear tipos de moneda", TypePermits.CREATE, "CREATE_CURRENCY_TYPE",
+                                moduleId);
+                Permission updateCurrencyType = createPermission("Actualizar tipos de moneda",
+                                "Permiso para actualizar tipos de moneda", TypePermits.UPDATE, "UPDATE_CURRENCY_TYPE",
+                                moduleId);
+                Permission deleteCurrencyType = createPermission("Eliminar tipos de moneda",
+                                "Permiso para eliminar tipos de moneda", TypePermits.DELETE, "DELETE_CURRENCY_TYPE",
+                                moduleId);
 
         // Crear roles y asignar permisos
         createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of(
@@ -184,7 +197,9 @@ public class DataInitializer implements CommandLineRunner {
                         viewMenus, createMenus, updateMenus, deleteMenus,
                         createParameter, viewParameter, updateParameter, deleteParameter,
                         viewMenuPermissions, createMenuPermissions, updateMenuPermissions, deleteMenuPermissions,
-                        viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter));
+                        viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
+                                                viewCurrencyType, createCurrencyType, updateCurrencyType,
+                                                deleteCurrencyType));
 
         createMenuPermissions("Perfil", "SUPERADMIN");
         createMenuPermissions("Perfil", "USER");
