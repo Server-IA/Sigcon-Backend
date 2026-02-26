@@ -1,12 +1,13 @@
-package com.sigcon.backend.exchangeRates.application.dto;
+package com.sigcon.backend.lists_accounting.exchangeRates.application.dto;
 
-import com.sigcon.backend.exchangeRates.domain.model.ExchangeType;
 import lombok.Data;
 
 import java.time.LocalDate;
 
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeType;
+
 @Data
-public class CreateExchangeRateRequest {
+public class UpdateExchangeRateRequest {
 
     private Long currencyId;
     private String currencyIso;

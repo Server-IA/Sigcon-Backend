@@ -1,9 +1,10 @@
-package com.sigcon.backend.exchangeRates.domain.repository;
+package com.sigcon.backend.lists_accounting.exchangeRates.domain.repository;
 
-import com.sigcon.backend.exchangeRates.domain.model.ExchangeRate;
-import com.sigcon.backend.exchangeRates.domain.model.ExchangeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeRate;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeType;
 
 import java.time.LocalDate;
 import java.util.List;

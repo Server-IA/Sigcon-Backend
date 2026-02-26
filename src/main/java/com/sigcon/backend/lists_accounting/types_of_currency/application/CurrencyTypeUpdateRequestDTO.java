@@ -1,4 +1,4 @@
-package com.sigcon.backend.accounting_lists.types_of_currency.application;
+package com.sigcon.backend.lists_accounting.types_of_currency.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;

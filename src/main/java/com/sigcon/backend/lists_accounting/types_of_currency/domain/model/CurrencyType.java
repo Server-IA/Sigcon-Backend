@@ -1,4 +1,4 @@
-package com.sigcon.backend.accounting_lists.types_of_currency.domain.model;
+package com.sigcon.backend.lists_accounting.types_of_currency.domain.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
