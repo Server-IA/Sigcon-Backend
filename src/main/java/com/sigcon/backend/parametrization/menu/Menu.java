@@ -47,7 +47,6 @@ public class Menu {
     
     private MenuStatus status;
 
-    @NotBlank(message = "El componente es requerido")
     private String component;
     private List<PermissionDTO> permissions;
     private List<Menu> childrens;

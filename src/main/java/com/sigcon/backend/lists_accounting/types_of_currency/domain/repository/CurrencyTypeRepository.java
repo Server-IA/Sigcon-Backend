@@ -1,6 +1,6 @@
-package com.sigcon.backend.accounting_lists.types_of_currency.domain.repository;
+package com.sigcon.backend.lists_accounting.types_of_currency.domain.repository;
 
-import com.sigcon.backend.accounting_lists.types_of_currency.domain.model.CurrencyType;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import java.util.Optional;

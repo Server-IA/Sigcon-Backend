@@ -1,10 +1,10 @@
-package com.sigcon.backend.accounting_lists.types_of_currency.interfaces;
+package com.sigcon.backend.lists_accounting.types_of_currency.interfaces;
 
-import com.sigcon.backend.accounting_lists.types_of_currency.application.CurrencyTypeRequestDTO;
-import com.sigcon.backend.accounting_lists.types_of_currency.application.CurrencyTypeResponseDTO;
-import com.sigcon.backend.accounting_lists.types_of_currency.application.CurrencyTypeUpdateRequestDTO;
-import com.sigcon.backend.accounting_lists.types_of_currency.application.CurrencyTypeDeleteResponseDTO;
-import com.sigcon.backend.accounting_lists.types_of_currency.domain.service.CurrencyTypeService;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeRequestDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeUpdateRequestDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeDeleteResponseDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.service.CurrencyTypeService;
 import com.sigcon.backend.utils.DataTableRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
