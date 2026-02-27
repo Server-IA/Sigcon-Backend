@@ -211,7 +211,7 @@ public class ChartOfAccountService {
 
     public void validateAccountLevel(AccountLevel accountLevel) {
         if (accountLevel == null) {
-            throw new IllegalArgumentException("Jerarquia no valida");
+            throw new IllegalArgumentException("Jerarquia de la cuenta no valida, por favor seleccione una jerarquia valida");
         }
     }
 
@@ -226,8 +226,37 @@ public class ChartOfAccountService {
         };
 
         if (codeLength != expectedLength) {
-            throw new IllegalArgumentException("Jerarquia no valida");
+            String expectedLevelByCode = levelToEnglish(resolveLevelByLength(codeLength));
+            String receivedLevel = levelToEnglish(level);
+
+            throw new IllegalArgumentException("Jerarquía de cuenta inválida: basado en el código " + code
+                    + ", se esperaba nivel " + expectedLevelByCode
+                    + " pero se recibió nivel " + receivedLevel
+                    + " (" + codeLength + " dígitos; " + receivedLevel + " requiere " + expectedLength + " dígitos).");
         }
+    }
+
+    private AccountLevel resolveLevelByLength(int codeLength) {
+        return switch (codeLength) {
+            case 1 -> AccountLevel.CLASS;
+            case 2 -> AccountLevel.GROUP;
+            case 4 -> AccountLevel.ACCOUNT;
+            case 6 -> AccountLevel.SUBACCOUNT;
+            default -> null;
+        };
+    }
+
+    private String levelToEnglish(AccountLevel level) {
+        if (level == null) {
+            return "Invalid";
+        }
+
+        return switch (level) {
+            case CLASS -> "Class";
+            case GROUP -> "Group";
+            case ACCOUNT -> "Account";
+            case SUBACCOUNT -> "Subaccount";
+        };
     }
 
     private String normalizeCode(String code) {
@@ -336,3 +365,4 @@ public class ChartOfAccountService {
         }
     }
 }
+

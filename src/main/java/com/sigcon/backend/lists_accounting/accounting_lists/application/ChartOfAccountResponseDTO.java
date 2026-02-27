@@ -5,9 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 import java.time.LocalDateTime;
-
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
