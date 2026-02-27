@@ -77,26 +77,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
 
     @Override
     public MenuEntity saveMenu(MenuEntity menu) {
-        MenuEntity saved = repository.save(
-            MenuEntity.builder()
-                .id(menu.getId())
-                .label(menu.getLabel())
-                .icon(menu.getIcon())
-                .path(menu.getPath())
-                .menuOrder(menu.getMenuOrder())
-                .parent(menu.getParent() != null ? MenuEntity.builder()
-                    .id(menu.getParent().getId())
-                    .build() : null)
-                .module(menu.getModule() != null ? ModuleEntity.builder()
-                    .id(menu.getModule().getId())
-                    .name(menu.getModule().getName())
-                    .build() : null)
-                .status(menu.getStatus())
-                .component(menu.getComponent())
-                .createdAt(menu.getCreatedAt() != null ? menu.getCreatedAt() : LocalDateTime.now())
-                .updatedAt(menu.getUpdatedAt() != null ? menu.getUpdatedAt() : LocalDateTime.now())
-                .build()
-        );
+        MenuEntity saved = repository.save(menu);
         
         return saved;
     }
@@ -124,11 +105,14 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .icon(m.getIcon())
             .path(m.getPath())
             .menuOrder(m.getMenuOrder())
-            .parent(Menu.builder()
-                .id(m.getParent().getId())
-                .label(m.getParent().getLabel())
-                .icon(m.getParent().getIcon())
-                .build())
+            .parent(
+                null != m.getParent() ?
+                    Menu.builder()
+                        .id(m.getParent().getId())
+                        .label(m.getParent().getLabel())
+                        .icon(m.getParent().getIcon())
+                        .build()
+                    : null)
             .module(ModuleDTO.builder()
                 .id(m.getModule().getId())
                 .name(m.getModule().getName())
@@ -143,31 +127,9 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
 
     @Override
     public MenuEntity updateMenu(MenuEntity menuEntity) {
-        MenuEntity saved = repository.save(MenuEntity.builder()
-            .id(menuEntity.getId())
-            .label(menuEntity.getLabel())
-            .icon(menuEntity.getIcon())
-            .path(menuEntity.getPath())
-            .menuOrder(menuEntity.getMenuOrder())
-            .parent(menuEntity.getParent())
-            .module(menuEntity.getModule())
-            .status(menuEntity.getStatus())
-            .component(menuEntity.getComponent())
-            .updatedAt(LocalDateTime.now())
-            .build());
+        MenuEntity saved = repository.save(menuEntity);
 
-        return MenuEntity.builder()
-            .id(saved.getId())
-            .label(saved.getLabel())
-            .icon(saved.getIcon())
-            .path(saved.getPath())
-            .menuOrder(saved.getMenuOrder())
-            .parent(saved.getParent())
-            .module(saved.getModule())
-            .status(saved.getStatus())
-            .component(saved.getComponent())
-            .updatedAt(saved.getUpdatedAt())
-            .build();
+        return saved;
     }
 
     @Override
