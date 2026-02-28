@@ -186,7 +186,7 @@ public class DataInitializer implements CommandLineRunner {
                 Permission deleteCostCenter = createPermission("Eliminar centros de costo",
                                 "Permiso para eliminar centros de costo", TypePermits.DELETE, "DELETE_COST_CENTER",
                                 moduleId);
-
+          
                 // Permisos Modulos
                 Permission viewModules = createPermission("Ver módulos", "Permiso para ver módulos", TypePermits.READ,
                                 "VIEW_MODULES", moduleId);
@@ -246,8 +246,7 @@ public class DataInitializer implements CommandLineRunner {
                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                 viewExchangeRates, createExchangeRates, updateExchangeRates, deleteExchangeRates,
                                 viewCurrencyType, createCurrencyType, updateCurrencyType, deleteCurrencyType,
-                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu
-                            )));
+                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu)));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
                 // Crear usuarios
@@ -267,7 +266,8 @@ public class DataInitializer implements CommandLineRunner {
                                                 deleteAccountingAccount,
                                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                                 viewCurrencyType, createCurrencyType, updateCurrencyType,
-                                                deleteCurrencyType));
+                                                deleteCurrencyType,
+                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu));
 
                 createMenuPermissions("Perfil", "SUPERADMIN");
                 createMenuPermissions("Perfil", "USER");
