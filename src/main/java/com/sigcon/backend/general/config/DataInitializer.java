@@ -185,7 +185,19 @@ public class DataInitializer implements CommandLineRunner {
                                 moduleId);
                 Permission deleteCostCenter = createPermission("Eliminar centros de costo",
                                 "Permiso para eliminar centros de costo", TypePermits.DELETE, "DELETE_COST_CENTER",
-                                moduleId);
+                                moduleId);          
+          
+                // Permisos Modulos
+                Permission viewModules = createPermission("Ver módulos", "Permiso para ver módulos", TypePermits.READ,
+                                "VIEW_MODULES", moduleId);
+                Permission createModules = createPermission("Crear módulos", "Permiso para crear módulos", TypePermits.CREATE,
+                                "CREATE_MODULES", moduleId);
+                Permission updateModules = createPermission("Actualizar módulos", "Permiso para actualizar módulos", TypePermits.UPDATE,
+                                "UPDATE_MODULES", moduleId);
+                Permission deleteModules = createPermission("Eliminar módulos", "Permiso para eliminar módulos", TypePermits.DELETE,
+                                "DELETE_MODULES", moduleId);
+                Permission viewModulesMenu = createPermission("Ver menús de módulos", "Permiso para ver menús de módulos", TypePermits.READ,
+                                "VIEW_MODULES_MENU", moduleId);
 
                 // Exchange rates
                 Permission viewExchangeRates = createPermission("Ver tasas de cambio",
@@ -253,7 +265,8 @@ public class DataInitializer implements CommandLineRunner {
                                                 deleteAccountingAccount,
                                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                                 viewCurrencyType, createCurrencyType, updateCurrencyType,
-                                                deleteCurrencyType));
+                                                deleteCurrencyType,
+                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu));
 
                 createMenuPermissions("Perfil", "SUPERADMIN");
                 createMenuPermissions("Perfil", "USER");

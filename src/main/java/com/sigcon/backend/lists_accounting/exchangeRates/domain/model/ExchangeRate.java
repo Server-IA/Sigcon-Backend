@@ -6,6 +6,10 @@ import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.ExchangeType;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.StatusCurrencyExchange;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
+
 @Entity
 @Table(name = "exchange_rates")
 @Getter
@@ -19,24 +23,48 @@ public class ExchangeRate {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long currencyId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "currency_id", nullable = false)
+    private CurrencyType currencyExchange;
 
-    private String currencyIso;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "currency_iso", nullable = false)
+    private CurrencyType currencyExchanged;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "exchange_type", nullable = false)
     private ExchangeType exchangeType;
 
     private Double value;
 
+    @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
+    @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
 
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private StatusCurrencyExchange status;
 
+    @Column(name = "created_at", nullable = false)    
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "deleted_at", nullable = true)
     private LocalDateTime deletedAt;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        this.status = StatusCurrencyExchange.ACTIVE;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }
