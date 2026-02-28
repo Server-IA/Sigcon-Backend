@@ -185,7 +185,7 @@ public class DataInitializer implements CommandLineRunner {
                                 moduleId);
                 Permission deleteCostCenter = createPermission("Eliminar centros de costo",
                                 "Permiso para eliminar centros de costo", TypePermits.DELETE, "DELETE_COST_CENTER",
-                                moduleId);          
+                                moduleId);
           
                 // Permisos Modulos
                 Permission viewModules = createPermission("Ver módulos", "Permiso para ver módulos", TypePermits.READ,
@@ -245,7 +245,8 @@ public class DataInitializer implements CommandLineRunner {
                                 deleteAccountingAccount,
                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                 viewExchangeRates, createExchangeRates, updateExchangeRates, deleteExchangeRates,
-                                viewCurrencyType, createCurrencyType, updateCurrencyType, deleteCurrencyType)));
+                                viewCurrencyType, createCurrencyType, updateCurrencyType, deleteCurrencyType,
+                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu)));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
                 // Crear usuarios
