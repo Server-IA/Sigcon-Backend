@@ -1,10 +1,13 @@
 package com.sigcon.backend.lists_accounting.exchangeRates.domain.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeRate;
-import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeType;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.ExchangeType;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -15,13 +18,15 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
     @Query("""
         SELECT COUNT(e) > 0
         FROM ExchangeRate e
-        WHERE e.currencyId = :currencyId
+        WHERE e.currencyExchange.id = :currencyId
+        AND e.currencyExchanged.id = :currencyExchangedId
         AND e.exchangeType = :type
         AND e.deletedAt IS NULL
         AND (:startDate <= e.endDate AND :endDate >= e.startDate)
     """)
     boolean existsOverlap(
             Long currencyId,
+            Long currencyExchangedId,
             ExchangeType type,
             LocalDate startDate,
             LocalDate endDate
@@ -31,7 +36,8 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
     @Query("""
         SELECT COUNT(e) > 0
         FROM ExchangeRate e
-        WHERE e.currencyId = :currencyId
+        WHERE e.currencyExchange.id = :currencyId
+        AND e.currencyExchanged.id = :currencyExchangedId
         AND e.exchangeType = :type
         AND e.deletedAt IS NULL
         AND e.id <> :id
@@ -39,6 +45,7 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
     """)
     boolean existsOverlapForUpdate(
             Long currencyId,
+            Long currencyExchangedId,
             ExchangeType type,
             LocalDate startDate,
             LocalDate endDate,
@@ -46,4 +53,5 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
     );
 
     List<ExchangeRate> findByDeletedAtIsNull();
+    Page<ExchangeRate> findAll(Specification<ExchangeRate> spec, Pageable pageable);
 }

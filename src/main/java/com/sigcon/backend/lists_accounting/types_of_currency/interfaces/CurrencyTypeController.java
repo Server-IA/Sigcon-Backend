@@ -27,7 +27,7 @@ import java.util.Map;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/accounting-lists/currency-types")
+@RequestMapping("/api/v1/accounting-lists/currency-types")
 @RequiredArgsConstructor
 @Tag(name = "Lista de Monedas", description = "Endpoints para la gestión de tipos de moneda (ISO 4217)")
 public class CurrencyTypeController {
