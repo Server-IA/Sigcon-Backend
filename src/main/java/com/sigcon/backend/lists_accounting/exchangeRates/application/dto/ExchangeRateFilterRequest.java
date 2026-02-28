@@ -4,7 +4,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 
-import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeType;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.ExchangeType;
 
 @Data
 public class ExchangeRateFilterRequest {
