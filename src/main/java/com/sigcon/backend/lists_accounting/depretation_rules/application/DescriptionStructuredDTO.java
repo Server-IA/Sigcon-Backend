@@ -22,7 +22,7 @@ public class DescriptionStructuredDTO {
     @NotBlank(message = "Los parametros son  obligatorios")
     private String parameters; 
 
-    @Schema(description = "Excepciones o casos especiales a la regla (campo opcional)", example = "No aplica para activos adquiridos en el último trimestre del año",nullable = true)
+    @Schema(description = "Excepciones o casos especiales a la regla (campo opcional)", example = "No aplica para activos adquiridos en el último trimestre del año")
     private String exception; 
 
      @Schema(description = "Norma contable o legal que sustenta la regla", example = "NIC 16 - Propiedades, Planta y Equipo")

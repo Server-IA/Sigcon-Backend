@@ -57,8 +57,8 @@ public class DataInitializer implements CommandLineRunner {
                 // Crear módulos base para la aplicación
                 Long moduleId = createOrUpdateModule("Parametrización", "Gestión de parámetros del sistema",
                                 "parametrizacion", "bx-cog", 1);
-                Long exchangeModuleId = createOrUpdateModule("Configuración Financiera",
-                                "Gestión de tasas de cambio", "exchange-rates", "bx-dollar", 2);
+                Long listsAccountingModuleId = createOrUpdateModule("Listas Contables",
+                                "Gestión de listas contables", "lists-accounting", "bx-dollar", 2);
 
                 // Crear menús base
 
@@ -70,8 +70,14 @@ public class DataInitializer implements CommandLineRunner {
                 createOrUpdateMenu("Usuarios", "users", null, 6, null, moduleId, "USERS");
                 createOrUpdateMenu("Parámetros", "parameters", null, 7, null, moduleId, "PARAMETERS");
                 createOrUpdateMenu("Permisos Menu", "menu-permissions", null, 8, null, moduleId, "MENUSPERMISSIONS");
-                createOrUpdateMenu("Tasas de Cambio", "exchange-rates", "ri-exchange-dollar-line", 9, null,
-                                exchangeModuleId, "EXCHANGE_RATES");
+                
+                // Listas Contables
+                createOrUpdateMenu("Catalogo PUC", "puc-catalog", "ri-list-check", 1, null, listsAccountingModuleId, "PUC");
+                createOrUpdateMenu("Reglas de Depreciación", "depreciation-rules", "ri-calculator-line", 2, null, listsAccountingModuleId, "DEPRECIATION_RULES");
+                createOrUpdateMenu("Centros de Costo", "cost-centers", "ri-building-line", 3, null, listsAccountingModuleId, "COST_CENTERS");
+                createOrUpdateMenu("Tasas de Cambio", "exchange-rates", "ri-exchange-dollar-line", 4, null, listsAccountingModuleId, "EXCHANGE_RATES");
+                createOrUpdateMenu("Tipos de Moneda", "currency-types", "ri-money-dollar-circle-line", 5, null, listsAccountingModuleId, "CURRENCY_TYPES");
+                createOrUpdateMenu("Cuentas Contables", "accounting-accounts", "ri-list-settings-fill", 6, null, listsAccountingModuleId, "ACCOUNTING_ACCOUNTS");
 
                 // Crear permisos base
                 Permission viewRoles = createPermission("Obtener roles", "Permiso para ver roles", TypePermits.READ,
@@ -176,16 +182,30 @@ public class DataInitializer implements CommandLineRunner {
 
                 Permission viewCostCenters = createPermission("Ver centros de costo",
                                 "Permiso para ver centros de costo",
-                                TypePermits.READ, "VIEW_COST_CENTERS", moduleId);
+                                TypePermits.READ, "VIEW_COST_CENTERS", listsAccountingModuleId);
                 Permission createCostCenter = createPermission("Crear centros de costo",
                                 "Permiso para crear centros de costo",
-                                TypePermits.CREATE, "CREATE_COST_CENTER", moduleId);
+                                TypePermits.CREATE, "CREATE_COST_CENTER", listsAccountingModuleId);
                 Permission updateCostCenter = createPermission("Actualizar centros de costo",
                                 "Permiso para actualizar centros de costo", TypePermits.UPDATE, "UPDATE_COST_CENTER",
-                                moduleId);
+                                listsAccountingModuleId);
                 Permission deleteCostCenter = createPermission("Eliminar centros de costo",
                                 "Permiso para eliminar centros de costo", TypePermits.DELETE, "DELETE_COST_CENTER",
-                                moduleId);
+                                listsAccountingModuleId);
+                
+                //depretation_rules
+                Permission viewDepretationRules = createPermission("Ver reglas de depreciación", 
+                                "Permiso para ver reglas de depreciación", TypePermits.READ, 
+                                "VIEW_DEPRECIATION_RULE", listsAccountingModuleId);
+                Permission createDepretationRules = createPermission("Crear reglas de depreciación", 
+                                "Permiso para crear reglas de depreciación", TypePermits.CREATE, 
+                                "CREATE_DEPRECIATION_RULE", listsAccountingModuleId);
+                Permission updateDepretationRules = createPermission("Actualizar reglas de depreciación", 
+                                "Permiso para actualizar reglas de depreciación", TypePermits.UPDATE, 
+                                "UPDATE_DEPRECIATION_RULE", listsAccountingModuleId);
+                Permission deleteDepretationRules = createPermission("Eliminar reglas de depreciación", 
+                                "Permiso para eliminar reglas de depreciación", TypePermits.DELETE, 
+                                "DELETE_DEPRECIATION_RULE", listsAccountingModuleId);
           
                 // Permisos Modulos
                 Permission viewModules = createPermission("Ver módulos", "Permiso para ver módulos", TypePermits.READ,
@@ -202,30 +222,30 @@ public class DataInitializer implements CommandLineRunner {
                 // Exchange rates
                 Permission viewExchangeRates = createPermission("Ver tasas de cambio",
                                 "Permiso para visualizar tasas de cambio", TypePermits.READ,
-                                "VIEW_EXCHANGE_RATE", exchangeModuleId);
+                                "VIEW_EXCHANGE_RATE", listsAccountingModuleId);
                 Permission createExchangeRates = createPermission("Crear tasa de cambio",
                                 "Permiso para crear tasas de cambio", TypePermits.CREATE,
-                                "CREATE_EXCHANGE_RATE", exchangeModuleId);
+                                "CREATE_EXCHANGE_RATE", listsAccountingModuleId);
                 Permission updateExchangeRates = createPermission("Actualizar tasa de cambio",
                                 "Permiso para actualizar tasas de cambio", TypePermits.UPDATE,
-                                "UPDATE_EXCHANGE_RATE", exchangeModuleId);
+                                "UPDATE_EXCHANGE_RATE", listsAccountingModuleId);
                 Permission deleteExchangeRates = createPermission("Eliminar tasa de cambio",
                                 "Permiso para eliminar tasas de cambio", TypePermits.DELETE,
-                                "DELETE_EXCHANGE_RATE", exchangeModuleId);
+                                "DELETE_EXCHANGE_RATE", listsAccountingModuleId);
 
                 // Currency types
                 Permission viewCurrencyType = createPermission("Ver tipos de moneda",
                                 "Permiso para ver tipos de moneda", TypePermits.READ,
-                                "VIEW_CURRENCY_TYPE", moduleId);
+                                "VIEW_CURRENCY_TYPE", listsAccountingModuleId);
                 Permission createCurrencyType = createPermission("Crear tipos de moneda",
                                 "Permiso para crear tipos de moneda", TypePermits.CREATE,
-                                "CREATE_CURRENCY_TYPE", moduleId);
+                                "CREATE_CURRENCY_TYPE", listsAccountingModuleId);
                 Permission updateCurrencyType = createPermission("Actualizar tipos de moneda",
                                 "Permiso para actualizar tipos de moneda", TypePermits.UPDATE,
-                                "UPDATE_CURRENCY_TYPE", moduleId);
+                                "UPDATE_CURRENCY_TYPE", listsAccountingModuleId);
                 Permission deleteCurrencyType = createPermission("Eliminar tipos de moneda",
                                 "Permiso para eliminar tipos de moneda", TypePermits.DELETE,
-                                "DELETE_CURRENCY_TYPE", moduleId);
+                                "DELETE_CURRENCY_TYPE", listsAccountingModuleId);
 
                 // Permission createUser = createPermission("Crear usuarios", "Permiso para
                 // crear usuarios", TypePermits.CREATE, "CREATE_USER", moduleId);
@@ -245,6 +265,8 @@ public class DataInitializer implements CommandLineRunner {
                                 deleteAccountingAccount,
                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                 viewExchangeRates, createExchangeRates, updateExchangeRates, deleteExchangeRates,
+                                viewDepretationRules, createDepretationRules, updateDepretationRules, deleteDepretationRules,
+
                                 viewCurrencyType, createCurrencyType, updateCurrencyType, deleteCurrencyType,
                                 viewModules, createModules, updateModules, deleteModules, viewModulesMenu)));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
@@ -266,7 +288,8 @@ public class DataInitializer implements CommandLineRunner {
                                                 deleteAccountingAccount,
                                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                                 viewCurrencyType, createCurrencyType, updateCurrencyType,
-                                                deleteCurrencyType,
+                                                deleteCurrencyType, viewDepretationRules, createDepretationRules, updateDepretationRules, deleteDepretationRules,
+
                                 viewModules, createModules, updateModules, deleteModules, viewModulesMenu));
 
                 createMenuPermissions("Perfil", "SUPERADMIN");
@@ -280,6 +303,13 @@ public class DataInitializer implements CommandLineRunner {
                 createMenuPermissions("Parámetros", "SUPERADMIN");
                 createMenuPermissions("Permisos Menu", "SUPERADMIN");
                 createMenuPermissions("Tasas de Cambio", "SUPERADMIN");
+
+                createMenuPermissions("Catalogo PUC", "SUPERADMIN");
+                createMenuPermissions("Reglas de Depreciación", "SUPERADMIN");
+                createMenuPermissions("Centros de Costo", "SUPERADMIN");
+                createMenuPermissions("Tasas de Cambio", "SUPERADMIN");
+                createMenuPermissions("Tipos de Moneda", "SUPERADMIN");
+                createMenuPermissions("Cuentas Contables", "SUPERADMIN");
 
         }
 

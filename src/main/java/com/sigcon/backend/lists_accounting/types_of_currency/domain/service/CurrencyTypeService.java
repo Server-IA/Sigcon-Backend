@@ -9,8 +9,14 @@ import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.C
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
+
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Optional;
+
 import org.springframework.data.domain.Page;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -19,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.validation.BindingResult;
 
 @Slf4j
 @Service
@@ -29,88 +36,104 @@ public class CurrencyTypeService {
     private final DataTableSpecificationBuilder<CurrencyType> specificationBuilder = new DataTableSpecificationBuilder<>();
 
     @Transactional
-    public CurrencyTypeResponseDTO createCurrencyType(CurrencyTypeRequestDTO request) {
+    public ResponseEntity<?> createCurrencyType(CurrencyTypeRequestDTO request, BindingResult bindingResult) {
 
-        // Validar formato ISO 4217
-        if (request.getIsoCode() == null || request.getName() == null
-                || request.getIsoCode().isBlank() || request.getName().isBlank()
-                || !request.getIsoCode().matches("[A-Z]{3}")) {
-            throw new IllegalArgumentException(
-                    "Debe ingresar un código ISO válido (ej. USD) y un nombre de moneda");
+        try {
+            if (bindingResult.hasErrors()) {
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+            }
+    
+            // Validar duplicado de código ISO
+            if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
+                throw new IllegalArgumentException("El código ISO ingresado ya está registrado en el sistema");
+            }
+    
+            // Validar duplicado de nombre
+            if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
+                throw new IllegalArgumentException("El nombre de la moneda ya existe en el sistema");
+            }
+    
+            // Mapear DTO → Entity
+            CurrencyType currencyType = CurrencyType.builder()
+                    .isoCode(request.getIsoCode())
+                    .name(request.getName())
+                    .build();
+    
+            currencyTypeRepository.save(currencyType);
+
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda creada exitosamente"), Optional.empty()));
+    
+            // Mapear Entity → ResponseDTO
+            // return CurrencyTypeResponseDTO.builder()
+            //         .id(saved.getId())
+            //         .isoCode(saved.getIsoCode())
+            //         .name(saved.getName())
+            //         .createdAt(saved.getCreatedAt())
+            //         .build();
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
 
-        // Validar duplicado de código ISO
-        if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
-            throw new IllegalArgumentException("El código ISO ingresado ya está registrado en el sistema");
-        }
-
-        // Validar duplicado de nombre
-        if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
-            throw new IllegalArgumentException("El nombre de la moneda ya existe en el sistema");
-        }
-
-        // Mapear DTO → Entity
-        CurrencyType currencyType = CurrencyType.builder()
-                .isoCode(request.getIsoCode())
-                .name(request.getName())
-                .build();
-
-        CurrencyType saved = currencyTypeRepository.save(currencyType);
-
-        // Mapear Entity → ResponseDTO
-        return CurrencyTypeResponseDTO.builder()
-                .id(saved.getId())
-                .isoCode(saved.getIsoCode())
-                .name(saved.getName())
-                .createdAt(saved.getCreatedAt())
-                .build();
     }
 
     @Transactional
-    public CurrencyTypeResponseDTO updateCurrencyType(Long id, CurrencyTypeUpdateRequestDTO request) {
+    public ResponseEntity<?> updateCurrencyType(Long id, CurrencyTypeUpdateRequestDTO request, BindingResult bindingResult) {
 
-        CurrencyType existing = currencyTypeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("La moneda seleccionada no existe en el sistema"));
+        try{
 
-        boolean isModified = false;
-
-        // Validar e inyectar isoCode
-        if (request.getIsoCode() != null && !request.getIsoCode().isBlank()) {
-            if (!request.getIsoCode().matches("[A-Z]{3}")) {
-                throw new IllegalArgumentException("Datos inválidos. Verifique el formato de entrada");
-            }
-            if (!existing.getIsoCode().equals(request.getIsoCode())) {
-                if (currencyTypeRepository.existsByIsoCodeAndIdNotAndDeletedAtIsNull(request.getIsoCode(), id)) {
-                    throw new IllegalArgumentException("El código/nombre ingresado ya se encuentra en uso");
+            CurrencyType existing = currencyTypeRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("La moneda seleccionada no existe en el sistema"));
+    
+            boolean isModified = false;
+    
+            // Validar e inyectar isoCode
+            if (request.getIsoCode() != null && !request.getIsoCode().isBlank()) {
+                if (!request.getIsoCode().matches("[A-Z]{3}")) {
+                    throw new IllegalArgumentException("Datos inválidos. Verifique el formato de entrada");
                 }
-                existing.setIsoCode(request.getIsoCode());
-                isModified = true;
-            }
-        }
-
-        // Validar e inyectar name
-        if (request.getName() != null && !request.getName().isBlank()) {
-            if (!existing.getName().equals(request.getName())) {
-                if (currencyTypeRepository.existsByNameIgnoreCaseAndIdNotAndDeletedAtIsNull(request.getName(), id)) {
-                    throw new IllegalArgumentException("El código/nombre ingresado ya se encuentra en uso");
+                if (!existing.getIsoCode().equals(request.getIsoCode())) {
+                    if (currencyTypeRepository.existsByIsoCodeAndIdNotAndDeletedAtIsNull(request.getIsoCode(), id)) {
+                        throw new IllegalArgumentException("El código/nombre ingresado ya se encuentra en uso");
+                    }
+                    existing.setIsoCode(request.getIsoCode());
+                    isModified = true;
                 }
-                existing.setName(request.getName());
-                isModified = true;
             }
-        }
+    
+            // Validar e inyectar name
+            if (request.getName() != null && !request.getName().isBlank()) {
+                if (!existing.getName().equals(request.getName())) {
+                    if (currencyTypeRepository.existsByNameIgnoreCaseAndIdNotAndDeletedAtIsNull(request.getName(), id)) {
+                        throw new IllegalArgumentException("El código/nombre ingresado ya se encuentra en uso");
+                    }
+                    existing.setName(request.getName());
+                    isModified = true;
+                }
+            }
 
-        if (!isModified) {
-            throw new IllegalArgumentException("No se enviaron datos nuevos para actualizar");
-        }
+            if (request.getStatus() != null) {
+                if (!request.getStatus().equals(existing.getStatus())) {
+                    existing.setStatus(request.getStatus());
+                    isModified = true;
+                }
+            }
+    
+            if (!isModified) {
+                throw new IllegalArgumentException("No se enviaron datos nuevos para actualizar");
+            }
+    
+            currencyTypeRepository.save(existing);
 
-        CurrencyType updated = currencyTypeRepository.save(existing);
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda actualizada exitosamente"), Optional.empty())
+            );
+    
+        }catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }   
 
-        return CurrencyTypeResponseDTO.builder()
-                .id(updated.getId())
-                .isoCode(updated.getIsoCode())
-                .name(updated.getName())
-                .createdAt(updated.getCreatedAt())
-                .build();
     }
 
     @Transactional
@@ -124,17 +147,16 @@ public class CurrencyTypeService {
         }
 
         existing.setDeletedAt(java.time.LocalDateTime.now());
-        existing.setActive(false);
 
         // Append a suffix to release the unique constraints for future records
-        existing.setIsoCode(existing.getIsoCode() + "_DEL" + existing.getId());
+        // existing.setIsoCode(existing.getIsoCode() + "_DEL" + existing.getId());
 
-        String deletedSuffix = " (DEL " + existing.getId() + ")";
-        String newName = existing.getName();
-        if (newName.length() + deletedSuffix.length() > 100) {
-            newName = newName.substring(0, 100 - deletedSuffix.length());
-        }
-        existing.setName(newName + deletedSuffix);
+        // String deletedSuffix = " (DEL " + existing.getId() + ")";
+        // String newName = existing.getName();
+        // if (newName.length() + deletedSuffix.length() > 100) {
+        //     newName = newName.substring(0, 100 - deletedSuffix.length());
+        // }
+        // existing.setName(newName + deletedSuffix);
 
         CurrencyType deleted = currencyTypeRepository.save(existing);
 
@@ -163,6 +185,7 @@ public class CurrencyTypeService {
                     .id(c.getId())
                     .isoCode(c.getIsoCode())
                     .name(c.getName())
+                    .status(c.getStatus())
                     .createdAt(c.getCreatedAt())
                     .build());
 

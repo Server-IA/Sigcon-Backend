@@ -32,7 +32,7 @@ public class CreateDepretationRuleRequest {
     @Size(max = 100, message = "El nombre no puede superar los 100 caracteres")
     private String name; 
 
-    @Schema(description = "Descripcion estructurada en formato JSON")
+    @Schema(description = "Descripcion estructurada con base de calculo, parametros, excepciones y norma aplicable")
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
     private DescriptionStructuredDTO descriptionStructured;
 
@@ -61,9 +61,9 @@ public class CreateDepretationRuleRequest {
     @DecimalMin(value = "0.00", message = "El valor resiudal debe ser mayor o igual a 0 ")
     private BigDecimal residualValue;
 
-    @Schema(description = "Fecha de vigencia efectiva de la regla en formato (dd/MM/yy)", example = "01/01/2026")
+    @Schema(description = "Fecha de vigencia efectiva de la regla en formato (dd/MM/yyy)", example = "01/01/2026")
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
-    @JsonFormat(pattern = "dd/MM/yyyy")
+    @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDate effectiveDate; 
 
 }

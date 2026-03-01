@@ -4,6 +4,9 @@ import java.time.LocalDateTime;
 
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
+import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -26,58 +29,34 @@ public class AccountingAccountDTO {
     private Long puc_id;
 
     @Schema(description = "Código oficial de la cuenta según el estándar PUC", example = "1105", nullable = true)
-    private String puc_code;
+    private ChartOfAccountResponseDTO pucAccount;
 
     @Schema(description = "Nombre personalizado de la cuenta para visualización en el sistema", example = "Caja General", nullable = true)
-    private String custom_name;
+    private String customName;
 
-    @Schema(description = "Moneda base de la cuenta (código ISO 4217)", example = "COP", nullable = true)
-    private String base_currency;
+    @Schema(description = "Moneda base de la cuenta", nullable = true)
+    private CurrencyTypeResponseDTO currencyType;
 
-    @Schema(description = "ID del centro de costos asociado a la cuenta", example = "1", nullable = true)
-    private Long cost_center_id;
+    @Schema(description = "Centro de costos asociado a la cuenta", nullable = true)
+    private CostCenterDTO costCenter;
 
-    @Schema(description = "Nombre del centro de costos para visualización en tablas", example = "Administración Central", nullable = true)
-    private String cost_center_name;
+    @Schema(description = "ID de la regla tributaria aplicada a esta cuenta", nullable = true)
+    private Long taxRuleId;
 
-    @Schema(description = "ID de la regla de depreciación aplicada a esta cuenta", example = "1", nullable = true)
-    private Long depreciation_rule_id;
-
-    @Schema(description = "Nombre de la regla de depreciación para visualización en tablas", example = "Depreciación Lineal 5 años", nullable = true)
-    private String depreciation_rule_name;
-
-    @Schema(
-        description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", 
-        example = "DEBIT", 
-        allowableValues = {"DEBIT", "CREDIT"}
-    )
+    @Schema(description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", example = "DEBIT", allowableValues = {
+            "DEBIT", "CREDIT" })
     private AccountNature nature;
 
-    @Schema(
-        description = "Estado actual de la cuenta en el sistema", 
-        example = "ACTIVE", 
-        allowableValues = {"ACTIVE", "INACTIVE"}
-    )
+    @Schema(description = "Estado actual de la cuenta en el sistema", example = "ACTIVE", allowableValues = { "ACTIVE",
+            "INACTIVE" })
     private AccountStatus status;
 
-    @Schema(
-        description = "Fecha y hora de creación del registro (UTC)", 
-        example = "2024-02-21T10:30:00", 
-        nullable = true
-    )
+    @Schema(description = "Fecha y hora de creación del registro (UTC)", example = "2024-02-21T10:30:00", nullable = true)
     private LocalDateTime createdAt;
-    
-    @Schema(
-        description = "Fecha y hora de última actualización del registro (UTC)", 
-        example = "2024-02-21T10:30:00", 
-        nullable = true
-    )
+
+    @Schema(description = "Fecha y hora de última actualización del registro (UTC)", example = "2024-02-21T10:30:00", nullable = true)
     private LocalDateTime updatedAt;
-    
-    @Schema(
-        description = "Fecha y hora de eliminación lógica del registro (null si la cuenta está activa)", 
-        example = "2024-02-21T10:30:00", 
-        nullable = true
-    )
+
+    @Schema(description = "Fecha y hora de eliminación lógica del registro (null si la cuenta está activa)", example = "2024-02-21T10:30:00", nullable = true)
     private LocalDateTime deletedAt;
 }

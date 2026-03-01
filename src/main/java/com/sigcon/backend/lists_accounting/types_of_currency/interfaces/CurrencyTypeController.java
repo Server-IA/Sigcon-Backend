@@ -6,6 +6,9 @@ import com.sigcon.backend.lists_accounting.types_of_currency.application.Currenc
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeDeleteResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.service.CurrencyTypeService;
 import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -20,10 +23,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @RestController
@@ -43,11 +48,7 @@ public class CurrencyTypeController {
         })
         public ResponseEntity<?> getCurrencyTypesDataTable(
                         @Parameter(description = "Configuración de paginación y filtros de DataTable") @RequestBody(required = false) DataTableRequest request) {
-                if (request == null) {
-                        request = new DataTableRequest();
-                        request.setLength(10); // default value
-                        request.setStart(0);
-                }
+                
                 return currencyTypeService.getCurrencyTypesDataTable(request);
         }
 
@@ -60,30 +61,8 @@ public class CurrencyTypeController {
                         @ApiResponse(responseCode = "500", description = "Error interno del servidor", content = @Content)
         })
         public ResponseEntity<?> createCurrencyType(
-                        @Valid @RequestBody CurrencyTypeRequestDTO request) {
-
-                try {
-                        CurrencyTypeResponseDTO response = currencyTypeService.createCurrencyType(request);
-
-                        return ResponseEntity.status(HttpStatus.CREATED).body(
-                                        Map.of(
-                                                        "success", true,
-                                                        "message", "El tipo de moneda ha sido creado exitosamente",
-                                                        "data", response));
-
-                } catch (IllegalArgumentException e) {
-                        return ResponseEntity.badRequest().body(
-                                        Map.of(
-                                                        "success", false,
-                                                        "message", e.getMessage()));
-
-                } catch (Exception e) {
-                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                        .body(Map.of(
-                                                        "success", false,
-                                                        "message",
-                                                        "Error interno al registrar la moneda. Intente nuevamente o contacte soporte"));
-                }
+                        @Valid @RequestBody CurrencyTypeRequestDTO request, BindingResult bindingResult) {
+                return currencyTypeService.createCurrencyType(request, bindingResult);
         }
 
         @PutMapping("/{id}")
@@ -96,31 +75,8 @@ public class CurrencyTypeController {
         })
         public ResponseEntity<?> updateCurrencyType(
                         @Parameter(description = "ID único de la moneda a actualizar", example = "1") @PathVariable Long id,
-                        @Valid @RequestBody CurrencyTypeUpdateRequestDTO request) {
-
-                try {
-                        CurrencyTypeResponseDTO response = currencyTypeService.updateCurrencyType(id, request);
-
-                        return ResponseEntity.ok(
-                                        Map.of(
-                                                        "success", true,
-                                                        "message", "El tipo de moneda ha sido actualizado exitosamente",
-                                                        "data", response));
-
-                } catch (IllegalArgumentException e) {
-                        return ResponseEntity.badRequest().body(
-                                        Map.of(
-                                                        "success", false,
-                                                        "message", e.getMessage()));
-
-                } catch (Exception e) {
-                        log.error("Error técnico al actualizar la moneda: ", e);
-                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                        .body(Map.of(
-                                                        "success", false,
-                                                        "message",
-                                                        "Error técnico al actualizar la moneda. Intente nuevamente o contacte al administrador"));
-                }
+                        @Valid @RequestBody CurrencyTypeUpdateRequestDTO request, BindingResult bindingResult) {
+                return currencyTypeService.updateCurrencyType(id, request, bindingResult);
         }
 
         @DeleteMapping("/{id}")
@@ -136,24 +92,26 @@ public class CurrencyTypeController {
                 try {
                         CurrencyTypeDeleteResponseDTO response = currencyTypeService.deleteCurrencyType(id);
                         return ResponseEntity.ok(
-                                        Map.of(
-                                                        "success", true,
-                                                        "message", response.getMessage(),
-                                                        "data", response));
+                                SuccessRespondJson.getSuccessRespondMessage(Optional.of(response.getMessage()), Optional.of(response))
+                        );
                 } catch (java.util.NoSuchElementException e) {
                         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                                        Map.of("success", false, "message", e.getMessage()));
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+                        );
                 } catch (IllegalArgumentException e) {
                         return ResponseEntity.badRequest().body(
-                                        Map.of("success", false, "message", e.getMessage()));
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+                        );
                 } catch (IllegalStateException e) {
                         return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                                        Map.of("success", false, "message", e.getMessage()));
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+                        );
                 } catch (Exception e) {
                         log.error("Error técnico al eliminar la moneda: ", e);
                         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                        .body(Map.of("success", false, "message",
-                                                        "Error al procesar la eliminación, contacte al administrador (código ERR-DB-01)"));
+                                .body(
+                                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al procesar la eliminación, contacte al administrador (código ERR-DB-01)"))
+                                );
                 }
         }
 
@@ -165,8 +123,7 @@ public class CurrencyTypeController {
                                 : "Debe ingresar un código ISO válido (ej. USD) y un nombre de moneda";
 
                 return ResponseEntity.badRequest().body(
-                                Map.of(
-                                                "success", false,
-                                                "message", message));
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(message))
+                        );
         }
 }

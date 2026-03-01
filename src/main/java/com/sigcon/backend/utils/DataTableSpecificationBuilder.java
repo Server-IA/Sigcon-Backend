@@ -238,7 +238,11 @@ public class DataTableSpecificationBuilder<T> {
         if (Boolean.class.equals(type)) return Boolean.valueOf(value);
 
         if (type.isEnum()) {
-            return Enum.valueOf((Class<Enum>) type, value);
+            try {
+                return Enum.valueOf((Class<Enum>) type, value.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return null; // 👈 IMPORTANTE
+            }
         }
 
         return value;
