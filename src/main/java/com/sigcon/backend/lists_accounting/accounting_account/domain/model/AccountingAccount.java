@@ -41,7 +41,7 @@ public class AccountingAccount {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "puc_id", nullable = false)
-    private ChartOfAccount puc;
+    private ChartOfAccount pucAccount;
 
     @Column(name = "custom_name", length = 50, nullable = false, unique = true)
     private String customName;
@@ -54,8 +54,8 @@ public class AccountingAccount {
     @JoinColumn(name = "cost_center_id", nullable = true)
     private CostCenter costCenter;
 
-    @Column(name = "depreciation_rule_id", nullable = true)
-    private Long depreciationRuleId;
+    @Column(name = "tax_rule_id", nullable = true)
+    private Long taxRuleId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "nature", nullable = false)

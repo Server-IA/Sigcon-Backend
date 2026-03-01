@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
+import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.service.CostCenterService;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -68,9 +69,9 @@ public class CostCenterController {
         })
         @PostMapping("/store")
         @PreAuthorize("hasAuthority('PERM_CREATE_COST_CENTER')")
-        public ResponseEntity<?> storeCostCenter(@Valid @RequestBody CostCenter costCenter,
+        public ResponseEntity<?> storeCostCenter(@Valid @RequestBody CostCenterDTO costCenterDTO,
                         BindingResult bindingResult) {
-                return costCenterService.storeCostCenter(costCenter, bindingResult);
+                return costCenterService.storeCostCenter(costCenterDTO, bindingResult);
         }
 
         // =========================================================

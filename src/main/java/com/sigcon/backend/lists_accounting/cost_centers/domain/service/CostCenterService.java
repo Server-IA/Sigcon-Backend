@@ -59,12 +59,12 @@ public class CostCenterService {
                 }
         }
 
-        public ResponseEntity<?> storeCostCenter(CostCenter request, BindingResult bindingResult) {
-                if (bindingResult.hasErrors()) {
-                        return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-                }
-
+        public ResponseEntity<?> storeCostCenter(CostCenterDTO request, BindingResult bindingResult) {
                 try {
+                        if (bindingResult.hasErrors()) {
+                                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+                        }
+                        
                         Long companyId = request.getCompanyId();
 
                         if (costCenterRepository.existsByCodeAndCompanyIdAndDeletedAtIsNull(request.getCode(),
@@ -81,7 +81,15 @@ public class CostCenterService {
                                                                 Optional.of("El nombre del centro de costo ya existe para esta empresa")));
                         }
 
-                        costCenterRepository.save(request);
+                        CostCenter costCenter = CostCenter.builder()
+                                .code(request.getCode())
+                                .name(request.getName())
+                                .description(request.getDescription())
+                                .status(request.getStatus())
+                                .companyId(companyId)
+                                .build();
+
+                        costCenterRepository.save(costCenter);
                         return ResponseEntity.ok(
                                         SuccessRespondJson.getSuccessRespondMessage(
                                                         Optional.of("Centro de costo creado exitosamente"),

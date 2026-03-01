@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -23,6 +25,9 @@ public class CurrencyTypeResponseDTO {
 
     @Schema(description = "Nombre de la moneda", example = "Peso Colombiano")
     private String name;
+
+    @Schema(description = "Estado de la moneda", example = "ACTIVE")
+    private StatusCurrencyType status;
 
     @Schema(description = "Fecha y hora de registro en el sistema", example = "2024-02-22T10:30:00")
     private LocalDateTime createdAt;

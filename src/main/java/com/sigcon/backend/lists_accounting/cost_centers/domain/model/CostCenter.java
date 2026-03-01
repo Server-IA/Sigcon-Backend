@@ -17,7 +17,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "cost_centers")
+@Table(name = "cost_centers", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_cost_center_code", columnNames = { "code", "company_id", "deleted_at" })
+})
 @Data
 @Builder
 @AllArgsConstructor
