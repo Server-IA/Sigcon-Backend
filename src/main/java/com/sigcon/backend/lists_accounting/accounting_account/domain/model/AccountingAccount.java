@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -44,22 +46,15 @@ public class AccountingAccount {
     @Column(name = "custom_name", length = 50, nullable = false, unique = true)
     private String customName;
 
-    @Column(name = "base_currency", length = 50, nullable = false)
-    private String baseCurrency;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "currency_type_id", nullable = false)
+    private CurrencyType currencyType;
 
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "cost_center_id", nullable = true)
-//    private Object costCenter; // Stub - reemplazar con entidad real cuando exista
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cost_center_id", nullable = true)
+    private CostCenter costCenter;
 
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "depreciation_rule_id", nullable = true)
-//    private Object depreciationRule; // Stub - reemplazar con entidad real cuando exista
-
-    // Cambia la relación por un campo básico
-    @Column(name = "cost_center_id")
-    private Long costCenterId; 
-
-    @Column(name = "depreciation_rule_id")
+    @Column(name = "depreciation_rule_id", nullable = true)
     private Long depreciationRuleId;
 
     @Enumerated(EnumType.STRING)
