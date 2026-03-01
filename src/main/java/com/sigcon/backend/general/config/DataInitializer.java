@@ -263,7 +263,6 @@ public class DataInitializer implements CommandLineRunner {
 
                                 viewCurrencyType, createCurrencyType, updateCurrencyType, deleteCurrencyType,
                                 viewModules, createModules, updateModules, deleteModules, viewModulesMenu)));
-
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
                 // Crear usuarios
@@ -284,6 +283,7 @@ public class DataInitializer implements CommandLineRunner {
                                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                                 viewCurrencyType, createCurrencyType, updateCurrencyType,
                                                 deleteCurrencyType, viewDepretationRules, createDepretationRules, updateDepretationRules, deleteDepretationRules,
+
                                 viewModules, createModules, updateModules, deleteModules, viewModulesMenu));
 
                 createMenuPermissions("Perfil", "SUPERADMIN");
