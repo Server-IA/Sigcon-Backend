@@ -7,9 +7,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 import org.springframework.security.core.Authentication;
 
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.repository.ChartOfAccountRepository;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.CreateDepretationRuleRequest;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleResponse;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.DescriptionStructuredDTO;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.UpdateDepretationRuleRequest;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
@@ -17,8 +18,9 @@ import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.exception.DuplicateDepretationRuleException;
 import com.sigcon.backend.lists_accounting.depretation_rules.exception.InvalidDepretationRuleException;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 
@@ -43,7 +45,7 @@ import java.util.Optional;
 public class DepretationRuleService {
 
     private final DepretationRuleRepository depretationRuleRepository;
-    private final ChartOfAccountRepository chartOfAccountRepository;
+    private final AccountingAccountRepository accountingAccountRepository;
     private final UserRepository userRepository;
 
     /**
@@ -77,6 +79,8 @@ public class DepretationRuleService {
             //Long userId = getAuthenticatedUserId();
 
             // 6. Mapear request a entity
+            String description = buildDescription(request.getDescriptionStructured());
+
             DepretationRule rule = DepretationRule.builder()
                     .name(request.getName())
                     .depretationType(request.getDepretationType())
@@ -86,7 +90,7 @@ public class DepretationRuleService {
                     .usefulLifeYears(request.getUsefulLifeYears())
                     .residualValue(request.getResidualValue())
                     .effectiveDate(request.getEffectiveDate())
-                    .descriptionStructured(request.getDescriptionStructured())
+                    .descriptionStructured(description)
                     // .createdById(userId) // Para auditoría
                     .build();
 
@@ -127,8 +131,23 @@ public class DepretationRuleService {
     }
 
     /**
+     * Construir descripción estructurada como texto largo
+     */
+     private String buildDescription(DescriptionStructuredDTO dto) {
+                StringBuilder sb = new StringBuilder(); 
+                sb.append("Base de calculo: ").append(dto.getCalculationBase());
+                sb.append(" | Parametros: ").append(dto.getParameters());
+                if(dto.getException() != null && !dto.getException().isBlank()){
+                        sb.append(" | Exepciones: ").append(dto.getException()); 
+                }
+                sb.append(" | Norma aplicable: ").append(dto.getApplicableNorm()); 
+                return sb.toString();
+        }
+
+        /**
      * Validar que NO exista duplicado: método + cuenta + vigencia
      */
+
     private void validateNoDuplicates(
             DepretationType depretationType,
             Long accountingAccountId,
@@ -199,7 +218,7 @@ public class DepretationRuleService {
      */
     
     private void validateAccountingAccountExists(Long accountingAccountId) {
-        ChartOfAccount account = chartOfAccountRepository.findById(accountingAccountId)
+        AccountingAccount account = accountingAccountRepository.findByIdAndDeletedAtIsNull(accountingAccountId)
                 .orElseThrow(() -> new InvalidDepretationRuleException(
                         "La cuenta contable no existe"
                 ));
@@ -232,11 +251,25 @@ public class DepretationRuleService {
      * Mapear DepretationRule a Response
      */
     private DepretationRuleResponse mapToResponse(DepretationRule rule) {
+
+        AccountingAccount account = accountingAccountRepository
+                .findByIdAndDeletedAtIsNull(rule.getAccountingAccountId())
+                .orElse(null);
+        
+        AccountingAccountDTO accountDTO = account != null ? AccountingAccountDTO.builder()
+                .id(account.getId())
+                .custom_name(account.getCustomName())
+                .base_currency(account.getBaseCurrency())
+                .nature(account.getNature())
+                .status(account.getStatus())
+                .build(): null;
+
         return DepretationRuleResponse.builder()
                 .id(rule.getId())
                 .name(rule.getName())
                 .depretationType(rule.getDepretationType())
                 .accountingAccountId(rule.getAccountingAccountId())
+                .accountingAccountDTO(accountDTO)
                 .depretationRate(rule.getDepretationRate())
                 .usefulLifeYears(rule.getUsefulLifeYears())
                 .residualValue(rule.getResidualValue())
@@ -255,6 +288,11 @@ public class DepretationRuleService {
      */
     public ResponseEntity<?> getDepretationRulesPaged(com.sigcon.backend.utils.DataTableRequest request) {
         try {
+                
+            if(request == null) {
+                request = new com.sigcon.backend.utils.DataTableRequest();
+            }
+
             int start = Math.max(0, request.getStart());
             int length = request.getLength();
 
@@ -274,7 +312,7 @@ public class DepretationRuleService {
              if(rules.isEmpty()) {
                 return ResponseEntity.ok(
                     ErrorRespondJson.getErrorRespondMessage(
-            Optional.of("No existen reglas con esos criterios")
+            Optional.of("No se encontraron reglas de depreciación con los filtros aplicados")
             )
             );
             }
