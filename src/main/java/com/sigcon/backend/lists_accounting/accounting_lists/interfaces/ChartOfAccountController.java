@@ -4,7 +4,6 @@ import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfA
 import com.sigcon.backend.lists_accounting.accounting_lists.application.CreateChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.DeleteChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.UpdateChartOfAccountDTO;
-import com.sigcon.backend.lists_accounting.accounting_lists.application.ViewChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.service.ChartOfAccountService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
@@ -19,9 +18,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -29,16 +25,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springdoc.core.annotations.ParameterObject;
 
 import java.util.Optional;
 
@@ -101,55 +93,6 @@ public class ChartOfAccountController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
                             "Error al guardar la informacion, intente nuevamente"
-                    )));
-        }
-    }
-
-    @GetMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT')")
-    @Operation(
-            summary = "Buscar cuentas contables (paginado)",
-            description = "Consulta cuentas por filtros opcionales y retorna resultados paginados."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente",
-                    content = @Content(schema = @Schema(implementation = Object.class))),
-            @ApiResponse(responseCode = "400", description = "Filtros invalidos",
-                    content = @Content(schema = @Schema(implementation = Object.class))),
-            @ApiResponse(responseCode = "500", description = "Error interno del servidor",
-                    content = @Content(schema = @Schema(implementation = Object.class)))
-    })
-    public ResponseEntity<?> searchChartOfAccounts(
-            @ParameterObject @Valid @ModelAttribute ViewChartOfAccountDTO request,
-            @Parameter(hidden = true)
-            BindingResult bindingResult,
-            @Parameter(description = "Numero de pagina (inicia en 0)", example = "0")
-            @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Tamano de pagina permitido: 10, 20, 50 o 100", example = "10")
-            @RequestParam(defaultValue = "10") int size
-    ) {
-        try {
-            if (bindingResult.hasErrors()) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-            }
-
-            Pageable pageable = PageRequest.of(Math.max(page, 0), resolvePageSize(size));
-            Page<ChartOfAccountResponseDTO> result = chartOfAccountService.searchChartOfAccounts(request, pageable);
-
-            return ResponseEntity.ok(
-                    SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("Se encontraron cuentas con coincidencias"),
-                            Optional.of(result)
-                    )
-            );
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Error al consultar datos, intente nuevamente"
                     )));
         }
     }
@@ -288,10 +231,4 @@ public class ChartOfAccountController {
         }
     }
 
-    private int resolvePageSize(int requestedSize) {
-        return switch (requestedSize) {
-            case 10, 20, 50, 100 -> requestedSize;
-            default -> 10;
-        };
-    }
 }
