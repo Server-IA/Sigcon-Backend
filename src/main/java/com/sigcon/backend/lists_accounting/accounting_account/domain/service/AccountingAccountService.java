@@ -69,13 +69,13 @@ public class AccountingAccountService {
             return ResponseEntity.ok(
                     DataTableResponse.from(accountingAccounts.map(accountingAccount -> AccountingAccountDTO.builder()
                             .id(accountingAccount.getId())
-                            .puc_id(accountingAccount.getPuc().getId())
+                            .puc_id(accountingAccount.getPucAccount().getId())
                             .pucAccount(ChartOfAccountResponseDTO.builder()
-                                    .id(accountingAccount.getPuc().getId())
-                                    .code(accountingAccount.getPuc().getCode())
-                                    .name(accountingAccount.getPuc().getName())
+                                    .id(accountingAccount.getPucAccount().getId())
+                                    .code(accountingAccount.getPucAccount().getCode())
+                                    .name(accountingAccount.getPucAccount().getName())
                                     .build())
-                            .custom_name(accountingAccount.getCustomName())
+                            .customName(accountingAccount.getCustomName())
                             .currencyType(accountingAccount.getCurrencyType() != null
                                     ? CurrencyTypeResponseDTO.builder()
                                             .id(accountingAccount.getCurrencyType().getId())
@@ -90,7 +90,7 @@ public class AccountingAccountService {
                                             .name(accountingAccount.getCostCenter().getName())
                                             .build()
                                     : null)
-                            .depreciation_rule_id(accountingAccount.getDepreciationRuleId())
+                            .taxRuleId(accountingAccount.getTaxRuleId())
                             .nature(accountingAccount.getNature())
                             .status(accountingAccount.getStatus())
                             .createdAt(accountingAccount.getCreatedAt())
@@ -99,7 +99,7 @@ public class AccountingAccountService {
 
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson
-                    .getErrorRespondMessage(Optional.of("Error al consultar datos, intente nuevamente.")));
+                    .getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -139,11 +139,11 @@ public class AccountingAccountService {
             }
 
             AccountingAccount accountingAccount = AccountingAccount.builder()
-                    .puc(ChartOfAccount.builder().id(request.getPuc_id()).build())
+                    .pucAccount(ChartOfAccount.builder().id(request.getPuc_id()).build())
                     .customName(request.getCustom_name())
                     .currencyType(currencyType)
                     .costCenter(costCenter)
-                    .depreciationRuleId(request.getDepreciation_rule_id())
+                    .taxRuleId(request.getTax_rule_id())
                     .nature(request.getNature())
                     .status(AccountStatus.ACTIVE)
                     .companyId(companyId)
@@ -198,7 +198,7 @@ public class AccountingAccountService {
                             "El tipo de moneda seleccionado no está disponible o no existe"));
 
             // Actualizar campos
-            accountingAccount.setPuc(ChartOfAccount.builder().id(request.getPuc_id()).build());
+            accountingAccount.setPucAccount(ChartOfAccount.builder().id(request.getPuc_id()).build());
             accountingAccount.setCustomName(request.getCustom_name());
             accountingAccount.setCurrencyType(currencyType);
             accountingAccount.setNature(request.getNature());
@@ -214,7 +214,7 @@ public class AccountingAccountService {
                 accountingAccount.setCostCenter(null);
             }
 
-            accountingAccount.setDepreciationRuleId(request.getDepreciation_rule_id());
+            accountingAccount.setTaxRuleId(request.getTax_rule_id());
 
             accountingAccountRepository.save(accountingAccount);
 

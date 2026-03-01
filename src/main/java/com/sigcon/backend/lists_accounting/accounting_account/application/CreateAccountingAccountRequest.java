@@ -37,8 +37,8 @@ public class CreateAccountingAccountRequest {
     @Schema(description = "ID del centro de costos asociado a esta cuenta (opcional)", example = "1", nullable = true)
     private Long cost_center_id;
 
-    @Schema(description = "ID de la regla de depreciación aplicada a esta cuenta (opcional, solo para cuentas de activo fijo)", example = "1", nullable = true)
-    private Long depreciation_rule_id;
+    @Schema(description = "ID de la regla tributaria aplicada a esta cuenta (opcional)", example = "1", nullable = true)
+    private Long tax_rule_id;
 
     @Schema(description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", example = "DEBIT", allowableValues = {
             "DEBIT", "CREDIT" }, nullable = false)

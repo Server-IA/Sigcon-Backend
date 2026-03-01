@@ -63,7 +63,7 @@ public class CreateDepretationRuleRequest {
 
     @Schema(description = "Fecha de vigencia efectiva de la regla en formato (dd/MM/yyy)", example = "01/01/2026")
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
-    @JsonFormat(pattern = "dd/MM/yyyy")
+    @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDate effectiveDate; 
 
 }

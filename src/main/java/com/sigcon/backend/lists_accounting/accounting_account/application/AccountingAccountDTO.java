@@ -32,7 +32,7 @@ public class AccountingAccountDTO {
     private ChartOfAccountResponseDTO pucAccount;
 
     @Schema(description = "Nombre personalizado de la cuenta para visualización en el sistema", example = "Caja General", nullable = true)
-    private String custom_name;
+    private String customName;
 
     @Schema(description = "Moneda base de la cuenta", nullable = true)
     private CurrencyTypeResponseDTO currencyType;
@@ -40,8 +40,8 @@ public class AccountingAccountDTO {
     @Schema(description = "Centro de costos asociado a la cuenta", nullable = true)
     private CostCenterDTO costCenter;
 
-    @Schema(description = "ID de la regla de depreciación aplicada a esta cuenta", nullable = true)
-    private Long depreciation_rule_id;
+    @Schema(description = "ID de la regla tributaria aplicada a esta cuenta", nullable = true)
+    private Long taxRuleId;
 
     @Schema(description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", example = "DEBIT", allowableValues = {
             "DEBIT", "CREDIT" })

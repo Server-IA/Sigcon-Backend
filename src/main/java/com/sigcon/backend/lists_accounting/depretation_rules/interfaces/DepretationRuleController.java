@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/v1/depretation-rules")
+@RequestMapping("/api/v1/depreciation-rules")
 @RequiredArgsConstructor
 public class DepretationRuleController {
 
@@ -74,7 +74,7 @@ public class DepretationRuleController {
             @Valid @RequestBody CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
         try{        
-        return depretationRuleService.createDepretationRule(request, bindingResult);
+            return depretationRuleService.createDepretationRule(request, bindingResult);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

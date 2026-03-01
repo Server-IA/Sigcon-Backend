@@ -8,6 +8,7 @@ import org.springframework.validation.BindingResult;
 import org.springframework.security.core.Authentication;
 
 import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
+import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.CreateDepretationRuleRequest;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleResponse;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.DescriptionStructuredDTO;
@@ -18,6 +19,7 @@ import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.exception.DuplicateDepretationRuleException;
 import com.sigcon.backend.lists_accounting.depretation_rules.exception.InvalidDepretationRuleException;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
@@ -73,7 +75,7 @@ public class DepretationRuleService {
             validateUsefulLifeByType(request.getDepretationType(), request.getUsefulLifeYears());
 
             // 4. Validar cuenta contable existe y está activa
-            validateAccountingAccountExists(request.getAccountingAccountId());
+            AccountingAccount accountingAccount = validateAccountingAccountExists(request.getAccountingAccountId());
 
             // 5. Obtener usuario del contexto (esto se utilizaria cuando se avance a auditoria)
             //Long userId = getAuthenticatedUserId();
@@ -84,8 +86,7 @@ public class DepretationRuleService {
             DepretationRule rule = DepretationRule.builder()
                     .name(request.getName())
                     .depretationType(request.getDepretationType())
-                    .status(DepretationStatus.ACTIVE) // por defecto al crear
-                    .accountingAccountId(request.getAccountingAccountId())
+                    .accountingAccount(accountingAccount)
                     .depretationRate(request.getDepretationRate())
                     .usefulLifeYears(request.getUsefulLifeYears())
                     .residualValue(request.getResidualValue())
@@ -217,17 +218,11 @@ public class DepretationRuleService {
      * Validar que cuenta contable existe y está activa
      */
     
-    private void validateAccountingAccountExists(Long accountingAccountId) {
-        AccountingAccount account = accountingAccountRepository.findByIdAndDeletedAtIsNull(accountingAccountId)
+    private AccountingAccount validateAccountingAccountExists(Long accountingAccountId) {
+        return accountingAccountRepository.findByIdAndDeletedAtIsNull(accountingAccountId)
                 .orElseThrow(() -> new InvalidDepretationRuleException(
                         "La cuenta contable no existe"
                 ));
-
-        if (!account.getStatus().equals(AccountStatus.ACTIVE)) {
-            throw new InvalidDepretationRuleException(
-                    "La cuenta contable debe estar activa"
-            );
-        }
     }
     
 
@@ -252,24 +247,17 @@ public class DepretationRuleService {
      */
     private DepretationRuleResponse mapToResponse(DepretationRule rule) {
 
-        AccountingAccount account = accountingAccountRepository
-                .findByIdAndDeletedAtIsNull(rule.getAccountingAccountId())
-                .orElse(null);
-        
-        AccountingAccountDTO accountDTO = account != null ? AccountingAccountDTO.builder()
-                .id(account.getId())
-                .custom_name(account.getCustomName())
-                .base_currency(account.getBaseCurrency())
-                .nature(account.getNature())
-                .status(account.getStatus())
-                .build(): null;
-
         return DepretationRuleResponse.builder()
                 .id(rule.getId())
                 .name(rule.getName())
                 .depretationType(rule.getDepretationType())
-                .accountingAccountId(rule.getAccountingAccountId())
-                .accountingAccountDTO(accountDTO)
+                .accountingAccountId(rule.getAccountingAccount().getId())
+                .accountingAccountDTO(AccountingAccountDTO.builder()
+                        .id(rule.getAccountingAccount().getId())
+                        .customName(rule.getAccountingAccount().getCustomName())
+                        .nature(rule.getAccountingAccount().getNature())
+                        .status(rule.getAccountingAccount().getStatus())
+                        .build())
                 .depretationRate(rule.getDepretationRate())
                 .usefulLifeYears(rule.getUsefulLifeYears())
                 .residualValue(rule.getResidualValue())
@@ -309,13 +297,13 @@ public class DepretationRuleService {
 
             Page<DepretationRule> rules = depretationRuleRepository.findAll(spec, pageable);
 
-             if(rules.isEmpty()) {
-                return ResponseEntity.ok(
-                    ErrorRespondJson.getErrorRespondMessage(
-            Optional.of("No se encontraron reglas de depreciación con los filtros aplicados")
-            )
-            );
-            }
+        //      if(rules.isEmpty()) {
+        //         return ResponseEntity.ok(
+        //             ErrorRespondJson.getErrorRespondMessage(
+        //     Optional.of("No se encontraron reglas de depreciación con los filtros aplicados")
+        //     )
+        //     );
+        //     }
 
             return ResponseEntity.ok(
                     com.sigcon.backend.utils.DataTableResponse.from(

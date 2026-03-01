@@ -108,15 +108,15 @@ public class ChartOfAccountService {
 
         AccountNature resolvedNature = validateAccountNature(request.getAccountClass(), request.getNature());
 
-        boolean hasActiveDependencies = hasActiveDependencies(account);
+        // boolean hasActiveDependencies = hasActiveDependencies(account);
 
-        if (!targetCode.equals(account.getCode()) && hasActiveDependencies) {
-            throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
-        }
+        // if (!targetCode.equals(account.getCode()) && hasActiveDependencies) {
+        //     throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
+        // }
 
-        if (request.getStatus() == AccountStatus.INACTIVE && hasActiveDependencies) {
-            throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
-        }
+        // if (request.getStatus() == AccountStatus.INACTIVE && hasActiveDependencies) {
+        //     throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
+        // }
 
         if (chartOfAccountRepository.existsAnyByCodeAndIdNot(targetCode, id)) {
             throw new IllegalArgumentException("Codigo oficial ya registrado");
@@ -149,9 +149,9 @@ public class ChartOfAccountService {
             throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
         }
 
-        if (hasActiveDependencies(account)) {
-            throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
-        }
+        // if (hasActiveDependencies(account)) {
+        //     throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
+        // }
 
         account.setIsDeleted(AccountDeleted.DELETED);
         account.setDeletedReason(request.getReason().trim());
