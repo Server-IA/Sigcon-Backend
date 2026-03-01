@@ -186,6 +186,20 @@ public class DataInitializer implements CommandLineRunner {
                 Permission deleteCostCenter = createPermission("Eliminar centros de costo",
                                 "Permiso para eliminar centros de costo", TypePermits.DELETE, "DELETE_COST_CENTER",
                                 moduleId);
+                
+                //depretation_rules
+                Permission viewDepretationRules = createPermission("Ver reglas de depreciación", 
+                                "Permiso para ver reglas de depreciación", TypePermits.READ, 
+                                "VIEW_DEPRECIATION_RULE", moduleId);
+                Permission createDepretationRules = createPermission("Crear reglas de depreciación", 
+                                "Permiso para crear reglas de depreciación", TypePermits.CREATE, 
+                                "CREATE_DEPRECIATION_RULE", moduleId);
+                Permission updateDepretationRules = createPermission("Actualizar reglas de depreciación", 
+                                "Permiso para actualizar reglas de depreciación", TypePermits.UPDATE, 
+                                "UPDATE_DEPRECIATION_RULE", moduleId);
+                Permission deleteDepretationRules = createPermission("Eliminar reglas de depreciación", 
+                                "Permiso para eliminar reglas de depreciación", TypePermits.DELETE, 
+                                "DELETE_DEPRECIATION_RULE", moduleId);
           
                 // Permisos Modulos
                 Permission viewModules = createPermission("Ver módulos", "Permiso para ver módulos", TypePermits.READ,
@@ -245,6 +259,8 @@ public class DataInitializer implements CommandLineRunner {
                                 deleteAccountingAccount,
                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                 viewExchangeRates, createExchangeRates, updateExchangeRates, deleteExchangeRates,
+                                viewDepretationRules, createDepretationRules, updateDepretationRules, deleteDepretationRules,
+
                                 viewCurrencyType, createCurrencyType, updateCurrencyType, deleteCurrencyType,
                                 viewModules, createModules, updateModules, deleteModules, viewModulesMenu)));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
@@ -266,7 +282,8 @@ public class DataInitializer implements CommandLineRunner {
                                                 deleteAccountingAccount,
                                                 viewCostCenters, createCostCenter, updateCostCenter, deleteCostCenter,
                                                 viewCurrencyType, createCurrencyType, updateCurrencyType,
-                                                deleteCurrencyType,
+                                                deleteCurrencyType, viewDepretationRules, createDepretationRules, updateDepretationRules, deleteDepretationRules,
+
                                 viewModules, createModules, updateModules, deleteModules, viewModulesMenu));
 
                 createMenuPermissions("Perfil", "SUPERADMIN");

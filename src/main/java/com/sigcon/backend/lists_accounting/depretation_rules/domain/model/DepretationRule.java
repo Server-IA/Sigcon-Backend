@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import org.hibernate.annotations.JdbcTypeCode;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -20,10 +19,6 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
-import com.sigcon.backend.lists_accounting.depretation_rules.application.DescriptionStructuredDTO;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 
@@ -72,11 +67,10 @@ public class DepretationRule {
     @NotNull(message = "La fecha de vigencia es obligatoria")
     private LocalDate effectiveDate;
 
-    //Descripcion estructurada como JSON
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
+    //Descripcion estructurada como texto largo
+    @Column(columnDefinition = "TEXT", nullable = false)
     @NotNull(message = "La descripción estructurada es obligatoria")
-    private DescriptionStructuredDTO descriptionStructured;
+    private String descriptionStructured;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

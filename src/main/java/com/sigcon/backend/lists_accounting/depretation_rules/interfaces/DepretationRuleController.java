@@ -33,12 +33,12 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Consultar reglas de depresación", 
-        description = "Retrona un listado paginado de reglas de depreciacion activas segun las especificaciones del requerimiento CFG-RF-14" + 
+        description = "Retrona un listado paginado de reglas de depreciacion segun las especificaciones del requerimiento CFG-RF-14. " + 
         "Requiere permisos PERM_VIEW_DEPRETATION_RULE"
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Listado obtenido exitosamente"),
-        @ApiResponse(responseCode = "200", description = "No existen Reglas con esos Criterios"), 
+        @ApiResponse(responseCode = "404", description = "No se encontraron reglas con esos criterios"), 
         @ApiResponse(responseCode = "400", description = "Error en los parametros de busqueda")
     })
     @PostMapping("/search")
@@ -59,7 +59,7 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Crear reglas de depresación", 
-        description = "Crea una nueva regla de depreciacion segun las especificaciones del requerimiento CFG-RF-13" + 
+        description = "Crea una nueva regla de depreciacion segun las especificaciones del requerimiento CFG-RF-13. " + 
         "Requiere permisos PERM_CREATE_DEPRETATION_RULE"
     )
     @ApiResponses({
@@ -87,7 +87,7 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Editar reglas de depresación Existentes", 
-        description = "Actualizar los campos editables de una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-15" + 
+        description = "Actualizar los campos editables de una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-15. " + 
         "Requiere permisos PERM_UPDATE_DEPRETATION_RULE"
     )
     @ApiResponses({
@@ -114,7 +114,7 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Eliminar regla de depresación (eliminado logico)", 
-        description = "Eliminar una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-16" + 
+        description = "Eliminar una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-16. " + 
         "Requiere permisos PERM_DELETE_DEPRETATION_RULE"
     )
     @ApiResponses({
