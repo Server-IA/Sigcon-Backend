@@ -2,6 +2,9 @@ package com.sigcon.backend.lists_accounting.accounting_account.domain.model;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
+
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
@@ -28,7 +31,8 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "accounting_accounts")
-
+@SQLDelete(sql = "UPDATE accounting_accounts SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @AllArgsConstructor
@@ -43,7 +47,7 @@ public class AccountingAccount {
     @JoinColumn(name = "puc_id", nullable = false)
     private ChartOfAccount pucAccount;
 
-    @Column(name = "custom_name", length = 50, nullable = false, unique = true)
+    @Column(name = "custom_name", length = 50, nullable = false)
     private String customName;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -25,6 +25,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -37,7 +38,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class AuthService {
+public class AuthService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -105,7 +106,7 @@ public class AuthService {
     public ResponseEntity<?> login(AuthRequest request){
         try {
             Authentication auth = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+                    new UsernamePasswordAuthenticationToken(request.getUsernameOrEmail(), request.getPassword())
             );
 
             User user = (User) auth.getPrincipal();
@@ -258,6 +259,12 @@ public class AuthService {
             return avatarStorageService.saveBase64Avatar(avatarValue, null);
         }
         return avatarValue;
+    }
+
+    @Override
+    public User loadUserByUsername(String usernameOrEmail) throws RuntimeException {
+        return userRepository.findByUsernameOrEmail(usernameOrEmail, usernameOrEmail)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
     }
 
 }

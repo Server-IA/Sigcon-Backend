@@ -1,5 +1,6 @@
 package com.sigcon.backend.utils;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.data.jpa.domain.Specification;
@@ -75,23 +76,45 @@ public class DataTableSpecificationBuilder<T> {
                     }
                     
                     /* -------- NUMERIC / BOOLEAN -------- */
-                    else if(type.equals(Long.class) || type.equals(Integer.class)) {
-                        if(globalValue.matches("\\d+")) {
-                            Object convertedValue = convertValue(globalValue, type);
-                            if(regex) {
-                                // Convertir número a texto para LIKE en Postgres
-                                globalPredicate = cb.or(
-                                    globalPredicate,
-                                    cb.like(cb.concat("", path.as(String.class)), "%" + convertedValue + "%")
-                                );
-                            } else {
-                                globalPredicate = cb.or(
-                                    globalPredicate,
-                                    cb.equal(path, convertedValue)
-                                );
-                            }
-                        }
+                    else if(type.equals(Long.class) || type.equals(Integer.class) || type.equals(Double.class)) {
+                        // Permitir enteros y decimales
+    if (globalValue.matches("\\d+(\\.\\d+)?")) {
+
+        Object convertedValue = convertValue(globalValue, type);
+
+        if (regex) {
+
+            // 🔥 Convertir número a texto usando to_char (Postgres)
+            Expression<String> numberAsString = cb.function(
+                    "to_char",
+                    String.class,
+                    path,
+                    cb.literal("FM999999999999.000000")
+            );
+
+            globalPredicate = cb.or(
+                    globalPredicate,
+                    cb.like(numberAsString, "%" + globalValue + "%")
+            );
+
+        } else {
+
+            globalPredicate = cb.or(
+                    globalPredicate,
+                    cb.equal(path, convertedValue)
+            );
+        }
+    }
                     }
+
+                    
+
+                    // else if(type.equals(LocalDate.class)) {
+                    //     globalPredicate = cb.or(
+                    //         globalPredicate,
+                    //         cb.equal(path, LocalDate.parse(globalValue))
+                    //     );
+                    // }
 
                 }
     
@@ -244,6 +267,10 @@ public class DataTableSpecificationBuilder<T> {
                 return null; // 👈 IMPORTANTE
             }
         }
+
+        if (Double.class.equals(type)) return Double.valueOf(value);
+
+        // if (LocalDate.class.equals(type)) return LocalDate.parse(value);
 
         return value;
     }

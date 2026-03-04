@@ -9,7 +9,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.Where;
 
 import com.sigcon.backend.parametrization.parameters.domain.model.enums.CategoryParameter;
 import com.sigcon.backend.parametrization.parameters.domain.model.enums.StatusParameter;
@@ -18,6 +20,8 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "parameters")
+@SQLDelete(sql = "UPDATE parameters SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor

@@ -9,10 +9,13 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
+
 @Entity
-@Table(name = "user_parameters", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"user_id", "parameter_id"})
-})
+@Table(name = "user_parameters")
+@SQLDelete(sql = "UPDATE user_parameters SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor

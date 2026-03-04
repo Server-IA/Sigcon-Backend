@@ -6,7 +6,13 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.annotations.Where;
+
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
+
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
 
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
 
@@ -14,10 +20,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @SQLRestriction("deleted_at IS NULL")
-@Table(name = "cfg_currency_types", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_currency_iso_code", columnNames = {"iso_code", "deleted_at"}),
-        @UniqueConstraint(name = "uk_currency_name", columnNames = {"name", "deleted_at"})
-})
+@Table(name = "cfg_currency_types")
+@SQLDelete(sql = "UPDATE cfg_currency_types SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

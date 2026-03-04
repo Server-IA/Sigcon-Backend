@@ -44,10 +44,10 @@ public class AccountingAccountController {
             @ApiResponse(responseCode = "403", description = "No autorizado - Permiso PERM_VIEW_ACCOUNTING_ACCOUNT requerido")
     })
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getAccountingAccounts(
             @RequestBody(required = false) DataTableRequest dtRequest) {
-        try {
+        // try {
             // DataTableRequest puede venir null, crear uno por defecto
             if (dtRequest == null) {
                 dtRequest = new DataTableRequest();
@@ -57,10 +57,10 @@ public class AccountingAccountController {
             }
 
             return accountingAccountService.getAccountingAccounts(dtRequest);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson
-                    .getErrorRespondMessage(Optional.of("Error al consultar datos, intente nuevamente.")));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest().body(ErrorRespondJson
+        //             .getErrorRespondMessage(Optional.of("Error al consultar datos, intente nuevamente.")));
+        // }
     }
 
     /**
@@ -80,20 +80,20 @@ public class AccountingAccountController {
             @ApiResponse(responseCode = "500", description = "Error interno al guardar la cuenta en la base de datos")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_ACCOUNTING_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> createAccountingAccount(
             @Valid @RequestBody CreateAccountingAccountRequest request,
             BindingResult bindingResult) {
-        try {
+        // try {
             // TODO: Obtener userId y companyId del contexto de seguridad (JwtService)
             Long userId = 1L; // Temporal - reemplazar con jwtService.getUserIdFromToken()
             Long companyId = 1L; // Temporal - reemplazar con usuario actual
 
             return accountingAccountService.createAccountingAccount(request, bindingResult, userId, companyId);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -114,19 +114,19 @@ public class AccountingAccountController {
             @ApiResponse(responseCode = "500", description = "Error interno al guardar los cambios")
     })
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_ACCOUNTING_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updateAccountingAccount(
             @Valid @RequestBody UpdateAccountingAccountRequest request,
             BindingResult bindingResult) {
-        try {
+        // try {
             // TODO: Obtener userId del contexto de seguridad (JwtService)
             Long userId = 1L; // Temporal - reemplazar con jwtService.getUserIdFromToken()
 
             return accountingAccountService.updateAccountingAccount(request, bindingResult, userId);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -145,19 +145,30 @@ public class AccountingAccountController {
             @ApiResponse(responseCode = "500", description = "Error interno al procesar la inactivación")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_ACCOUNTING_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> deleteAccountingAccount(
             @PathVariable Long id,
             @RequestParam(name = "reason", required = true) String reason) {
-        try {
+        // try {
             // TODO: Obtener userId del contexto de seguridad (JwtService)
             Long userId = 1L; // Temporal - reemplazar con jwtService.getUserIdFromToken()
 
             return accountingAccountService.deleteAccountingAccount(id, reason, userId);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleMalformedJson(HttpMessageNotReadableException ex) {
+        String detail = ex.getMostSpecificCause() != null
+                ? ex.getMostSpecificCause().getMessage()
+                : ex.getMessage();
+        return ResponseEntity.badRequest()
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of(
+                                "El cuerpo de la solicitud contiene un valor inválido o mal formateado: " + detail)));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

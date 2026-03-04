@@ -38,20 +38,20 @@ public class CurrencyTypeService {
     @Transactional
     public ResponseEntity<?> createCurrencyType(CurrencyTypeRequestDTO request, BindingResult bindingResult) {
 
-        try {
+        // try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
     
             // Validar duplicado de código ISO
-            if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
-                throw new IllegalArgumentException("El código ISO ingresado ya está registrado en el sistema");
-            }
+            // if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
+            //     throw new IllegalArgumentException("El código ISO ingresado ya está registrado en el sistema");
+            // }
     
-            // Validar duplicado de nombre
-            if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
-                throw new IllegalArgumentException("El nombre de la moneda ya existe en el sistema");
-            }
+            // // Validar duplicado de nombre
+            // if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
+            //     throw new IllegalArgumentException("El nombre de la moneda ya existe en el sistema");
+            // }
     
             // Mapear DTO → Entity
             CurrencyType currencyType = CurrencyType.builder()
@@ -72,10 +72,9 @@ public class CurrencyTypeService {
             //         .createdAt(saved.getCreatedAt())
             //         .build();
 
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
-
+        // } catch (Exception e) {
+        //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     @Transactional

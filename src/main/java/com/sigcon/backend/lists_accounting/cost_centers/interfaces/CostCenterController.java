@@ -46,7 +46,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_VIEW_COST_CENTERS", content = @Content)
         })
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_COST_CENTERS')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_COST_CENTERS') or hasAuthority('ROLE_SUPERADMIN')")
         public ResponseEntity<?> searchCostCenters(@RequestBody(required = false) DataTableRequest request) {
                 if (request == null) {
                         request = new DataTableRequest();
@@ -68,7 +68,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_CREATE_COST_CENTER", content = @Content)
         })
         @PostMapping("/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_COST_CENTER')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_COST_CENTER') or hasAuthority('ROLE_SUPERADMIN')")
         public ResponseEntity<?> storeCostCenter(@Valid @RequestBody CostCenterDTO costCenterDTO,
                         BindingResult bindingResult) {
                 return costCenterService.storeCostCenter(costCenterDTO, bindingResult);
@@ -89,7 +89,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "404", description = "Centro de costo no encontrado", content = @Content)
         })
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_COST_CENTER')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_COST_CENTER') or hasAuthority('ROLE_SUPERADMIN')")
         public ResponseEntity<?> updateCostCenter(
                         @PathVariable Long id,
                         @Valid @RequestBody CostCenter costCenter,
@@ -115,7 +115,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_DELETE_COST_CENTER", content = @Content)
         })
         @DeleteMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_COST_CENTER')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_COST_CENTER') or hasAuthority('ROLE_SUPERADMIN')")
         public ResponseEntity<?> deleteCostCenter(
                         @PathVariable Long id,
                         @RequestParam(required = false) String reason) {
