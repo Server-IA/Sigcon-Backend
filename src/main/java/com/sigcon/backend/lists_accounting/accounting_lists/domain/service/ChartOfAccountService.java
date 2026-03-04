@@ -142,9 +142,9 @@ public class ChartOfAccountService {
             throw new IllegalStateException("La cuenta seleccionada del catalogo PUC no existe");
         }
 
-        if (account.getStatus() != AccountStatus.INACTIVE) {
-            throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
-        }
+        // if (account.getStatus() != AccountStatus.INACTIVE) {
+        //     throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
+        // }
 
         // if (hasActiveDependencies(account)) {
         //     throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
