@@ -37,7 +37,6 @@ public class CurrencyTypeService {
 
     @Transactional
     public ResponseEntity<?> createCurrencyType(CurrencyTypeRequestDTO request, BindingResult bindingResult) {
-<<<<<<< feature/William
 
         // try {
             if (bindingResult.hasErrors()) {
@@ -76,47 +75,9 @@ public class CurrencyTypeService {
         // } catch (Exception e) {
         //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
-=======
-
-        try {
-            if (bindingResult.hasErrors()) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-            }
-    
-            // Validar duplicado de código ISO
-            if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
-                throw new IllegalArgumentException("El código ISO ingresado ya está registrado en el sistema");
-            }
-    
-            // Validar duplicado de nombre
-            if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
-                throw new IllegalArgumentException("El nombre de la moneda ya existe en el sistema");
-            }
-    
-            // Mapear DTO → Entity
-            CurrencyType currencyType = CurrencyType.builder()
-                    .isoCode(request.getIsoCode())
-                    .name(request.getName())
-                    .build();
-    
-            currencyTypeRepository.save(currencyType);
-
-            return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda creada exitosamente"), Optional.empty()));
-    
-            // Mapear Entity → ResponseDTO
-            // return CurrencyTypeResponseDTO.builder()
-            //         .id(saved.getId())
-            //         .isoCode(saved.getIsoCode())
-            //         .name(saved.getName())
-            //         .createdAt(saved.getCreatedAt())
-            //         .build();
-
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
->>>>>>> stable_v1
-
+        // } catch (Exception e) {
+        //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     @Transactional
