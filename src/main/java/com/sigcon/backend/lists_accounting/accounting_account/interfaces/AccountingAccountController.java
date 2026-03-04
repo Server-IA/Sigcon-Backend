@@ -170,15 +170,4 @@ public class AccountingAccountController {
                         Optional.of(
                                 "El cuerpo de la solicitud contiene un valor inválido o mal formateado: " + detail)));
     }
-
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<?> handleMalformedJson(HttpMessageNotReadableException ex) {
-        String detail = ex.getMostSpecificCause() != null
-                ? ex.getMostSpecificCause().getMessage()
-                : ex.getMessage();
-        return ResponseEntity.badRequest()
-                .body(ErrorRespondJson.getErrorRespondMessage(
-                        Optional.of(
-                                "El cuerpo de la solicitud contiene un valor inválido o mal formateado: " + detail)));
-    }
 }

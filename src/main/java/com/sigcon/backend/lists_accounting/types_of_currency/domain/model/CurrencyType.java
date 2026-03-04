@@ -14,8 +14,6 @@ import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.
 
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
 
-import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
-
 import java.time.LocalDateTime;
 
 @Entity

@@ -75,6 +75,9 @@ public class CurrencyTypeService {
         // } catch (Exception e) {
         //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
+        // } catch (Exception e) {
+        //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     @Transactional
