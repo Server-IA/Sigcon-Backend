@@ -35,9 +35,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "depretation_rules", uniqueConstraints = {
-    @UniqueConstraint(name = "unique_name_accounting_account_effective_date", columnNames = {"name", "accounting_account_id", "effective_date", "deleted_at"})
-})
+@Table(name = "depretation_rules")
 @SQLDelete(sql = "UPDATE depretation_rules SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @Data

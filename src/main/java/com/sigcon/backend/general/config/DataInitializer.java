@@ -318,7 +318,6 @@ public class DataInitializer implements CommandLineRunner {
                 createMenuPermissions("Tipos de Moneda", "SUPERADMIN");
                 createMenuPermissions("Cuentas Contables", "SUPERADMIN");
 
-<<<<<<< feature/William
                 // ✅ Ejecutar SQL desde archivo
 
                 
@@ -329,8 +328,6 @@ public class DataInitializer implements CommandLineRunner {
 
                 System.out.println("Archivo SQL ejecutado correctamente");
 
-=======
->>>>>>> stable_v1
         }
 
         private Permission createPermission(String name, String description, TypePermits type, String code,
