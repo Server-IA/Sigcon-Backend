@@ -12,8 +12,6 @@ import org.hibernate.annotations.Where;
 
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
 
-import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
-
 import java.time.LocalDateTime;
 
 @Entity

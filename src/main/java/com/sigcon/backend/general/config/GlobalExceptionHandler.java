@@ -113,6 +113,17 @@ public class GlobalExceptionHandler  {
     
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleException(Exception ex) {
+
+        System.out.println("ex.getMessage() Exception: " + ex.getMessage());
+
+        if (ex.getMessage().contains("Debe existir al menos un usuario con SUPERADMIN")) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe existir al menos un usuario con SUPERADMIN."))
+                    );
+        }
+
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(
