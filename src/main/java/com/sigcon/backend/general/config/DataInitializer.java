@@ -327,7 +327,6 @@ public class DataInitializer implements CommandLineRunner {
                 populator.execute(dataSource);
 
                 System.out.println("Archivo SQL ejecutado correctamente");
-
         }
 
         private Permission createPermission(String name, String description, TypePermits type, String code,

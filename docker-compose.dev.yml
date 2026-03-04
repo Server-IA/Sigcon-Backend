@@ -9,8 +9,9 @@ services:
     container_name: backend-dev-api
     ports:
       - "${backend_port_api}:${backend_port_api}"
-    #depends_on:
-    #- ${backend_host} 
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://${backend_host}:${backend_port_db_dev}/${backend_database}
       SPRING_DATASOURCE_USERNAME: ${backend_user}
@@ -26,32 +27,32 @@ services:
         limits:
           memory: 512M  # Más memoria para desarrollo
 
-  db:
-    image: postgres:15
-    container_name: backend-dev-db
-    restart: always
-    environment:
-      POSTGRES_DB: ${backend_database}
-      POSTGRES_USER: ${backend_user}
-      POSTGRES_PASSWORD: ${backend_password}
-    ports:
-      - "${backend_port_db_dev}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
+  # db:
+  #   image: postgres:14
+  #   container_name: backend-dev-db
+  #   restart: always
+  #   environment:
+  #     POSTGRES_DB: ${backend_database}
+  #     POSTGRES_USER: ${backend_user}
+  #     POSTGRES_PASSWORD: ${backend_password}
+  #   ports:
+  #     - "${backend_port_db_dev}:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   volumes:
+  #     - postgres_data_dev:/var/lib/postgresql/data
 
-  adminer:
-    image: adminer
-    container_name: backend-dev-adminer
-    restart: always
-    ports:
-      - "${backend_port_adminer}:8080"
-    depends_on:
-      - db
+  # adminer:
+  #   image: adminer
+  #   container_name: backend-dev-adminer
+  #   restart: always
+  #   ports:
+  #     - "${backend_port_adminer}:8080"
+  #   depends_on:
+  #     - db
 
 volumes:
   postgres_data_dev:
