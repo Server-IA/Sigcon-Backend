@@ -220,7 +220,11 @@ public class DepretationRuleService {
     
     private AccountingAccount validateAccountingAccountExists(Long accountingAccountId) {
         return accountingAccountRepository.findByIdAndDeletedAtIsNull(accountingAccountId)
+<<<<<<< feature/William
                 .orElseThrow(() -> new IllegalArgumentException(
+=======
+                .orElseThrow(() -> new InvalidDepretationRuleException(
+>>>>>>> stable_v1
                         "La cuenta contable no existe"
                 ));
     }
