@@ -149,8 +149,11 @@ public class ChartOfAccountService {
         // if (hasActiveDependencies(account)) {
         //     throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
         // }
+<<<<<<< feature/William
 
         account.setDeletedAt(LocalDateTime.now());
+=======
+>>>>>>> stable_v1
 
         account.setDeletedReason(request.getReason().trim());
         chartOfAccountRepository.save(account);
