@@ -40,7 +40,7 @@ public class CurrencyTypeController {
         private final CurrencyTypeService currencyTypeService;
 
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_CURRENCY_TYPE')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_CURRENCY_TYPE') or hasAuthority('ROLE_SUPERADMIN')")
         @Operation(summary = "Consultar monedas para DataTable", description = "Retorna una lista paginada de monedas compatible con DataTables, permitiendo filtros y ordenamiento.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Búsqueda realizada exitosamente", content = @Content(mediaType = "application/json")),
@@ -53,7 +53,7 @@ public class CurrencyTypeController {
         }
 
         @PostMapping
-        @PreAuthorize("hasAuthority('PERM_CREATE_CURRENCY_TYPE')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_CURRENCY_TYPE') or hasAuthority('ROLE_SUPERADMIN')")
         @Operation(summary = "Registrar nueva moneda", description = "Permite crear un nuevo tipo de moneda validando que el código ISO no esté duplicado.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "201", description = "Moneda creada exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CurrencyTypeResponseDTO.class))),
@@ -66,7 +66,7 @@ public class CurrencyTypeController {
         }
 
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_CURRENCY_TYPE')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_CURRENCY_TYPE') or hasAuthority('ROLE_SUPERADMIN')")
         @Operation(summary = "Actualizar moneda existente", description = "Modifica los datos de una moneda identificada por su ID.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Moneda actualizada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CurrencyTypeResponseDTO.class))),
@@ -80,7 +80,7 @@ public class CurrencyTypeController {
         }
 
         @DeleteMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_CURRENCY_TYPE')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_CURRENCY_TYPE') or hasAuthority('ROLE_SUPERADMIN')")
         @Operation(summary = "Eliminar moneda (Soft Delete)", description = "Realiza una eliminación lógica de la moneda, permitiendo su posterior reutilización del código ISO.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Moneda eliminada exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CurrencyTypeDeleteResponseDTO.class))),

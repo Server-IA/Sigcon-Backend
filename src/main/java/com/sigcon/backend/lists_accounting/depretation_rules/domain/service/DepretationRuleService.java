@@ -18,7 +18,7 @@ import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.exception.DuplicateDepretationRuleException;
-import com.sigcon.backend.lists_accounting.depretation_rules.exception.InvalidDepretationRuleException;
+// import com.sigcon.backend.lists_accounting.depretation_rules.exception.IllegalArgumentException;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
@@ -57,7 +57,7 @@ public class DepretationRuleService {
             CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
 
-        try {
+        // try {
             // 1. Validar errores de bean validation
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest()
@@ -65,11 +65,11 @@ public class DepretationRuleService {
             }
 
             // 2. Validar duplicados (método + cuenta + vigencia)
-            validateNoDuplicates(
-                    request.getDepretationType(),
-                    request.getAccountingAccountId(),
-                    request.getEffectiveDate()
-            );
+        //     validateNoDuplicates(
+        //             request.getDepretationType(),
+        //             request.getAccountingAccountId(),
+        //             request.getEffectiveDate()
+        //     );
 
             // 3. Validar vida útil según tipo de depreciación
             validateUsefulLifeByType(request.getDepretationType(), request.getUsefulLifeYears());
@@ -119,16 +119,16 @@ public class DepretationRuleService {
                             Optional.of(response)
                     ));
 
-        } catch (DuplicateDepretationRuleException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        } catch (InvalidDepretationRuleException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar la regla. Intente nuevamente")));
-        }
+        // } catch (DuplicateDepretationRuleException e) {
+        //     return ResponseEntity.status(HttpStatus.CONFLICT)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // } catch (IllegalArgumentException e) {
+        //     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // } catch (Exception e) {
+        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar la regla. Intente nuevamente")));
+        // }
     }
 
     /**
@@ -173,7 +173,7 @@ public class DepretationRuleService {
      */
     private void validateUsefulLifeByType(DepretationType depretationType, Integer usefulLife) {
         if (usefulLife <= 0) {
-            throw new InvalidDepretationRuleException(
+            throw new IllegalArgumentException(
                     "Vida útil no válida para el método seleccionado"
             );
         }
@@ -182,28 +182,28 @@ public class DepretationRuleService {
         switch (depretationType) {
             case LINEAR:
                 if (usefulLife > 50) {
-                    throw new InvalidDepretationRuleException(
+                    throw new IllegalArgumentException(
                             "Para depreciación lineal, la vida útil debe ser <= 50 años"
                     );
                 }
                 break;
             case DECREASING: 
                 if(usefulLife > 25 ) {
-                    throw new InvalidDepretationRuleException(
+                    throw new IllegalArgumentException(
                             "Para depreciación decreciente, la vida útil debe ser <= 25 años"
                     );
                 }
                 break;
             case ACCELERATED:
             	if(usefulLife > 20) {
-                    throw new InvalidDepretationRuleException(
+                    throw new IllegalArgumentException(
                             "Para depreciación acelerada, la vida útil debe ser <= 20 años"
                     );
                 }
                 break;
             case MINIMUN_USEFUL_LIFE:
                 if (usefulLife > 10) {
-                    throw new InvalidDepretationRuleException(
+                    throw new IllegalArgumentException(
                             "Para vida útil mínima, la vida útil debe ser <= 10 años"
                     );
                 }
@@ -220,7 +220,11 @@ public class DepretationRuleService {
     
     private AccountingAccount validateAccountingAccountExists(Long accountingAccountId) {
         return accountingAccountRepository.findByIdAndDeletedAtIsNull(accountingAccountId)
+<<<<<<< feature/William
+                .orElseThrow(() -> new IllegalArgumentException(
+=======
                 .orElseThrow(() -> new InvalidDepretationRuleException(
+>>>>>>> stable_v1
                         "La cuenta contable no existe"
                 ));
     }
@@ -233,11 +237,11 @@ public class DepretationRuleService {
     private Long getAuthenticatedUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
-            throw new InvalidDepretationRuleException("Usuario no autenticado");
+            throw new IllegalArgumentException("Usuario no autenticado");
         }
         
         User user = userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new InvalidDepretationRuleException("Usuario no encontrado"));
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         
         return user.getId();
     }
@@ -275,7 +279,7 @@ public class DepretationRuleService {
      * CFG-RF-14: Consultar reglas de depreciación existentes (HU-14)
      */
     public ResponseEntity<?> getDepretationRulesPaged(com.sigcon.backend.utils.DataTableRequest request) {
-        try {
+        // try {
                 
             if(request == null) {
                 request = new com.sigcon.backend.utils.DataTableRequest();
@@ -312,10 +316,10 @@ public class DepretationRuleService {
                     )
             ); 
 
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -325,7 +329,7 @@ public class DepretationRuleService {
             UpdateDepretationRuleRequest request,
             BindingResult bindingResult) {
 
-        try {
+        // try {
             // 1. Validar errores de bean validation
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest()
@@ -334,11 +338,11 @@ public class DepretationRuleService {
 
             // 2. Verificar que la regla existe
             DepretationRule rule = depretationRuleRepository.findById(request.getId())
-                    .orElseThrow(() -> new InvalidDepretationRuleException(
+                    .orElseThrow(() -> new IllegalArgumentException(
                             "No se puede editar una regla eliminada."
                     ));
                     if(rule.getDeletedAt() != null) {
-                        throw new InvalidDepretationRuleException(
+                        throw new IllegalArgumentException(
                                 "No se puede editar una regla eliminada."
                         );
                     }
@@ -349,7 +353,7 @@ public class DepretationRuleService {
             // 4. Validar que la tasa esté en rango (adicional)
             if (request.getDepretationRate().compareTo(java.math.BigDecimal.ZERO) < 0 ||
                 request.getDepretationRate().compareTo(new java.math.BigDecimal("100")) > 0) {
-                throw new InvalidDepretationRuleException(
+                throw new IllegalArgumentException(
                         "La tasa de depreciación está fuera del rango permitido."
                 );
             }
@@ -386,23 +390,23 @@ public class DepretationRuleService {
                     )
             );
 
-        } catch (InvalidDepretationRuleException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar los cambios. Intente nuevamente")));
-        }
+        // } catch (IllegalArgumentException e) {
+        //     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // } catch (Exception e) {
+        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar los cambios. Intente nuevamente")));
+        // }
     }
 
     /**
      * CFG-RF-16: Eliminar regla de depreciación (eliminación lógica) (HU-16)
      */
     public ResponseEntity<?> deleteDepretationRule(Long id, String reason) {
-        try {
+        // try {
             // 1. Verificar que la regla existe
             DepretationRule rule = depretationRuleRepository.findById(id)
-                    .orElseThrow(() -> new InvalidDepretationRuleException(
+                    .orElseThrow(() -> new IllegalArgumentException(
                             "La regla seleccionada no existe o está eliminada."
                     ));
 
@@ -415,7 +419,7 @@ public class DepretationRuleService {
 
             // 3. Validar que no esté ya eliminada
             if (rule.getDeletedAt() != null) {
-                throw new InvalidDepretationRuleException(
+                throw new IllegalArgumentException(
                         "La regla seleccionada ya fue eliminada o está inactiva."
                 );
             }
@@ -444,12 +448,12 @@ public class DepretationRuleService {
                     )
             );
 
-        } catch (InvalidDepretationRuleException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar la regla. Intente nuevamente")));
-        }
+        // } catch (IllegalArgumentException e) {
+        //     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // } catch (Exception e) {
+        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar la regla. Intente nuevamente")));
+        // }
     }
 }

@@ -143,72 +143,77 @@ public class UserService {
 
     public ResponseEntity<?> getUserInfo() {
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String email = auth.getName();
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String email = auth.getName();
+    
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+    
+            UserDTO response = new UserDTO();
+            response.setId(user.getId());
+            response.setName(user.getName());
+            response.setLastname(user.getLastname());
+            response.setEmail(user.getEmail());
+            response.setAvatar(user.getAvatar());
+            response.setStatus(user.getStatus());
+            response.setRoles(
+                    user.getRoles()
+                            .stream()
+                            .map(Role::getName)
+                            .collect(Collectors.toSet())
+            );
+    
+            response.setPermissions(
+                permissionRepository.findByUserID(user.getId())
+                    .stream()
+                    .map(permission -> new PermissionDTO(
+                        null,
+                        permission.getName(),
+                        permission.getCode(),
+                        permission.getType(),
+                        null,
+                        null,
+                        permission.getDescription(),
+                        null
+                    ))
+                    .collect(Collectors.toList())
+            );
+    
+            List<ParameterDTO> parameters = parameterRepository.findAll()
+                    .stream()
+                    .map(parameter -> new ParameterDTO(
+                        null,
+                        parameter.getName(),
+                        parameter.getValue(),
+                        userParameterRepository.findByUserAndParameter(user, parameter)
+                            .map(userParameter -> new UserParameterDTO(
+                                null,
+                                null,
+                                null,
+                                userParameter.getValue(),
+                                null,
+                                null,
+                                null,
+                                null
+                            )).orElse(null),
+                        parameter.getCategory(),
+                        parameter.getStatus(),
+                        null,
+                        null,
+                        null
+                    ))
+                    .collect(Collectors.toList());
+    
+            response.setParameters(parameters);
+    
+            return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario obtenida correctamente"), Optional.of(response))
+            );
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        UserDTO response = new UserDTO();
-        response.setId(user.getId());
-        response.setName(user.getName());
-        response.setLastname(user.getLastname());
-        response.setEmail(user.getEmail());
-        response.setAvatar(user.getAvatar());
-        response.setStatus(user.getStatus());
-        response.setRoles(
-                user.getRoles()
-                        .stream()
-                        .map(Role::getName)
-                        .collect(Collectors.toSet())
-        );
-
-        response.setPermissions(
-            permissionRepository.findByUserID(user.getId())
-                .stream()
-                .map(permission -> new PermissionDTO(
-                    null,
-                    permission.getName(),
-                    permission.getCode(),
-                    permission.getType(),
-                    null,
-                    null,
-                    permission.getDescription(),
-                    null
-                ))
-                .collect(Collectors.toList())
-        );
-
-        List<ParameterDTO> parameters = parameterRepository.findAll()
-                .stream()
-                .map(parameter -> new ParameterDTO(
-                    null,
-                    parameter.getName(),
-                    parameter.getValue(),
-                    userParameterRepository.findByUserAndParameter(user, parameter)
-                        .map(userParameter -> new UserParameterDTO(
-                            null,
-                            null,
-                            null,
-                            userParameter.getValue(),
-                            null,
-                            null,
-                            null,
-                            null
-                        )).orElse(null),
-                    parameter.getCategory(),
-                    parameter.getStatus(),
-                    null,
-                    null,
-                    null
-                ))
-                .collect(Collectors.toList());
-
-        response.setParameters(parameters);
-
-        return ResponseEntity.ok(
-            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario obtenida correctamente"), Optional.of(response))
-        );
     }
 
     public ResponseEntity<?> updateInfo(UserDTO request) {

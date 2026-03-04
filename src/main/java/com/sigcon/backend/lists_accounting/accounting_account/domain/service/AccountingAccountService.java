@@ -50,7 +50,7 @@ public class AccountingAccountService {
      * CFG-RF-06: Consultar cuentas contables existentes
      */
     public ResponseEntity<?> getAccountingAccounts(DataTableRequest request) {
-        try {
+        // try {
             int start = Math.max(0, request.getStart());
             int length = request.getLength();
 
@@ -97,10 +97,10 @@ public class AccountingAccountService {
                             .updatedAt(accountingAccount.getUpdatedAt())
                             .build()), request.getDraw()));
 
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson
-                    .getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest().body(ErrorRespondJson
+        //             .getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -108,7 +108,7 @@ public class AccountingAccountService {
      */
     public ResponseEntity<?> createAccountingAccount(CreateAccountingAccountRequest request,
             BindingResult bindingResult, Long userId, Long companyId) {
-        try {
+        // try {
 
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -119,11 +119,11 @@ public class AccountingAccountService {
                 throw new IllegalArgumentException("El identificador PUC asociado no está disponible o no existe");
             }
 
-            // Validación: Nombre único por empresa
-            if (accountingAccountRepository.existsByCustomNameAndCompanyIdAndDeletedAtIsNull(request.getCustom_name(),
-                    companyId)) {
-                throw new IllegalArgumentException("Nombre ya registrado");
-            }
+        //     // Validación: Nombre único por empresa
+        //     if (accountingAccountRepository.existsByCustomNameAndCompanyIdAndDeletedAtIsNull(request.getCustom_name(),
+        //             companyId)) {
+        //         throw new IllegalArgumentException("Nombre ya registrado");
+        //     }
 
             // Validación: Moneda existe
             CurrencyType currencyType = currencyTypeRepository.findById(request.getCurrency_type_id())
@@ -159,10 +159,10 @@ public class AccountingAccountService {
                     SuccessRespondJson.getSuccessRespondMessage(
                             Optional.of("Cuenta contable creada exitosamente"),
                             Optional.empty()));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -170,7 +170,7 @@ public class AccountingAccountService {
      */
     public ResponseEntity<?> updateAccountingAccount(UpdateAccountingAccountRequest request,
             BindingResult bindingResult, Long userId) {
-        try {
+        // try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -182,10 +182,10 @@ public class AccountingAccountService {
                             "La cuenta contable seleccionada no está disponible para edición"));
 
             // Validación: Nombre único (excluyendo el actual)
-            if (accountingAccountRepository.existsByCustomNameAndCompanyIdAndIdNotAndDeletedAtIsNull(
-                    request.getCustom_name(), accountingAccount.getCompanyId(), request.getId())) {
-                throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
-            }
+        //     if (accountingAccountRepository.existsByCustomNameAndCompanyIdAndIdNotAndDeletedAtIsNull(
+        //             request.getCustom_name(), accountingAccount.getCompanyId(), request.getId())) {
+        //         throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
+        //     }
 
             // Validación: PUC existe
             if (!chartOfAccountRepository.findById(request.getPuc_id()).isPresent()) {
@@ -227,13 +227,13 @@ public class AccountingAccountService {
                             Optional.of("La cuenta contable ha sido actualizada exitosamente"),
                             Optional.empty()));
 
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson
-                    .getErrorRespondMessage(Optional.of("Error al guardar la información, intente nuevamente")));
-        }
+        // } catch (IllegalArgumentException e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest().body(ErrorRespondJson
+        //             .getErrorRespondMessage(Optional.of("Error al guardar la información, intente nuevamente")));
+        // }
     }
 
     /**

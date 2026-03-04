@@ -6,12 +6,17 @@ import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
+
 import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.ExchangeType;
 import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.StatusCurrencyExchange;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 
 @Entity
 @Table(name = "exchange_rates")
+@SQLDelete(sql = "UPDATE exchange_rates SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Getter
 @Setter
 @Builder
@@ -35,6 +40,10 @@ public class ExchangeRate {
     @Column(name = "exchange_type", nullable = false)
     private ExchangeType exchangeType;
 
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
+    @Column(name = "value", nullable = false)
     private Double value;
 
     @Column(name = "start_date", nullable = false)

@@ -30,13 +30,13 @@ public class UserController {
     private final UserService userService;
 
     @PostMapping("/getUsers")
-    @PreAuthorize("hasAuthority('PERM_VIEW_USERS')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_USERS') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getUsers(@RequestBody(required = false) DataTableRequest request) {
         return userService.getUsers(request);
     }
 
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_USER')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_USER')  or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> store(@Valid @RequestBody UserDTO request, BindingResult bindingResult) {
         return userService.store(request, bindingResult);
     }
@@ -53,13 +53,13 @@ public class UserController {
     }
 
     @PutMapping("/updateUser/{userId}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_USER')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_USER') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UserDTO request){
         return userService.updateUser(userId, request);
     }
 
     @PostMapping("/deleteUser/{userId}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_USER')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_USER') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
         return userService.deleteUser(userId);
     }

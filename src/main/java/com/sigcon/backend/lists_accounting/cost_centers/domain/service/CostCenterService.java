@@ -60,26 +60,26 @@ public class CostCenterService {
         }
 
         public ResponseEntity<?> storeCostCenter(CostCenterDTO request, BindingResult bindingResult) {
-                try {
+                // try {
                         if (bindingResult.hasErrors()) {
                                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
                         }
                         
                         Long companyId = request.getCompanyId();
 
-                        if (costCenterRepository.existsByCodeAndCompanyIdAndDeletedAtIsNull(request.getCode(),
-                                        companyId)) {
-                                return ResponseEntity.badRequest().body(
-                                                ErrorRespondJson.getErrorRespondMessage(
-                                                                Optional.of("El código del centro de costo ya existe para esta empresa")));
-                        }
+                        // if (costCenterRepository.existsByCodeAndCompanyIdAndDeletedAtIsNull(request.getCode(),
+                        //                 companyId)) {
+                        //         return ResponseEntity.badRequest().body(
+                        //                         ErrorRespondJson.getErrorRespondMessage(
+                        //                                         Optional.of("El código del centro de costo ya existe para esta empresa")));
+                        // }
 
-                        if (costCenterRepository.existsByNameAndCompanyIdAndDeletedAtIsNull(request.getName(),
-                                        companyId)) {
-                                return ResponseEntity.badRequest().body(
-                                                ErrorRespondJson.getErrorRespondMessage(
-                                                                Optional.of("El nombre del centro de costo ya existe para esta empresa")));
-                        }
+                        // if (costCenterRepository.existsByNameAndCompanyIdAndDeletedAtIsNull(request.getName(),
+                        //                 companyId)) {
+                        //         return ResponseEntity.badRequest().body(
+                        //                         ErrorRespondJson.getErrorRespondMessage(
+                        //                                         Optional.of("El nombre del centro de costo ya existe para esta empresa")));
+                        // }
 
                         CostCenter costCenter = CostCenter.builder()
                                 .code(request.getCode())
@@ -94,11 +94,11 @@ public class CostCenterService {
                                         SuccessRespondJson.getSuccessRespondMessage(
                                                         Optional.of("Centro de costo creado exitosamente"),
                                                         Optional.empty()));
-                } catch (Exception e) {
-                        return ResponseEntity.badRequest().body(
-                                        ErrorRespondJson.getErrorRespondMessage(
-                                                        Optional.of("Error al guardar el centro de costo")));
-                }
+                // } catch (Exception e) {
+                //         return ResponseEntity.badRequest().body(
+                //                         ErrorRespondJson.getErrorRespondMessage(
+                //                                         Optional.of("Error al guardar el centro de costo")));
+                // }
         }
 
         public ResponseEntity<?> updateCostCenter(Long id, CostCenter request, BindingResult bindingResult) {
@@ -106,25 +106,25 @@ public class CostCenterService {
                         return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
                 }
 
-                try {
+                // try {
                         CostCenter costCenter = costCenterRepository.findByIdAndDeletedAtIsNull(id)
                                         .orElseThrow(() -> new RuntimeException("Centro de costo no encontrado"));
 
                         Long companyId = request.getCompanyId();
 
-                        if (costCenterRepository.existsByCodeAndCompanyIdAndIdNotAndDeletedAtIsNull(request.getCode(),
-                                        companyId, id)) {
-                                return ResponseEntity.badRequest().body(
-                                                ErrorRespondJson.getErrorRespondMessage(
-                                                                Optional.of("El código del centro de costo ya existe para esta empresa")));
-                        }
+                        // if (costCenterRepository.existsByCodeAndCompanyIdAndIdNotAndDeletedAtIsNull(request.getCode(),
+                        //                 companyId, id)) {
+                        //         return ResponseEntity.badRequest().body(
+                        //                         ErrorRespondJson.getErrorRespondMessage(
+                        //                                         Optional.of("El código del centro de costo ya existe para esta empresa")));
+                        // }
 
-                        if (costCenterRepository.existsByNameAndCompanyIdAndIdNotAndDeletedAtIsNull(request.getName(),
-                                        companyId, id)) {
-                                return ResponseEntity.badRequest().body(
-                                                ErrorRespondJson.getErrorRespondMessage(
-                                                                Optional.of("El nombre del centro de costo ya existe para esta empresa")));
-                        }
+                        // if (costCenterRepository.existsByNameAndCompanyIdAndIdNotAndDeletedAtIsNull(request.getName(),
+                        //                 companyId, id)) {
+                        //         return ResponseEntity.badRequest().body(
+                        //                         ErrorRespondJson.getErrorRespondMessage(
+                        //                                         Optional.of("El nombre del centro de costo ya existe para esta empresa")));
+                        // }
 
                         costCenter.setCode(request.getCode());
                         costCenter.setName(request.getName());
@@ -137,14 +137,14 @@ public class CostCenterService {
                                         SuccessRespondJson.getSuccessRespondMessage(
                                                         Optional.of("Centro de costo actualizado exitosamente"),
                                                         Optional.empty()));
-                } catch (Exception e) {
-                        return ResponseEntity.badRequest().body(
-                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-                }
+                // } catch (Exception e) {
+                //         return ResponseEntity.badRequest().body(
+                //                         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+                // }
         }
 
         public ResponseEntity<?> deleteCostCenter(Long id, String reason) {
-                try {
+                // try {
                         CostCenter costCenter = costCenterRepository.findByIdAndDeletedAtIsNull(id)
                                         .orElseThrow(() -> new RuntimeException("Centro de costo no encontrado"));
 
@@ -159,10 +159,10 @@ public class CostCenterService {
                                         SuccessRespondJson.getSuccessRespondMessage(
                                                         Optional.of("Centro de costo eliminado exitosamente"),
                                                         Optional.empty()));
-                } catch (Exception e) {
-                        return ResponseEntity.badRequest().body(
-                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-                }
+                // } catch (Exception e) {
+                //         return ResponseEntity.badRequest().body(
+                //                         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+                // }
         }
 
         private Long getCurrentCompanyId() {

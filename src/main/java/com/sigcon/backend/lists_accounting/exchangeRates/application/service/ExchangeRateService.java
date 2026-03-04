@@ -40,7 +40,7 @@ public class ExchangeRateService {
 
     // CFG-RF-31 Crear tasa
     public ResponseEntity<?> create(CreateExchangeRateRequest request, BindingResult bindingResult) {
-        try{
+        // try{
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(bindingResult.getAllErrors());
             }
@@ -49,19 +49,20 @@ public class ExchangeRateService {
                 return ResponseEntity.badRequest().body("La fecha inicio no puede ser mayor a la fecha fin");
             }
 
-            boolean overlap = repository.existsOverlap(
-                    request.getCurrencyId(),
-                    request.getCurrencyIso(),
-                    request.getExchangeType(),
-                    request.getStartDate(),
-                    request.getEndDate()
-            );
+            // boolean overlap = repository.existsOverlap(
+            //         request.getCompanyId(),
+            //         request.getCurrencyId(),
+            //         request.getCurrencyIso(),
+            //         request.getExchangeType(),
+            //         request.getStartDate(),
+            //         request.getEndDate()
+            // );
 
-            if (overlap) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Ya existe una tasa en ese rango de fechas"))
-                );
-            }
+            // if (overlap) {
+            //     return ResponseEntity.badRequest().body(
+            //         ErrorRespondJson.getErrorRespondMessage(Optional.of("Ya existe una tasa en ese rango de fechas"))
+            //     );
+            // }
 
             CurrencyType currencyExchange = currencyRepository.findByIdAndDeletedAtIsNull(request.getCurrencyId())
                     .orElseThrow(() -> new RuntimeException("La moneda cambiada no existe"));
@@ -70,6 +71,7 @@ public class ExchangeRateService {
                     .orElseThrow(() -> new RuntimeException("La moneda a cambiar no existe"));
 
             ExchangeRate rate = ExchangeRate.builder()
+                    .companyId(request.getCompanyId())
                     .currencyExchange(currencyExchange)
                     .currencyExchanged(currencyExchanged)
                     .exchangeType(request.getExchangeType())
@@ -84,11 +86,11 @@ public class ExchangeRateService {
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio creado con exito"), Optional.empty())
             );
-        }catch(Exception e){
-            return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        }
+        // }catch(Exception e){
+        //     return ResponseEntity.badRequest().body(
+        //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+        //     );
+        // }
     }
 
     // CFG-RF-32 Consultar tasas
@@ -141,7 +143,7 @@ public class ExchangeRateService {
     // CFG-RF-33 Editar tasa
     public ResponseEntity<?> update(Long id, UpdateExchangeRateRequest request, BindingResult bindingResult) {
 
-        try{
+        // try{
 
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(
@@ -164,20 +166,20 @@ public class ExchangeRateService {
                 );
             }
     
-            boolean overlap = repository.existsOverlapForUpdate(
-                    request.getCurrencyId(),
-                    request.getCurrencyIso(),
-                    request.getExchangeType(),
-                    request.getStartDate(),
-                    request.getEndDate(),
-                    id
-            );
+            // boolean overlap = repository.existsOverlapForUpdate(
+            //         request.getCurrencyId(),
+            //         request.getCurrencyIso(),
+            //         request.getExchangeType(),
+            //         request.getStartDate(),
+            //         request.getEndDate(),
+            //         id
+            // );
     
-            if (overlap) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Existe conflicto con otra tasa"))
-                );
-            }
+            // if (overlap) {
+            //     return ResponseEntity.badRequest().body(
+            //         ErrorRespondJson.getErrorRespondMessage(Optional.of("Existe conflicto con otra tasa"))
+            //     );
+            // }
     
             CurrencyType currencyExchange = currencyRepository.findByIdAndDeletedAtIsNull(request.getCurrencyId())
                     .orElseThrow(() -> new RuntimeException("La moneda cambiada no existe"));
@@ -199,17 +201,17 @@ public class ExchangeRateService {
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio actualizada con exito"), Optional.empty())
             );
             
-        }catch(Exception e){
-            return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        }
+        // }catch(Exception e){
+        //     return ResponseEntity.badRequest().body(
+        //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+        //     );
+        // }
     }
 
     // CFG-RF-34 Eliminar tasa
     public ResponseEntity<?> delete(Long id) {
 
-        try{
+        // try{
 
             ExchangeRate rate = repository.findById(id)
                     .orElseThrow(() -> new RuntimeException("La tasa no existe"));
@@ -223,10 +225,10 @@ public class ExchangeRateService {
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio eliminada con exito"), Optional.empty())
             );
 
-        }catch(Exception e){
-            return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        }
+        // }catch(Exception e){
+        //     return ResponseEntity.badRequest().body(
+        //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+        //     );
+        // }
     }
 }

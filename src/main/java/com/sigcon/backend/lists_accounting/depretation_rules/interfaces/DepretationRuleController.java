@@ -42,15 +42,15 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "400", description = "Error en los parametros de busqueda")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getDepretationRules(
             @RequestBody(required = false) DataTableRequest dtRequest) {
-        try {
+        // try {
             return depretationRuleService.getDepretationRulesPaged(dtRequest);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -69,16 +69,16 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "500", description = "Error interno al guardar la regla")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> createDepretationRule(
             @Valid @RequestBody CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
-        try{        
+        // try{        
             return depretationRuleService.createDepretationRule(request, bindingResult);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -96,16 +96,16 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "500", description = "Error interno al guardar los cambios")
     })
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updateDepretationRule(
             @Valid @RequestBody UpdateDepretationRuleRequest request,
             BindingResult bindingResult) {
-        try{
+        // try{
         return depretationRuleService.updateDepretationRule(request, bindingResult);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -123,7 +123,7 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "500", description = "Error interno al eliminar la regla")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> deleteDepretationRule(
             @PathVariable Long id,
             @RequestParam(name = "reason", required = true) String reason) {

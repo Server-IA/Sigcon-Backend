@@ -23,6 +23,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,13 +47,13 @@ public class ChartOfAccountService {
 
         AccountNature resolvedNature = validateAccountNature(request.getAccountClass(), request.getNature());
 
-        if (chartOfAccountRepository.existsAnyByCode(code)) {
-            throw new IllegalArgumentException("Codigo oficial ya registrado");
-        }
+        // if (chartOfAccountRepository.existsAnyByCode(code)) {
+        //     throw new IllegalArgumentException("Codigo oficial ya registrado");
+        // }
 
-        if (chartOfAccountRepository.existsAnyByName(name)) {
-            throw new IllegalArgumentException("Nombre ya registrado");
-        }
+        // if (chartOfAccountRepository.existsAnyByName(name)) {
+        //     throw new IllegalArgumentException("Nombre ya registrado");
+        // }
 
         ChartOfAccount account = ChartOfAccount.builder()
                 .code(code)
@@ -78,11 +79,7 @@ public class ChartOfAccountService {
                 ? Pageable.unpaged()
                 : PageRequest.of(page, safeLength);
 
-        Specification<ChartOfAccount> spec = chartOfAccountSpecificationBuilder.build(safeRequest)
-                .and((root, query, cb) -> cb.and(
-                        cb.isNull(root.get("deletedAt")),
-                        cb.equal(root.get("isDeleted"), AccountDeleted.NOT_DELETED)
-                ));
+        Specification<ChartOfAccount> spec = chartOfAccountSpecificationBuilder.build(safeRequest);
 
         Page<ChartOfAccount> result = chartOfAccountRepository.findAll(spec, pageable);
         if (result.isEmpty()) {
@@ -118,13 +115,13 @@ public class ChartOfAccountService {
         //     throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
         // }
 
-        if (chartOfAccountRepository.existsAnyByCodeAndIdNot(targetCode, id)) {
-            throw new IllegalArgumentException("Codigo oficial ya registrado");
-        }
+        // if (chartOfAccountRepository.existsAnyByCodeAndIdNot(targetCode, id)) {
+        //     throw new IllegalArgumentException("Codigo oficial ya registrado");
+        // }
 
-        if (chartOfAccountRepository.existsAnyByNameAndIdNot(targetName, id)) {
-            throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
-        }
+        // if (chartOfAccountRepository.existsAnyByNameAndIdNot(targetName, id)) {
+        //     throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
+        // }
 
         account.setCode(targetCode);
         account.setName(targetName);
@@ -141,7 +138,7 @@ public class ChartOfAccountService {
         ChartOfAccount account = chartOfAccountRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("La cuenta seleccionada del catalogo PUC no existe"));
 
-        if (account.getIsDeleted() == AccountDeleted.DELETED) {
+        if (account.getDeletedAt() != null) {
             throw new IllegalStateException("La cuenta seleccionada del catalogo PUC no existe");
         }
 
@@ -152,8 +149,12 @@ public class ChartOfAccountService {
         // if (hasActiveDependencies(account)) {
         //     throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
         // }
+<<<<<<< feature/William
 
-        account.setIsDeleted(AccountDeleted.DELETED);
+        account.setDeletedAt(LocalDateTime.now());
+=======
+>>>>>>> stable_v1
+
         account.setDeletedReason(request.getReason().trim());
         chartOfAccountRepository.save(account);
     }
@@ -220,10 +221,10 @@ public class ChartOfAccountService {
         }
 
         return switch (level) {
-            case CLASS -> "Class";
-            case GROUP -> "Group";
-            case ACCOUNT -> "Account";
-            case SUBACCOUNT -> "Subaccount";
+            case CLASS -> "Clase";
+            case GROUP -> "Grupo";
+            case ACCOUNT -> "Cuenta";
+            case SUBACCOUNT -> "Subcuenta";
         };
     }
 
