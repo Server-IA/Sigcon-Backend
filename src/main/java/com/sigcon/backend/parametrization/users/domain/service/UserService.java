@@ -80,6 +80,7 @@ public class UserService {
                 dto.setEmail(user.getEmail());
                 dto.setAvatar(user.getAvatar());
                 dto.setStatus(user.getStatus());
+                dto.setUsername(user.getUsername());
                 dto.setRoles(
                         user.getRoles()
                                 .stream()
@@ -105,6 +106,7 @@ public class UserService {
         return isBlank(dto.getName())
                 && isBlank(dto.getLastname())
                 && isBlank(dto.getEmail())
+                && isBlank(dto.getUsername())
                 && isBlank(dto.getRole())
                 && dto.getStatus() == null;
     }
@@ -114,7 +116,7 @@ public class UserService {
     }
 
     public ResponseEntity<?> store(UserDTO request, BindingResult bindingResult) {
-        try{
+        // try{
             if(bindingResult.hasErrors()){
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -127,6 +129,7 @@ public class UserService {
                 .name(request.getName())
                 .lastname(request.getLastname())
                 .email(request.getEmail())
+                .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .status(Status.ACTIVE)
                 .roles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toSet()))
@@ -136,9 +139,9 @@ public class UserService {
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario creado correctamente"), Optional.empty())
             );
 
-        }catch(Exception e){
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // }catch(Exception e){
+        //     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     public ResponseEntity<?> getUserInfo() {
@@ -269,7 +272,7 @@ public class UserService {
     }
     public ResponseEntity<?> updateUser(Long id, UserDTO request){
 
-        try{
+        // try{
 
             Optional<User> userOpt = userRepository.findById(id);
     
@@ -304,6 +307,10 @@ public class UserService {
             if (request.getRoles() != null) {
                 user.setRoles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toSet()));
             }
+
+            if (request.getUsername() != null) {
+                user.setUsername(request.getUsername());
+            }
     
             user.setUpdatedAt(LocalDateTime.now());
             userRepository.save(user);
@@ -311,14 +318,14 @@ public class UserService {
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario actualizada correctamente"), Optional.empty())
             );
-        }catch(Exception e){
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // }catch(Exception e){
+        //     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     public ResponseEntity<?> deleteUser(Long id){
 
-        try{
+        // try{
             Optional<User> userOpt = userRepository.findById(id);
     
             if (userOpt.isEmpty()) {
@@ -341,9 +348,9 @@ public class UserService {
                     SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"), Optional.empty())
             );
             
-        }catch(Exception e){
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // }catch(Exception e){
+        //     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     private String resolveAvatarFilename(String avatarValue, String previousAvatarFilename) {
