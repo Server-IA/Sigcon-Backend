@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.antlr.v4.runtime.misc.NotNull;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,6 +21,8 @@ import java.util.stream.Stream;
 
 @Entity
 @Table(name = "users")
+@SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @AllArgsConstructor
@@ -29,16 +33,19 @@ public class User implements UserDetails {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotNull
+    @Column(name = "name", nullable = false)
     private String name;
 
-    @NotNull
+    @Column(name = "username", nullable = false)
+    private String username;
+
+    @Column(name = "lastname", nullable = false)
     private String lastname;
 
-    @NotNull
+    @Column(name = "email", nullable = false)
     private String email;
 
-    @NotNull
+    @Column(name = "password", nullable = false)
     private String password;
 
     @Column(length = 255)

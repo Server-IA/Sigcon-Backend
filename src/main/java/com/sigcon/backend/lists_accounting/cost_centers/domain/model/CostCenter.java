@@ -3,7 +3,9 @@ package com.sigcon.backend.lists_accounting.cost_centers.domain.model;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.Where;
 
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.enums.CostCenterStatus;
 
@@ -17,9 +19,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "cost_centers", uniqueConstraints = {
-    @UniqueConstraint(name = "uk_cost_center_code", columnNames = { "code", "company_id", "deleted_at" })
-})
+@Table(name = "cost_centers")
+@SQLDelete(sql = "UPDATE cost_centers SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @AllArgsConstructor

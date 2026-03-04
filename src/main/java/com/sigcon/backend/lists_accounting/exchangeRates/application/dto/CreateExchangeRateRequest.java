@@ -12,6 +12,9 @@ import jakarta.validation.constraints.NotNull;
 @Data
 public class CreateExchangeRateRequest {
 
+    @NotNull(message = "La empresa es requerida")
+    private Long companyId;
+
     @NotNull(message = "La moneda cambiada es requerida")
     private Long currencyId;
 

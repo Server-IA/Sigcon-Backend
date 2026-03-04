@@ -38,6 +38,7 @@ public class ErrorRespondJson {
         response.put("code", 400);
         response.put("error", "Error en la operación");
         response.put("message", message.orElse("Error en la operación"));
+        response.put("details", null);
         response.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         response.put("data", null);
         return response;

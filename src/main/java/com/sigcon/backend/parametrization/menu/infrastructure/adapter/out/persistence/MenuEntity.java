@@ -12,7 +12,9 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.Where;
 import org.hibernate.validator.constraints.UniqueElements;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 
@@ -22,6 +24,8 @@ import io.micrometer.common.lang.Nullable;
 
 @Entity
 @Table(name = "menus")
+@SQLDelete(sql = "UPDATE menus SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @AllArgsConstructor

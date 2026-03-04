@@ -51,7 +51,7 @@ public class ChartOfAccountController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
             summary = "Crear una cuenta contable",
             description = "Crea una nueva cuenta dentro del catalogo PUC con sus datos base."
@@ -73,32 +73,21 @@ public class ChartOfAccountController {
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        try {
-            if (bindingResult.hasErrors()) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-            }
-
-            chartOfAccountService.createChartOfAccount(request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(
-                    SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("La cuenta ha sido creada exitosamente en el catalogo PUC"),
-                            Optional.empty()
-                    )
-            );
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Error al guardar la informacion, intente nuevamente"
-                    )));
+        if (bindingResult.hasErrors()) {
+        return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
+
+        chartOfAccountService.createChartOfAccount(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("La cuenta ha sido creada exitosamente en el catalogo PUC"),
+                        Optional.empty()
+                )
+        );
     }
 
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
             summary = "Buscar cuentas contables (DataTable)",
             description = "Consulta cuentas contables usando el formato de request de DataTables."
@@ -134,7 +123,7 @@ public class ChartOfAccountController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
             summary = "Actualizar una cuenta contable",
             description = "Actualiza los datos principales de una cuenta existente en el catalogo PUC."
@@ -158,7 +147,7 @@ public class ChartOfAccountController {
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        try {
+        // try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -170,20 +159,20 @@ public class ChartOfAccountController {
                             Optional.empty()
                     )
             );
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Error al guardar la informacion, intente nuevamente"
-                    )));
-        }
+        // } catch (IllegalArgumentException | IllegalStateException e) {
+        //     return ResponseEntity.badRequest().body(
+        //             ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+        //     );
+        // } catch (Exception e) {
+        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+        //                     "Error al guardar la informacion, intente nuevamente"
+        //             )));
+        // }
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
             summary = "Inactivar o eliminar logica de una cuenta contable",
             description = "Registra la eliminacion logica de una cuenta con su motivo."
@@ -207,7 +196,7 @@ public class ChartOfAccountController {
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        try {
+        // try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -219,16 +208,16 @@ public class ChartOfAccountController {
                             Optional.empty()
                     )
             );
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Error al registrar la inactivacion. Intente nuevamente mas tarde"
-                    )));
-        }
+        // } catch (IllegalArgumentException | IllegalStateException e) {
+        //     return ResponseEntity.badRequest().body(
+        //             ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+        //     );
+        // } catch (Exception e) {
+        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+        //                     "Error al registrar la inactivacion. Intente nuevamente mas tarde"
+        //             )));
+        // }
     }
 
 }

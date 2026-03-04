@@ -38,55 +38,56 @@ public class RoleController {
     private final RoleService roleService;
 
     @PostMapping("/getRoles")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ROLES')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ROLES') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getRoles(@RequestBody(required = false) DataTableRequest request) {
         return roleService.getRoles(request);
     }
 
 
     @PostMapping("/createRole")
-    @PreAuthorize("hasAuthority('PERM_CREATE_ROLE')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> createRole(@RequestBody RoleRequest request) {
         return roleService.createRole(request);
     }
 
     @PutMapping("/updateRole/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_ROLE')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updateRole(@PathVariable Long id, @RequestBody RoleRequest request) {
         return roleService.updateRole(id, request);
     }
 
     @PostMapping("/deleteRole/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_ROLE')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> deleteRole(@PathVariable Long id) {
         return roleService.deleteRole(id);
     }
 
     @PostMapping("/assignRole")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_ROLE')")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> assignRoleToUser(@RequestBody UpdateUserRole request) {
         return roleService.assignRoleToUser(request);
     }
 
     @PostMapping("/createPermission")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PERMISSION')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> createPermission(@Valid @RequestBody PermissionDTO request, BindingResult bindingResult) {
         return roleService.createPermission(request, bindingResult);
     }
 
     @PutMapping("/updatePermission/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updatePermission(@PathVariable Long id, @Valid @RequestBody PermissionDTO request, BindingResult bindingResult) {
         return roleService.updatePermission(id, request, bindingResult);
     }
 
     @PostMapping("/permissions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getPermissions(@RequestBody DataTableRequest dtRequest) {
         return roleService.getPermissions(dtRequest);
     }
 
     @PostMapping("/assign-permissions")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> assignPermissions(@RequestBody RoleRequest request) {
 
         try {
@@ -108,7 +109,7 @@ public class RoleController {
     }
 
     @PostMapping("/remove-permissions")
-    @PreAuthorize("hasAuthority('PERM_REMOVE_PERMISSION')")
+    @PreAuthorize("hasAuthority('PERM_REMOVE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> removePermissions(@RequestBody RoleRequest request) {
         return roleService.removePermissions(request);
     }

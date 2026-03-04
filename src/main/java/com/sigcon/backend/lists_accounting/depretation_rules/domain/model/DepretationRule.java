@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -36,6 +38,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "depretation_rules", uniqueConstraints = {
     @UniqueConstraint(name = "unique_name_accounting_account_effective_date", columnNames = {"name", "accounting_account_id", "effective_date", "deleted_at"})
 })
+@SQLDelete(sql = "UPDATE depretation_rules SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor
@@ -50,7 +54,7 @@ public class DepretationRule {
     private String name; 
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, name = "depretation_type")
     @NotNull(message = "El tipo de depreciación es obligatorio")
     private DepretationType depretationType;
 
@@ -71,8 +75,8 @@ public class DepretationRule {
     @NotNull(message = "El valor residual es obligatorio")
     private BigDecimal residualValue;
 
-    @Column(nullable = false)
     @NotNull(message = "La fecha de vigencia es obligatoria")
+    @Column(name = "effective_date", nullable = false)
     private LocalDate effectiveDate;
 
     //Descripcion estructurada como texto largo

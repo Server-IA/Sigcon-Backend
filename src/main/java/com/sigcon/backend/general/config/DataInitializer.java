@@ -20,6 +20,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.HashSet;
@@ -37,11 +39,15 @@ import com.sigcon.backend.parametrization.users.domain.repository.UserRepository
 
 import jakarta.transaction.Transactional;
 
+import javax.sql.DataSource;
+
 @Configuration
 @RequiredArgsConstructor
 // @Profile("DEVELOPMENT")
 @Transactional
 public class DataInitializer implements CommandLineRunner {
+
+        private final DataSource dataSource;
 
         private final RoleRepository roleRepository;
         private final PermissionRepository permissionRepository;
@@ -273,7 +279,7 @@ public class DataInitializer implements CommandLineRunner {
 
                 // Crear usuarios
 
-                createOrUpdateUser("SUPERADMIN", null, "superadmin@gmail.com", "123456", "SUPERADMIN",
+                createOrUpdateUser("SUPER", "ADMIN", "superadmin@gmail.com", "123456", "SUPERADMIN",
                                 Set.of(
                                                 viewRoles, createRoles, updateRole, deleteRole, assignRole,
                                                 viewUsers, createUsers, updateUser, deleteUser,
@@ -290,7 +296,8 @@ public class DataInitializer implements CommandLineRunner {
                                                 viewCurrencyType, createCurrencyType, updateCurrencyType,
                                                 deleteCurrencyType, viewDepretationRules, createDepretationRules, updateDepretationRules, deleteDepretationRules,
 
-                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu));
+                                viewModules, createModules, updateModules, deleteModules, viewModulesMenu)
+                , "superadmin");
 
                 createMenuPermissions("Perfil", "SUPERADMIN");
                 createMenuPermissions("Perfil", "USER");
@@ -310,6 +317,16 @@ public class DataInitializer implements CommandLineRunner {
                 createMenuPermissions("Tasas de Cambio", "SUPERADMIN");
                 createMenuPermissions("Tipos de Moneda", "SUPERADMIN");
                 createMenuPermissions("Cuentas Contables", "SUPERADMIN");
+
+                // ✅ Ejecutar SQL desde archivo
+
+                
+                ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+                populator.addScript(new ClassPathResource("db/migration/V2__create_unique_indexes.sql"));
+                // populator.addScript(new ClassPathResource("db/migration/V3__create_triggers.sql"));
+                populator.execute(dataSource);
+
+                System.out.println("Archivo SQL ejecutado correctamente");
 
         }
 
@@ -375,7 +392,7 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         private void createOrUpdateUser(String name, String lastname, String email, String password, String role,
-                        Set<Permission> permissions) {
+                        Set<Permission> permissions, String username) {
                 User user = userRepository.findByEmail(email)
                                 .orElseGet(() -> User.builder()
                                                 .name(name)
@@ -386,6 +403,7 @@ public class DataInitializer implements CommandLineRunner {
                                                                 .orElseThrow(() -> new RuntimeException(
                                                                                 "Role not found"))))
                                                 .status(Status.ACTIVE)
+                                                .username(username)
                                                 .build());
                 userRepository.save(user);
         }
