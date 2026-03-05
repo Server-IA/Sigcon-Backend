@@ -67,3 +67,11 @@ WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_custom_name_company_active
 ON accounting_accounts (custom_name, company_id)
 WHERE deleted_at IS NULL;
+
+-- Reglas de impuestos
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ruler_tax_type_ruler_tax_name_company_active
+ON ruler_tax (type_ruler_tax, name, company_id)
+WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_ruler_tax_id_active
+ON tax_ruler_accounts (ruler_tax_id, accounting_account_id);
