@@ -32,7 +32,7 @@ public class DataTableResponse<T> {
             page.getContent(),
             true,
             200,
-            "Operación realizada correctamente",
+            "Operación realizada correctamente.",
             LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         );
     }
