@@ -34,7 +34,9 @@ public class GlobalExceptionHandler  {
         Map.entry("uk_depretation_rule_type_accounting_account_effective_date_acti", "Ya existe una regla de depreciación activa con ese tipo de depreciación, cuenta contable y fecha efectiva."),
         Map.entry("uk_currency_type_iso_code_active", "Ya existe un tipo de moneda activo con ese código ISO."),
         Map.entry("uk_accounting_account_custom_name_company_active", "Ya existe una cuenta contable activa con ese nombre."),
-        Map.entry("no_overlapping_exchange_rates", "Ya existe una tasa de cambio activa con ese tipo de cambio, moneda de cambio, moneda cambiada y rango de fechas.")
+        Map.entry("no_overlapping_exchange_rates", "Ya existe una tasa de cambio activa con ese tipo de cambio, moneda de cambio, moneda cambiada y rango de fechas."),
+        Map.entry("uk_ruler_tax_type_ruler_tax_name_company_active", "Ya existe una regla de impuesto activa con ese tipo de regla de impuesto y nombre."),
+        Map.entry("uk_accounting_account_ruler_tax_id_active", "Ya existe una cuenta contable activa con esa regla de impuesto y cuenta contable.")
     );
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -114,20 +116,26 @@ public class GlobalExceptionHandler  {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleException(Exception ex) {
 
-        System.out.println("ex.getMessage() Exception: " + ex.getMessage());
+        String message = ex.getMessage();
 
-        if (ex.getMessage().contains("Debe existir al menos un usuario con SUPERADMIN")) {
+        System.out.println("ex.getMessage() Exception: " + message);
+
+        if (message != null && message.contains("Debe existir al menos un usuario con SUPERADMIN")) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
-                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe existir al menos un usuario con SUPERADMIN."))
+                        ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("Debe existir al menos un usuario con SUPERADMIN.")
+                        )
                     );
         }
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Error interno del servidor."))
+                    ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of(message != null ? message : "Error interno del servidor.")
+                    )
                 );
     }
 
