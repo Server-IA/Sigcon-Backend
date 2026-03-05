@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.sigcon.backend.utils.ErrorRespondJson;
 
+import io.swagger.v3.oas.annotations.Hidden;
+
+@Hidden
+
 @RestControllerAdvice
 
 public class GlobalExceptionHandler  {

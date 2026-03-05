@@ -47,6 +47,50 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION check_soft_delete_superadmin()
+RETURNS TRIGGER AS $$
+DECLARE
+    total_superadmin INTEGER;
+BEGIN
+
+    -- Solo validar si se está haciendo soft delete
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+
+        -- Verificar si el usuario tiene rol SUPERADMIN
+        IF EXISTS (
+            SELECT 1
+            FROM users_roles
+            WHERE user_id = OLD.id
+            AND role_id = 1
+        ) THEN
+
+            SELECT COUNT(*) INTO total_superadmin
+            FROM users_roles ur
+            JOIN users u ON u.id = ur.user_id
+            WHERE ur.role_id = 1
+            AND u.deleted_at IS NULL
+            AND u.id <> OLD.id;
+
+            IF total_superadmin = 0 THEN
+                RAISE EXCEPTION
+                USING
+                    MESSAGE = 'Debe existir al menos un usuario con SUPERADMIN',
+                    ERRCODE = '45000';
+            END IF;
+
+        END IF;
+
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER prevent_soft_delete_last_superadmin
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION check_soft_delete_superadmin();
+
 CREATE TRIGGER prevent_delete_last_role1
 BEFORE DELETE ON users_roles
 FOR EACH ROW
