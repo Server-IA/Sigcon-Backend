@@ -16,20 +16,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
+
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.annotation.PostConstruct;
-
-@Hidden
-
-import io.swagger.v3.oas.annotations.Hidden;
-
-@Hidden
-
-import io.swagger.v3.oas.annotations.Hidden;
-
-@Hidden
-
-import io.swagger.v3.oas.annotations.Hidden;
 
 @Hidden
 
