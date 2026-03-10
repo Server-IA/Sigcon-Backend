@@ -16,12 +16,15 @@ import lombok.Data;
 public class UpdateChartOfAccountDTO {
 
     @NotBlank(message = "No se puede actualizar la informacion. Por favor complete todos los campos obligatorios antes de continuar.")
-    @Pattern(regexp = "^[0-9]{1,10}$", message = "Por favor siga el formato de los filtros")
-    @Schema(description = "Codigo de la cuenta (solo numeros, maximo 10 digitos)", example = "110505")
+    @Pattern(
+            regexp = "^(?:[0-9]{1}|[0-9]{2}|[0-9]{4}|[0-9]{6})$",
+            message = "El codigo debe tener 1, 2, 4 o 6 digitos segun Catálogo de cuentas del PUC para comerciantes de Colombia."
+    )
+    @Schema(description = "Codigo de la cuenta (solo numeros de 1, 2, 4 o 6 digitos)", example = "110505")
     private String code;
 
     @NotBlank(message = "No se puede actualizar la informacion. Por favor complete todos los campos obligatorios antes de continuar.")
-    @Pattern(regexp = "^[A-Za-z0-9_\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
+    @Pattern(regexp = "^[\\p{L}0-9_\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
     @Schema(description = "Nombre de la cuenta", example = "Caja General")
     private String name;
 

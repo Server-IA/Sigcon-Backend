@@ -21,6 +21,10 @@ import jakarta.annotation.PostConstruct;
 
 @Hidden
 
+import io.swagger.v3.oas.annotations.Hidden;
+
+@Hidden
+
 @RestControllerAdvice
 
 public class GlobalExceptionHandler  {
