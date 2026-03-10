@@ -46,7 +46,7 @@ public class ThirdPartyController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ThirdPartyDTO.class),
-                            examples = @ExampleObject(value = "{\n  \"nit\": \"9001234567\",\n  \"dv\": \"1\",\n  \"businessName\": \"EMPRESA ABC SAS\",\n  \"personType\": \"JURIDICA\",\n  \"roleIds\": [1,2],\n  \"statusId\": 1,\n  \"city\": \"Bogota\",\n  \"department\": \"Cundinamarca\",\n  \"address\": \"Calle 10 # 20-30\",\n  \"country\": \"COLOMBIA\",\n  \"phone\": \"6011112233\",\n  \"email\": \"contacto@empresa.com\",\n  \"taxRegime\": \"COMMON\",\n  \"fiscalResponsibilities\": \"R-99-PN\",\n  \"withholdingInfo\": \"RET_FUENTE\",\n  \"creditLimit\": 10000000,\n  \"paymentTerms\": \"30 dias\",\n  \"marketSegment\": \"CORPORATIVO\"\n}")
+                            examples = @ExampleObject(value = "{\n  \"nit\": \"9001234567\",\n  \"dv\": \"1\",\n  \"businessName\": \"EMPRESA ABC SAS\",\n  \"personType\": \"JURIDICA\",\n  \"roleIds\": [1,2],\n  \"statusId\": 1,\n  \"municipalityId\": 1,\n  \"address\": \"Calle 10 # 20-30\",\n  \"phone\": \"6011112233\",\n  \"email\": \"contacto@empresa.com\",\n  \"taxRegime\": \"COMMON\",\n  \"fiscalResponsibilities\": \"R-99-PN\",\n  \"withholdingInfo\": \"RET_FUENTE\",\n  \"creditLimit\": 10000000,\n  \"paymentTerms\": \"30 dias\",\n  \"marketSegment\": \"CORPORATIVO\"\n}")
                     )
             )
     )
@@ -131,7 +131,7 @@ public class ThirdPartyController {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = ThirdPartyDTO.class),
-                            examples = @ExampleObject(value = "{\n  \"businessName\": \"EMPRESA ABC SAS ACTUALIZADA\",\n  \"city\": \"Medellin\",\n  \"email\": \"nuevo@empresa.com\"\n}")
+                            examples = @ExampleObject(value = "{\n  \"businessName\": \"EMPRESA ABC SAS ACTUALIZADA\",\n  \"municipalityId\": 2,\n  \"email\": \"nuevo@empresa.com\"\n}")
                     )
             )
     )

@@ -12,7 +12,7 @@ public class DeleteChartOfAccountDTO {
 
     @NotBlank(message = "No ingreso el motivo de eliminacion")
     @Size(max = 255, message = "No ingreso el motivo de eliminacion")
-    @Pattern(regexp = "^[A-Za-z0-9_\\-\\s]{1,255}$", message = "No ingreso el motivo de eliminacion")
+    @Pattern(regexp = "^[\\p{L}0-9_\\-\\s]{1,255}$", message = "No ingreso el motivo de eliminacion")
     @Schema(description = "Motivo de la eliminacion o inactivacion", example = "Cuenta duplicada en catalogo")
     private String reason;
 }

@@ -6,7 +6,6 @@ import com.sigcon.backend.lists_accounting.accounting_lists.application.DeleteCh
 import com.sigcon.backend.lists_accounting.accounting_lists.application.UpdateChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountDeleted;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
@@ -47,13 +46,13 @@ public class ChartOfAccountService {
 
         AccountNature resolvedNature = validateAccountNature(request.getAccountClass(), request.getNature());
 
-        // if (chartOfAccountRepository.existsAnyByCode(code)) {
-        //     throw new IllegalArgumentException("Codigo oficial ya registrado");
-        // }
+/*         if (chartOfAccountRepository.existsAnyByCode(code)) {
+            throw new IllegalArgumentException("Codigo oficial ya registrado");
+        }
 
-        // if (chartOfAccountRepository.existsAnyByName(name)) {
-        //     throw new IllegalArgumentException("Nombre ya registrado");
-        // }
+        if (chartOfAccountRepository.existsAnyByName(name)) {
+            throw new IllegalArgumentException("Nombre ya registrado");
+        } */
 
         ChartOfAccount account = ChartOfAccount.builder()
                 .code(code)
@@ -98,6 +97,8 @@ public class ChartOfAccountService {
 
         String targetCode = normalizeCode(request.getCode());
         String targetName = normalizeName(request.getName());
+/*         String currentCode = normalizeCode(account.getCode());
+        String currentName = normalizeName(account.getName()); */
 
         validateAccountClass(request.getAccountClass());
         validateAccountLevel(request.getLevel());
@@ -105,23 +106,23 @@ public class ChartOfAccountService {
 
         AccountNature resolvedNature = validateAccountNature(request.getAccountClass(), request.getNature());
 
-        // boolean hasActiveDependencies = hasActiveDependencies(account);
+/*         boolean hasActiveDependencies = hasActiveDependencies(account); */
 
-        // if (!targetCode.equals(account.getCode()) && hasActiveDependencies) {
-        //     throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
-        // }
+/*         if (!targetCode.equals(account.getCode()) && hasActiveDependencies) {
+            throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
+        }
 
-        // if (request.getStatus() == AccountStatus.INACTIVE && hasActiveDependencies) {
-        //     throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
-        // }
+        if (request.getStatus() == AccountStatus.INACTIVE && hasActiveDependencies) {
+            throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
+        }
 
-        // if (chartOfAccountRepository.existsAnyByCodeAndIdNot(targetCode, id)) {
-        //     throw new IllegalArgumentException("Codigo oficial ya registrado");
-        // }
+        if (chartOfAccountRepository.existsAnyByCodeAndIdNot(targetCode, id)) {
+            throw new IllegalArgumentException("Codigo oficial ya registrado");
+        }
 
-        // if (chartOfAccountRepository.existsAnyByNameAndIdNot(targetName, id)) {
-        //     throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
-        // }
+        if (chartOfAccountRepository.existsAnyByNameAndIdNot(targetName, id)) {
+            throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
+        } */
 
         account.setCode(targetCode);
         account.setName(targetName);
@@ -142,13 +143,13 @@ public class ChartOfAccountService {
             throw new IllegalStateException("La cuenta seleccionada del catalogo PUC no existe");
         }
 
-        // if (account.getStatus() != AccountStatus.INACTIVE) {
-        //     throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
-        // }
+        if (account.getStatus() != AccountStatus.INACTIVE) {
+            throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
+        }
 
-        // if (hasActiveDependencies(account)) {
-        //     throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
-        // }
+/*         if (hasActiveDependencies(account)) {
+            throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
+        } */
 
         account.setDeletedAt(LocalDateTime.now());
 
@@ -183,22 +184,16 @@ public class ChartOfAccountService {
 
     private void validateCodeByLevel(String code, AccountLevel level) {
         int codeLength = code.length();
+        AccountLevel expectedLevelByCode = resolveLevelByLength(codeLength);
 
-        int expectedLength = switch (level) {
-            case CLASS -> 1;
-            case GROUP -> 2;
-            case ACCOUNT -> 4;
-            case SUBACCOUNT -> 6;
-        };
+        if (expectedLevelByCode == null) {
+            throw new IllegalArgumentException("Codigo invalido: la jerarquia PUC Colombiana solo permite 1, 2, 4 o 6 digitos");
+        }
 
-        if (codeLength != expectedLength) {
-            String expectedLevelByCode = levelToEnglish(resolveLevelByLength(codeLength));
-            String receivedLevel = levelToEnglish(level);
-
-            throw new IllegalArgumentException("Jerarquía de cuenta inválida: basado en el código " + code
-                    + ", se esperaba nivel " + expectedLevelByCode
-                    + " pero se recibió nivel " + receivedLevel
-                    + " (" + codeLength + " dígitos; " + receivedLevel + " requiere " + expectedLength + " dígitos).");
+        if (expectedLevelByCode != level) {
+            throw new IllegalArgumentException("Jerarquia de cuenta invalida: el codigo " + code
+                    + " (" + codeLength + " digitos) corresponde al nivel " + levelToDisplay(expectedLevelByCode)
+                    + " pero se recibio nivel " + levelToDisplay(level) + ".");
         }
     }
 
@@ -212,9 +207,9 @@ public class ChartOfAccountService {
         };
     }
 
-    private String levelToEnglish(AccountLevel level) {
+    private String levelToDisplay(AccountLevel level) {
         if (level == null) {
-            return "Invalid";
+            return "Invalido";
         }
 
         return switch (level) {
@@ -256,10 +251,10 @@ public class ChartOfAccountService {
         }
     }
 
-    private boolean hasActiveDependencies(ChartOfAccount account) {
+/*     private boolean hasActiveDependencies(ChartOfAccount account) {
         String prefix = account.getCode();
         return chartOfAccountRepository.existsActiveChildrenByCodePrefix(prefix, account.getId());
-    }
+    } */
 
     private ChartOfAccountResponseDTO toResponseDTO(ChartOfAccount account) {
         return ChartOfAccountResponseDTO.builder()

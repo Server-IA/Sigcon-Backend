@@ -1,5 +1,6 @@
 package com.sigcon.backend.third_parties.domain.model;
 
+import com.sigcon.backend.parametrization.parameters.domain.model.Municipality;
 import com.sigcon.backend.third_parties.domain.model.enums.PersonType;
 import com.sigcon.backend.third_parties.domain.model.enums.TaxRegime;
 import jakarta.persistence.Column;
@@ -73,17 +74,12 @@ public class ThirdParty {
     @Column(name = "blocking_reason", length = 500)
     private String blockingReason;
 
-    @Column(name = "city", length = 100)
-    private String city;
-
-    @Column(name = "department", length = 100)
-    private String department;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "municipality_id")
+    private Municipality municipality;
 
     @Column(name = "address", length = 255)
     private String address;
-
-    @Column(name = "country", length = 100)
-    private String country;
 
     @Column(name = "phone", length = 30)
     private String phone;

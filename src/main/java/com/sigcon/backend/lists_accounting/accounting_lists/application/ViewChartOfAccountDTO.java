@@ -17,7 +17,7 @@ public class ViewChartOfAccountDTO {
     @Schema(description = "Filtro por codigo de cuenta", example = "1105")
     private String code;
 
-    @Pattern(regexp = "^[A-Za-z0-9_\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
+    @Pattern(regexp = "^[\\p{L}0-9_\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
     @Schema(description = "Filtro por nombre de cuenta", example = "Caja")
     private String name;
 
