@@ -97,6 +97,12 @@ public class Assets {
     @Column(name = "observations", length = 500)
     private String observations;
 
+    @Column(name = "current_book_value", precision = 19, scale = 2)
+    private BigDecimal currentBookValue;
+
+    @Column(name = "last_depreciation_date")
+    private LocalDate lastDepreciationDate;
+
     @Column(name = "created_by", length = 150)
     private String createdBy;
 
