@@ -1,7 +1,10 @@
 package com.sigcon.backend.third_parties.application;
 
+import com.sigcon.backend.parametrization.parameters.application.MunicipalityDTO;
 import com.sigcon.backend.third_parties.domain.model.enums.PersonType;
 import com.sigcon.backend.third_parties.domain.model.enums.TaxRegime;
+
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,15 +25,17 @@ public class ThirdPartyDTO {
     private String dv;
     private String businessName;
     private PersonType personType;
+    private List<ThirdPartyRoleCatalogDTO> roles;
     private List<Long> roleIds;
     private List<String> roleNames;
+    private ThirdPartyStatusCatalogDTO status;
     private Long statusId;
     private String statusName;
     private String blockingReason;
-    private String city;
-    private String department;
+    private MunicipalityDTO municipality;
+    @NotNull(message = "El municipio es obligatorio")
+    private Long municipalityId;
     private String address;
-    private String country;
     private String phone;
     private String email;
     private TaxRegime taxRegime;
