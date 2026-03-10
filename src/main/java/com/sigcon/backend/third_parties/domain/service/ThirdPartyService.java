@@ -2,9 +2,16 @@ package com.sigcon.backend.third_parties.domain.service;
 
 import com.sigcon.backend.third_parties.application.BulkThirdPartyUploadRequest;
 import com.sigcon.backend.third_parties.application.BulkThirdPartyUploadResponse;
+import com.sigcon.backend.third_parties.application.ThirdPartyRoleCatalogDTO;
 import com.sigcon.backend.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.third_parties.application.ThirdPartyDetailDTO;
+import com.sigcon.backend.third_parties.application.ThirdPartyStatusCatalogDTO;
 import com.sigcon.backend.third_parties.application.UpdateThirdPartyRolesStatusRequest;
+import com.sigcon.backend.parametrization.parameters.application.CountryDTO;
+import com.sigcon.backend.parametrization.parameters.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.parameters.domain.model.Country;
+import com.sigcon.backend.parametrization.parameters.domain.model.Municipality;
+import com.sigcon.backend.parametrization.parameters.domain.repository.MunicipalityRepository;
 import com.sigcon.backend.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.domain.model.ThirdPartyRoleCatalog;
 import com.sigcon.backend.third_parties.domain.model.ThirdPartyStatusCatalog;
@@ -60,6 +67,7 @@ public class ThirdPartyService {
     private final ThirdPartyRepository thirdPartyRepository;
     private final ThirdPartyRoleCatalogRepository roleCatalogRepository;
     private final ThirdPartyStatusCatalogRepository statusCatalogRepository;
+    private final MunicipalityRepository municipalityRepository;
     private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
 
@@ -77,6 +85,7 @@ public class ThirdPartyService {
 
         Set<ThirdPartyRoleCatalog> roles = resolveRoles(request.getRoleIds());
         ThirdPartyStatusCatalog status = resolveStatus(request.getStatusId());
+        Municipality municipality = resolveMunicipality(request.getMunicipalityId());
         validateBlockingReason(status, request.getBlockingReason());
 
         ThirdParty thirdParty = ThirdParty.builder()
@@ -88,10 +97,8 @@ public class ThirdPartyService {
                 .roles(roles)
                 .status(status)
                 .blockingReason(resolveBlockingReasonForPersist(status, request.getBlockingReason()))
-                .city(emptyToNull(request.getCity()))
-                .department(emptyToNull(request.getDepartment()))
+                .municipality(municipality)
                 .address(emptyToNull(request.getAddress()))
-                .country(emptyToNull(request.getCountry()))
                 .phone(emptyToNull(request.getPhone()))
                 .email(emptyToNull(request.getEmail()))
                 .taxRegime(request.getTaxRegime())
@@ -166,6 +173,7 @@ public class ThirdPartyService {
             ThirdPartyStatusCatalog status = resolveStatusByName(row.status(), statusesByName, row.line());
             validateAllowedBulkStatus(status, row.line());
             Set<ThirdPartyRoleCatalog> roles = resolveRolesByNames(row.thirdPartyType(), rolesByName, row.line());
+            Municipality municipality = resolveMunicipalityForBulk(row.municipality(), row.line());
 
             if (existingByNit.isEmpty()) {
                 ThirdParty entity = ThirdParty.builder()
@@ -176,16 +184,16 @@ public class ThirdPartyService {
                         .personType(PersonType.JURIDICA)
                         .roles(roles)
                         .status(status)
+                        .municipality(municipality)
                         .address(emptyToNull(row.address()))
-                        .country(emptyToNull(row.country()))
                         .email(emptyToNull(row.email()))
                         .build();
                 toCreate.add(entity);
             } else {
                 ThirdParty entity = existingByNit.get(0);
                 entity.setBusinessName(row.businessName().trim());
+                entity.setMunicipality(municipality);
                 entity.setAddress(emptyToNull(row.address()));
-                entity.setCountry(emptyToNull(row.country()));
                 entity.setEmail(emptyToNull(row.email()));
                 entity.setStatus(status);
                 entity.setRoles(roles);
@@ -250,15 +258,16 @@ public class ThirdPartyService {
                         .dv(thirdParty.getDv())
                         .businessName(thirdParty.getBusinessName())
                         .personType(thirdParty.getPersonType())
+                        .roles(toRoleCatalogDtoList(thirdParty.getRoles()))
                         .roleIds(thirdParty.getRoles().stream().map(ThirdPartyRoleCatalog::getId).toList())
                         .roleNames(thirdParty.getRoles().stream().map(ThirdPartyRoleCatalog::getName).toList())
+                        .status(toStatusCatalogDto(thirdParty.getStatus()))
                         .statusId(thirdParty.getStatus().getId())
                         .statusName(thirdParty.getStatus().getName())
                         .blockingReason(thirdParty.getBlockingReason())
-                        .city(thirdParty.getCity())
-                        .department(thirdParty.getDepartment())
+                        .municipality(toMunicipalityDto(thirdParty.getMunicipality()))
+                        .municipalityId(thirdParty.getMunicipality() != null ? thirdParty.getMunicipality().getId() : null)
                         .address(thirdParty.getAddress())
-                        .country(thirdParty.getCountry())
                         .phone(thirdParty.getPhone())
                         .email(thirdParty.getEmail())
                         .createdAt(thirdParty.getCreatedAt())
@@ -308,6 +317,9 @@ public class ThirdPartyService {
         if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
             thirdParty.setRoles(resolveRoles(request.getRoleIds()));
         }
+        if (request.getMunicipalityId() != null) {
+            thirdParty.setMunicipality(resolveMunicipality(request.getMunicipalityId()));
+        }
         if (request.getStatusId() != null) {
             ThirdPartyStatusCatalog targetStatus = resolveStatus(request.getStatusId());
             validateBlockingReason(targetStatus, request.getBlockingReason());
@@ -320,10 +332,7 @@ public class ThirdPartyService {
 
         thirdParty.setNit(targetNit);
         thirdParty.setDv(targetDv);
-        thirdParty.setCity(emptyToNull(request.getCity()));
-        thirdParty.setDepartment(emptyToNull(request.getDepartment()));
         thirdParty.setAddress(emptyToNull(request.getAddress()));
-        thirdParty.setCountry(emptyToNull(request.getCountry()));
         thirdParty.setPhone(emptyToNull(request.getPhone()));
         thirdParty.setEmail(emptyToNull(request.getEmail()));
         thirdParty.setTaxRegime(request.getTaxRegime());
@@ -443,7 +452,7 @@ public class ThirdPartyService {
                     i + 1,
                     getRowValue(values, canonicalHeaderIndexes, "nit"),
                     getRowValue(values, canonicalHeaderIndexes, "business_name"),
-                    getRowValue(values, canonicalHeaderIndexes, "country"),
+                    getRowValue(values, canonicalHeaderIndexes, "municipality"),
                     getRowValue(values, canonicalHeaderIndexes, "address"),
                     getRowValue(values, canonicalHeaderIndexes, "email"),
                     getRowValue(values, canonicalHeaderIndexes, "status"),
@@ -515,7 +524,7 @@ public class ThirdPartyService {
                         i + 1,
                         getRowValue(rowMap, canonicalHeaderIndexes, "nit"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "business_name"),
-                        getRowValue(rowMap, canonicalHeaderIndexes, "country"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "municipality"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "address"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "email"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "status"),
@@ -559,7 +568,7 @@ public class ThirdPartyService {
         String normalized = normalizeHeader(header);
         if ("nit".equals(normalized)) return "nit";
         if (Set.of("nombre_razon_social", "razon_social", "nombre").contains(normalized)) return "business_name";
-        if ("pais".equals(normalized) || "country".equals(normalized)) return "country";
+        if (Set.of("municipio", "municipality", "municipio_codigo", "municipality_code").contains(normalized)) return "municipality";
         if ("direccion".equals(normalized)) return "address";
         if ("email".equals(normalized) || "correo".equals(normalized)) return "email";
         if (Set.of("estado", "estado_tercero").contains(normalized)) return "status";
@@ -569,7 +578,7 @@ public class ThirdPartyService {
     }
 
     private void validateRequiredHeaders(Set<String> foundHeaders) {
-        List<String> required = List.of("nit", "business_name", "country", "address", "email", "status", "third_party_type");
+        List<String> required = List.of("nit", "business_name", "municipality", "address", "email", "status", "third_party_type");
         for (String key : required) {
             if (!foundHeaders.contains(key)) {
                 throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
@@ -725,8 +734,8 @@ public class ThirdPartyService {
         if (row.businessName() == null || row.businessName().trim().length() < 3 || row.businessName().trim().length() > 255) {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": razon social invalida.");
         }
-        if (row.country() == null || row.country().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": pais es obligatorio.");
+        if (row.municipality() == null || row.municipality().trim().isEmpty()) {
+            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": municipio es obligatorio.");
         }
         if (row.address() == null || row.address().trim().isEmpty()) {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": direccion es obligatoria.");
@@ -903,6 +912,9 @@ public class ThirdPartyService {
         if (request.getPersonType() == null) {
             throw new IllegalArgumentException("El tipo de persona es obligatorio.");
         }
+        if (request.getMunicipalityId() == null) {
+            throw new IllegalArgumentException("El municipio es obligatorio.");
+        }
         if (request.getRoleIds() == null || request.getRoleIds().isEmpty()) {
             throw new IllegalArgumentException("Debe seleccionar al menos un rol para el tercero.");
         }
@@ -963,6 +975,25 @@ public class ThirdPartyService {
                 .orElseThrow(() -> new IllegalArgumentException("El estado no existe en el catalogo."));
     }
 
+    private Municipality resolveMunicipality(Long municipalityId) {
+        if (municipalityId == null) {
+            throw new IllegalArgumentException("El municipio es obligatorio.");
+        }
+        return municipalityRepository.findById(municipalityId)
+                .orElseThrow(() -> new IllegalArgumentException("El municipio no existe en el catalogo."));
+    }
+
+    private Municipality resolveMunicipalityForBulk(String municipalityValue, int line) {
+        String cleanValue = municipalityValue == null ? "" : municipalityValue.trim();
+        if (cleanValue.isEmpty()) {
+            throw new IllegalArgumentException("BULK_004: Error en linea " + line + ": municipio es obligatorio.");
+        }
+
+        return municipalityRepository.findByCodeIgnoreCase(cleanValue)
+                .or(() -> municipalityRepository.findByNameIgnoreCase(cleanValue))
+                .orElseThrow(() -> new IllegalArgumentException("BULK_004: Error en linea " + line + ": municipio no valido."));
+    }
+
     private ThirdParty getThirdPartyOrThrow(Long id) {
         return thirdPartyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("TERC_021: El tercero no existe o fue eliminado."));
@@ -984,7 +1015,7 @@ public class ThirdPartyService {
 
         Set<String> allowedFields = Set.of(
                 "id", "thirdPartyCode", "nit", "dv", "businessName", "status.name", "roles",
-                "city", "department", "createdAt", "updatedAt"
+                "municipality.name", "municipality.country.name", "createdAt", "updatedAt"
         );
 
         for (DataTableRequest.DataTableColumn column : request.getColumns()) {
@@ -1014,15 +1045,16 @@ public class ThirdPartyService {
                 .dv(entity.getDv())
                 .businessName(entity.getBusinessName())
                 .personType(entity.getPersonType())
+                .roles(toRoleCatalogDtoList(entity.getRoles()))
                 .roleIds(roleIds)
                 .roleNames(roleNames)
+                .status(toStatusCatalogDto(entity.getStatus()))
                 .statusId(entity.getStatus() != null ? entity.getStatus().getId() : null)
                 .statusName(entity.getStatus() != null ? entity.getStatus().getName() : null)
                 .blockingReason(entity.getBlockingReason())
-                .city(entity.getCity())
-                .department(entity.getDepartment())
+                .municipality(toMunicipalityDto(entity.getMunicipality()))
+                .municipalityId(entity.getMunicipality() != null ? entity.getMunicipality().getId() : null)
                 .address(entity.getAddress())
-                .country(entity.getCountry())
                 .phone(entity.getPhone())
                 .email(entity.getEmail())
                 .taxRegime(entity.getTaxRegime())
@@ -1033,6 +1065,57 @@ public class ThirdPartyService {
                 .marketSegment(entity.getMarketSegment())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .build();
+    }
+
+    private List<ThirdPartyRoleCatalogDTO> toRoleCatalogDtoList(Set<ThirdPartyRoleCatalog> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return List.of();
+        }
+        return roles.stream()
+                .map(role -> ThirdPartyRoleCatalogDTO.builder()
+                        .id(role.getId())
+                        .name(role.getName())
+                        .build())
+                .toList();
+    }
+
+    private ThirdPartyStatusCatalogDTO toStatusCatalogDto(ThirdPartyStatusCatalog status) {
+        if (status == null) {
+            return null;
+        }
+        return ThirdPartyStatusCatalogDTO.builder()
+                .id(status.getId())
+                .name(status.getName())
+                .build();
+    }
+
+    private MunicipalityDTO toMunicipalityDto(Municipality municipality) {
+        if (municipality == null) {
+            return null;
+        }
+        return MunicipalityDTO.builder()
+                .id(municipality.getId())
+                .name(municipality.getName())
+                .code(municipality.getCode())
+                .country(toCountryDto(municipality.getCountry()))
+                .createdAt(municipality.getCreatedAt())
+                .updatedAt(municipality.getUpdatedAt())
+                .deletedAt(municipality.getDeletedAt())
+                .build();
+    }
+
+    private CountryDTO toCountryDto(Country country) {
+        if (country == null) {
+            return null;
+        }
+        return CountryDTO.builder()
+                .id(country.getId())
+                .name(country.getName())
+                .code(country.getCode())
+                .createdAt(country.getCreatedAt())
+                .updatedAt(country.getUpdatedAt())
+                .deletedAt(country.getDeletedAt())
                 .build();
     }
 
@@ -1065,7 +1148,7 @@ public class ThirdPartyService {
             int line,
             String nit,
             String businessName,
-            String country,
+            String municipality,
             String address,
             String email,
             String status,

@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS third_parties (
     business_name VARCHAR(255) NOT NULL,
     person_type VARCHAR(16) NOT NULL,
     status_id BIGINT NOT NULL,
-    city VARCHAR(100),
-    department VARCHAR(100),
+    municipality_id BIGINT,
+    blocking_reason VARCHAR(500),
     address VARCHAR(255),
     phone VARCHAR(30),
     email VARCHAR(255),
@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS third_parties (
 
 ALTER TABLE third_parties
 ADD COLUMN IF NOT EXISTS status_id BIGINT;
+
+ALTER TABLE third_parties
+ADD COLUMN IF NOT EXISTS municipality_id BIGINT;
+
+ALTER TABLE third_parties
+ADD COLUMN IF NOT EXISTS blocking_reason VARCHAR(500);
 
 ALTER TABLE third_parties
 ALTER COLUMN person_type TYPE VARCHAR(16)
@@ -140,8 +146,6 @@ INSERT INTO third_parties (
     business_name,
     person_type,
     status_id,
-    city,
-    department,
     address,
     phone,
     email,
@@ -161,8 +165,6 @@ SELECT
     'TERCERO DEMO CLIENTE SAS',
     'JURIDICA',
     (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
-    'Bogota',
-    'Cundinamarca',
     'Calle 100 # 20-30',
     '6011234567',
     'demo1@thirdparty.com',
@@ -185,8 +187,6 @@ INSERT INTO third_parties (
     business_name,
     person_type,
     status_id,
-    city,
-    department,
     address,
     phone,
     email,
@@ -206,8 +206,6 @@ SELECT
     'TERCERO DEMO EMPLEADO',
     'NATURAL',
     (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
-    'Medellin',
-    'Antioquia',
     'Carrera 50 # 10-15',
     '6047654321',
     'demo2@thirdparty.com',
