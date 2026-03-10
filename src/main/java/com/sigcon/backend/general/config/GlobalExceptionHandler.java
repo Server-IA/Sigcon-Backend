@@ -29,6 +29,10 @@ import io.swagger.v3.oas.annotations.Hidden;
 
 @Hidden
 
+import io.swagger.v3.oas.annotations.Hidden;
+
+@Hidden
+
 @RestControllerAdvice
 
 public class GlobalExceptionHandler  {
