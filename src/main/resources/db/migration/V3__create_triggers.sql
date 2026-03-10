@@ -1,6 +1,8 @@
 -- Tasas de cambio
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
+DROP TRIGGER IF EXISTS prevent_soft_delete_last_superadmin ON users;
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -86,16 +88,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS prevent_soft_delete_last_superadmin ON users;
 CREATE TRIGGER prevent_soft_delete_last_superadmin
 BEFORE UPDATE ON users
 FOR EACH ROW
 EXECUTE FUNCTION check_soft_delete_superadmin();
 
+DROP TRIGGER IF EXISTS prevent_delete_last_role1 ON users_roles;
 CREATE TRIGGER prevent_delete_last_role1
 BEFORE DELETE ON users_roles
 FOR EACH ROW
 EXECUTE FUNCTION check_min_role1_user();
 
+DROP TRIGGER IF EXISTS prevent_update_last_role1 ON users_roles;
 CREATE TRIGGER prevent_update_last_role1
 BEFORE UPDATE ON users_roles
 FOR EACH ROW

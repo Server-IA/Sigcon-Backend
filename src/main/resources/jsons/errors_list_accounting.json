@@ -1,0 +1,38 @@
+[
+    {
+        "code": "uk_puc_code_active",
+        "message": "Ya existe un código de cuenta contable (PUC) activo con ese código."
+    },
+    {
+        "code": "uk_puc_name_active",
+        "message": "Ya existe un nombre de cuenta contable (PUC) activo con ese nombre."
+    },
+    {
+        "code": "uk_cost_center_code_company_active",
+        "message": "Ya existe un centro de costo activo con ese código."
+    },
+    {
+        "code": "uk_depretation_rule_type_accounting_account_effective_date_acti",
+        "message": "Ya existe una regla de depreciación activa con ese tipo de depreciación, cuenta contable y fecha efectiva."
+    },
+    {
+        "code": "uk_currency_type_iso_code_active",
+        "message": "Ya existe un tipo de moneda activo con ese código ISO."
+    },
+    {
+        "code": "uk_accounting_account_custom_name_company_active",
+        "message": "Ya existe una cuenta contable activa con ese nombre."
+    },
+    {
+        "code": "no_overlapping_exchange_rates",
+        "message": "Ya existe una tasa de cambio activa con ese tipo de cambio, moneda de cambio, moneda cambiada y rango de fechas."
+    },
+    {
+        "code": "uk_ruler_tax_type_ruler_tax_name_company_active",
+        "message": "Ya existe una regla de impuesto activa con ese tipo de regla de impuesto y nombre."
+    },
+    {
+        "code": "uk_accounting_account_ruler_tax_id_active",
+        "message": "Ya existe una cuenta contable activa con esa regla de impuesto y cuenta contable."
+    }
+]
