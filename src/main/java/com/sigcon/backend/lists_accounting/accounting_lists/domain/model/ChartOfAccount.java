@@ -10,7 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -23,7 +22,6 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountDeleted;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
@@ -41,7 +39,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class ChartOfAccount {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

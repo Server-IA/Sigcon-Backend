@@ -37,7 +37,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/chart-of-accounts")
 @RequiredArgsConstructor
-@Tag(name = "Accounting Lists - Chart Of Accounts", description = "Endpoints para gestionar el catalogo de cuentas contables (PUC)")
+@Tag(name = "Accounting Lists - Chart Of Accounts", description = "Endpoints para gestionar el catalogo de cuentas (PUC)")
 public class ChartOfAccountController {
 
     private final ChartOfAccountService chartOfAccountService;
@@ -53,7 +53,7 @@ public class ChartOfAccountController {
     @PostMapping
     @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Crear una cuenta contable",
+            summary = "Crear una cuenta en el PUC",
             description = "Crea una nueva cuenta dentro del catalogo PUC con sus datos base."
     )
     @ApiResponses(value = {
@@ -67,7 +67,7 @@ public class ChartOfAccountController {
     public ResponseEntity<?> createChartOfAccount(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "Datos requeridos para crear la cuenta contable."
+                    description = "Datos requeridos para crear la cuenta."
             )
             @Valid @RequestBody CreateChartOfAccountDTO request,
             @Parameter(hidden = true)
@@ -89,8 +89,8 @@ public class ChartOfAccountController {
     @PostMapping("/search")
     @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Buscar cuentas contables (DataTable)",
-            description = "Consulta cuentas contables usando el formato de request de DataTables."
+            summary = "Buscar cuentas en el PUC (DataTable)",
+            description = "Consulta cuentas en el PUC usando el formato de request de DataTables."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Consulta DataTable realizada correctamente",
@@ -125,7 +125,7 @@ public class ChartOfAccountController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Actualizar una cuenta contable",
+            summary = "Actualizar una cuenta del PUC",
             description = "Actualiza los datos principales de una cuenta existente en el catalogo PUC."
     )
     @ApiResponses(value = {
@@ -137,17 +137,17 @@ public class ChartOfAccountController {
                     content = @Content(schema = @Schema(implementation = Object.class)))
     })
     public ResponseEntity<?> updateChartOfAccount(
-            @Parameter(description = "ID de la cuenta contable a actualizar", example = "1")
+            @Parameter(description = "ID de la cuenta del PUC a actualizar", example = "1")
             @PathVariable Long id,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "Datos requeridos para actualizar la cuenta contable."
+                    description = "Datos requeridos para actualizar la cuenta del PUC."
             )
             @Valid @RequestBody UpdateChartOfAccountDTO request,
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        // try {
+/*         try { */
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -159,22 +159,22 @@ public class ChartOfAccountController {
                             Optional.empty()
                     )
             );
-        // } catch (IllegalArgumentException | IllegalStateException e) {
-        //     return ResponseEntity.badRequest().body(
-        //             ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-        //     );
-        // } catch (Exception e) {
-        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-        //                     "Error al guardar la informacion, intente nuevamente"
-        //             )));
-        // }
+/*         } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Error al guardar la informacion, intente nuevamente"
+                    )));
+        } */
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Inactivar o eliminar logica de una cuenta contable",
+            summary = "Eliminacion logica de una cuenta",
             description = "Registra la eliminacion logica de una cuenta con su motivo."
     )
     @ApiResponses(value = {
@@ -186,7 +186,7 @@ public class ChartOfAccountController {
                     content = @Content(schema = @Schema(implementation = Object.class)))
     })
     public ResponseEntity<?> deleteChartOfAccount(
-            @Parameter(description = "ID de la cuenta contable a eliminar", example = "1")
+            @Parameter(description = "ID de la cuenta del PUC a eliminar", example = "1")
             @PathVariable Long id,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
@@ -196,7 +196,7 @@ public class ChartOfAccountController {
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        // try {
+/*         try { */
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -208,16 +208,16 @@ public class ChartOfAccountController {
                             Optional.empty()
                     )
             );
-        // } catch (IllegalArgumentException | IllegalStateException e) {
-        //     return ResponseEntity.badRequest().body(
-        //             ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-        //     );
-        // } catch (Exception e) {
-        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-        //                     "Error al registrar la inactivacion. Intente nuevamente mas tarde"
-        //             )));
-        // }
+/*         } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Error al registrar la inactivacion. Intente nuevamente mas tarde"
+                    )));
+        } */
     }
 
 }
