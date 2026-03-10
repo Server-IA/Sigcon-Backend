@@ -1,0 +1,42 @@
+[
+    {
+        "code": "uk_users_email_active",
+        "message": "Ya existe un usuario activo con ese email."
+    },
+    {
+        "code": "uk_users_username_active",
+        "message": "El nombre de usuario ya está en uso."
+    },
+    {
+        "code": "uk_roles_active",
+        "message": "Ya existe un rol activo con ese nombre."
+    },
+    {
+        "code": "uk_permissions_active",
+        "message": "Ya existe un permiso activo con ese código."
+    },
+    {
+        "code": "uk_modules_active",
+        "message": "Ya existe un módulo con esa URL."
+    },
+    {
+        "code": "uk_menu_permissions_active",
+        "message": "Ya existe un permiso de menú activo con ese menú y rol."
+    },
+    {
+        "code": "uk_menus_active",
+        "message": "Ya existe un menú activo con ese módulo y path."
+    },
+    {
+        "code": "uk_user_parameters_active",
+        "message": "Ya existe un parámetro activo con ese usuario y parámetro."
+    },
+    {
+        "code": "uk_parameters_active",
+        "message": "Ya existe un parámetro activo con ese nombre."
+    },
+    {
+        "code": "45000",
+        "message": "Debe existir al menos un usuario con SUPERADMIN."
+    }
+]

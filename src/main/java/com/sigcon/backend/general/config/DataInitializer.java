@@ -21,10 +21,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import com.sigcon.backend.parametrization.menu.Menu;
@@ -319,14 +325,7 @@ public class DataInitializer implements CommandLineRunner {
                 createMenuPermissions("Cuentas Contables", "SUPERADMIN");
 
                 // ✅ Ejecutar SQL desde archivo
-
-                
-                ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-                populator.addScript(new ClassPathResource("db/migration/V2__create_unique_indexes.sql"));
-                // populator.addScript(new ClassPathResource("db/migration/V3__create_triggers.sql"));
-                populator.execute(dataSource);
-
-                System.out.println("Archivo SQL ejecutado correctamente");
+                executeScripts();
         }
 
         private Permission createPermission(String name, String description, TypePermits type, String code,
@@ -425,4 +424,99 @@ public class DataInitializer implements CommandLineRunner {
                 menuPermissionsRepository.save(menuPermissions);
         }
 
+        private void executeScripts() {
+
+                JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+
+                List<String> scripts = new ArrayList<>();
+
+                try {
+
+                        Resource[] resources =
+                                new PathMatchingResourcePatternResolver()
+                                .getResources("classpath:db/migration/*.sql");
+
+                        for (Resource resource : resources) {
+                                String filename = resource.getFilename();
+                                if (filename == null) {
+                                        System.out.println("⚠️ Ignorando script: " + filename + " (no tiene nombre)");
+                                        continue;
+                                }
+
+                                scripts.add(filename);
+                        }
+
+                } catch (Exception e) {
+                        throw new RuntimeException("Error al obtener scripts SQL", e);
+                }
+
+                // ordenar scripts
+                Collections.sort(scripts);
+
+                for (String script : scripts) {
+
+                        try {
+
+                                Resource resource = new ClassPathResource("db/migration/" + script);
+                                String sql = new String(resource.getInputStream().readAllBytes());
+
+                                System.out.println("Procesando script: " + script);
+
+                                List<String> statements = splitSqlStatements(sql);
+
+                                for (String statement : statements) {
+
+                                        if (!statement.trim().isEmpty()) {
+                                                jdbcTemplate.execute(statement);
+                                        }
+
+                                }
+
+                                System.out.println("✔ Script ejecutado: " + script);
+                                System.out.println("--------------------------------");
+
+                        } catch (Exception e) {
+
+                                System.out.println("❌ Error ejecutando script: " + script);
+                                throw new RuntimeException(e);
+
+                        }
+                }
+
+                System.out.println("✔ Todos los scripts ejecutados correctamente");
+                
+        }
+
+        private List<String> splitSqlStatements(String sql) {
+
+                List<String> statements = new ArrayList<>();
+            
+                StringBuilder current = new StringBuilder();
+            
+                boolean insideDollarBlock = false;
+            
+                String[] lines = sql.split("\n");
+            
+                for (String line : lines) {
+            
+                    if (line.contains("$$")) {
+                        insideDollarBlock = !insideDollarBlock;
+                    }
+            
+                    current.append(line).append("\n");
+            
+                    if (!insideDollarBlock && line.trim().endsWith(";")) {
+            
+                        statements.add(current.toString());
+                        current.setLength(0);
+            
+                    }
+                }
+            
+                if (current.length() > 0) {
+                    statements.add(current.toString());
+                }
+            
+                return statements;
+        }
 }
