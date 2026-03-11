@@ -74,8 +74,8 @@ public class AssetsController {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
-
         ViewAssetsDTO asset = assetsService.create(request);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Activo registrado correctamente"),
