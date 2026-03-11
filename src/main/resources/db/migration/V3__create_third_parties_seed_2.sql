@@ -2,14 +2,16 @@ CREATE TABLE IF NOT EXISTS third_party_role_catalog (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP NULL
 );
 
 CREATE TABLE IF NOT EXISTS third_party_status_catalog (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(30) NOT NULL UNIQUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP NULL
 );
 
 CREATE TABLE IF NOT EXISTS third_parties (
@@ -18,16 +20,9 @@ CREATE TABLE IF NOT EXISTS third_parties (
     nit VARCHAR(15) NOT NULL,
     dv VARCHAR(2) NOT NULL,
     business_name VARCHAR(255) NOT NULL,
-    person_type VARCHAR(16) NOT NULL,
     status_id BIGINT NOT NULL,
     municipality_id BIGINT,
     blocking_reason VARCHAR(500),
-    address VARCHAR(255),
-    phone VARCHAR(30),
-    email VARCHAR(255),
-    tax_regime VARCHAR(32),
-    fiscal_responsibilities VARCHAR(255),
-    withholding_info VARCHAR(255),
     credit_limit NUMERIC(19, 2),
     payment_terms VARCHAR(100),
     market_segment VARCHAR(100),
@@ -46,26 +41,6 @@ ADD COLUMN IF NOT EXISTS municipality_id BIGINT;
 
 ALTER TABLE third_parties
 ADD COLUMN IF NOT EXISTS blocking_reason VARCHAR(500);
-
-ALTER TABLE third_parties
-ALTER COLUMN person_type TYPE VARCHAR(16)
-USING (
-    CASE UPPER(person_type::text)
-        WHEN '0' THEN 'NATURAL'
-        WHEN '1' THEN 'JURIDICA'
-        ELSE person_type::text
-    END
-);
-
-ALTER TABLE third_parties
-ALTER COLUMN tax_regime TYPE VARCHAR(32)
-USING (
-    CASE UPPER(tax_regime::text)
-        WHEN '0' THEN 'SIMPLIFIED'
-        WHEN '1' THEN 'COMMON'
-        ELSE tax_regime::text
-    END
-);
 
 CREATE TABLE IF NOT EXISTS third_party_role_assignments (
     third_party_id BIGINT NOT NULL,
@@ -144,14 +119,7 @@ INSERT INTO third_parties (
     nit,
     dv,
     business_name,
-    person_type,
     status_id,
-    address,
-    phone,
-    email,
-    tax_regime,
-    fiscal_responsibilities,
-    withholding_info,
     credit_limit,
     payment_terms,
     market_segment,
@@ -163,14 +131,7 @@ SELECT
     '9001234567',
     '1',
     'TERCERO DEMO CLIENTE SAS',
-    'JURIDICA',
     (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
-    'Calle 100 # 20-30',
-    '6011234567',
-    'demo1@thirdparty.com',
-    'COMMON',
-    'R-99-PN',
-    'RET_FUENTE',
     50000000,
     '30 dias',
     'CORPORATIVO',
@@ -185,14 +146,7 @@ INSERT INTO third_parties (
     nit,
     dv,
     business_name,
-    person_type,
     status_id,
-    address,
-    phone,
-    email,
-    tax_regime,
-    fiscal_responsibilities,
-    withholding_info,
     credit_limit,
     payment_terms,
     market_segment,
@@ -204,14 +158,7 @@ SELECT
     '9019876543',
     '5',
     'TERCERO DEMO EMPLEADO',
-    'NATURAL',
     (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
-    'Carrera 50 # 10-15',
-    '6047654321',
-    'demo2@thirdparty.com',
-    'SIMPLIFIED',
-    'R-05',
-    'RET_ICA',
     0,
     'CONTADO',
     'PERSONA NATURAL',
