@@ -68,8 +68,7 @@ public class ThirdPartyService {
     private final ThirdPartyRoleCatalogRepository roleCatalogRepository;
     private final ThirdPartyStatusCatalogRepository statusCatalogRepository;
     private final MunicipalityRepository municipalityRepository;
-    private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder =
-            new DataTableSpecificationBuilder<>();
+    private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     public ResponseEntity<?> create(ThirdPartyDTO request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -125,7 +124,8 @@ public class ThirdPartyService {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
         if (request == null || request.getFileBase64() == null || request.getFileBase64().isBlank()) {
-            throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
         }
 
         byte[] fileBytes = decodeBase64Payload(request.getFileBase64());
@@ -136,11 +136,13 @@ public class ThirdPartyService {
         List<BulkThirdPartyRow> rows = switch (extension) {
             case "csv" -> parseCsvRows(fileBytes, delimiter);
             case "xlsx" -> parseXlsxRows(fileBytes);
-            default -> throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+            default -> throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
         };
 
         if (rows.isEmpty()) {
-            throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
         }
         if (rows.size() > MAX_BULK_ROWS) {
             throw new IllegalArgumentException("BULK_003: Archivo excede limite maximo (10,000 registros).");
@@ -159,15 +161,18 @@ public class ThirdPartyService {
             validateBulkRow(row);
             String normalizedNit = row.nit().trim();
             if (!seenNitsInFile.add(normalizedNit)) {
-                throw new IllegalArgumentException("BULK_002: Linea " + row.line() + ": NIT duplicado en archivo/sistema.");
+                throw new IllegalArgumentException(
+                        "BULK_002: Linea " + row.line() + ": NIT duplicado en archivo/sistema.");
             }
 
             List<ThirdParty> existingByNit = thirdPartyRepository.findByNitAndDeletedAtIsNull(normalizedNit);
             if (!existingByNit.isEmpty() && !overwrite) {
-                throw new IllegalArgumentException("BULK_002: Linea " + row.line() + ": NIT duplicado en archivo/sistema.");
+                throw new IllegalArgumentException(
+                        "BULK_002: Linea " + row.line() + ": NIT duplicado en archivo/sistema.");
             }
             if (existingByNit.size() > 1) {
-                throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": existen multiples terceros con el mismo NIT.");
+                throw new IllegalArgumentException(
+                        "BULK_004: Error en linea " + row.line() + ": existen multiples terceros con el mismo NIT.");
             }
 
             ThirdPartyStatusCatalog status = resolveStatusByName(row.status(), statusesByName, row.line());
@@ -217,9 +222,7 @@ public class ThirdPartyService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Carga masiva procesada exitosamente."),
-                        Optional.of(response)
-                )
-        );
+                        Optional.of(response)));
     }
 
     public ResponseEntity<?> findAllPaged(DataTableRequest request) {
@@ -241,7 +244,8 @@ public class ThirdPartyService {
         Page<ThirdParty> thirdParties = thirdPartyRepository.findAll(spec, pageable);
 
         if (thirdParties.isEmpty()) {
-            throw new IllegalArgumentException("TERC_001: No se encontraron terceros con los criterios de busqueda especificados.");
+            throw new IllegalArgumentException(
+                    "TERC_001: No se encontraron terceros con los criterios de busqueda especificados.");
         }
 
         return ResponseEntity.ok(DataTableResponse.from(thirdParties.map(this::toDto), safeRequest.getDraw()));
@@ -266,7 +270,8 @@ public class ThirdPartyService {
                         .statusName(thirdParty.getStatus().getName())
                         .blockingReason(thirdParty.getBlockingReason())
                         .municipality(toMunicipalityDto(thirdParty.getMunicipality()))
-                        .municipalityId(thirdParty.getMunicipality() != null ? thirdParty.getMunicipality().getId() : null)
+                        .municipalityId(
+                                thirdParty.getMunicipality() != null ? thirdParty.getMunicipality().getId() : null)
                         .address(thirdParty.getAddress())
                         .phone(thirdParty.getPhone())
                         .email(thirdParty.getEmail())
@@ -288,9 +293,7 @@ public class ThirdPartyService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Informacion detallada del tercero obtenida correctamente."),
-                        Optional.of(detail)
-                )
-        );
+                        Optional.of(detail)));
     }
 
     public ResponseEntity<?> update(Long id, ThirdPartyDTO request, BindingResult bindingResult) {
@@ -327,7 +330,8 @@ public class ThirdPartyService {
             thirdParty.setBlockingReason(resolveBlockingReasonForPersist(targetStatus, request.getBlockingReason()));
         } else if (request.getBlockingReason() != null) {
             validateBlockingReason(thirdParty.getStatus(), request.getBlockingReason());
-            thirdParty.setBlockingReason(resolveBlockingReasonForPersist(thirdParty.getStatus(), request.getBlockingReason()));
+            thirdParty.setBlockingReason(
+                    resolveBlockingReasonForPersist(thirdParty.getStatus(), request.getBlockingReason()));
         }
 
         thirdParty.setNit(targetNit);
@@ -346,12 +350,11 @@ public class ThirdPartyService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero actualizado exitosamente."),
-                        Optional.of(toDto(thirdParty))
-                )
-        );
+                        Optional.of(toDto(thirdParty))));
     }
 
-    public ResponseEntity<?> updateRolesAndStatus(Long id, UpdateThirdPartyRolesStatusRequest request, BindingResult bindingResult) {
+    public ResponseEntity<?> updateRolesAndStatus(Long id, UpdateThirdPartyRolesStatusRequest request,
+            BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
@@ -367,9 +370,7 @@ public class ThirdPartyService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Roles y estado del tercero actualizados correctamente."),
-                        Optional.of(toDto(thirdParty))
-                )
-        );
+                        Optional.of(toDto(thirdParty))));
     }
 
     public ResponseEntity<?> delete(Long id) {
@@ -378,9 +379,7 @@ public class ThirdPartyService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero eliminado exitosamente."),
-                        Optional.empty()
-                )
-        );
+                        Optional.empty()));
     }
 
     private byte[] decodeBase64Payload(String fileBase64) {
@@ -392,7 +391,8 @@ public class ThirdPartyService {
         try {
             return Base64.getDecoder().decode(payload);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
         }
     }
 
@@ -457,8 +457,7 @@ public class ThirdPartyService {
                     getRowValue(values, canonicalHeaderIndexes, "email"),
                     getRowValue(values, canonicalHeaderIndexes, "status"),
                     getRowValue(values, canonicalHeaderIndexes, "third_party_type"),
-                    getRowValue(values, canonicalHeaderIndexes, "dv")
-            ));
+                    getRowValue(values, canonicalHeaderIndexes, "dv")));
         }
         return rows;
     }
@@ -483,10 +482,14 @@ public class ThirdPartyService {
         int pipes = countChar(headerLine, '|');
         int tabs = countChar(headerLine, '\t');
 
-        if (configuredDelimiter == ',' && semicolons > commas) return ';';
-        if (configuredDelimiter == ',' && pipes > commas) return '|';
-        if (configuredDelimiter == ',' && tabs > commas) return '\t';
-        if (configuredDelimiter == ';' && commas > semicolons) return ',';
+        if (configuredDelimiter == ',' && semicolons > commas)
+            return ';';
+        if (configuredDelimiter == ',' && pipes > commas)
+            return '|';
+        if (configuredDelimiter == ',' && tabs > commas)
+            return '\t';
+        if (configuredDelimiter == ';' && commas > semicolons)
+            return ',';
 
         return configuredDelimiter;
     }
@@ -529,12 +532,12 @@ public class ThirdPartyService {
                         getRowValue(rowMap, canonicalHeaderIndexes, "email"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "status"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "third_party_type"),
-                        getRowValue(rowMap, canonicalHeaderIndexes, "dv")
-                ));
+                        getRowValue(rowMap, canonicalHeaderIndexes, "dv")));
             }
             return rows;
         } catch (Exception ex) {
-            throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
         }
     }
 
@@ -566,22 +569,32 @@ public class ThirdPartyService {
             return null;
         }
         String normalized = normalizeHeader(header);
-        if ("nit".equals(normalized)) return "nit";
-        if (Set.of("nombre_razon_social", "razon_social", "nombre").contains(normalized)) return "business_name";
-        if (Set.of("municipio", "municipality", "municipio_codigo", "municipality_code").contains(normalized)) return "municipality";
-        if ("direccion".equals(normalized)) return "address";
-        if ("email".equals(normalized) || "correo".equals(normalized)) return "email";
-        if (Set.of("estado", "estado_tercero").contains(normalized)) return "status";
-        if (Set.of("tipo_tercero", "roles", "rol").contains(normalized)) return "third_party_type";
-        if (Set.of("dv", "digito_verificacion", "digito_de_verificacion").contains(normalized)) return "dv";
+        if ("nit".equals(normalized))
+            return "nit";
+        if (Set.of("nombre_razon_social", "razon_social", "nombre").contains(normalized))
+            return "business_name";
+        if (Set.of("municipio", "municipality", "municipio_codigo", "municipality_code").contains(normalized))
+            return "municipality";
+        if ("direccion".equals(normalized))
+            return "address";
+        if ("email".equals(normalized) || "correo".equals(normalized))
+            return "email";
+        if (Set.of("estado", "estado_tercero").contains(normalized))
+            return "status";
+        if (Set.of("tipo_tercero", "roles", "rol").contains(normalized))
+            return "third_party_type";
+        if (Set.of("dv", "digito_verificacion", "digito_de_verificacion").contains(normalized))
+            return "dv";
         return null;
     }
 
     private void validateRequiredHeaders(Set<String> foundHeaders) {
-        List<String> required = List.of("nit", "business_name", "municipality", "address", "email", "status", "third_party_type");
+        List<String> required = List.of("nit", "business_name", "municipality", "address", "email", "status",
+                "third_party_type");
         for (String key : required) {
             if (!foundHeaders.contains(key)) {
-                throw new IllegalArgumentException("BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+                throw new IllegalArgumentException(
+                        "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
             }
         }
     }
@@ -668,7 +681,8 @@ public class ThirdPartyService {
                     continue;
                 }
                 Node refNode = cellNode.getAttributes() != null ? cellNode.getAttributes().getNamedItem("r") : null;
-                int columnIndex = refNode == null ? -1 : columnNameToIndex(refNode.getTextContent().replaceAll("\\d", ""));
+                int columnIndex = refNode == null ? -1
+                        : columnNameToIndex(refNode.getTextContent().replaceAll("\\d", ""));
                 if (columnIndex < 0) {
                     continue;
                 }
@@ -731,14 +745,17 @@ public class ThirdPartyService {
         if (row.nit() == null || !row.nit().trim().matches("^\\d{10,15}$")) {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": NIT invalido.");
         }
-        if (row.businessName() == null || row.businessName().trim().length() < 3 || row.businessName().trim().length() > 255) {
+        if (row.businessName() == null || row.businessName().trim().length() < 3
+                || row.businessName().trim().length() > 255) {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": razon social invalida.");
         }
         if (row.municipality() == null || row.municipality().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": municipio es obligatorio.");
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": municipio es obligatorio.");
         }
         if (row.address() == null || row.address().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": direccion es obligatoria.");
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": direccion es obligatoria.");
         }
         if (row.email() == null || row.email().trim().isEmpty()) {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": email es obligatorio.");
@@ -750,7 +767,8 @@ public class ThirdPartyService {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": estado es obligatorio.");
         }
         if (row.thirdPartyType() == null || row.thirdPartyType().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": tipo_tercero es obligatorio.");
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": tipo_tercero es obligatorio.");
         }
     }
 
@@ -768,8 +786,7 @@ public class ThirdPartyService {
     private ThirdPartyStatusCatalog resolveStatusByName(
             String statusName,
             Map<String, ThirdPartyStatusCatalog> statusesByName,
-            int line
-    ) {
+            int line) {
         ThirdPartyStatusCatalog status = null;
         for (String candidate : getStatusCandidates(statusName)) {
             status = statusesByName.get(candidate);
@@ -781,7 +798,8 @@ public class ThirdPartyService {
             status = findStatusBySemanticMatch(statusName, statusesByName);
         }
         if (status == null) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + line + ": estado no valido (" + safe(statusName) + ").");
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": estado no valido (" + safe(statusName) + ").");
         }
         return status;
     }
@@ -805,8 +823,7 @@ public class ThirdPartyService {
 
     private ThirdPartyStatusCatalog findStatusBySemanticMatch(
             String statusName,
-            Map<String, ThirdPartyStatusCatalog> statusesByName
-    ) {
+            Map<String, ThirdPartyStatusCatalog> statusesByName) {
         String normalized = compactToken(statusName);
         if (normalized.contains("BLOQ") || normalized.contains("BLOCK")) {
             for (Map.Entry<String, ThirdPartyStatusCatalog> entry : statusesByName.entrySet()) {
@@ -838,8 +855,7 @@ public class ThirdPartyService {
     private Set<ThirdPartyRoleCatalog> resolveRolesByNames(
             String roleNames,
             Map<String, ThirdPartyRoleCatalog> rolesByName,
-            int line
-    ) {
+            int line) {
         String[] rawRoles = roleNames.split("[,;|]");
         Set<ThirdPartyRoleCatalog> roles = new LinkedHashSet<>();
         for (String rawRole : rawRoles) {
@@ -873,8 +889,7 @@ public class ThirdPartyService {
     private void ensureStatusExists(String statusName) {
         statusCatalogRepository.findByNameIgnoreCase(statusName)
                 .orElseGet(() -> statusCatalogRepository.save(
-                        ThirdPartyStatusCatalog.builder().name(statusName).build()
-                ));
+                        ThirdPartyStatusCatalog.builder().name(statusName).build()));
     }
 
     private Map<String, ThirdPartyRoleCatalog> loadRolesByName() {
@@ -934,7 +949,8 @@ public class ThirdPartyService {
             return;
         }
         if (blockingReason == null || blockingReason.trim().length() < 20) {
-            throw new IllegalArgumentException("TERC_031: El tercero no puede ser bloqueado sin motivo registrado (min. 20 caracteres).");
+            throw new IllegalArgumentException(
+                    "TERC_031: El tercero no puede ser bloqueado sin motivo registrado (min. 20 caracteres).");
         }
     }
 
@@ -947,15 +963,17 @@ public class ThirdPartyService {
 
     private void validateAllowedBulkStatus(ThirdPartyStatusCatalog status, int line) {
         if (status != null && "BLOQUEADO".equalsIgnoreCase(status.getName())) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + line + ": no se permite crear terceros en estado BLOQUEADO en carga masiva.");
+            throw new IllegalArgumentException("BULK_004: Error en linea " + line
+                    + ": no se permite crear terceros en estado BLOQUEADO en carga masiva.");
         }
     }
 
     private Set<ThirdPartyRoleCatalog> resolveRoles(List<Long> roleIds) {
-        List<Long> cleanRoleIds = roleIds == null ? List.of() : roleIds.stream()
-                .filter(id -> id != null && id > 0)
-                .distinct()
-                .toList();
+        List<Long> cleanRoleIds = roleIds == null ? List.of()
+                : roleIds.stream()
+                        .filter(id -> id != null && id > 0)
+                        .distinct()
+                        .toList();
         if (cleanRoleIds.isEmpty()) {
             throw new IllegalArgumentException("Debe seleccionar al menos un rol para el tercero.");
         }
@@ -991,7 +1009,8 @@ public class ThirdPartyService {
 
         return municipalityRepository.findByCodeIgnoreCase(cleanValue)
                 .or(() -> municipalityRepository.findByNameIgnoreCase(cleanValue))
-                .orElseThrow(() -> new IllegalArgumentException("BULK_004: Error en linea " + line + ": municipio no valido."));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "BULK_004: Error en linea " + line + ": municipio no valido."));
     }
 
     private ThirdParty getThirdPartyOrThrow(Long id) {
@@ -1010,13 +1029,13 @@ public class ThirdPartyService {
 
     private void validateDataTableRequest(DataTableRequest request) {
         if (request.getLength() > MAX_PAGE_SIZE) {
-            throw new IllegalArgumentException("TERC_002: Parametros de paginacion invalidos. Limite maximo: 100 registros.");
+            throw new IllegalArgumentException(
+                    "TERC_002: Parametros de paginacion invalidos. Limite maximo: 100 registros.");
         }
 
         Set<String> allowedFields = Set.of(
                 "id", "thirdPartyCode", "nit", "dv", "businessName", "status.name", "roles",
-                "municipality.name", "municipality.country.name", "createdAt", "updatedAt"
-        );
+                "municipality.name", "municipality.country.name", "createdAt", "updatedAt");
 
         for (DataTableRequest.DataTableColumn column : request.getColumns()) {
             if (column == null || column.getData() == null || column.getData().isBlank()) {
@@ -1035,8 +1054,10 @@ public class ThirdPartyService {
     }
 
     private ThirdPartyDTO toDto(ThirdParty entity) {
-        List<Long> roleIds = entity.getRoles() == null ? List.of() : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getId).toList();
-        List<String> roleNames = entity.getRoles() == null ? List.of() : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getName).toList();
+        List<Long> roleIds = entity.getRoles() == null ? List.of()
+                : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getId).toList();
+        List<String> roleNames = entity.getRoles() == null ? List.of()
+                : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getName).toList();
 
         return ThirdPartyDTO.builder()
                 .id(entity.getId())
@@ -1153,7 +1174,6 @@ public class ThirdPartyService {
             String email,
             String status,
             String thirdPartyType,
-            String dv
-    ) {
+            String dv) {
     }
 }
