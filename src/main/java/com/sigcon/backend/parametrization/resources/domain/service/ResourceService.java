@@ -115,8 +115,16 @@ public class ResourceService {
             .name(country.getName())
             .code(country.getCode())
             .municipalities(municipalities.stream()
-                .map(this::toMunicipalityDTO)
+                .map(this::toMunicipalitySimpleDTO)
                 .collect(Collectors.toList()))
+            .build();
+    }
+
+    private MunicipalityDTO toMunicipalitySimpleDTO(Municipality municipality) {
+        return MunicipalityDTO.builder()
+            .id(municipality.getId())
+            .name(municipality.getName())
+            .code(municipality.getCode())
             .build();
     }
 
