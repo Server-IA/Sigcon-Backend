@@ -1,6 +1,6 @@
 package com.sigcon.backend.third_parties.third_parties.application;
 
-import com.sigcon.backend.parametrization.parameters.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
 import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;

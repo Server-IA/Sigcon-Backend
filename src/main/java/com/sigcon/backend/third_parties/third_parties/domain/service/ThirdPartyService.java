@@ -1,16 +1,16 @@
 package com.sigcon.backend.third_parties.third_parties.domain.service;
 
-import com.sigcon.backend.parametrization.parameters.application.CountryDTO;
-import com.sigcon.backend.parametrization.parameters.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.CountryDTO;
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
 import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
-import com.sigcon.backend.parametrization.parameters.domain.model.Country;
-import com.sigcon.backend.parametrization.parameters.domain.model.Municipality;
+import com.sigcon.backend.parametrization.resources.domain.model.Country;
+import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
 import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
 import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
 import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
-import com.sigcon.backend.parametrization.parameters.domain.repository.MunicipalityRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.MunicipalityRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.TypeOrganizationRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.TypeRegimenRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.WithholdingRepository;
@@ -30,6 +30,7 @@ import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyWit
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRoleCatalogRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyStatusCatalogRepository;
+
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
