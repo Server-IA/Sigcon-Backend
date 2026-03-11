@@ -14,11 +14,11 @@ import com.sigcon.backend.third_parties.third_parties.domain.model.enums.PersonT
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRoleCatalogRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyStatusCatalogRepository;
-import com.sigcon.backend.parametrization.parameters.application.CountryDTO;
-import com.sigcon.backend.parametrization.parameters.application.MunicipalityDTO;
-import com.sigcon.backend.parametrization.parameters.domain.model.Country;
-import com.sigcon.backend.parametrization.parameters.domain.model.Municipality;
-import com.sigcon.backend.parametrization.parameters.domain.repository.MunicipalityRepository;
+import com.sigcon.backend.parametrization.resources.application.CountryDTO;
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.domain.model.Country;
+import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
+import com.sigcon.backend.parametrization.resources.domain.repository.MunicipalityRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
