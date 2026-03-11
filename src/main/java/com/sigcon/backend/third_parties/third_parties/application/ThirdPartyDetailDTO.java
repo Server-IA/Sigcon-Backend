@@ -1,8 +1,9 @@
 package com.sigcon.backend.third_parties.third_parties.application;
 
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.PersonType;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.TaxRegime;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -32,19 +33,12 @@ public class ThirdPartyDetailDTO {
         private String nit;
         private String dv;
         private String businessName;
-        private PersonType personType;
         private List<ThirdPartyRoleCatalogDTO> roles;
-        private List<Long> roleIds;
-        private List<String> roleNames;
         private ThirdPartyStatusCatalogDTO status;
-        private Long statusId;
-        private String statusName;
         private String blockingReason;
         private MunicipalityDTO municipality;
-        private Long municipalityId;
-        private String address;
-        private String phone;
-        private String email;
+        private TypeOrganizationDTO typeOrganization;
+        private List<ThirdContactDTO> contacts;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
     }
@@ -54,9 +48,8 @@ public class ThirdPartyDetailDTO {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class FiscalTab {
-        private TaxRegime taxRegime;
-        private String fiscalResponsibilities;
-        private String withholdingInfo;
+        private TypeRegimenDTO typeRegimen;
+        private List<WithholdingDTO> withholdings;
     }
 
     @Data
@@ -69,3 +62,4 @@ public class ThirdPartyDetailDTO {
         private String marketSegment;
     }
 }
+

@@ -1,13 +1,11 @@
 package com.sigcon.backend.third_parties.third_parties.domain.model;
 
 import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.PersonType;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.TaxRegime;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -16,6 +14,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -28,6 +27,8 @@ import org.hibernate.annotations.Where;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -56,10 +57,6 @@ public class ThirdParty {
     @Column(name = "business_name", nullable = false, length = 255)
     private String businessName;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "person_type", nullable = false, length = 16)
-    private PersonType personType;
-
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "third_party_role_assignments", joinColumns = @JoinColumn(name = "third_party_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<ThirdPartyRoleCatalog> roles;
@@ -75,24 +72,13 @@ public class ThirdParty {
     @JoinColumn(name = "municipality_id")
     private Municipality municipality;
 
-    @Column(name = "address", length = 255)
-    private String address;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "type_organization_id")
+    private TypeOrganization typeOrganization;
 
-    @Column(name = "phone", length = 30)
-    private String phone;
-
-    @Column(name = "email", length = 255)
-    private String email;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "tax_regime", length = 32)
-    private TaxRegime taxRegime;
-
-    @Column(name = "fiscal_responsibilities", length = 255)
-    private String fiscalResponsibilities;
-
-    @Column(name = "withholding_info", length = 255)
-    private String withholdingInfo;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "type_regimen_id")
+    private TypeRegimen typeRegimen;
 
     @Column(name = "credit_limit", precision = 19, scale = 2)
     private BigDecimal creditLimit;
@@ -102,6 +88,14 @@ public class ThirdParty {
 
     @Column(name = "market_segment", length = 100)
     private String marketSegment;
+
+    @OneToMany(mappedBy = "thirdParty", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @Builder.Default
+    private List<ThirdContact> contacts = new ArrayList<>();
+
+    @OneToMany(mappedBy = "thirdParty", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @Builder.Default
+    private List<ThirdPartyWithholdingAssignment> withholdingAssignments = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -123,3 +117,4 @@ public class ThirdParty {
         this.updatedAt = LocalDateTime.now();
     }
 }
+

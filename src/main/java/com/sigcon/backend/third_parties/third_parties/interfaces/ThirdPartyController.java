@@ -36,29 +36,17 @@ public class ThirdPartyController {
 
     private final ThirdPartyService thirdPartyService;
 
-    @PostMapping("/store")
-    @Operation(
-            summary = "Registrar tercero",
-            description = "RF02 - Crea un tercero con datos generales, fiscales y comerciales.",
-            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    required = true,
-                    description = "Payload de creacion del tercero",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = ThirdPartyDTO.class),
-                            examples = @ExampleObject(value = "{\n  \"nit\": \"9001234567\",\n  \"dv\": \"1\",\n  \"businessName\": \"EMPRESA ABC SAS\",\n  \"personType\": \"JURIDICA\",\n  \"roleIds\": [1,2],\n  \"statusId\": 1,\n  \"municipalityId\": 1,\n  \"address\": \"Calle 10 # 20-30\",\n  \"phone\": \"6011112233\",\n  \"email\": \"contacto@empresa.com\",\n  \"taxRegime\": \"COMMON\",\n  \"fiscalResponsibilities\": \"R-99-PN\",\n  \"withholdingInfo\": \"RET_FUENTE\",\n  \"creditLimit\": 10000000,\n  \"paymentTerms\": \"30 dias\",\n  \"marketSegment\": \"CORPORATIVO\"\n}")
-                    )
-            )
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Tercero registrado correctamente"),
-            @ApiResponse(responseCode = "400", description = "Error de validacion"),
-            @ApiResponse(responseCode = "403", description = "Sin permisos")
-    })
-    @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> store(@Valid @RequestBody ThirdPartyDTO request, BindingResult bindingResult) {
-        return thirdPartyService.create(request, bindingResult);
-    }
+        @PostMapping("/store")
+        @Operation(summary = "Registrar tercero", description = "RF02 - Crea un tercero con datos generales, fiscales y comerciales.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Payload de creacion del tercero", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ThirdPartyDTO.class), examples = @ExampleObject(value = "{\n  \"nit\": \"9001234567\",\n  \"dv\": \"1\",\n  \"businessName\": \"EMPRESA ABC SAS\",\n  \"roleIds\": [1,2],\n  \"statusId\": 1,\n  \"municipalityId\": 1,\n  \"typeOrganizationId\": 1,\n  \"typeRegimenId\": 2,\n  \"withholdingIds\": [1,3],\n  \"creditLimit\": 10000000,\n  \"paymentTerms\": \"30 dias\",\n  \"marketSegment\": \"CORPORATIVO\",\n  \"contacts\": [\n    {\n      \"position\": \"Contador\",\n      \"phone\": \"3001234567\",\n      \"email\": \"contabilidad@empresa.com\",\n      \"contactPerson\": \"Pedro Perez\"\n    }\n  ]\n}"))))
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Tercero registrado correctamente"),
+                        @ApiResponse(responseCode = "400", description = "Error de validacion"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        public ResponseEntity<?> store(@Valid @RequestBody ThirdPartyDTO request, BindingResult bindingResult) {
+                return thirdPartyService.create(request, bindingResult);
+        }
 
     @PostMapping("/bulk/store")
     @Operation(

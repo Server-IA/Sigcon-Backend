@@ -1,10 +1,11 @@
 package com.sigcon.backend.third_parties.third_parties.application;
 
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.PersonType;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.TaxRegime;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,26 +25,30 @@ public class ThirdPartyDTO {
     private String nit;
     private String dv;
     private String businessName;
-    private PersonType personType;
     private List<ThirdPartyRoleCatalogDTO> roles;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private List<Long> roleIds;
-    private List<String> roleNames;
     private ThirdPartyStatusCatalogDTO status;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Long statusId;
-    private String statusName;
     private String blockingReason;
     private MunicipalityDTO municipality;
-    @NotNull(message = "El municipio es obligatorio")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Long municipalityId;
-    private String address;
-    private String phone;
-    private String email;
-    private TaxRegime taxRegime;
-    private String fiscalResponsibilities;
-    private String withholdingInfo;
+    private TypeOrganizationDTO typeOrganization;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private Long typeOrganizationId;
+    private TypeRegimenDTO typeRegimen;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private Long typeRegimenId;
+    private List<WithholdingDTO> withholdings;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private List<Long> withholdingIds;
     private BigDecimal creditLimit;
     private String paymentTerms;
     private String marketSegment;
+    private List<ThirdContactDTO> contacts;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
+
