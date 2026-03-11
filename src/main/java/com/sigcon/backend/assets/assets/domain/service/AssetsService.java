@@ -93,7 +93,7 @@ public class AssetsService {
                 .description(normalizeOptionalText(request.getDescription()))
                 .classification(request.getClassification())
                 .assetType(request.getType())
-                .chartOfAccount(chartOfAccount)
+                // .chartOfAccount(chartOfAccount)
                 .supplier(supplier)
                 .acquisitionValue(request.getAcquisitionValue())
                 .acquisitionDate(request.getAcquisitionDate())
@@ -177,7 +177,7 @@ public class AssetsService {
         existingAsset.setDescription(normalizedDescription);
         existingAsset.setClassification(request.getClassification());
         existingAsset.setAssetType(request.getType());
-        existingAsset.setChartOfAccount(chartOfAccount);
+        // existingAsset.setChartOfAccount(chartOfAccount);
         existingAsset.setSupplier(supplier);
         existingAsset.setAcquisitionValue(request.getAcquisitionValue());
         existingAsset.setAcquisitionDate(request.getAcquisitionDate());
@@ -413,9 +413,9 @@ public class AssetsService {
                 .description(asset.getDescription())
                 .classification(asset.getClassification())
                 .type(asset.getAssetType())
-                .chartOfAccountId(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getId() : null)
-                .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
-                .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
+                // .chartOfAccountId(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getId() : null)
+                // .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
+                // .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
                 .supplierId(asset.getSupplier() != null ? asset.getSupplier().getId() : null)
                 .supplierName(asset.getSupplier() != null ? asset.getSupplier().getBusinessName() : null)
                 .acquisitionValue(asset.getAcquisitionValue())
