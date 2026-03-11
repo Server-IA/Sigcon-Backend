@@ -9,9 +9,11 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.repository.AssetChartOfAccountBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetThirdPartyBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyRoleCatalog;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -62,6 +64,7 @@ public class AssetsService {
     private final AssetsRepository assetsRepository;
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
     private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
+    private final AccountingAccountRepository accountingAccountRepository;
     private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
 
@@ -69,10 +72,10 @@ public class AssetsService {
     public ViewAssetsDTO create(CreateAssetsDTO request) {
         validateAssetPermission(PERM_CREATE_ASSET);
         validateAccountingPeriodIsOpen();
-        validateMandatoryCreateData(request);
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         ChartOfAccount chartOfAccount = resolveChartOfAccount(request.getAccountingCode(), false);
+        AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
         validateAccountsPayableDependency(
@@ -99,7 +102,8 @@ public class AssetsService {
                 .paymentTerms(request.getPaymentTerms().trim())
                 .accountsPayableReferenceId(request.getAccountsPayableReferenceId())
                 .bankCashReferenceId(request.getBankCashReferenceId())
-                .costCenterOrAccountingLocation(normalizeOptionalText(request.getCostCenterOrAccountingLocation()))
+                .accountingAccount(accountingAccount)
+                .status(request.getStatus())
                 .observations(normalizeOptionalText(request.getObservations()))
                 .createdBy(currentUser)
                 .updatedBy(currentUser)
@@ -143,7 +147,6 @@ public class AssetsService {
     public ViewAssetsDTO update(Long id, UpdateAssetsDTO request) {
         validateAssetPermission(PERM_UPDATE_ASSET);
         validateAccountingPeriodIsOpen();
-        validateMandatoryUpdateData(request);
 
         Assets existingAsset = assetsRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El activo seleccionado no existe."));
@@ -155,6 +158,7 @@ public class AssetsService {
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         ChartOfAccount chartOfAccount = resolveChartOfAccount(request.getAccountingCode(), true);
+        AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
         validateAccountsPayableDependency(
@@ -165,7 +169,6 @@ public class AssetsService {
         validateBankCashDependency(request.getBankCashReferenceId());
 
         String normalizedDescription = normalizeOptionalText(request.getDescription());
-        String normalizedCostCenter = normalizeOptionalText(request.getCostCenterOrAccountingLocation());
         String normalizedObservations = normalizeOptionalText(request.getObservations());
         String normalizedPaymentTerms = request.getPaymentTerms().trim();
         String currentUser = resolveCurrentUsername();
@@ -183,46 +186,13 @@ public class AssetsService {
         existingAsset.setPaymentTerms(normalizedPaymentTerms);
         existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
         existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
-        existingAsset.setCostCenterOrAccountingLocation(normalizedCostCenter);
+        existingAsset.setAccountingAccount(accountingAccount);
         existingAsset.setStatus(request.getStatus());
         existingAsset.setObservations(normalizedObservations);
         existingAsset.setUpdatedBy(currentUser);
 
         Assets savedAsset = assetsRepository.save(existingAsset);
         return toViewDTO(savedAsset);
-    }
-
-    private void validateMandatoryCreateData(CreateAssetsDTO request) {
-        if (request == null
-                || !StringUtils.hasText(request.getName())
-                || request.getClassification() == null
-                || request.getType() == null
-                || !StringUtils.hasText(request.getAccountingCode())
-                || request.getAcquisitionValue() == null
-                || request.getAcquisitionDate() == null
-                || request.getUsefulLifeMonths() == null
-                || request.getDepreciationMethod() == null
-                || request.getSupplierId() == null
-                || !StringUtils.hasText(request.getPaymentTerms())) {
-            throw new IllegalArgumentException("Faltan datos requeridos");
-        }
-    }
-
-    private void validateMandatoryUpdateData(UpdateAssetsDTO request) {
-        if (request == null
-                || !StringUtils.hasText(request.getName())
-                || request.getClassification() == null
-                || request.getType() == null
-                || !StringUtils.hasText(request.getAccountingCode())
-                || request.getAcquisitionValue() == null
-                || request.getAcquisitionDate() == null
-                || request.getUsefulLifeMonths() == null
-                || request.getDepreciationMethod() == null
-                || request.getSupplierId() == null
-                || !StringUtils.hasText(request.getPaymentTerms())
-                || request.getStatus() == null) {
-            throw new IllegalArgumentException("Faltan datos requeridos");
-        }
     }
 
     private void validateAccountingPeriodIsOpen() {
@@ -262,7 +232,8 @@ public class AssetsService {
         ChartOfAccount chartOfAccount = chartOfAccountRepository.findByCode(normalizedCode)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe"));
 
-        if (chartOfAccount.getStatus() != AccountStatus.ACTIVE || chartOfAccount.getAccountClass() != AccountClass.ASSET) {
+        if (chartOfAccount.getStatus() != com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus.ACTIVE
+                || chartOfAccount.getAccountClass() != AccountClass.ASSET) {
             if (updateFlow) {
                 throw new IllegalArgumentException("Codigo contable invalido o no pertenece al grupo de activos permitidos.");
             }
@@ -272,21 +243,24 @@ public class AssetsService {
         return chartOfAccount;
     }
 
-    private void validateAccountsPayableDependency(Long accountsPayableReferenceId, Long supplierId, String paymentTerms) {
-        if (!StringUtils.hasText(paymentTerms)) {
-            throw new IllegalArgumentException("Faltan datos requeridos");
+    private AccountingAccount resolveAccountingAccount(Long accountingAccountId) {
+        AccountingAccount accountingAccount = accountingAccountRepository.findById(accountingAccountId)
+                .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe"));
+
+        if (accountingAccount.getStatus() != AccountStatus.ACTIVE) {
+            throw new IllegalArgumentException("Cuenta contable no existe");
         }
 
+        return accountingAccount;
+    }
+
+    private void validateAccountsPayableDependency(Long accountsPayableReferenceId, Long supplierId, String paymentTerms) {
         // TODO Integrar validacion con modulo de Cuentas por Pagar:
         // 1) Verificar que el termino de pago provenga de cuentas por pagar activas.
         // 2) Verificar que el termino este asociado al proveedor.
         // 3) Validar la deuda/condicion vigente antes de registrar/editar activos.
         if (accountsPayableReferenceId != null && accountsPayableReferenceId <= 0) {
             throw new IllegalArgumentException("Los datos ingresados no cumplen las politicas contables.");
-        }
-
-        if (supplierId == null || supplierId <= 0) {
-            throw new IllegalArgumentException("Proveedor no registrado");
         }
     }
 
@@ -451,7 +425,8 @@ public class AssetsService {
                 .paymentTerms(asset.getPaymentTerms())
                 .accountsPayableReferenceId(asset.getAccountsPayableReferenceId())
                 .bankCashReferenceId(asset.getBankCashReferenceId())
-                .costCenterOrAccountingLocation(asset.getCostCenterOrAccountingLocation())
+                .accountingAccountId(asset.getAccountingAccount() != null ? asset.getAccountingAccount().getId() : null)
+                .accountingAccountName(asset.getAccountingAccount() != null ? asset.getAccountingAccount().getCustomName() : null)
                 .status(asset.getStatus())
                 .observations(asset.getObservations())
                 .createdBy(asset.getCreatedBy())

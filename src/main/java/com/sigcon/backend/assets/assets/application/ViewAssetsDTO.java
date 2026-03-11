@@ -76,8 +76,11 @@ public class ViewAssetsDTO {
     @Schema(description = "Referencia de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
 
-    @Schema(description = "Centro de costo o ubicacion contable", example = "Sede principal")
-    private String costCenterOrAccountingLocation;
+    @Schema(description = "ID de la cuenta contable asociada", example = "12")
+    private Long accountingAccountId;
+
+    @Schema(description = "Nombre personalizado de la cuenta contable asociada", example = "Cuenta Activos Fijos PPE")
+    private String accountingAccountName;
 
     @Schema(description = "Estado del activo", example = "ACTIVE")
     private AssetStatus status;
