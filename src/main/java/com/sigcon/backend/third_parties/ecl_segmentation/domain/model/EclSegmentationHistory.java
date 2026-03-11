@@ -21,7 +21,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "ecl_segmentation_history")
+@Table(name = "risk_segmentation_history")
 @Data
 @Builder
 @NoArgsConstructor

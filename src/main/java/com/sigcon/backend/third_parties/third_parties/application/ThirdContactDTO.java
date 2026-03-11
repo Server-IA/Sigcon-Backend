@@ -1,4 +1,4 @@
-package com.sigcon.backend.parametrization.parameters.application;
+package com.sigcon.backend.third_parties.third_parties.application;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,11 +11,12 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class MunicipalityDTO {
+public class ThirdContactDTO {
     private Long id;
-    private String name;
-    private String code;
-    private CountryDTO country;
+    private String position;
+    private String phone;
+    private String email;
+    private String contactPerson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;

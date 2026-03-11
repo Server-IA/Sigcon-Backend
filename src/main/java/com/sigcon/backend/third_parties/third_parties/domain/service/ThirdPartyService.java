@@ -2,20 +2,31 @@ package com.sigcon.backend.third_parties.third_parties.domain.service;
 
 import com.sigcon.backend.parametrization.parameters.application.CountryDTO;
 import com.sigcon.backend.parametrization.parameters.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
 import com.sigcon.backend.parametrization.parameters.domain.model.Country;
 import com.sigcon.backend.parametrization.parameters.domain.model.Municipality;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
+import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
 import com.sigcon.backend.parametrization.parameters.domain.repository.MunicipalityRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.TypeOrganizationRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.TypeRegimenRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.WithholdingRepository;
 import com.sigcon.backend.third_parties.third_parties.application.BulkThirdPartyUploadRequest;
 import com.sigcon.backend.third_parties.third_parties.application.BulkThirdPartyUploadResponse;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDetailDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRoleCatalogDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyStatusCatalogDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdContactDTO;
 import com.sigcon.backend.third_parties.third_parties.application.UpdateThirdPartyRolesStatusRequest;
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdContact;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyRoleCatalog;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyStatusCatalog;
-import com.sigcon.backend.third_parties.third_parties.domain.model.enums.PersonType;
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyWithholdingAssignment;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRoleCatalogRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyStatusCatalogRepository;
@@ -61,13 +72,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ThirdPartyService {
 
-    private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_BULK_ROWS = 10_000;
 
     private final ThirdPartyRepository thirdPartyRepository;
     private final ThirdPartyRoleCatalogRepository roleCatalogRepository;
     private final ThirdPartyStatusCatalogRepository statusCatalogRepository;
     private final MunicipalityRepository municipalityRepository;
+    private final TypeOrganizationRepository typeOrganizationRepository;
+    private final TypeRegimenRepository typeRegimenRepository;
+    private final WithholdingRepository withholdingRepository;
     private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     public ResponseEntity<?> create(ThirdPartyDTO request, BindingResult bindingResult) {
@@ -85,6 +98,9 @@ public class ThirdPartyService {
         Set<ThirdPartyRoleCatalog> roles = resolveRoles(request.getRoleIds());
         ThirdPartyStatusCatalog status = resolveStatus(request.getStatusId());
         Municipality municipality = resolveMunicipality(request.getMunicipalityId());
+        TypeOrganization typeOrganization = resolveTypeOrganization(request.getTypeOrganizationId());
+        TypeRegimen typeRegimen = resolveTypeRegimen(request.getTypeRegimenId());
+        List<Withholding> withholdings = resolveWithholdings(request.getWithholdingIds());
         validateBlockingReason(status, request.getBlockingReason());
 
         ThirdParty thirdParty = ThirdParty.builder()
@@ -92,21 +108,19 @@ public class ThirdPartyService {
                 .nit(request.getNit().trim())
                 .dv(request.getDv().trim())
                 .businessName(request.getBusinessName().trim())
-                .personType(request.getPersonType())
                 .roles(roles)
                 .status(status)
                 .blockingReason(resolveBlockingReasonForPersist(status, request.getBlockingReason()))
                 .municipality(municipality)
-                .address(emptyToNull(request.getAddress()))
-                .phone(emptyToNull(request.getPhone()))
-                .email(emptyToNull(request.getEmail()))
-                .taxRegime(request.getTaxRegime())
-                .fiscalResponsibilities(emptyToNull(request.getFiscalResponsibilities()))
-                .withholdingInfo(emptyToNull(request.getWithholdingInfo()))
+                .typeOrganization(typeOrganization)
+                .typeRegimen(typeRegimen)
                 .creditLimit(request.getCreditLimit())
                 .paymentTerms(emptyToNull(request.getPaymentTerms()))
                 .marketSegment(emptyToNull(request.getMarketSegment()))
                 .build();
+
+        thirdParty.setContacts(toContactEntities(request.getContacts(), thirdParty));
+        thirdParty.setWithholdingAssignments(toWithholdingAssignments(withholdings, thirdParty));
 
         thirdPartyRepository.save(thirdParty);
 
@@ -186,20 +200,15 @@ public class ThirdPartyService {
                         .nit(normalizedNit)
                         .dv(resolveBulkDv(row.dv(), row.line()))
                         .businessName(row.businessName().trim())
-                        .personType(PersonType.JURIDICA)
                         .roles(roles)
                         .status(status)
                         .municipality(municipality)
-                        .address(emptyToNull(row.address()))
-                        .email(emptyToNull(row.email()))
                         .build();
                 toCreate.add(entity);
             } else {
                 ThirdParty entity = existingByNit.get(0);
                 entity.setBusinessName(row.businessName().trim());
                 entity.setMunicipality(municipality);
-                entity.setAddress(emptyToNull(row.address()));
-                entity.setEmail(emptyToNull(row.email()));
                 entity.setStatus(status);
                 entity.setRoles(roles);
                 toUpdate.add(entity);
@@ -227,11 +236,10 @@ public class ThirdPartyService {
 
     public ResponseEntity<?> findAllPaged(DataTableRequest request) {
         DataTableRequest safeRequest = normalizeDataTableRequest(request);
-        validateDataTableRequest(safeRequest);
 
         int start = Math.max(0, safeRequest.getStart());
         int length = safeRequest.getLength();
-        int safeLength = length <= 0 ? 20 : length;
+        int safeLength = length <= 0 ? 20 : length > 100 ? 100 : length;
         int page = start / safeLength;
 
         Pageable pageable = length == -1
@@ -261,27 +269,18 @@ public class ThirdPartyService {
                         .nit(thirdParty.getNit())
                         .dv(thirdParty.getDv())
                         .businessName(thirdParty.getBusinessName())
-                        .personType(thirdParty.getPersonType())
                         .roles(toRoleCatalogDtoList(thirdParty.getRoles()))
-                        .roleIds(thirdParty.getRoles().stream().map(ThirdPartyRoleCatalog::getId).toList())
-                        .roleNames(thirdParty.getRoles().stream().map(ThirdPartyRoleCatalog::getName).toList())
                         .status(toStatusCatalogDto(thirdParty.getStatus()))
-                        .statusId(thirdParty.getStatus().getId())
-                        .statusName(thirdParty.getStatus().getName())
                         .blockingReason(thirdParty.getBlockingReason())
                         .municipality(toMunicipalityDto(thirdParty.getMunicipality()))
-                        .municipalityId(
-                                thirdParty.getMunicipality() != null ? thirdParty.getMunicipality().getId() : null)
-                        .address(thirdParty.getAddress())
-                        .phone(thirdParty.getPhone())
-                        .email(thirdParty.getEmail())
+                        .typeOrganization(toTypeOrganizationDto(thirdParty.getTypeOrganization()))
+                        .contacts(toContactDtoList(thirdParty.getContacts()))
                         .createdAt(thirdParty.getCreatedAt())
                         .updatedAt(thirdParty.getUpdatedAt())
                         .build())
                 .fiscal(ThirdPartyDetailDTO.FiscalTab.builder()
-                        .taxRegime(thirdParty.getTaxRegime())
-                        .fiscalResponsibilities(thirdParty.getFiscalResponsibilities())
-                        .withholdingInfo(thirdParty.getWithholdingInfo())
+                        .typeRegimen(toTypeRegimenDto(thirdParty.getTypeRegimen()))
+                        .withholdings(toWithholdingDtoList(thirdParty.getWithholdingAssignments()))
                         .build())
                 .commercial(ThirdPartyDetailDTO.CommercialTab.builder()
                         .creditLimit(thirdParty.getCreditLimit())
@@ -314,14 +313,24 @@ public class ThirdPartyService {
             validateBusinessName(request.getBusinessName());
             thirdParty.setBusinessName(request.getBusinessName().trim());
         }
-        if (request.getPersonType() != null) {
-            thirdParty.setPersonType(request.getPersonType());
-        }
         if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
             thirdParty.setRoles(resolveRoles(request.getRoleIds()));
         }
         if (request.getMunicipalityId() != null) {
             thirdParty.setMunicipality(resolveMunicipality(request.getMunicipalityId()));
+        }
+        if (request.getTypeOrganizationId() != null) {
+            TypeOrganization typeOrganization = resolveTypeOrganization(request.getTypeOrganizationId());
+            thirdParty.setTypeOrganization(typeOrganization);
+        }
+        if (request.getTypeRegimenId() != null) {
+            TypeRegimen typeRegimen = resolveTypeRegimen(request.getTypeRegimenId());
+            thirdParty.setTypeRegimen(typeRegimen);
+        }
+        if (request.getWithholdingIds() != null) {
+            List<Withholding> withholdings = resolveWithholdings(request.getWithholdingIds());
+            thirdParty.getWithholdingAssignments().clear();
+            thirdParty.getWithholdingAssignments().addAll(toWithholdingAssignments(withholdings, thirdParty));
         }
         if (request.getStatusId() != null) {
             ThirdPartyStatusCatalog targetStatus = resolveStatus(request.getStatusId());
@@ -336,15 +345,19 @@ public class ThirdPartyService {
 
         thirdParty.setNit(targetNit);
         thirdParty.setDv(targetDv);
-        thirdParty.setAddress(emptyToNull(request.getAddress()));
-        thirdParty.setPhone(emptyToNull(request.getPhone()));
-        thirdParty.setEmail(emptyToNull(request.getEmail()));
-        thirdParty.setTaxRegime(request.getTaxRegime());
-        thirdParty.setFiscalResponsibilities(emptyToNull(request.getFiscalResponsibilities()));
-        thirdParty.setWithholdingInfo(emptyToNull(request.getWithholdingInfo()));
-        thirdParty.setCreditLimit(request.getCreditLimit());
-        thirdParty.setPaymentTerms(emptyToNull(request.getPaymentTerms()));
-        thirdParty.setMarketSegment(emptyToNull(request.getMarketSegment()));
+        if (request.getCreditLimit() != null) {
+            thirdParty.setCreditLimit(request.getCreditLimit());
+        }
+        if (request.getPaymentTerms() != null) {
+            thirdParty.setPaymentTerms(emptyToNull(request.getPaymentTerms()));
+        }
+        if (request.getMarketSegment() != null) {
+            thirdParty.setMarketSegment(emptyToNull(request.getMarketSegment()));
+        }
+        if (request.getContacts() != null) {
+            thirdParty.getContacts().clear();
+            thirdParty.getContacts().addAll(toContactEntities(request.getContacts(), thirdParty));
+        }
 
         thirdPartyRepository.save(thirdParty);
         return ResponseEntity.ok(
@@ -453,8 +466,6 @@ public class ThirdPartyService {
                     getRowValue(values, canonicalHeaderIndexes, "nit"),
                     getRowValue(values, canonicalHeaderIndexes, "business_name"),
                     getRowValue(values, canonicalHeaderIndexes, "municipality"),
-                    getRowValue(values, canonicalHeaderIndexes, "address"),
-                    getRowValue(values, canonicalHeaderIndexes, "email"),
                     getRowValue(values, canonicalHeaderIndexes, "status"),
                     getRowValue(values, canonicalHeaderIndexes, "third_party_type"),
                     getRowValue(values, canonicalHeaderIndexes, "dv")));
@@ -528,8 +539,6 @@ public class ThirdPartyService {
                         getRowValue(rowMap, canonicalHeaderIndexes, "nit"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "business_name"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "municipality"),
-                        getRowValue(rowMap, canonicalHeaderIndexes, "address"),
-                        getRowValue(rowMap, canonicalHeaderIndexes, "email"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "status"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "third_party_type"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "dv")));
@@ -589,7 +598,7 @@ public class ThirdPartyService {
     }
 
     private void validateRequiredHeaders(Set<String> foundHeaders) {
-        List<String> required = List.of("nit", "business_name", "municipality", "address", "email", "status",
+        List<String> required = List.of("nit", "business_name", "municipality", "status",
                 "third_party_type");
         for (String key : required) {
             if (!foundHeaders.contains(key)) {
@@ -753,16 +762,6 @@ public class ThirdPartyService {
             throw new IllegalArgumentException(
                     "BULK_004: Error en linea " + row.line() + ": municipio es obligatorio.");
         }
-        if (row.address() == null || row.address().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": direccion es obligatoria.");
-        }
-        if (row.email() == null || row.email().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": email es obligatorio.");
-        }
-        if (!row.email().trim().matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": email invalido.");
-        }
         if (row.status() == null || row.status().trim().isEmpty()) {
             throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": estado es obligatorio.");
         }
@@ -924,8 +923,11 @@ public class ThirdPartyService {
 
     private void validateRequiredFields(ThirdPartyDTO request) {
         validateBusinessName(request.getBusinessName());
-        if (request.getPersonType() == null) {
-            throw new IllegalArgumentException("El tipo de persona es obligatorio.");
+        if (request.getTypeOrganizationId() == null) {
+            throw new IllegalArgumentException("El tipo de organizacion es obligatorio.");
+        }
+        if (request.getTypeRegimenId() == null) {
+            throw new IllegalArgumentException("El tipo de regimen es obligatorio.");
         }
         if (request.getMunicipalityId() == null) {
             throw new IllegalArgumentException("El municipio es obligatorio.");
@@ -993,6 +995,40 @@ public class ThirdPartyService {
                 .orElseThrow(() -> new IllegalArgumentException("El estado no existe en el catalogo."));
     }
 
+    private TypeOrganization resolveTypeOrganization(Long typeOrganizationId) {
+        if (typeOrganizationId == null) {
+            return null;
+        }
+        return typeOrganizationRepository.findById(typeOrganizationId)
+                .orElseThrow(() -> new IllegalArgumentException("El tipo de organizacion no existe en el catalogo."));
+    }
+
+    private TypeRegimen resolveTypeRegimen(Long typeRegimenId) {
+        if (typeRegimenId == null) {
+            return null;
+        }
+        return typeRegimenRepository.findById(typeRegimenId)
+                .orElseThrow(() -> new IllegalArgumentException("El tipo de regimen no existe en el catalogo."));
+    }
+
+    private List<Withholding> resolveWithholdings(List<Long> withholdingIds) {
+        if (withholdingIds == null || withholdingIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> cleanIds = withholdingIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (cleanIds.isEmpty()) {
+            return List.of();
+        }
+        List<Withholding> withholdings = withholdingRepository.findAllById(cleanIds);
+        if (withholdings.size() != cleanIds.size()) {
+            throw new IllegalArgumentException("Una o mas retenciones no existen en el catalogo.");
+        }
+        return withholdings;
+    }
+
     private Municipality resolveMunicipality(Long municipalityId) {
         if (municipalityId == null) {
             throw new IllegalArgumentException("El municipio es obligatorio.");
@@ -1027,26 +1063,6 @@ public class ThirdPartyService {
         }
     }
 
-    private void validateDataTableRequest(DataTableRequest request) {
-        if (request.getLength() > MAX_PAGE_SIZE) {
-            throw new IllegalArgumentException(
-                    "TERC_002: Parametros de paginacion invalidos. Limite maximo: 100 registros.");
-        }
-
-        Set<String> allowedFields = Set.of(
-                "id", "thirdPartyCode", "nit", "dv", "businessName", "status.name", "roles",
-                "municipality.name", "municipality.country.name", "createdAt", "updatedAt");
-
-        for (DataTableRequest.DataTableColumn column : request.getColumns()) {
-            if (column == null || column.getData() == null || column.getData().isBlank()) {
-                continue;
-            }
-            if (!allowedFields.contains(column.getData())) {
-                throw new IllegalArgumentException("TERC_003: Campo de ordenamiento no valido.");
-            }
-        }
-    }
-
     private String generateThirdPartyCode() {
         long sequence = thirdPartyRepository.count() + 1;
         int year = LocalDate.now().getYear();
@@ -1056,8 +1072,6 @@ public class ThirdPartyService {
     private ThirdPartyDTO toDto(ThirdParty entity) {
         List<Long> roleIds = entity.getRoles() == null ? List.of()
                 : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getId).toList();
-        List<String> roleNames = entity.getRoles() == null ? List.of()
-                : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getName).toList();
 
         return ThirdPartyDTO.builder()
                 .id(entity.getId())
@@ -1065,25 +1079,23 @@ public class ThirdPartyService {
                 .nit(entity.getNit())
                 .dv(entity.getDv())
                 .businessName(entity.getBusinessName())
-                .personType(entity.getPersonType())
                 .roles(toRoleCatalogDtoList(entity.getRoles()))
                 .roleIds(roleIds)
-                .roleNames(roleNames)
                 .status(toStatusCatalogDto(entity.getStatus()))
                 .statusId(entity.getStatus() != null ? entity.getStatus().getId() : null)
-                .statusName(entity.getStatus() != null ? entity.getStatus().getName() : null)
                 .blockingReason(entity.getBlockingReason())
                 .municipality(toMunicipalityDto(entity.getMunicipality()))
                 .municipalityId(entity.getMunicipality() != null ? entity.getMunicipality().getId() : null)
-                .address(entity.getAddress())
-                .phone(entity.getPhone())
-                .email(entity.getEmail())
-                .taxRegime(entity.getTaxRegime())
-                .fiscalResponsibilities(entity.getFiscalResponsibilities())
-                .withholdingInfo(entity.getWithholdingInfo())
+                .typeOrganization(toTypeOrganizationDto(entity.getTypeOrganization()))
+                .typeOrganizationId(entity.getTypeOrganization() != null ? entity.getTypeOrganization().getId() : null)
+                .typeRegimen(toTypeRegimenDto(entity.getTypeRegimen()))
+                .typeRegimenId(entity.getTypeRegimen() != null ? entity.getTypeRegimen().getId() : null)
+                .withholdings(toWithholdingDtoList(entity.getWithholdingAssignments()))
+                .withholdingIds(toWithholdingIdList(entity.getWithholdingAssignments()))
                 .creditLimit(entity.getCreditLimit())
                 .paymentTerms(entity.getPaymentTerms())
                 .marketSegment(entity.getMarketSegment())
+                .contacts(toContactDtoList(entity.getContacts()))
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
@@ -1140,6 +1152,121 @@ public class ThirdPartyService {
                 .build();
     }
 
+    private TypeOrganizationDTO toTypeOrganizationDto(TypeOrganization typeOrganization) {
+        if (typeOrganization == null) {
+            return null;
+        }
+        return TypeOrganizationDTO.builder()
+                .id(typeOrganization.getId())
+                .name(typeOrganization.getName())
+                .code(typeOrganization.getCode())
+                .createdAt(typeOrganization.getCreatedAt())
+                .updatedAt(typeOrganization.getUpdatedAt())
+                .deletedAt(typeOrganization.getDeletedAt())
+                .build();
+    }
+
+    private TypeRegimenDTO toTypeRegimenDto(TypeRegimen typeRegimen) {
+        if (typeRegimen == null) {
+            return null;
+        }
+        return TypeRegimenDTO.builder()
+                .id(typeRegimen.getId())
+                .name(typeRegimen.getName())
+                .code(typeRegimen.getCode())
+                .createdAt(typeRegimen.getCreatedAt())
+                .updatedAt(typeRegimen.getUpdatedAt())
+                .deletedAt(typeRegimen.getDeletedAt())
+                .build();
+    }
+
+    private WithholdingDTO toWithholdingDto(Withholding withholding) {
+        if (withholding == null) {
+            return null;
+        }
+        return WithholdingDTO.builder()
+                .id(withholding.getId())
+                .name(withholding.getName())
+                .code(withholding.getCode())
+                .createdAt(withholding.getCreatedAt())
+                .updatedAt(withholding.getUpdatedAt())
+                .deletedAt(withholding.getDeletedAt())
+                .build();
+    }
+
+    private List<Long> toWithholdingIdList(List<ThirdPartyWithholdingAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            return List.of();
+        }
+        return assignments.stream()
+                .map(ThirdPartyWithholdingAssignment::getWithholding)
+                .filter(w -> w != null && w.getId() != null)
+                .map(Withholding::getId)
+                .distinct()
+                .toList();
+    }
+
+    private List<WithholdingDTO> toWithholdingDtoList(List<ThirdPartyWithholdingAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            return List.of();
+        }
+        return assignments.stream()
+                .map(ThirdPartyWithholdingAssignment::getWithholding)
+                .filter(w -> w != null && w.getId() != null)
+                .collect(Collectors.toMap(Withholding::getId, w -> w, (a, b) -> a, java.util.LinkedHashMap::new))
+                .values().stream()
+                .map(this::toWithholdingDto)
+                .toList();
+    }
+
+    private List<ThirdPartyWithholdingAssignment> toWithholdingAssignments(
+            List<Withholding> withholdings,
+            ThirdParty thirdParty) {
+        if (withholdings == null || withholdings.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return withholdings.stream()
+                .map(withholding -> ThirdPartyWithholdingAssignment.builder()
+                        .thirdParty(thirdParty)
+                        .withholding(withholding)
+                        .build())
+                .toList();
+    }
+
+    private List<ThirdContactDTO> toContactDtoList(List<ThirdContact> contacts) {
+        if (contacts == null || contacts.isEmpty()) {
+            return List.of();
+        }
+        return contacts.stream()
+                .map(contact -> ThirdContactDTO.builder()
+                        .id(contact.getId())
+                        .position(contact.getPosition())
+                        .phone(contact.getPhone())
+                        .email(contact.getEmail())
+                        .contactPerson(contact.getContactPerson())
+                        .createdAt(contact.getCreatedAt())
+                        .updatedAt(contact.getUpdatedAt())
+                        .deletedAt(contact.getDeletedAt())
+                        .build())
+                .toList();
+    }
+
+    private List<ThirdContact> toContactEntities(List<ThirdContactDTO> contactDTOs, ThirdParty thirdParty) {
+        if (contactDTOs == null || contactDTOs.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return contactDTOs.stream()
+                .map(dto -> ThirdContact.builder()
+                        .id(dto.getId())
+                        .thirdParty(thirdParty)
+                        .position(emptyToNull(dto.getPosition()))
+                        .phone(emptyToNull(dto.getPhone()))
+                        .email(emptyToNull(dto.getEmail()))
+                        .contactPerson(emptyToNull(dto.getContactPerson()))
+                        .build())
+                .toList();
+    }
+
     private String emptyToNull(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
@@ -1170,10 +1297,9 @@ public class ThirdPartyService {
             String nit,
             String businessName,
             String municipality,
-            String address,
-            String email,
             String status,
             String thirdPartyType,
             String dv) {
     }
 }
+

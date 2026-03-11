@@ -1,4 +1,4 @@
-package com.sigcon.backend.parametrization.parameters.domain.model;
+package com.sigcon.backend.third_parties.third_parties.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,28 +21,34 @@ import org.hibernate.annotations.Where;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "municipalities")
-@SQLDelete(sql = "UPDATE municipalities SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "third_contact")
+@SQLDelete(sql = "UPDATE third_contact SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Municipality {
+public class ThirdContact {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "country_id", nullable = false)
-    private Country country;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "third_party_id", nullable = false)
+    private ThirdParty thirdParty;
 
-    @Column(name = "name", nullable = false, length = 255)
-    private String name;
+    @Column(name = "position", length = 255)
+    private String position;
 
-    @Column(name = "code", nullable = false, length = 45)
-    private String code;
+    @Column(name = "phone", length = 12)
+    private String phone;
+
+    @Column(name = "email", length = 255)
+    private String email;
+
+    @Column(name = "contact_person", length = 255)
+    private String contactPerson;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

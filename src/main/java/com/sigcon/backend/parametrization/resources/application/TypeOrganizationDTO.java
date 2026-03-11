@@ -1,4 +1,4 @@
-package com.sigcon.backend.parametrization.parameters.application;
+package com.sigcon.backend.parametrization.resources.application;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CountryDTO {
+public class TypeOrganizationDTO {
     private Long id;
     private String name;
     private String code;

@@ -100,7 +100,6 @@ public class AssetsService {
                 .accountsPayableReferenceId(request.getAccountsPayableReferenceId())
                 .bankCashReferenceId(request.getBankCashReferenceId())
                 .costCenterOrAccountingLocation(normalizeOptionalText(request.getCostCenterOrAccountingLocation()))
-                .status(request.getStatus() == null ? AssetStatus.ACTIVE : request.getStatus())
                 .observations(normalizeOptionalText(request.getObservations()))
                 .createdBy(currentUser)
                 .updatedBy(currentUser)
@@ -117,7 +116,7 @@ public class AssetsService {
         int draw = Math.max(0, safeRequest.getDraw());
         int start = Math.max(0, safeRequest.getStart());
         int length = safeRequest.getLength();
-        int safeLength = length <= 0 ? 20 : length;
+        int safeLength = length <= 0 ? 20 : length > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : length ;
         int page = start / safeLength;
 
         Pageable pageable = length == -1

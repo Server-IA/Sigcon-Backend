@@ -22,6 +22,9 @@ import com.sigcon.backend.third_parties.ecl_segmentation.application.EclSegmenta
 import com.sigcon.backend.third_parties.ecl_segmentation.application.EclSegmentationResponse;
 import com.sigcon.backend.third_parties.ecl_segmentation.application.ManualAdjustmentRequest;
 
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty; // Import para validación de rol cliente activo
+import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository; // Import para validación de rol cliente activo
+
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
@@ -32,6 +35,7 @@ public class EclSegmentationService {
     
     private final EclSegmentationRepository eclSegmentationRepository;
     private final EclSegmentationHistoryRepository eclSegmentationHistoryRepository; 
+    private final ThirdPartyRepository thirdPartyRepository;
     //si al final si se requiere datos del modulo Accounts Receivable aui se inyectara su repositorio
     //private final ArRepository arRepository;
 
@@ -40,10 +44,8 @@ public class EclSegmentationService {
     */
    public ResponseEntity<?> calculateSegmentation(Long clientId, boolean isMonthlyClose) { 
         
-        // Validar que el cliente tenga el rol de cleinte activo y no otro rol activo 
-        //thirdPartyRepository.findByclientIdAndRoleAndDeletedAtIsNull(client Id, "CLEINTE")
-        //   .orElseThrow(() -> new IllegalArgumentException(
-        //           "ECL_003: Cliente no tiene rol CLIENTE activo."));
+        // Validar que el Cliente exista y tenga rol de cliente activo segun el ECL_003 del Requerimiento. Se asume que un cliente sin rol activo no puede ser segmentado, aunque tenga datos en AR.
+        validateClientRole(clientId);
 
         //1. obtener datos AR del cliente (se utiliza el ArDTO para reemplazar al modulo hasta implementarlo)
         ArDataDTO arData = getArData(clientId);
@@ -68,17 +70,16 @@ public class EclSegmentationService {
     ManualAdjustmentRequest request, 
     org.springframework.validation.BindingResult bindingResult) {
 
-        // Validar que el cliente tenga el rol de cleinte activo y no otro rol activo 
-        //thirdPartyRepository.findByclientIdAndRoleAndDeletedAtIsNull(client Id, "CLEINTE")
-        //   .orElseThrow(() -> new IllegalArgumentException(
-        //           "ECL_003: Cliente no tiene rol CLIENTE activo."));
-
         //1. validar errores de bean validation 
         if (bindingResult.hasErrors()) {
 
             return ResponseEntity.badRequest()
                 .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         } 
+
+        // Validar que el Cliente exista y tenga rol de cliente activo segun el ECL_003 del Requerimiento. Se asume que un cliente sin rol activo no puede ser segmentado, aunque tenga datos en AR.
+        validateClientRole(request.getClientId());
+
          // 2. Verificar que el cliente tiene segmento calculado previamente
         EclSegmentation current = eclSegmentationRepository
                 .findByClientIdAndDeletedAtIsNull(request.getClientId())
@@ -190,6 +191,23 @@ public class EclSegmentationService {
     // =========================================================================
     // MÉTODOS PRIVADOS
     // =========================================================================
+
+    /**
+        * Validar que el cliente exista y tenga rol de cliente activo segun el ECL_003 del Requerimiento. 
+        */
+       private void validateClientRole(Long clientId){
+        ThirdParty thirdParty = thirdPartyRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "ECL_003: Cliente no tiene Rol Cliente activo."
+                ));
+        boolean hasClientRole = thirdParty.getRoles().stream()
+                .anyMatch(role -> "CLIENTE".equalsIgnoreCase(role.getName())); 
+        if (!hasClientRole) {
+                throw new IllegalArgumentException(
+                        "ECL_003: Cliente no tiene Rol Cliente activo."
+                ); 
+        }
+       }
 
     /**
      * Reglas automáticas de segmentación por días mora (RF08).

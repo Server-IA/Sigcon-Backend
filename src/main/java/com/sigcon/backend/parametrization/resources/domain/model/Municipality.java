@@ -1,10 +1,13 @@
-package com.sigcon.backend.third_parties.third_parties.domain.model;
+package com.sigcon.backend.parametrization.resources.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -18,21 +21,28 @@ import org.hibernate.annotations.Where;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "third_party_status_catalog")
-@SQLDelete(sql = "UPDATE third_party_status_catalog SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "municipalities")
+@SQLDelete(sql = "UPDATE municipalities SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ThirdPartyStatusCatalog {
+public class Municipality {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", nullable = false, unique = true, length = 30)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "country_id", nullable = false)
+    private Country country;
+
+    @Column(name = "name", nullable = false, length = 255)
     private String name;
+
+    @Column(name = "code", nullable = false, length = 45)
+    private String code;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
