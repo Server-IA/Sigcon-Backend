@@ -1,0 +1,18 @@
+[
+    {
+        "code": "uk_risk_segmentation_client_id", 
+        "message": "Ya existe un segmento de riesgo activo para este cliente. "
+    }, 
+    {
+        "code": "fk_risk_segmentation_client_id", 
+        "message": "El cliente referenciado no existe en el sistema. "
+    }, 
+    {
+        "code": "fk_risk_segmentation_history_client_id", 
+        "message": "El cliente referenciado en el historial no existe en el sistema. "
+    }, 
+    {
+        "code": "fk_risk_segmentation_history_risk_segmentation_id", 
+        "message": "El segmento de riesgo referenciado en el historial no existe en el sistema. "
+    }
+]
