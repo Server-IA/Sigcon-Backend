@@ -20,11 +20,13 @@ import com.sigcon.backend.utils.DataTableRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/ecl-segmentation")
 @RequiredArgsConstructor
+@Tag(name = "Segmentación ECL", description = "Operaciones para calcular el riego de segmentación de un cliente (bajo,medio y alto). ")
 public class EclSegmentationController { 
 
     private final EclSegmentationService eclSegmentationService; 
