@@ -114,12 +114,12 @@ public class AssetsService {
     }
 
     public DataTableResponse<ViewAssetsDTO> findAllPaged(DataTableRequest request) {
-        DataTableRequest safeRequest = normalizeDataTableRequest(request);
-        validateDataTableRequest(safeRequest);
+        // DataTableRequest safeRequest = normalizeDataTableRequest(request);
+        // validateDataTableRequest(safeRequest);
 
-        int draw = Math.max(0, safeRequest.getDraw());
-        int start = Math.max(0, safeRequest.getStart());
-        int length = safeRequest.getLength();
+        int draw = Math.max(0, request.getDraw());
+        int start = Math.max(0, request.getStart());
+        int length = request.getLength();
         int safeLength = length <= 0 ? 20 : length > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : length ;
         int page = start / safeLength;
 
@@ -127,12 +127,12 @@ public class AssetsService {
                 ? Pageable.unpaged()
                 : PageRequest.of(page, safeLength);
 
-        Specification<Assets> specification = dataTableSpecificationBuilder.build(safeRequest);
+        Specification<Assets> specification = dataTableSpecificationBuilder.build(request);
 
         Page<Assets> assetsPage = assetsRepository.findAll(specification, pageable);
-        if (assetsPage.isEmpty()) {
-            throw new IllegalArgumentException("No se encontraron activos con los criterios de busqueda especificados.");
-        }
+        // if (assetsPage.isEmpty()) {
+        //     throw new IllegalArgumentException("No se encontraron activos con los criterios de busqueda especificados.");
+        // }
 
         return DataTableResponse.from(assetsPage.map(this::toViewDTO), draw);
     }
