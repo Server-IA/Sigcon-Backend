@@ -128,10 +128,7 @@ public class Assets {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = this.createdAt;
-
-        if (this.status == null) {
-            this.status = AssetStatus.ACTIVE;
-        }
+        this.status = AssetStatus.ACTIVE;
 
         if (this.createdBy == null || this.createdBy.isBlank()) {
             this.createdBy = "sistema";

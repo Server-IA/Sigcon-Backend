@@ -1,6 +1,6 @@
 package com.sigcon.backend.third_parties.third_parties.domain.model;
 
-import com.sigcon.backend.parametrization.parameters.domain.model.Municipality;
+import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
 import com.sigcon.backend.third_parties.third_parties.domain.model.enums.PersonType;
 import com.sigcon.backend.third_parties.third_parties.domain.model.enums.TaxRegime;
 

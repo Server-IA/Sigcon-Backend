@@ -1,4 +1,4 @@
-package com.sigcon.backend.parametrization.parameters.domain.model;
+package com.sigcon.backend.parametrization.resources.domain.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
