@@ -1,0 +1,10 @@
+[
+    {
+        "code": "uk_payment_terms_name_active",
+        "message": "El nombre del término de pago ya existe"
+    },
+    {
+        "code": "uk_payment_terms_days_active",
+        "message": "Los días del término de pago ya existe"
+    }
+]
