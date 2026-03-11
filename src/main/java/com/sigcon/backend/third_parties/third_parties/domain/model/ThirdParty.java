@@ -61,11 +61,7 @@ public class ThirdParty {
     private PersonType personType;
 
     @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(
-            name = "third_party_role_assignments",
-            joinColumns = @JoinColumn(name = "third_party_id"),
-            inverseJoinColumns = @JoinColumn(name = "role_id")
-    )
+    @JoinTable(name = "third_party_role_assignments", joinColumns = @JoinColumn(name = "third_party_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<ThirdPartyRoleCatalog> roles;
 
     @ManyToOne(fetch = FetchType.EAGER)
