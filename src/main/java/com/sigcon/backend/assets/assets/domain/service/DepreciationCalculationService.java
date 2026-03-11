@@ -97,7 +97,8 @@ public class DepreciationCalculationService {
 
             // 5. Buscar regla de depreciación activa para el método del activo
             DepretationType requiredType = mapMethodToType(asset.getDepreciationMethod());
-            Optional<DepretationRule> ruleOpt = findActiveRule(requiredType);
+            Long accountingAccountId = asset.getAccountingAccount() != null ? asset.getAccountingAccount().getId() : null;
+            Optional<DepretationRule> ruleOpt = findActiveRule(requiredType, accountingAccountId);
 
             if (ruleOpt.isEmpty()) {
                 skipped.add(buildSkipped(asset, SkipReason.NO_ACTIVE_RULE));
@@ -149,8 +150,8 @@ public class DepreciationCalculationService {
                     .previousBookValue(bookValue)
                     .currentBookValue(newBookValue)
                     .supplierName(asset.getSupplier() != null ? asset.getSupplier().getBusinessName() : null)
-                    .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
-                    .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
+                    // .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
+                    // .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
                     .depreciationAccountId(depreciationAccount.getId())
                     .depreciationAccountName(depreciationAccount.getCustomName())
                     .calculationDate(calculationDate)
@@ -209,11 +210,14 @@ public class DepreciationCalculationService {
      * Busca la regla de depreciación activa más reciente para un tipo dado.
      * Retorna la primera regla activa ordenada descendentemente por effectiveDate.
      */
-    private Optional<DepretationRule> findActiveRule(DepretationType type) {
+    private Optional<DepretationRule> findActiveRule(DepretationType type, Long accountingAccountId) {
         return depretationRuleRepository
                 .findAll()
                 .stream()
                 .filter(r -> r.getDepretationType() == type
+                        && r.getAccountingAccount() != null
+                        && r.getAccountingAccount().getId() != null
+                        && r.getAccountingAccount().getId().equals(accountingAccountId)
                         && r.getStatus() == DepretationStatus.ACTIVE
                         && r.getDeletedAt() == null)
                 .max((a, b) -> a.getEffectiveDate().compareTo(b.getEffectiveDate()));

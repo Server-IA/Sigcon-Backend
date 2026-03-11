@@ -80,9 +80,10 @@ public class UpdateAssetsDTO {
     @Schema(description = "Referencia del modulo de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
 
-    @Size(max = 120, message = "Faltan datos requeridos")
-    @Schema(description = "Centro de costo o ubicacion contable", example = "Sede principal")
-    private String costCenterOrAccountingLocation;
+    @NotNull(message = "Faltan datos requeridos")
+    @Positive(message = "Faltan datos requeridos")
+    @Schema(description = "ID de la cuenta contable asociada al activo", example = "12")
+    private Long accountingAccountId;
 
     @NotNull(message = "Faltan datos requeridos")
     @Schema(description = "Estado del activo", example = "ACTIVE", allowableValues = {

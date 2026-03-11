@@ -1,0 +1,51 @@
+INSERT INTO accounting_accounts (
+    puc_id,
+    custom_name,
+    currency_type_id,
+    cost_center_id,
+    tax_rule_id,
+    nature,
+    status,
+    company_id,
+    created_at,
+    updated_at,
+    created_by
+)
+SELECT
+    puc_ref.id,
+    'Cuenta Activos Fijos PPE',
+    currency_ref.id,
+    NULL,
+    NULL,
+    'DEBIT',
+    'ACTIVE',
+    1,
+    NOW(),
+    NOW(),
+    1
+FROM
+    (
+        SELECT id
+        FROM cfg_chart_of_accounts
+        WHERE account_class = 'ASSET'
+          AND account_status = 'ACTIVE'
+          AND deleted_at IS NULL
+        ORDER BY id
+        LIMIT 1
+    ) puc_ref
+CROSS JOIN
+    (
+        SELECT id
+        FROM cfg_currency_types
+        WHERE status = 'ACTIVE'
+          AND deleted_at IS NULL
+        ORDER BY id
+        LIMIT 1
+    ) currency_ref
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM accounting_accounts
+    WHERE custom_name = 'Cuenta Activos Fijos PPE'
+      AND company_id = 1
+      AND deleted_at IS NULL
+);

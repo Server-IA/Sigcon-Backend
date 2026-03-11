@@ -2,6 +2,9 @@ package com.sigcon.backend.third_parties.ecl_segmentation.domain.model;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
+
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.SegmentationSource;
 
@@ -13,6 +16,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreRemove;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -22,6 +26,8 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "risk_segmentation_history")
+@SQLDelete(sql = "UPDATE risk_segmentation SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor
@@ -51,9 +57,16 @@ public class EclSegmentationHistory {
     @Column(name = "change_date", nullable = false)
     @NotNull(message = "La fecha de cambio es obligatoria")
     private LocalDateTime changeDate; 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @PrePersist
     protected void onCreate() {
         this.changeDate = LocalDateTime.now();
+    } 
+
+    @PreRemove
+    protected void onDelete() {
+        this.deletedAt = LocalDateTime.now();
     }
 }

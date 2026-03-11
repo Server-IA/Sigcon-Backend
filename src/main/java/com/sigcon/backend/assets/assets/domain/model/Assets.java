@@ -5,6 +5,7 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
 import jakarta.persistence.Column;
@@ -63,11 +64,11 @@ public class Assets {
     @Column(name = "asset_type", nullable = false, length = 20)
     private AssetType assetType;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "chart_of_account_id", nullable = false)
-    private ChartOfAccount chartOfAccount;
+    // @ManyToOne(fetch = FetchType.LAZY)
+    // @JoinColumn(name = "chart_of_account_id", nullable = false)
+    // private ChartOfAccount chartOfAccount;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id", nullable = false)
     private ThirdParty supplier;
 
@@ -93,8 +94,9 @@ public class Assets {
     @Column(name = "bank_cash_reference_id")
     private Long bankCashReferenceId;
 
-    @Column(name = "cost_center_or_accounting_location", length = 120)
-    private String costCenterOrAccountingLocation;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "accounting_account_id", nullable = false)
+    private AccountingAccount accountingAccount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "asset_status", nullable = false, length = 30)
