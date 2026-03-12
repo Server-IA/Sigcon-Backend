@@ -16,6 +16,9 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.
 import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleDTO;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.parametrization.resources.application.CountryDTO;
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
@@ -61,6 +64,8 @@ public class AssetsService {
 
     private final AssetsRepository assetsRepository;
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
+    private final DepretationRuleRepository depretationRuleRepository;
+
   //  private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder =
@@ -71,6 +76,10 @@ public class AssetsService {
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
+        DepretationRule depreciationRule = depretationRuleRepository.findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
+        if (depreciationRule == null) {
+            throw new IllegalArgumentException("Regla de depreciacion no encontrada");
+        }
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
 
@@ -86,8 +95,7 @@ public class AssetsService {
                 .acquisitionValue(request.getAcquisitionValue())
                 .acquisitionDate(request.getAcquisitionDate())
                 .usefulLifeMonths(request.getUsefulLifeMonths())
-                .depreciationMethod(request.getDepreciationMethod())
-                .paymentTerms(request.getPaymentTerms().trim())
+                .depretationRule(depreciationRule)
                 .accountsPayableReferenceId(request.getAccountsPayableReferenceId())
                 .bankCashReferenceId(request.getBankCashReferenceId())
                 .accountingAccount(accountingAccount)
@@ -143,12 +151,15 @@ public class AssetsService {
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
+        DepretationRule depretationRule = depretationRuleRepository.findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
+        if (depretationRule == null) {
+            throw new IllegalArgumentException("Regla de depreciacion no encontrada");
+        }
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
 
         String normalizedDescription = normalizeOptionalText(request.getDescription());
         String normalizedObservations = normalizeOptionalText(request.getObservations());
-        String normalizedPaymentTerms = request.getPaymentTerms().trim();
         String currentUser = resolveCurrentUsername();
 
         existingAsset.setAssetName(request.getName().trim());
@@ -160,8 +171,7 @@ public class AssetsService {
         existingAsset.setAcquisitionValue(request.getAcquisitionValue());
         existingAsset.setAcquisitionDate(request.getAcquisitionDate());
         existingAsset.setUsefulLifeMonths(request.getUsefulLifeMonths());
-        existingAsset.setDepreciationMethod(request.getDepreciationMethod());
-        existingAsset.setPaymentTerms(normalizedPaymentTerms);
+        existingAsset.setDepretationRule(depretationRule);
         existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
         existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
         existingAsset.setAccountingAccount(accountingAccount);
@@ -264,14 +274,11 @@ public class AssetsService {
                 .classification(asset.getClassification())
                 .type(asset.getAssetType())
                 .accountingAccount(toAccountingAccountDto(asset.getAccountingAccount()))
-                .chartOfAccount(toChartOfAccountDto(
-                        asset.getAccountingAccount() != null ? asset.getAccountingAccount().getPucAccount() : null))
                 .supplier(toThirdPartyDto(asset.getSupplier()))
                 .acquisitionValue(asset.getAcquisitionValue())
                 .acquisitionDate(asset.getAcquisitionDate())
                 .usefulLifeMonths(asset.getUsefulLifeMonths())
-                .depreciationMethod(asset.getDepreciationMethod())
-                .paymentTerms(asset.getPaymentTerms())
+                .depretationRule(toDepretationRuleDto(asset.getDepretationRule()))
                 .accountsPayableReferenceId(asset.getAccountsPayableReferenceId())
                 .bankCashReferenceId(asset.getBankCashReferenceId())
                 .status(asset.getStatus())
@@ -342,6 +349,16 @@ public class AssetsService {
                 .build();
     }
 
+    private DepretationRuleDTO toDepretationRuleDto(DepretationRule depretationRule) {
+        if (depretationRule == null) {
+            return null;
+        }
+        return DepretationRuleDTO.builder()
+                .id(depretationRule.getId())
+                .name(depretationRule.getName())
+                .build();
+    }
+    
     private ThirdPartyDTO toThirdPartyDto(ThirdParty entity) {
         if (entity == null) {
             return null;
