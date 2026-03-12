@@ -1,4 +1,4 @@
-package com.sigcon.backend.assets.assets.application;
+package com.sigcon.backend.assets.assets_depreciation.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -8,6 +8,9 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.List;
+
+import com.sigcon.backend.assets.assets.application.AssetDepreciationResultDTO;
+import com.sigcon.backend.assets.assets.application.AssetSkippedDTO;
 
 @Data
 @Builder

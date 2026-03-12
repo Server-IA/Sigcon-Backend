@@ -16,7 +16,7 @@ import java.time.LocalDate;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
-import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
+import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
 
 @Data
 @Schema(description = "DTO para actualizar un activo")

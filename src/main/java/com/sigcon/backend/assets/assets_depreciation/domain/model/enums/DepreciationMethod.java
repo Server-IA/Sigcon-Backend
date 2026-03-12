@@ -1,4 +1,4 @@
-package com.sigcon.backend.assets.assets.domain.model.enums;
+package com.sigcon.backend.assets.assets_depreciation.domain.model.enums;
 
 public enum DepreciationMethod {
     STRAIGHT_LINE,
