@@ -98,8 +98,12 @@ public class AssetsService {
                 .depretationRule(depreciationRule)
                 .accountsPayableReferenceId(request.getAccountsPayableReferenceId())
                 .bankCashReferenceId(request.getBankCashReferenceId())
+<<<<<<< HEAD
+                .costCenterOrAccountingLocation(normalizeOptionalText(request.getCostCenterOrAccountingLocation()))
+=======
                 .accountingAccount(accountingAccount)
                 .status(request.getStatus())
+>>>>>>> 3346ca398812bcc2d488d5a710216190c83738b9
                 .observations(normalizeOptionalText(request.getObservations()))
                 .createdBy(currentUser)
                 .updatedBy(currentUser)
@@ -115,10 +119,17 @@ public class AssetsService {
             request = new DataTableRequest();
         }
 
+<<<<<<< HEAD
+        int draw = Math.max(0, safeRequest.getDraw());
+        int start = Math.max(0, safeRequest.getStart());
+        int length = safeRequest.getLength();
+        int safeLength = length <= 0 ? 20 : length > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : length ;
+=======
         int draw = Math.max(0, request.getDraw());
         int start = Math.max(0, request.getStart());
         int length = request.getLength();
         int safeLength = length <= 0 ? 20 : length;
+>>>>>>> 3346ca398812bcc2d488d5a710216190c83738b9
         int page = start / safeLength;
 
         Pageable pageable = length == -1
