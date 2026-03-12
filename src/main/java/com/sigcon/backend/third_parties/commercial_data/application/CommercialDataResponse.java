@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 import com.sigcon.backend.parametrization.resources.application.PaymentTermsDTO;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,6 +20,7 @@ public class CommercialDataResponse {
 
     private Long Id; 
     private Long thirdPartyId;
+    private ThirdPartyDTO thirdParty;
     private PaymentTermsDTO paymentTerm; 
     private BigDecimal limitCredit;
     private RiskSegmentation riskLevel; 

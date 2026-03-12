@@ -62,4 +62,28 @@ SELECT 'Anual', 360
 WHERE NOT EXISTS (
     SELECT 1 FROM payment_terms 
     WHERE name = 'Anual' AND deleted_at IS NULL
-);
+); 
+
+--Datos Comerciales (Commercial_Data), indexes para validar la unicidad 
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_commercial_data_third_party_active
+ON commercial_data (client_id)
+WHERE deleted_at IS NULL; 
+
+--Datos Defaults para las fechas 
+
+ALTER TABLE commercial_data 
+ALTER COLUMN created_at SET DEFAULT NOW(); 
+
+ALTER TABLE commercial_data
+ALTER COLUMN updated_at SET DEFAULT NOW();
+
+--Valor por defecto para un limit_credit, en caso de que no se envie 
+
+ALTER TABLE commercial_data 
+ALTER COLUMN limit_credit SET DEFAULT 0.00; 
+
+--Valor por defecto para el risk_level, en caso de que no se envie
+
+ALTER TABLE commercial_data 
+ALTER COLUMN risk_level SET DEFAULT 'LOW';
