@@ -1,0 +1,54 @@
+[
+    {
+        "code": "uk_third_parties_nit_dv_active",
+        "message": "Ya existe un tercero activo con el mismo NIT y DV."
+    },
+    {
+        "code": "uk_third_parties_code_active",
+        "message": "Ya existe un tercero activo con el mismo codigo."
+    },
+    {
+        "code": "uk_countries_code_active",
+        "message": "Ya existe un pais activo con el mismo codigo."
+    },
+    {
+        "code": "uk_countries_name_active",
+        "message": "Ya existe un pais activo con el mismo nombre."
+    },
+    {
+        "code": "uk_municipalities_country_name_active",
+        "message": "Ya existe un municipio activo con el mismo nombre para ese pais."
+    },
+    {
+        "code": "uk_municipalities_code_active",
+        "message": "Ya existe un municipio activo con el mismo codigo."
+    },
+    {
+        "code": "idx_third_parties_municipality_id",
+        "message": "Indice de municipio en terceros."
+    },
+    {
+        "code": "uk_type_regimen_code_active",
+        "message": "Ya existe un tipo de regimen activo con el mismo codigo."
+    },
+    {
+        "code": "uk_type_organization_code_active",
+        "message": "Ya existe un tipo de organizacion activo con el mismo codigo."
+    },
+    {
+        "code": "uk_withholdings_code_active",
+        "message": "Ya existe una retencion activa con el mismo codigo."
+    },
+    {
+        "code": "idx_third_contact_third_party_id",
+        "message": "Indice de contactos por tercero."
+    },
+    {
+        "code": "uk_third_party_withholding_assignment_active",
+        "message": "La retencion ya esta asignada al tercero."
+    },
+    {
+        "code": "idx_third_party_withholding_assignments_third_party_id",
+        "message": "Indice de retenciones por tercero."
+    }
+]
