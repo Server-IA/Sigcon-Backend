@@ -5,7 +5,7 @@ import com.sigcon.backend.assets.assets.application.AssetSkippedDTO;
 import com.sigcon.backend.assets.assets.application.AssetSkippedDTO.SkipReason;
 import com.sigcon.backend.assets.assets.domain.model.Assets;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
-import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
+// import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
 import com.sigcon.backend.assets.assets_depreciation.application.DepreciationCalculationResponseDTO;
 import com.sigcon.backend.assets.assets_depreciation.domain.model.AssetDepreciation;
@@ -13,7 +13,9 @@ import com.sigcon.backend.assets.assets_depreciation.domain.repository.AssetDepr
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
+// import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
 import com.sigcon.backend.utils.DepreciationCalculator;
@@ -86,29 +88,30 @@ public class DepreciationCalculationService {
                 continue;
             }
 
-            // 3. Validar método de depreciación
-            if (asset.getDepreciationMethod() == null
-                    || asset.getDepreciationMethod() == DepreciationMethod.OTHER) {
-                skipped.add(buildSkipped(asset, SkipReason.NO_DEPRECIATION_METHOD));
-                continue;
-            }
+            // // 3. Validar método de depreciación
+            // if (asset.getDepretationRule() == null
+            //         || asset.getDepretationRule().getDepretationType() == DepretationType.OTHER) {
+            //     skipped.add(buildSkipped(asset, SkipReason.NO_DEPRECIATION_METHOD));
+            //     continue;
+            // }
 
             // 4. UNITS_OF_PRODUCTION no aplica para cálculo por período contable
-            if (asset.getDepreciationMethod() == DepreciationMethod.UNITS_OF_PRODUCTION) {
+            if (asset.getDepretationRule().getDepretationType() == DepretationType.PRODUCTION_UNITS) {
                 skipped.add(buildSkipped(asset, SkipReason.OTHER_METHOD));
                 continue;
             }
 
             // 5. Buscar regla de depreciación activa para el método del activo
-            DepretationType requiredType = mapMethodToType(asset.getDepreciationMethod());
-            Optional<DepretationRule> ruleOpt = findActiveRule(requiredType);
+            DepretationType requiredType = asset.getDepretationRule().getDepretationType();
 
-            if (ruleOpt.isEmpty()) {
+            Optional<DepretationRule> depretationRule = depretationRuleRepository.findById(asset.getDepretationRule().getId());
+
+            if (depretationRule.isEmpty()) {
                 skipped.add(buildSkipped(asset, SkipReason.NO_ACTIVE_RULE));
                 continue;
             }
 
-            DepretationRule rule = ruleOpt.get();
+            DepretationRule rule = depretationRule.get();
 
             // 6. Validar cuenta contable de la regla
             AccountingAccount depreciationAccount = rule.getAccountingAccount();
@@ -126,7 +129,7 @@ public class DepreciationCalculationService {
 
             // 8. Delegar cálculo al DepreciationCalculator (sin fórmulas aquí)
             BigDecimal depreciationAmount = computeDepreciation(
-                    asset.getDepreciationMethod(),
+                    rule.getDepretationType(),
                     asset.getAcquisitionValue(),
                     bookValue,
                     rule.getResidualValue(),
@@ -148,15 +151,22 @@ public class DepreciationCalculationService {
                     .assetId(asset.getId())
                     .assetCode(asset.getAssetCode())
                     .assetName(asset.getAssetName())
-                    .depreciationMethod(asset.getDepreciationMethod())
+                    .depreciationMethod(rule.getDepretationType())
                     .depreciationAmount(depreciationAmount)
                     .previousBookValue(bookValue)
                     .currentBookValue(newBookValue)
-                    .supplierName(asset.getSupplier() != null ? asset.getSupplier().getBusinessName() : null)
-                    .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
-                    .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
-                    .depreciationAccountId(depreciationAccount.getId())
-                    .depreciationAccountName(depreciationAccount.getCustomName())
+                    .supplier(asset.getSupplier() != null ? ThirdPartyDTO.builder()
+                            .id(asset.getSupplier().getId())
+                            .businessName(asset.getSupplier().getBusinessName())
+                            .build() : null)
+                    // .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
+                    // .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
+                    // .accountingAccount(AccountingAccountDTO.builder()
+                    //         .id(depreciationAccount.getId())
+                    //         .code(depreciationAccount.getCode())
+                    //         .name(depreciationAccount.getName())
+                    //         .build())
+                    // .depreciationAccountName(depreciationAccount.getCustomName())
                     .calculationDate(calculationDate)
                     .build());
 
@@ -172,7 +182,7 @@ public class DepreciationCalculationService {
                     .previousBookValue(bookValue)
                     .currentBookValue(newBookValue)
                     .depreciationAmount(depreciationAmount)
-                    .depreciationMethod(asset.getDepreciationMethod())
+                    .depretationType(rule.getDepretationType())
                     .calculationDate(calculationDate)
                     .build());
         }
@@ -216,14 +226,14 @@ public class DepreciationCalculationService {
     /**
      * Mapea el DepreciationMethod del activo al DepretationType de las reglas.
      */
-    private DepretationType mapMethodToType(DepreciationMethod method) {
-        return switch (method) {
-            case STRAIGHT_LINE -> DepretationType.LINEAR;
-            case DECLINING_BALANCE -> DepretationType.DECREASING;
-            case UNITS_OF_PRODUCTION -> DepretationType.PRODUCTION_UNITS;
-            case OTHER -> throw new IllegalArgumentException("Método no reconocido o no permitido");
-        };
-    }
+    // private DepretationType mapMethodToType(DepreciationMethod method) {
+    //     return switch (method) {
+    //         case STRAIGHT_LINE -> DepretationType.LINEAR;
+    //         case DECLINING_BALANCE -> DepretationType.DECREASING;
+    //         case UNITS_OF_PRODUCTION -> DepretationType.PRODUCTION_UNITS;
+    //         case OTHER -> throw new IllegalArgumentException("Método no reconocido o no permitido");
+    //     };
+    // }
 
     /**
      * Busca la regla de depreciación activa más reciente para un tipo dado.
@@ -243,7 +253,7 @@ public class DepreciationCalculationService {
      * Delega el cálculo al utilitario DepreciationCalculator según el método.
      */
     private BigDecimal computeDepreciation(
-            DepreciationMethod method,
+            DepretationType method,
             BigDecimal acquisitionValue,
             BigDecimal currentBookValue,
             BigDecimal residualValue,
@@ -251,9 +261,9 @@ public class DepreciationCalculationService {
             int usefulLifeMonths) {
 
         return switch (method) {
-            case STRAIGHT_LINE ->
+            case LINEAR ->
                 DepreciationCalculator.calculateStraightLine(acquisitionValue, residualValue, usefulLifeMonths);
-            case DECLINING_BALANCE ->
+            case DECREASING ->
                 DepreciationCalculator.calculateDecliningBalance(currentBookValue, annualRate);
             default ->
                 throw new IllegalArgumentException("Método no reconocido o no permitido");

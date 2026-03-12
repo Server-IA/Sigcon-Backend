@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
-import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
+// import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleDTO;

@@ -64,7 +64,7 @@ public class AssetDepreciationHistoryService {
                 .previousBookValue(record.getPreviousBookValue())
                 .currentBookValue(record.getCurrentBookValue())
                 .depreciationAmount(record.getDepreciationAmount())
-                .depreciationMethod(record.getDepreciationMethod())
+                .depretationType(record.getDepretationType())
                 .calculationDate(record.getCalculationDate())
                 .createdAt(record.getCreatedAt())
                 .build();
