@@ -4,7 +4,6 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
@@ -63,10 +62,6 @@ public class Assets {
     @Enumerated(EnumType.STRING)
     @Column(name = "asset_type", nullable = false, length = 20)
     private AssetType assetType;
-
-    // @ManyToOne(fetch = FetchType.LAZY)
-    // @JoinColumn(name = "chart_of_account_id", nullable = false)
-    // private ChartOfAccount chartOfAccount;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id", nullable = false)
