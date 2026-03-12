@@ -64,10 +64,6 @@ public class Assets {
     @Column(name = "asset_type", nullable = false, length = 20)
     private AssetType assetType;
 
-    // @ManyToOne(fetch = FetchType.LAZY)
-    // @JoinColumn(name = "chart_of_account_id", nullable = false)
-    // private ChartOfAccount chartOfAccount;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id", nullable = false)
     private ThirdParty supplier;
