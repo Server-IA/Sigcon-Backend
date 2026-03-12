@@ -16,7 +16,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
-
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.annotation.PostConstruct;
 
@@ -24,7 +23,7 @@ import jakarta.annotation.PostConstruct;
 
 @RestControllerAdvice
 
-public class GlobalExceptionHandler  {
+public class GlobalExceptionHandler {
 
     ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, String> CONSTRAINT_MESSAGES = new HashMap<>();
@@ -33,22 +32,29 @@ public class GlobalExceptionHandler  {
         private String code;
         private String message;
 
-        public String getMessage() { return message; }
-        public String getCode() { return code; }
+        public String getMessage() {
+            return message;
+        }
 
-        public void setMessage(String message) { this.message = message; }
-        public void setCode(String code) { this.code = code; }
+        public String getCode() {
+            return code;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+
+        public void setCode(String code) {
+            this.code = code;
+        }
     }
-
-
 
     @PostConstruct
     public void loadConstraintMessages() {
 
         try {
 
-            Resource[] resources =
-                new PathMatchingResourcePatternResolver()
+            Resource[] resources = new PathMatchingResourcePatternResolver()
                     .getResources("classpath:jsons/*.json");
 
             for (Resource resource : resources) {
@@ -56,9 +62,9 @@ public class GlobalExceptionHandler  {
                 System.out.println("Procesando archivo: " + resource.getFilename());
 
                 var list = objectMapper.readValue(
-                    resource.getInputStream(),
-                    new TypeReference<java.util.List<ConstraintMessages>>() {}
-                );
+                        resource.getInputStream(),
+                        new TypeReference<java.util.List<ConstraintMessages>>() {
+                        });
 
                 for (ConstraintMessages item : list) {
                     CONSTRAINT_MESSAGES.put(item.code, item.message);
@@ -86,43 +92,40 @@ public class GlobalExceptionHandler  {
         System.out.println("rootMessage: " + rootMessage);
 
         Optional<String> errorMessage = CONSTRAINT_MESSAGES.entrySet()
-            .stream()
-            .filter(entry -> rootMessage != null && rootMessage.contains(entry.getKey()))
-            .map(Map.Entry::getValue)
-            .findFirst();
+                .stream()
+                .filter(entry -> rootMessage != null && rootMessage.contains(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst();
 
-            // Detectar mensaje del trigger directamente
+        // Detectar mensaje del trigger directamente
         if (rootMessage != null && rootMessage.contains("Debe existir al menos un usuario con SUPERADMIN")) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
-                        ErrorRespondJson.getErrorRespondMessage(
-                            Optional.of("No se puede eliminar o modificar el único SUPERADMIN")
-                        )
-                    );
+                            ErrorRespondJson.getErrorRespondMessage(
+                                    Optional.of("No se puede eliminar o modificar el único SUPERADMIN")));
         }
 
         if (errorMessage.isPresent()) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
-                        ErrorRespondJson.getErrorRespondMessage(errorMessage)
-                    );
+                            ErrorRespondJson.getErrorRespondMessage(errorMessage));
         }
 
         // if (rootMessage != null && rootMessage.contains("UP0001")) {
-        //     return ResponseEntity
-        //             .status(HttpStatus.BAD_REQUEST)
-        //             .body(
-        //                 ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe existir al menos un usuario con SUPERADMIN"))
-        //             );
+        // return ResponseEntity
+        // .status(HttpStatus.BAD_REQUEST)
+        // .body(
+        // ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe existir al menos un
+        // usuario con SUPERADMIN"))
+        // );
         // }
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Error de integridad de datos."))
-                );
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Error de integridad de datos.")));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -133,10 +136,9 @@ public class GlobalExceptionHandler  {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage()))
-                );
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
     }
-    
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<?> handleIllegalStateException(IllegalStateException ex) {
 
@@ -144,10 +146,9 @@ public class GlobalExceptionHandler  {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage()))
-                );
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
     }
-    
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleException(Exception ex) {
 
@@ -159,22 +160,15 @@ public class GlobalExceptionHandler  {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
-                        ErrorRespondJson.getErrorRespondMessage(
-                            Optional.of("Debe existir al menos un usuario con SUPERADMIN.")
-                        )
-                    );
+                            ErrorRespondJson.getErrorRespondMessage(
+                                    Optional.of("Debe existir al menos un usuario con SUPERADMIN.")));
         }
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(
-                    ErrorRespondJson.getErrorRespondMessage(
-                        Optional.of(message != null ? message : "Error interno del servidor.")
-                    )
-                );
+                        ErrorRespondJson.getErrorRespondMessage(
+                                Optional.of(message != null ? message : "Error interno del servidor.")));
     }
 
-
-    
-    
 }

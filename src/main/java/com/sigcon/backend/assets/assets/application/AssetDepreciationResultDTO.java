@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
+import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
 
 @Data
 @Builder
