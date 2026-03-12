@@ -16,6 +16,7 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 
 @Data
@@ -46,9 +47,6 @@ public class ViewAssetsDTO {
     @Schema(description = "Cuenta contable asociada (DTO completo)")
     private AccountingAccountDTO accountingAccount;
 
-    @Schema(description = "Cuenta PUC asociada (DTO completo)")
-    private ChartOfAccountResponseDTO chartOfAccount;
-
     @Schema(description = "Proveedor asociado (DTO completo)")
     private ThirdPartyDTO supplier;
 
@@ -61,23 +59,14 @@ public class ViewAssetsDTO {
     @Schema(description = "Vida util en meses", example = "60")
     private Integer usefulLifeMonths;
 
-    @Schema(description = "Metodo de depreciacion", example = "STRAIGHT_LINE")
-    private DepreciationMethod depreciationMethod;
-
-    @Schema(description = "Condiciones de pago", example = "30 dias")
-    private String paymentTerms;
+    @Schema(description = "Regla de depreciacion asociada (DTO completo)")
+    private DepretationRuleDTO depretationRule;
 
     @Schema(description = "Referencia de Cuentas por Pagar (pendiente de integrar)", example = "1001")
     private Long accountsPayableReferenceId;
 
     @Schema(description = "Referencia de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
-
-    @Schema(description = "ID de la cuenta contable asociada", example = "12")
-    private Long accountingAccountId;
-
-    @Schema(description = "Nombre personalizado de la cuenta contable asociada", example = "Cuenta Activos Fijos PPE")
-    private String accountingAccountName;
 
     @Schema(description = "Estado del activo", example = "ACTIVE")
     private AssetStatus status;

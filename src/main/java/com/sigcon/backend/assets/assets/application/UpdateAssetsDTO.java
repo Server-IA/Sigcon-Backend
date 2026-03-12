@@ -59,10 +59,8 @@ public class UpdateAssetsDTO {
     private Integer usefulLifeMonths;
 
     @NotNull(message = "Faltan datos requeridos")
-    @Schema(description = "Metodo de depreciacion", example = "STRAIGHT_LINE", allowableValues = {
-            "STRAIGHT_LINE", "DECLINING_BALANCE", "UNITS_OF_PRODUCTION", "OTHER"
-    })
-    private DepreciationMethod depreciationMethod;
+    @Schema(description = "ID de la regla de depreciacion", example = "1")
+    private Long depreciationRuleId;
 
     @NotNull(message = "Faltan datos requeridos")
     @Positive(message = "Faltan datos requeridos")
