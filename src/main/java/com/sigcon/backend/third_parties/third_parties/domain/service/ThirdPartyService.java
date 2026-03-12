@@ -128,9 +128,7 @@ public class ThirdPartyService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero registrado exitosamente."),
-                        Optional.of(toDto(thirdParty))
-                )
-        );
+                        Optional.of(toDto(thirdParty))));
     }
 
     @Transactional

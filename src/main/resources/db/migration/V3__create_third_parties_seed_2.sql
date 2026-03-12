@@ -53,36 +53,32 @@ CREATE TABLE IF NOT EXISTS third_party_role_assignments (
 );
 
 INSERT INTO third_party_role_catalog (name, created_at, updated_at)
-SELECT 'CLIENTE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_role_catalog WHERE name = 'CLIENTE');
-
-INSERT INTO third_party_role_catalog (name, created_at, updated_at)
-SELECT 'PROVEEDOR', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_role_catalog WHERE name = 'PROVEEDOR');
-
-INSERT INTO third_party_role_catalog (name, created_at, updated_at)
-SELECT 'EMPLEADO', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_role_catalog WHERE name = 'EMPLEADO');
-
-INSERT INTO third_party_role_catalog (name, created_at, updated_at)
-SELECT 'ACREEDOR', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_role_catalog WHERE name = 'ACREEDOR');
-
-INSERT INTO third_party_role_catalog (name, created_at, updated_at)
-SELECT 'DEUDOR', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_role_catalog WHERE name = 'DEUDOR');
+SELECT v.name, NOW(), NOW()
+FROM (VALUES
+    ('CLIENTE'),
+    ('PROVEEDOR'),
+    ('EMPLEADO'),
+    ('ACREEDOR'),
+    ('DEUDOR')
+) AS v(name)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM third_party_role_catalog rc
+    WHERE UPPER(TRIM(rc.name)) = UPPER(TRIM(v.name))
+);
 
 INSERT INTO third_party_status_catalog (name, created_at, updated_at)
-SELECT 'ACTIVO', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_status_catalog WHERE name = 'ACTIVO');
-
-INSERT INTO third_party_status_catalog (name, created_at, updated_at)
-SELECT 'BLOQUEADO', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_status_catalog WHERE name = 'BLOQUEADO');
-
-INSERT INTO third_party_status_catalog (name, created_at, updated_at)
-SELECT 'INACTIVO', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM third_party_status_catalog WHERE name = 'INACTIVO');
+SELECT v.name, NOW(), NOW()
+FROM (VALUES
+    ('ACTIVO'),
+    ('BLOQUEADO'),
+    ('INACTIVO')
+) AS v(name)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM third_party_status_catalog sc
+    WHERE UPPER(TRIM(sc.name)) = UPPER(TRIM(v.name))
+);
 
 DO $$
 BEGIN
@@ -138,7 +134,13 @@ SELECT
     NOW(),
     NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM third_parties WHERE nit = '9001234567' AND dv = '1' AND deleted_at IS NULL
+    SELECT 1
+    FROM third_parties tp
+    WHERE tp.deleted_at IS NULL
+      AND (
+          (tp.nit = '9001234567' AND tp.dv = '1')
+          OR tp.third_party_code = 'TER2026000001'
+      )
 );
 
 INSERT INTO third_parties (
@@ -165,7 +167,13 @@ SELECT
     NOW(),
     NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM third_parties WHERE nit = '9019876543' AND dv = '5' AND deleted_at IS NULL
+    SELECT 1
+    FROM third_parties tp
+    WHERE tp.deleted_at IS NULL
+      AND (
+          (tp.nit = '9019876543' AND tp.dv = '5')
+          OR tp.third_party_code = 'TER2026000002'
+      )
 );
 
 INSERT INTO third_party_role_assignments (third_party_id, role_id)
