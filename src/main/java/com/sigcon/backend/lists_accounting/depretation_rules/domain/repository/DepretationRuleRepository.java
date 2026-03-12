@@ -19,4 +19,6 @@ public interface DepretationRuleRepository extends JpaRepository<DepretationRule
                 Long accountingAccountId, 
                 LocalDate effectiveDate
             );
+
+            DepretationRule findByIdAndAccountingAccountId(Long id, Long accountingAccountId);
 }

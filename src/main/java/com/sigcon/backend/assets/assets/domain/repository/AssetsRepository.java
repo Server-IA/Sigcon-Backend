@@ -24,7 +24,7 @@ public interface AssetsRepository extends JpaRepository<Assets, Long>, JpaSpecif
          */
         @Query("SELECT a FROM Assets a WHERE a.status IN :statuses " +
                         "AND a.usefulLifeMonths > 0 " +
-                        "AND a.depreciationMethod IS NOT NULL " +
+                        "AND a.depretationRule IS NOT NULL " +
                         "AND (a.deletedAt IS NULL)")
         List<Assets> findEligibleForDepreciation(
                         @Param("statuses") List<AssetStatus> statuses);

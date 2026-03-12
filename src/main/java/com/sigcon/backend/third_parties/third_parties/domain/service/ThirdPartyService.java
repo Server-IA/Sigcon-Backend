@@ -30,7 +30,6 @@ import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyWit
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRoleCatalogRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyStatusCatalogRepository;
-
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;

@@ -5,6 +5,7 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
 import jakarta.persistence.Column;
@@ -76,12 +77,9 @@ public class Assets {
     @Column(name = "useful_life_months", nullable = false)
     private Integer usefulLifeMonths;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "depreciation_method", nullable = false, length = 40)
-    private DepreciationMethod depreciationMethod;
-
-    @Column(name = "payment_terms", nullable = false, length = 120)
-    private String paymentTerms;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "depretation_rule_id", nullable = false)
+    private DepretationRule depretationRule;
 
     @Column(name = "accounts_payable_reference_id")
     private Long accountsPayableReferenceId;

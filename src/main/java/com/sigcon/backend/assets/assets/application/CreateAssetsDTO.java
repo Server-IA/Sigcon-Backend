@@ -16,7 +16,6 @@ import java.time.LocalDate;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
-import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
 
 @Data
 @Schema(description = "DTO para registrar un activo")
@@ -59,20 +58,13 @@ public class CreateAssetsDTO {
     private Integer usefulLifeMonths;
 
     @NotNull(message = "Faltan datos requeridos")
-    @Schema(description = "Metodo de depreciacion", example = "STRAIGHT_LINE", allowableValues = {
-            "STRAIGHT_LINE", "DECLINING_BALANCE", "UNITS_OF_PRODUCTION", "OTHER"
-    })
-    private DepreciationMethod depreciationMethod;
+    @Schema(description = "ID de la regla de depreciacion", example = "1")
+    private Long depreciationRuleId;
 
     @NotNull(message = "Faltan datos requeridos")
     @Positive(message = "Faltan datos requeridos")
     @Schema(description = "ID del proveedor (modulo Terceros)", example = "1")
     private Long supplierId;
-
-    @NotBlank(message = "Faltan datos requeridos")
-    @Size(max = 120, message = "Faltan datos requeridos")
-    @Schema(description = "Condiciones de pago asociadas al activo", example = "30 dias")
-    private String paymentTerms;
 
     @Schema(description = "Referencia del modulo de Cuentas por Pagar (pendiente de integrar)", example = "1001")
     private Long accountsPayableReferenceId;
