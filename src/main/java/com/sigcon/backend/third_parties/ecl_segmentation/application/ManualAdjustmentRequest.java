@@ -18,9 +18,6 @@ import lombok.NoArgsConstructor;
 @Schema(name = "ManualAdjustmentRequest", description = "Solicitud de ajuste manual del segmento de riesgo ECL de un cliente (RF08 - Flujo 4,5,6,7)")
 public class ManualAdjustmentRequest {
 
-    @Schema(description = "Identificador único del cliente", example = "1")
-    @NotNull(message = "Debe Diligenciar todos los campos obligatorios")
-    private Long clientId; //Identificador unico (ID) del Cliente
     @Schema(description = "Nuevo segmento de riesgo asignado manualmente al cliente", example = "MEDIUM", allowableValues = {"LOW", "MEDIUM", "HIGH"})
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
     private RiskSegmentation newSegmentation; //NUevo segmento de riesgo asignado manualmente al cliente
