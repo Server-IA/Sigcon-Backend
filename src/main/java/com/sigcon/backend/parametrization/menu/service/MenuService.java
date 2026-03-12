@@ -80,7 +80,6 @@ public class MenuService implements MenuUseCase {
                             Menu.builder()
                                 .id(menu.getParent().getId())
                                 .label(menu.getParent().getLabel())
-                                .icon(menu.getParent().getIcon())
                                 .build()
                             : null
                     )
@@ -155,7 +154,6 @@ public class MenuService implements MenuUseCase {
                 if(parent.getDeletedAt() != null) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El menú padre ya se encuentra eliminado")));
                 }
-                menu.setParent(parent);
             }
 
             if(menu.getModuleId() != null) {
@@ -163,9 +161,6 @@ public class MenuService implements MenuUseCase {
                 if(module.getDeletedAt() != null) {
                     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El módulo ya se encuentra eliminado")));
                 }
-                menu.setModule(ModuleDTO.builder()
-                    .id(module.getId())
-                    .build());
             }
 
             MenuEntity menuEntity = MenuEntity.builder()
@@ -173,7 +168,7 @@ public class MenuService implements MenuUseCase {
                 .icon(menu.getIcon())
                 .path(menu.getPath())
                 .menuOrder(menu.getMenuOrder())
-                .parent(menu.getParent() != null ? MenuEntity.builder()
+                .parent(menu.getParentId() != null ? MenuEntity.builder()
                     .id(menu.getParentId())
                     .build() : null)
                 .module(ModuleEntity.builder()

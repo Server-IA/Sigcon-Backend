@@ -1,13 +1,11 @@
 package com.sigcon.backend.lists_accounting.depretation_rules.application;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -58,7 +56,7 @@ public class UpdateDepretationRuleRequest {
     @DecimalMin(value = "0.00", message = "El valor residual debe ser mayor o igual a 0")
     private BigDecimal residualValue;
 
-    @Schema(description = "Fecha de vigencia efectiva de la regla en formato (dd/MM/yy)", example = "01/01/2026")
+    @Schema(description = "Estado de la regla de depreciación", example = "ACTIVE", allowableValues = {"ACTIVE","INACTIVE"})
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
     private DepretationStatus status;
 

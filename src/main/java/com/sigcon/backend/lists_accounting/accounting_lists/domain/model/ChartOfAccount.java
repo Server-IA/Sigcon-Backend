@@ -10,7 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -18,10 +17,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountDeleted;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
@@ -30,19 +30,15 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(
-        name = "cfg_chart_of_accounts",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_puc_code", columnNames = "account_code"),
-                @UniqueConstraint(name = "uk_puc_name", columnNames = "account_name")
-        }
+        name = "cfg_chart_of_accounts"
 )
+@SQLDelete(sql = "UPDATE cfg_chart_of_accounts SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Where(clause = "deleted_at IS NULL AND is_deleted = 'NOT_DELETED'")
 public class ChartOfAccount {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -76,10 +72,6 @@ public class ChartOfAccount {
     @Column(nullable = false, length = 10, name = "account_status")
     private AccountStatus status;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, name = "is_deleted")
-    private AccountDeleted isDeleted;
-
     @Column(nullable = false, updatable = false, name = "created_at")
     private LocalDateTime createdAt;
 
@@ -95,18 +87,14 @@ public class ChartOfAccount {
     @PrePersist
     public void onCreate() {
         this.createdAt = LocalDateTime.now();
-        this.updatedAt = null;
+        this.updatedAt = this.createdAt;
         this.deletedAt = null;
         this.deletedReason = null;
         this.status = AccountStatus.ACTIVE;
-        this.isDeleted = AccountDeleted.NOT_DELETED;
     }
 
     @PreUpdate
     public void onUpdate() {
         this.updatedAt = LocalDateTime.now();
-        if (this.isDeleted == AccountDeleted.DELETED && this.deletedAt == null) {
-            this.deletedAt = LocalDateTime.now();
-        }
     }
 }

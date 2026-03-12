@@ -2,6 +2,9 @@ package com.sigcon.backend.parametrization.users.domain.model;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
+
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 
 import com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits;
@@ -17,7 +20,8 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "permissions")
-// @Data
+@SQLDelete(sql = "UPDATE permissions SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 
 @Getter
 @Setter

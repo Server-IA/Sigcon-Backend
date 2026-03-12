@@ -1,4 +1,4 @@
-package com.sigcon.backend.accounting_lists.types_of_currency.domain.model;
+package com.sigcon.backend.lists_accounting.types_of_currency.domain.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -6,16 +6,19 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.annotations.Where;
+
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.enums.StatusCurrencyType;
 
 import java.time.LocalDateTime;
 
 @Entity
 @SQLRestriction("deleted_at IS NULL")
-@Table(name = "cfg_currency_types", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_currency_iso_code", columnNames = "iso_code"),
-        @UniqueConstraint(name = "uk_currency_name", columnNames = "name")
-})
+@Table(name = "cfg_currency_types")
+@SQLDelete(sql = "UPDATE cfg_currency_types SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -44,16 +47,15 @@ public class CurrencyType {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Column(nullable = false, name = "status")
+    @Enumerated(EnumType.STRING)
     @Builder.Default
-    private Boolean active = true;
+    private StatusCurrencyType status = StatusCurrencyType.ACTIVE;
 
     @PrePersist
     public void onCreate() {
         this.createdAt = LocalDateTime.now();
-        if (this.active == null) {
-            this.active = true;
-        }
+        this.status = StatusCurrencyType.ACTIVE;
     }
 
     @PreUpdate

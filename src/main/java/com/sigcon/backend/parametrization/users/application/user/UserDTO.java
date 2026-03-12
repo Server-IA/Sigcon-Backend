@@ -28,6 +28,9 @@ public class UserDTO {
     @Email(message = "El correo electrónico no es válido")
     private String email;
 
+    @NotBlank(message = "El usuario es obligatorio")
+    private String username;
+
     private String password;
     private String avatar;
     private String role;

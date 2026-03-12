@@ -3,7 +3,9 @@ package com.sigcon.backend.parametrization.modules.domain.model;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.Where;
 
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 
@@ -20,6 +22,8 @@ import lombok.Builder.Default;
 
 @Entity
 @Table(name = "modules")
+@SQLDelete(sql = "UPDATE modules SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @AllArgsConstructor

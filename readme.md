@@ -90,7 +90,7 @@ GET http://localhost:8080
 docker-compose down
 ```
 
-## Instalación en Mac
+## Instalación en Mac .
 
 Modificar el archivo Dockerfile:
 ```dockerfile

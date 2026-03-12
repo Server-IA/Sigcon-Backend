@@ -4,34 +4,35 @@ import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfA
 import com.sigcon.backend.lists_accounting.accounting_lists.application.CreateChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.DeleteChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.UpdateChartOfAccountDTO;
-import com.sigcon.backend.lists_accounting.accounting_lists.application.ViewChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountDeleted;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountLevel;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.repository.ChartOfAccountRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ChartOfAccountService {
 
-    private static final int DEFAULT_LENGTH = 10;
-    private static final int MAX_UNPAGED_LENGTH = 1000;
-
     private final ChartOfAccountRepository chartOfAccountRepository;
+    private final DataTableSpecificationBuilder<ChartOfAccount> chartOfAccountSpecificationBuilder =
+            new DataTableSpecificationBuilder<>();
 
     @Transactional
     public void createChartOfAccount(CreateChartOfAccountDTO request) {
@@ -45,13 +46,13 @@ public class ChartOfAccountService {
 
         AccountNature resolvedNature = validateAccountNature(request.getAccountClass(), request.getNature());
 
-        if (chartOfAccountRepository.existsAnyByCode(code)) {
+/*         if (chartOfAccountRepository.existsAnyByCode(code)) {
             throw new IllegalArgumentException("Codigo oficial ya registrado");
         }
 
         if (chartOfAccountRepository.existsAnyByName(name)) {
             throw new IllegalArgumentException("Nombre ya registrado");
-        }
+        } */
 
         ChartOfAccount account = ChartOfAccount.builder()
                 .code(code)
@@ -64,64 +65,27 @@ public class ChartOfAccountService {
         chartOfAccountRepository.save(account);
     }
 
-    public Page<ChartOfAccountResponseDTO> searchChartOfAccounts(ViewChartOfAccountDTO request, Pageable pageable) {
-
-        if (chartOfAccountRepository.count() == 0) {
-            throw new IllegalStateException("No existen cuentas registradas en el catalogo PUC");
-        }
-
-        Page<ChartOfAccount> result = chartOfAccountRepository.searchChartOfAccounts(
-                normalizeFilter(request.getCode()),
-                normalizeFilter(request.getName()),
-                request.getAccountClass(),
-                request.getLevel(),
-                request.getNature(),
-                request.getStatus(),
-                pageable
-        );
-
-        if (result.isEmpty()) {
-            throw new IllegalArgumentException("No existen cuentas con estos criterios");
-        }
-
-        return result.map(this::toResponseDTO);
-    }
-
     public DataTableResponse<ChartOfAccountResponseDTO> searchChartOfAccounts(DataTableRequest request) {
-        DataTableRequest safeRequest = request == null ? new DataTableRequest() : request;
-
-        ViewChartOfAccountDTO filters = buildFiltersFromDataTable(safeRequest);
+        DataTableRequest safeRequest = normalizeDataTableRequest(request == null ? new DataTableRequest() : request);
 
         int draw = Math.max(0, safeRequest.getDraw());
         int start = Math.max(0, safeRequest.getStart());
         int length = safeRequest.getLength();
-
-        if (length == -1) {
-            List<ChartOfAccountResponseDTO> allData = chartOfAccountRepository.searchChartOfAccounts(
-                            normalizeFilter(filters.getCode()),
-                            normalizeFilter(filters.getName()),
-                            filters.getAccountClass(),
-                            filters.getLevel(),
-                            filters.getNature(),
-                            filters.getStatus(),
-                            Pageable.unpaged()
-                    ).stream()
-                    .map(this::toResponseDTO)
-                    .limit(MAX_UNPAGED_LENGTH)
-                    .toList();
-
-            if (allData.isEmpty()) {
-                throw new IllegalArgumentException("No existen cuentas con estos criterios");
-            }
-
-            return DataTableResponse.from(allData, draw);
-        }
-
-        int safeLength = length > 0 ? length : DEFAULT_LENGTH;
+        int safeLength = length <= 0 ? 10 : length;
         int page = start / safeLength;
 
-        Page<ChartOfAccountResponseDTO> pageResult = searchChartOfAccounts(filters, PageRequest.of(page, safeLength));
-        return DataTableResponse.from(pageResult, draw);
+        Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
+
+        Specification<ChartOfAccount> spec = chartOfAccountSpecificationBuilder.build(safeRequest);
+
+        Page<ChartOfAccount> result = chartOfAccountRepository.findAll(spec, pageable);
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException("No existen cuentas con estos criterios");
+        }
+
+        return DataTableResponse.from(result.map(this::toResponseDTO), draw);
     }
 
     @Transactional
@@ -133,6 +97,8 @@ public class ChartOfAccountService {
 
         String targetCode = normalizeCode(request.getCode());
         String targetName = normalizeName(request.getName());
+/*         String currentCode = normalizeCode(account.getCode());
+        String currentName = normalizeName(account.getName()); */
 
         validateAccountClass(request.getAccountClass());
         validateAccountLevel(request.getLevel());
@@ -140,9 +106,9 @@ public class ChartOfAccountService {
 
         AccountNature resolvedNature = validateAccountNature(request.getAccountClass(), request.getNature());
 
-        boolean hasActiveDependencies = hasActiveDependencies(account);
+/*         boolean hasActiveDependencies = hasActiveDependencies(account); */
 
-        if (!targetCode.equals(account.getCode()) && hasActiveDependencies) {
+/*         if (!targetCode.equals(account.getCode()) && hasActiveDependencies) {
             throw new IllegalStateException("No se puede modificar el campo, ya que la regla cuenta PUC esta asociada a transacciones registradas en el sistema.");
         }
 
@@ -156,7 +122,7 @@ public class ChartOfAccountService {
 
         if (chartOfAccountRepository.existsAnyByNameAndIdNot(targetName, id)) {
             throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
-        }
+        } */
 
         account.setCode(targetCode);
         account.setName(targetName);
@@ -173,7 +139,7 @@ public class ChartOfAccountService {
         ChartOfAccount account = chartOfAccountRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("La cuenta seleccionada del catalogo PUC no existe"));
 
-        if (account.getIsDeleted() == AccountDeleted.DELETED) {
+        if (account.getDeletedAt() != null) {
             throw new IllegalStateException("La cuenta seleccionada del catalogo PUC no existe");
         }
 
@@ -181,11 +147,12 @@ public class ChartOfAccountService {
             throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
         }
 
-        if (hasActiveDependencies(account)) {
+/*         if (hasActiveDependencies(account)) {
             throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
-        }
+        } */
 
-        account.setIsDeleted(AccountDeleted.DELETED);
+        account.setDeletedAt(LocalDateTime.now());
+
         account.setDeletedReason(request.getReason().trim());
         chartOfAccountRepository.save(account);
     }
@@ -211,23 +178,46 @@ public class ChartOfAccountService {
 
     public void validateAccountLevel(AccountLevel accountLevel) {
         if (accountLevel == null) {
-            throw new IllegalArgumentException("Jerarquia no valida");
+            throw new IllegalArgumentException("Jerarquia de la cuenta no valida, por favor seleccione una jerarquia valida");
         }
     }
 
     private void validateCodeByLevel(String code, AccountLevel level) {
         int codeLength = code.length();
+        AccountLevel expectedLevelByCode = resolveLevelByLength(codeLength);
 
-        int expectedLength = switch (level) {
-            case CLASS -> 1;
-            case GROUP -> 2;
-            case ACCOUNT -> 4;
-            case SUBACCOUNT -> 6;
-        };
-
-        if (codeLength != expectedLength) {
-            throw new IllegalArgumentException("Jerarquia no valida");
+        if (expectedLevelByCode == null) {
+            throw new IllegalArgumentException("Codigo invalido: la jerarquia PUC Colombiana solo permite 1, 2, 4 o 6 digitos");
         }
+
+        if (expectedLevelByCode != level) {
+            throw new IllegalArgumentException("Jerarquia de cuenta invalida: el codigo " + code
+                    + " (" + codeLength + " digitos) corresponde al nivel " + levelToDisplay(expectedLevelByCode)
+                    + " pero se recibio nivel " + levelToDisplay(level) + ".");
+        }
+    }
+
+    private AccountLevel resolveLevelByLength(int codeLength) {
+        return switch (codeLength) {
+            case 1 -> AccountLevel.CLASS;
+            case 2 -> AccountLevel.GROUP;
+            case 4 -> AccountLevel.ACCOUNT;
+            case 6 -> AccountLevel.SUBACCOUNT;
+            default -> null;
+        };
+    }
+
+    private String levelToDisplay(AccountLevel level) {
+        if (level == null) {
+            return "Invalido";
+        }
+
+        return switch (level) {
+            case CLASS -> "Clase";
+            case GROUP -> "Grupo";
+            case ACCOUNT -> "Cuenta";
+            case SUBACCOUNT -> "Subcuenta";
+        };
     }
 
     private String normalizeCode(String code) {
@@ -242,10 +232,6 @@ public class ChartOfAccountService {
             throw new IllegalArgumentException("Por favor diligencie todos los campos obligatorios");
         }
         return name.trim();
-    }
-
-    private String normalizeFilter(String value) {
-        return value == null ? null : value.trim();
     }
 
     private void validateMandatoryCreateFields(CreateChartOfAccountDTO request) {
@@ -265,10 +251,10 @@ public class ChartOfAccountService {
         }
     }
 
-    private boolean hasActiveDependencies(ChartOfAccount account) {
+/*     private boolean hasActiveDependencies(ChartOfAccount account) {
         String prefix = account.getCode();
         return chartOfAccountRepository.existsActiveChildrenByCodePrefix(prefix, account.getId());
-    }
+    } */
 
     private ChartOfAccountResponseDTO toResponseDTO(ChartOfAccount account) {
         return ChartOfAccountResponseDTO.builder()
@@ -285,54 +271,32 @@ public class ChartOfAccountService {
                 .build();
     }
 
-    private ViewChartOfAccountDTO buildFiltersFromDataTable(DataTableRequest request) {
-        ViewChartOfAccountDTO filters = new ViewChartOfAccountDTO();
+    private DataTableRequest normalizeDataTableRequest(DataTableRequest request) {
+        if (request.getColumns() == null) {
+            request.setColumns(new ArrayList<>());
+            return request;
+        }
 
-        if (request.getColumns() != null) {
-            request.getColumns().forEach(column -> {
-                if (column == null || column.getSearch() == null || !StringUtils.hasText(column.getData())) {
-                    return;
-                }
-
-                String value = column.getSearch().getValue();
-                if (!StringUtils.hasText(value)) {
-                    return;
-                }
-
-                String data = column.getData().trim();
-                String normalizedValue = value.trim();
-
-                switch (data) {
-                    case "code" -> filters.setCode(normalizedValue);
-                    case "name" -> filters.setName(normalizedValue);
-                    case "accountClass" -> filters.setAccountClass(parseEnum(AccountClass.class, normalizedValue));
-                    case "level" -> filters.setLevel(parseEnum(AccountLevel.class, normalizedValue));
-                    case "nature" -> filters.setNature(parseEnum(AccountNature.class, normalizedValue));
-                    case "status" -> filters.setStatus(parseEnum(AccountStatus.class, normalizedValue));
-                    default -> {
+        List<DataTableRequest.DataTableColumn> normalizedColumns = request.getColumns().stream()
+                .map(column -> {
+                    if (column == null || !StringUtils.hasText(column.getData())) {
+                        return column;
                     }
-                }
-            });
-        }
+                    column.setData(mapDataTableColumn(column.getData().trim()));
+                    return column;
+                })
+                .toList();
 
-        if (request.getSearch() != null && StringUtils.hasText(request.getSearch().getValue())) {
-            String global = request.getSearch().getValue().trim();
-            if (!StringUtils.hasText(filters.getCode())) {
-                filters.setCode(global);
-            }
-            if (!StringUtils.hasText(filters.getName())) {
-                filters.setName(global);
-            }
-        }
-
-        return filters;
+        request.setColumns(normalizedColumns);
+        return request;
     }
 
-    private <E extends Enum<E>> E parseEnum(Class<E> enumType, String rawValue) {
-        try {
-            return Enum.valueOf(enumType, rawValue.trim().toUpperCase());
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Por favor siga el formato de los filtros");
-        }
+    private String mapDataTableColumn(String columnName) {
+        return switch (columnName) {
+            case "level" -> "accountLevel";
+            case "nature" -> "accountNature";
+            default -> columnName;
+        };
     }
 }
+

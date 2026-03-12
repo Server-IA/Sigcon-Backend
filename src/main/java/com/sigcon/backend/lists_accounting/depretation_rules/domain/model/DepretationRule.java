@@ -4,26 +4,28 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreRemove;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
-import com.sigcon.backend.lists_accounting.depretation_rules.application.DescriptionStructuredDTO;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 
@@ -34,6 +36,8 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "depretation_rules")
+@SQLDelete(sql = "UPDATE depretation_rules SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @NoArgsConstructor
@@ -48,13 +52,14 @@ public class DepretationRule {
     private String name; 
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, name = "depretation_type")
     @NotNull(message = "El tipo de depreciación es obligatorio")
     private DepretationType depretationType;
 
-    @Column(nullable = false, name = "accounting_account_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "accounting_account_id", nullable = false)
     @NotNull(message = "La cuenta contable es obligatoria")
-    private Long accountingAccountId;
+    private AccountingAccount accountingAccount;
 
     @Column(nullable = false, precision = 5, scale = 2)
     @NotNull(message = "La tasa de depreciación es obligatoria")
@@ -68,15 +73,14 @@ public class DepretationRule {
     @NotNull(message = "El valor residual es obligatorio")
     private BigDecimal residualValue;
 
-    @Column(nullable = false)
     @NotNull(message = "La fecha de vigencia es obligatoria")
+    @Column(name = "effective_date", nullable = false)
     private LocalDate effectiveDate;
 
-    //Descripcion estructurada como JSON
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
+    //Descripcion estructurada como texto largo
+    @Column(columnDefinition = "TEXT", nullable = false)
     @NotNull(message = "La descripción estructurada es obligatoria")
-    private DescriptionStructuredDTO descriptionStructured;
+    private String descriptionStructured;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

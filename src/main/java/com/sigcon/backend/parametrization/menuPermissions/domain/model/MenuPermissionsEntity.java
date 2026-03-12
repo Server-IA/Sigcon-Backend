@@ -2,6 +2,9 @@ package com.sigcon.backend.parametrization.menuPermissions.domain.model;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
+
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 
@@ -23,7 +26,8 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "menu_permissions")
-
+@SQLDelete(sql = "UPDATE menu_permissions SET deleted_at = NOW() WHERE id = ?")
+@Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
 @AllArgsConstructor

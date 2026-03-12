@@ -4,7 +4,6 @@ import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfA
 import com.sigcon.backend.lists_accounting.accounting_lists.application.CreateChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.DeleteChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.UpdateChartOfAccountDTO;
-import com.sigcon.backend.lists_accounting.accounting_lists.application.ViewChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.service.ChartOfAccountService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
@@ -19,9 +18,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -29,23 +25,19 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springdoc.core.annotations.ParameterObject;
 
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/chart-of-accounts")
 @RequiredArgsConstructor
-@Tag(name = "Accounting Lists - Chart Of Accounts", description = "Endpoints para gestionar el catalogo de cuentas contables (PUC)")
+@Tag(name = "Accounting Lists - Chart Of Accounts", description = "Endpoints para gestionar el catalogo de cuentas (PUC)")
 public class ChartOfAccountController {
 
     private final ChartOfAccountService chartOfAccountService;
@@ -59,9 +51,9 @@ public class ChartOfAccountController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Crear una cuenta contable",
+            summary = "Crear una cuenta en el PUC",
             description = "Crea una nueva cuenta dentro del catalogo PUC con sus datos base."
     )
     @ApiResponses(value = {
@@ -75,90 +67,30 @@ public class ChartOfAccountController {
     public ResponseEntity<?> createChartOfAccount(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "Datos requeridos para crear la cuenta contable."
+                    description = "Datos requeridos para crear la cuenta."
             )
             @Valid @RequestBody CreateChartOfAccountDTO request,
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        try {
-            if (bindingResult.hasErrors()) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-            }
-
-            chartOfAccountService.createChartOfAccount(request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(
-                    SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("La cuenta ha sido creada exitosamente en el catalogo PUC"),
-                            Optional.empty()
-                    )
-            );
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Error al guardar la informacion, intente nuevamente"
-                    )));
+        if (bindingResult.hasErrors()) {
+        return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
-    }
 
-    @GetMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT')")
-    @Operation(
-            summary = "Buscar cuentas contables (paginado)",
-            description = "Consulta cuentas por filtros opcionales y retorna resultados paginados."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente",
-                    content = @Content(schema = @Schema(implementation = Object.class))),
-            @ApiResponse(responseCode = "400", description = "Filtros invalidos",
-                    content = @Content(schema = @Schema(implementation = Object.class))),
-            @ApiResponse(responseCode = "500", description = "Error interno del servidor",
-                    content = @Content(schema = @Schema(implementation = Object.class)))
-    })
-    public ResponseEntity<?> searchChartOfAccounts(
-            @ParameterObject @Valid @ModelAttribute ViewChartOfAccountDTO request,
-            @Parameter(hidden = true)
-            BindingResult bindingResult,
-            @Parameter(description = "Numero de pagina (inicia en 0)", example = "0")
-            @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Tamano de pagina permitido: 10, 20, 50 o 100", example = "10")
-            @RequestParam(defaultValue = "10") int size
-    ) {
-        try {
-            if (bindingResult.hasErrors()) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-            }
-
-            Pageable pageable = PageRequest.of(Math.max(page, 0), resolvePageSize(size));
-            Page<ChartOfAccountResponseDTO> result = chartOfAccountService.searchChartOfAccounts(request, pageable);
-
-            return ResponseEntity.ok(
-                    SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("Se encontraron cuentas con coincidencias"),
-                            Optional.of(result)
-                    )
-            );
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Error al consultar datos, intente nuevamente"
-                    )));
-        }
+        chartOfAccountService.createChartOfAccount(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("La cuenta ha sido creada exitosamente en el catalogo PUC"),
+                        Optional.empty()
+                )
+        );
     }
 
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Buscar cuentas contables (DataTable)",
-            description = "Consulta cuentas contables usando el formato de request de DataTables."
+            summary = "Buscar cuentas en el PUC (DataTable)",
+            description = "Consulta cuentas en el PUC usando el formato de request de DataTables."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Consulta DataTable realizada correctamente",
@@ -191,9 +123,9 @@ public class ChartOfAccountController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Actualizar una cuenta contable",
+            summary = "Actualizar una cuenta del PUC",
             description = "Actualiza los datos principales de una cuenta existente en el catalogo PUC."
     )
     @ApiResponses(value = {
@@ -205,17 +137,17 @@ public class ChartOfAccountController {
                     content = @Content(schema = @Schema(implementation = Object.class)))
     })
     public ResponseEntity<?> updateChartOfAccount(
-            @Parameter(description = "ID de la cuenta contable a actualizar", example = "1")
+            @Parameter(description = "ID de la cuenta del PUC a actualizar", example = "1")
             @PathVariable Long id,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "Datos requeridos para actualizar la cuenta contable."
+                    description = "Datos requeridos para actualizar la cuenta del PUC."
             )
             @Valid @RequestBody UpdateChartOfAccountDTO request,
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        try {
+/*         try { */
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -227,7 +159,7 @@ public class ChartOfAccountController {
                             Optional.empty()
                     )
             );
-        } catch (IllegalArgumentException | IllegalStateException e) {
+/*         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
@@ -236,13 +168,13 @@ public class ChartOfAccountController {
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
                             "Error al guardar la informacion, intente nuevamente"
                     )));
-        }
+        } */
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
     @Operation(
-            summary = "Inactivar o eliminar logica de una cuenta contable",
+            summary = "Eliminacion logica de una cuenta",
             description = "Registra la eliminacion logica de una cuenta con su motivo."
     )
     @ApiResponses(value = {
@@ -254,7 +186,7 @@ public class ChartOfAccountController {
                     content = @Content(schema = @Schema(implementation = Object.class)))
     })
     public ResponseEntity<?> deleteChartOfAccount(
-            @Parameter(description = "ID de la cuenta contable a eliminar", example = "1")
+            @Parameter(description = "ID de la cuenta del PUC a eliminar", example = "1")
             @PathVariable Long id,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
@@ -264,7 +196,7 @@ public class ChartOfAccountController {
             @Parameter(hidden = true)
             BindingResult bindingResult
     ) {
-        try {
+/*         try { */
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
@@ -276,7 +208,7 @@ public class ChartOfAccountController {
                             Optional.empty()
                     )
             );
-        } catch (IllegalArgumentException | IllegalStateException e) {
+/*         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
@@ -285,13 +217,7 @@ public class ChartOfAccountController {
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
                             "Error al registrar la inactivacion. Intente nuevamente mas tarde"
                     )));
-        }
+        } */
     }
 
-    private int resolvePageSize(int requestedSize) {
-        return switch (requestedSize) {
-            case 10, 20, 50, 100 -> requestedSize;
-            default -> 10;
-        };
-    }
 }

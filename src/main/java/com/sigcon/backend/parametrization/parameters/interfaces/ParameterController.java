@@ -31,7 +31,7 @@ public class ParameterController {
      */
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETER')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETER') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getSystemParameters(@RequestBody(required = false) DataTableRequest dtRequest) {
         return parameterService.getSystemParametersPaged(dtRequest);
     }
@@ -41,7 +41,7 @@ public class ParameterController {
      * POST /api/parameters/store
      */
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PARAMETER')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PARAMETER') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> storeSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
         return parameterService.storeSystemParameter(request, bindingResult);
     }
@@ -51,7 +51,7 @@ public class ParameterController {
      * PUT /api/parameters/update
      */
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_PARAMETER')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PARAMETER') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updateSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
         return parameterService.updateSystemParameter(request, bindingResult);
     }
@@ -61,7 +61,7 @@ public class ParameterController {
      * DELETE /api/parameters/delete/{id}
      */
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_PARAMETER')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_PARAMETER') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> deleteSystemParameter(@PathVariable Long id) {
         return parameterService.deleteSystemParameter(id);
     }

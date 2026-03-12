@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/v1/depretation-rules")
+@RequestMapping("/api/v1/depreciation-rules")
 @RequiredArgsConstructor
 public class DepretationRuleController {
 
@@ -33,24 +33,24 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Consultar reglas de depresación", 
-        description = "Retrona un listado paginado de reglas de depreciacion activas segun las especificaciones del requerimiento CFG-RF-14" + 
+        description = "Retrona un listado paginado de reglas de depreciacion segun las especificaciones del requerimiento CFG-RF-14. " + 
         "Requiere permisos PERM_VIEW_DEPRETATION_RULE"
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Listado obtenido exitosamente"),
-        @ApiResponse(responseCode = "200", description = "No existen Reglas con esos Criterios"), 
+        @ApiResponse(responseCode = "404", description = "No se encontraron reglas con esos criterios"), 
         @ApiResponse(responseCode = "400", description = "Error en los parametros de busqueda")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getDepretationRules(
             @RequestBody(required = false) DataTableRequest dtRequest) {
-        try {
+        // try {
             return depretationRuleService.getDepretationRulesPaged(dtRequest);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -59,7 +59,7 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Crear reglas de depresación", 
-        description = "Crea una nueva regla de depreciacion segun las especificaciones del requerimiento CFG-RF-13" + 
+        description = "Crea una nueva regla de depreciacion segun las especificaciones del requerimiento CFG-RF-13. " + 
         "Requiere permisos PERM_CREATE_DEPRETATION_RULE"
     )
     @ApiResponses({
@@ -69,16 +69,16 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "500", description = "Error interno al guardar la regla")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> createDepretationRule(
             @Valid @RequestBody CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
-        try{        
-        return depretationRuleService.createDepretationRule(request, bindingResult);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // try{        
+            return depretationRuleService.createDepretationRule(request, bindingResult);
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -87,7 +87,7 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Editar reglas de depresación Existentes", 
-        description = "Actualizar los campos editables de una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-15" + 
+        description = "Actualizar los campos editables de una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-15. " + 
         "Requiere permisos PERM_UPDATE_DEPRETATION_RULE"
     )
     @ApiResponses({
@@ -96,16 +96,16 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "500", description = "Error interno al guardar los cambios")
     })
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> updateDepretationRule(
             @Valid @RequestBody UpdateDepretationRuleRequest request,
             BindingResult bindingResult) {
-        try{
+        // try{
         return depretationRuleService.updateDepretationRule(request, bindingResult);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        }
+        // } catch (Exception e) {
+        //     return ResponseEntity.badRequest()
+        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // }
     }
 
     /**
@@ -114,7 +114,7 @@ public class DepretationRuleController {
      */
     @Operation(
         summary = "Eliminar regla de depresación (eliminado logico)", 
-        description = "Eliminar una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-16" + 
+        description = "Eliminar una regla de depreciacion segun las especificaciones del requerimiento CFG-RF-16. " + 
         "Requiere permisos PERM_DELETE_DEPRETATION_RULE"
     )
     @ApiResponses({
@@ -123,7 +123,7 @@ public class DepretationRuleController {
         @ApiResponse(responseCode = "500", description = "Error interno al eliminar la regla")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> deleteDepretationRule(
             @PathVariable Long id,
             @RequestParam(name = "reason", required = true) String reason) {
