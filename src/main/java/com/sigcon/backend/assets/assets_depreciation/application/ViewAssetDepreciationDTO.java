@@ -1,6 +1,8 @@
 package com.sigcon.backend.assets.assets_depreciation.application;
 
 import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -46,7 +48,7 @@ public class ViewAssetDepreciationDTO {
     private BigDecimal depreciationAmount;
 
     @Schema(description = "Método de depreciación aplicado", example = "STRAIGHT_LINE")
-    private DepreciationMethod depreciationMethod;
+    private DepretationType depretationType;
 
     @Schema(description = "Fecha en que se ejecutó el cálculo", example = "2026-03-11")
     private LocalDate calculationDate;
