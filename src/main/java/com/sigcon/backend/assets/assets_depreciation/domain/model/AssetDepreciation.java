@@ -1,7 +1,7 @@
 package com.sigcon.backend.assets.assets_depreciation.domain.model;
 
 import com.sigcon.backend.assets.assets.domain.model.Assets;
-import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -83,7 +83,7 @@ public class AssetDepreciation {
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "depreciation_method", nullable = false, length = 40)
-    private DepreciationMethod depreciationMethod;
+    private DepretationType depretationType;
 
     /**
      * Fecha en que se ejecutó el cálculo (LocalDate.now() al momento del proceso).
