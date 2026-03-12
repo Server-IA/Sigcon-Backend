@@ -39,10 +39,10 @@ public class UpdateAssetsDTO {
     @Schema(description = "Tipo del activo", example = "TANGIBLE", allowableValues = {"TANGIBLE", "INTANGIBLE"})
     private AssetType type;
 
-    @NotBlank(message = "Faltan datos requeridos")
-    @Pattern(regexp = "^[0-9]{1,10}$", message = "Faltan datos requeridos")
-    @Schema(description = "Codigo contable del catalogo PUC (modulo Listas Contables)", example = "1504")
-    private String accountingCode;
+    @NotNull(message = "Faltan datos requeridos")
+    @Positive(message = "Faltan datos requeridos")
+    @Schema(description = "ID de la cuenta contable asociada al activo", example = "12")
+    private Long accountingAccountId;
 
     @NotNull(message = "Faltan datos requeridos")
     @DecimalMin(value = "0.01", message = "Faltan datos requeridos")
@@ -59,10 +59,8 @@ public class UpdateAssetsDTO {
     private Integer usefulLifeMonths;
 
     @NotNull(message = "Faltan datos requeridos")
-    @Schema(description = "Metodo de depreciacion", example = "STRAIGHT_LINE", allowableValues = {
-            "STRAIGHT_LINE", "DECLINING_BALANCE", "UNITS_OF_PRODUCTION", "OTHER"
-    })
-    private DepreciationMethod depreciationMethod;
+    @Schema(description = "ID de la regla de depreciacion", example = "1")
+    private Long depreciationRuleId;
 
     @NotNull(message = "Faltan datos requeridos")
     @Positive(message = "Faltan datos requeridos")
@@ -79,10 +77,6 @@ public class UpdateAssetsDTO {
 
     @Schema(description = "Referencia del modulo de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
-
-    @Size(max = 120, message = "Faltan datos requeridos")
-    @Schema(description = "Centro de costo o ubicacion contable", example = "Sede principal")
-    private String costCenterOrAccountingLocation;
 
     @NotNull(message = "Faltan datos requeridos")
     @Schema(description = "Estado del activo", example = "ACTIVE", allowableValues = {

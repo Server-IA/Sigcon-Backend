@@ -14,6 +14,10 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
+import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 
 @Data
 @Builder
@@ -40,20 +44,11 @@ public class ViewAssetsDTO {
     @Schema(description = "Tipo de activo", example = "TANGIBLE")
     private AssetType type;
 
-    @Schema(description = "ID de la cuenta contable asociada", example = "15")
-    private Long chartOfAccountId;
+    @Schema(description = "Cuenta contable asociada (DTO completo)")
+    private AccountingAccountDTO accountingAccount;
 
-    @Schema(description = "Codigo de cuenta contable", example = "1504")
-    private String accountingCode;
-
-    @Schema(description = "Nombre de la cuenta contable", example = "Propiedad planta y equipo")
-    private String accountingName;
-
-    @Schema(description = "ID del proveedor", example = "1")
-    private Long supplierId;
-
-    @Schema(description = "Nombre del proveedor", example = "TERCERO DEMO CLIENTE SAS")
-    private String supplierName;
+    @Schema(description = "Proveedor asociado (DTO completo)")
+    private ThirdPartyDTO supplier;
 
     @Schema(description = "Valor de adquisicion", example = "3200000.00")
     private BigDecimal acquisitionValue;
@@ -64,20 +59,14 @@ public class ViewAssetsDTO {
     @Schema(description = "Vida util en meses", example = "60")
     private Integer usefulLifeMonths;
 
-    @Schema(description = "Metodo de depreciacion", example = "STRAIGHT_LINE")
-    private DepreciationMethod depreciationMethod;
-
-    @Schema(description = "Condiciones de pago", example = "30 dias")
-    private String paymentTerms;
+    @Schema(description = "Regla de depreciacion asociada (DTO completo)")
+    private DepretationRuleDTO depretationRule;
 
     @Schema(description = "Referencia de Cuentas por Pagar (pendiente de integrar)", example = "1001")
     private Long accountsPayableReferenceId;
 
     @Schema(description = "Referencia de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
-
-    @Schema(description = "Centro de costo o ubicacion contable", example = "Sede principal")
-    private String costCenterOrAccountingLocation;
 
     @Schema(description = "Estado del activo", example = "ACTIVE")
     private AssetStatus status;

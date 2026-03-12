@@ -10,6 +10,7 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.model.Accou
 public interface AccountingAccountRepository extends JpaRepository<AccountingAccount, Long>, JpaSpecificationExecutor<AccountingAccount> {
 
     Optional<AccountingAccount> findByIdAndDeletedAtIsNull(Long id);
+
     
     boolean existsByCustomNameAndCompanyIdAndDeletedAtIsNull(String customName, Long companyId);
     

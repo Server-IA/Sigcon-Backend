@@ -19,7 +19,6 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreRemove;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,8 +26,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "ecl_segmentation")
-@SQLDelete(sql = "UPDATE ecl_segmentation SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "risk_segmentation")
+@SQLDelete(sql = "UPDATE risk_segmentation SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @Data
 @Builder
@@ -53,7 +52,7 @@ public class EclSegmentation {
     @Enumerated(EnumType.STRING)
     @Column(name = "segmentation_source", nullable = false)
     @Builder.Default
-    private SegmentationSource segmentationSource = SegmentationSource.AUTOMATIC; //revisar mas adelante porque no me cuadra algo 
+    private SegmentationSource segmentationSource = SegmentationSource.AUTOMATIC; 
     @Column(name = "justification", columnDefinition = "TEXT")
     private String justification;
     @Column(name = "calculation_date", nullable = false)
@@ -63,7 +62,7 @@ public class EclSegmentation {
     private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-    @Column(name = "deleted_at", nullable = false)
+    @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
     @PrePersist
