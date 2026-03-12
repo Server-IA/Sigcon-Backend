@@ -39,10 +39,10 @@ public class CreateAssetsDTO {
     @Schema(description = "Tipo del activo", example = "TANGIBLE", allowableValues = {"TANGIBLE", "INTANGIBLE"})
     private AssetType type;
 
-    @NotBlank(message = "Faltan datos requeridos")
-    @Pattern(regexp = "^[0-9]{1,10}$", message = "Faltan datos requeridos")
-    @Schema(description = "Codigo contable del catalogo PUC (modulo Listas Contables)", example = "1504")
-    private String accountingCode;
+    @NotNull(message = "Faltan datos requeridos")
+    @Positive(message = "Faltan datos requeridos")
+    @Schema(description = "ID de la cuenta contable asociada al activo", example = "12")
+    private Long accountingAccountId;
 
     @NotNull(message = "Faltan datos requeridos")
     @DecimalMin(value = "0.01", message = "Faltan datos requeridos")
@@ -79,11 +79,6 @@ public class CreateAssetsDTO {
 
     @Schema(description = "Referencia del modulo de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
-
-    @NotNull(message = "Faltan datos requeridos")
-    @Positive(message = "Faltan datos requeridos")
-    @Schema(description = "ID de la cuenta contable asociada al activo", example = "12")
-    private Long accountingAccountId;
 
     @Schema(description = "Estado inicial del activo", example = "ACTIVE", allowableValues = {
             "ACTIVE", "IN_REPAIR", "DECOMMISSIONED", "TRANSFERRED"

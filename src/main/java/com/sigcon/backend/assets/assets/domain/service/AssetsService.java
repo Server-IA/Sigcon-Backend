@@ -6,16 +6,36 @@ import com.sigcon.backend.assets.assets.application.ViewAssetsDTO;
 import com.sigcon.backend.assets.assets.domain.model.Assets;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
-import com.sigcon.backend.assets.assets.domain.repository.AssetChartOfAccountBridgeRepository;
+//import com.sigcon.backend.assets.assets.domain.repository.AssetChartOfAccountBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetThirdPartyBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
-import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
+import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
+import com.sigcon.backend.parametrization.resources.application.CountryDTO;
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
+import com.sigcon.backend.parametrization.resources.domain.model.Country;
+import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
+import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdContactDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRoleCatalogDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyStatusCatalogDTO;
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdContact;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyRoleCatalog;
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyStatusCatalog;
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyWithholdingAssignment;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
@@ -31,59 +51,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.Year;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class AssetsService {
 
-    private static final int MAX_PAGE_SIZE = 100;
-    private static final String ROLE_SUPERADMIN = "ROLE_SUPERADMIN";
-    private static final String PERM_CREATE_ASSET = "PERM_CREATE_ASSET";
-    private static final String PERM_UPDATE_ASSET = "PERM_UPDATE_ASSET";
-
-    private static final Set<String> ALLOWED_DATA_TABLE_FIELDS = Set.of(
-            "id",
-            "assetCode",
-            "assetName",
-            "classification",
-            "assetType",
-            "chartOfAccount.code",
-            "chartOfAccount.name",
-            "supplier.id",
-            "supplier.businessName",
-            "acquisitionValue",
-            "acquisitionDate",
-            "status",
-            "createdAt",
-            "updatedAt"
-    );
-
     private final AssetsRepository assetsRepository;
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
-    private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
+  //  private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
 
     @Transactional
     public ViewAssetsDTO create(CreateAssetsDTO request) {
-        validateAssetPermission(PERM_CREATE_ASSET);
-        validateAccountingPeriodIsOpen();
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
-        ChartOfAccount chartOfAccount = resolveChartOfAccount(request.getAccountingCode(), false);
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
-        validateAccountsPayableDependency(
-                request.getAccountsPayableReferenceId(),
-                supplier.getId(),
-                request.getPaymentTerms()
-        );
-        validateBankCashDependency(request.getBankCashReferenceId());
 
         String currentUser = resolveCurrentUsername();
 
@@ -93,7 +82,6 @@ public class AssetsService {
                 .description(normalizeOptionalText(request.getDescription()))
                 .classification(request.getClassification())
                 .assetType(request.getType())
-                // .chartOfAccount(chartOfAccount)
                 .supplier(supplier)
                 .acquisitionValue(request.getAcquisitionValue())
                 .acquisitionDate(request.getAcquisitionDate())
@@ -113,14 +101,16 @@ public class AssetsService {
         return toViewDTO(savedAsset);
     }
 
+    @Transactional
     public DataTableResponse<ViewAssetsDTO> findAllPaged(DataTableRequest request) {
-        // DataTableRequest safeRequest = normalizeDataTableRequest(request);
-        // validateDataTableRequest(safeRequest);
+        if (request == null) {
+            request = new DataTableRequest();
+        }
 
         int draw = Math.max(0, request.getDraw());
         int start = Math.max(0, request.getStart());
         int length = request.getLength();
-        int safeLength = length <= 0 ? 20 : length > MAX_PAGE_SIZE ? MAX_PAGE_SIZE : length ;
+        int safeLength = length <= 0 ? 20 : length;
         int page = start / safeLength;
 
         Pageable pageable = length == -1
@@ -130,13 +120,10 @@ public class AssetsService {
         Specification<Assets> specification = dataTableSpecificationBuilder.build(request);
 
         Page<Assets> assetsPage = assetsRepository.findAll(specification, pageable);
-        // if (assetsPage.isEmpty()) {
-        //     throw new IllegalArgumentException("No se encontraron activos con los criterios de busqueda especificados.");
-        // }
-
         return DataTableResponse.from(assetsPage.map(this::toViewDTO), draw);
     }
 
+    @Transactional
     public ViewAssetsDTO getById(Long id) {
         Assets asset = assetsRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El activo seleccionado no existe."));
@@ -145,8 +132,6 @@ public class AssetsService {
 
     @Transactional
     public ViewAssetsDTO update(Long id, UpdateAssetsDTO request) {
-        validateAssetPermission(PERM_UPDATE_ASSET);
-        validateAccountingPeriodIsOpen();
 
         Assets existingAsset = assetsRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El activo seleccionado no existe."));
@@ -157,16 +142,9 @@ public class AssetsService {
         }
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
-        ChartOfAccount chartOfAccount = resolveChartOfAccount(request.getAccountingCode(), true);
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
-        validateAccountsPayableDependency(
-                request.getAccountsPayableReferenceId(),
-                supplier.getId(),
-                request.getPaymentTerms()
-        );
-        validateBankCashDependency(request.getBankCashReferenceId());
 
         String normalizedDescription = normalizeOptionalText(request.getDescription());
         String normalizedObservations = normalizeOptionalText(request.getObservations());
@@ -195,16 +173,6 @@ public class AssetsService {
         return toViewDTO(savedAsset);
     }
 
-    private void validateAccountingPeriodIsOpen() {
-        boolean accountingPeriodOpen = true;
-
-        // TODO Integrar validacion real del periodo contable cuando este disponible
-        // el modulo de periodos contables.
-        if (!accountingPeriodOpen) {
-            throw new IllegalStateException("Periodo contable cerrado");
-        }
-    }
-
     private void validateAssetClassification(AssetClassification classification, Integer usefulLifeMonths) {
         if (classification == AssetClassification.CURRENT && usefulLifeMonths != null && usefulLifeMonths > 12) {
             throw new IllegalArgumentException("Los datos ingresados no cumplen las politicas contables.");
@@ -226,25 +194,9 @@ public class AssetsService {
         return supplier;
     }
 
-    private ChartOfAccount resolveChartOfAccount(String accountingCode, boolean updateFlow) {
-        String normalizedCode = normalizeAccountingCode(accountingCode);
-
-        ChartOfAccount chartOfAccount = chartOfAccountRepository.findByCode(normalizedCode)
-                .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe"));
-
-        if (chartOfAccount.getStatus() != com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountStatus.ACTIVE
-                || chartOfAccount.getAccountClass() != AccountClass.ASSET) {
-            if (updateFlow) {
-                throw new IllegalArgumentException("Codigo contable invalido o no pertenece al grupo de activos permitidos.");
-            }
-            throw new IllegalArgumentException("Codigo contable no valido o no pertenece al grupo de activos.");
-        }
-
-        return chartOfAccount;
-    }
-
     private AccountingAccount resolveAccountingAccount(Long accountingAccountId) {
-        AccountingAccount accountingAccount = accountingAccountRepository.findById(accountingAccountId)
+        AccountingAccount accountingAccount = accountingAccountRepository
+                .findByIdAndDeletedAtIsNull(accountingAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe"));
 
         if (accountingAccount.getStatus() != AccountStatus.ACTIVE) {
@@ -252,43 +204,6 @@ public class AssetsService {
         }
 
         return accountingAccount;
-    }
-
-    private void validateAccountsPayableDependency(Long accountsPayableReferenceId, Long supplierId, String paymentTerms) {
-        // TODO Integrar validacion con modulo de Cuentas por Pagar:
-        // 1) Verificar que el termino de pago provenga de cuentas por pagar activas.
-        // 2) Verificar que el termino este asociado al proveedor.
-        // 3) Validar la deuda/condicion vigente antes de registrar/editar activos.
-        if (accountsPayableReferenceId != null && accountsPayableReferenceId <= 0) {
-            throw new IllegalArgumentException("Los datos ingresados no cumplen las politicas contables.");
-        }
-    }
-
-    private void validateBankCashDependency(Long bankCashReferenceId) {
-        // TODO Integrar validacion con modulo Bancos/Cajas cuando este disponible.
-        if (bankCashReferenceId != null && bankCashReferenceId <= 0) {
-            throw new IllegalArgumentException("Los datos ingresados no cumplen las politicas contables.");
-        }
-    }
-
-    private void validateAssetPermission(String requiredPermission) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        boolean authorized = authentication != null
-                && authentication.isAuthenticated()
-                && authentication.getAuthorities() != null
-                && authentication.getAuthorities().stream()
-                .map(authority -> authority.getAuthority())
-                .filter(StringUtils::hasText)
-                .map(String::trim)
-                .anyMatch(authority ->
-                        requiredPermission.equalsIgnoreCase(authority)
-                                || ROLE_SUPERADMIN.equalsIgnoreCase(authority)
-                );
-
-        if (!authorized) {
-            throw new IllegalStateException("Acceso no autorizado para gestionar activos.");
-        }
     }
 
     private String resolveCurrentUsername() {
@@ -311,12 +226,6 @@ public class AssetsService {
         return candidate;
     }
 
-    private String normalizeAccountingCode(String accountingCode) {
-        if (!StringUtils.hasText(accountingCode)) {
-            throw new IllegalArgumentException("Faltan datos requeridos");
-        }
-        return accountingCode.trim();
-    }
 
     private String normalizeOptionalText(String text) {
         if (!StringUtils.hasText(text)) {
@@ -346,65 +255,6 @@ public class AssetsService {
                 .anyMatch(roleName -> "PROVEEDOR".equalsIgnoreCase(roleName) || "SUPPLIER".equalsIgnoreCase(roleName));
     }
 
-    private DataTableRequest normalizeDataTableRequest(DataTableRequest request) {
-        DataTableRequest safeRequest = request != null ? request : new DataTableRequest();
-
-        if (safeRequest.getLength() == 0) {
-            safeRequest.setLength(20);
-        }
-
-        if (safeRequest.getColumns() == null) {
-            safeRequest.setColumns(new ArrayList<>());
-        }
-
-        if (safeRequest.getSearch() == null) {
-            safeRequest.setSearch(new DataTableRequest.DataTableSearch("", false));
-        }
-
-        List<DataTableRequest.DataTableColumn> normalizedColumns = safeRequest.getColumns().stream()
-                .map(column -> {
-                    if (column == null || !StringUtils.hasText(column.getData())) {
-                        return column;
-                    }
-                    column.setData(mapDataTableColumn(column.getData().trim()));
-                    return column;
-                })
-                .toList();
-
-        safeRequest.setColumns(normalizedColumns);
-        return safeRequest;
-    }
-
-    private String mapDataTableColumn(String columnName) {
-        return switch (columnName) {
-            case "assetCode" -> "assetCode";
-            case "name" -> "assetName";
-            case "classification" -> "classification";
-            case "type" -> "assetType";
-            case "accountingCode" -> "chartOfAccount.code";
-            case "accountingName" -> "chartOfAccount.name";
-            case "supplierId" -> "supplier.id";
-            case "supplierName" -> "supplier.businessName";
-            case "status" -> "status";
-            default -> columnName;
-        };
-    }
-
-    private void validateDataTableRequest(DataTableRequest request) {
-        if (request.getLength() > MAX_PAGE_SIZE) {
-            throw new IllegalArgumentException("Parametros de paginacion invalidos. Limite maximo: 100 registros.");
-        }
-
-        for (DataTableRequest.DataTableColumn column : request.getColumns()) {
-            if (column == null || !StringUtils.hasText(column.getData())) {
-                continue;
-            }
-            if (!ALLOWED_DATA_TABLE_FIELDS.contains(column.getData())) {
-                throw new IllegalArgumentException("Campo de ordenamiento no valido.");
-            }
-        }
-    }
-
     private ViewAssetsDTO toViewDTO(Assets asset) {
         return ViewAssetsDTO.builder()
                 .id(asset.getId())
@@ -413,11 +263,10 @@ public class AssetsService {
                 .description(asset.getDescription())
                 .classification(asset.getClassification())
                 .type(asset.getAssetType())
-                // .chartOfAccountId(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getId() : null)
-                // .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
-                // .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
-                .supplierId(asset.getSupplier() != null ? asset.getSupplier().getId() : null)
-                .supplierName(asset.getSupplier() != null ? asset.getSupplier().getBusinessName() : null)
+                .accountingAccount(toAccountingAccountDto(asset.getAccountingAccount()))
+                .chartOfAccount(toChartOfAccountDto(
+                        asset.getAccountingAccount() != null ? asset.getAccountingAccount().getPucAccount() : null))
+                .supplier(toThirdPartyDto(asset.getSupplier()))
                 .acquisitionValue(asset.getAcquisitionValue())
                 .acquisitionDate(asset.getAcquisitionDate())
                 .usefulLifeMonths(asset.getUsefulLifeMonths())
@@ -425,8 +274,6 @@ public class AssetsService {
                 .paymentTerms(asset.getPaymentTerms())
                 .accountsPayableReferenceId(asset.getAccountsPayableReferenceId())
                 .bankCashReferenceId(asset.getBankCashReferenceId())
-                .accountingAccountId(asset.getAccountingAccount() != null ? asset.getAccountingAccount().getId() : null)
-                .accountingAccountName(asset.getAccountingAccount() != null ? asset.getAccountingAccount().getCustomName() : null)
                 .status(asset.getStatus())
                 .observations(asset.getObservations())
                 .createdBy(asset.getCreatedBy())
@@ -434,5 +281,235 @@ public class AssetsService {
                 .createdAt(asset.getCreatedAt())
                 .updatedAt(asset.getUpdatedAt())
                 .build();
+    }
+
+    private AccountingAccountDTO toAccountingAccountDto(AccountingAccount accountingAccount) {
+        if (accountingAccount == null) {
+            return null;
+        }
+
+        return AccountingAccountDTO.builder()
+                .id(accountingAccount.getId())
+                .puc_id(accountingAccount.getPucAccount() != null ? accountingAccount.getPucAccount().getId() : null)
+                .pucAccount(toChartOfAccountDto(accountingAccount.getPucAccount()))
+                .customName(accountingAccount.getCustomName())
+                .currencyType(accountingAccount.getCurrencyType() != null
+                        ? CurrencyTypeResponseDTO.builder()
+                                .id(accountingAccount.getCurrencyType().getId())
+                                .isoCode(accountingAccount.getCurrencyType().getIsoCode())
+                                .name(accountingAccount.getCurrencyType().getName())
+                                .status(accountingAccount.getCurrencyType().getStatus())
+                                .createdAt(accountingAccount.getCurrencyType().getCreatedAt())
+                                .build()
+                        : null)
+                .costCenter(accountingAccount.getCostCenter() != null
+                        ? CostCenterDTO.builder()
+                                .id(accountingAccount.getCostCenter().getId())
+                                .code(accountingAccount.getCostCenter().getCode())
+                                .name(accountingAccount.getCostCenter().getName())
+                                .description(accountingAccount.getCostCenter().getDescription())
+                                .status(accountingAccount.getCostCenter().getStatus())
+                                .companyId(accountingAccount.getCostCenter().getCompanyId())
+                                .createdAt(accountingAccount.getCostCenter().getCreatedAt())
+                                .updatedAt(accountingAccount.getCostCenter().getUpdatedAt())
+                                .deletionReason(accountingAccount.getCostCenter().getDeletionReason())
+                                .build()
+                        : null)
+                .taxRuleId(accountingAccount.getTaxRuleId())
+                .nature(accountingAccount.getNature())
+                .status(accountingAccount.getStatus())
+                .createdAt(accountingAccount.getCreatedAt())
+                .updatedAt(accountingAccount.getUpdatedAt())
+                .deletedAt(accountingAccount.getDeletedAt())
+                .build();
+    }
+
+    private ChartOfAccountResponseDTO toChartOfAccountDto(ChartOfAccount chartOfAccount) {
+        if (chartOfAccount == null) {
+            return null;
+        }
+        return ChartOfAccountResponseDTO.builder()
+                .id(chartOfAccount.getId())
+                .code(chartOfAccount.getCode())
+                .name(chartOfAccount.getName())
+                .accountClass(chartOfAccount.getAccountClass())
+                .level(chartOfAccount.getAccountLevel())
+                .nature(chartOfAccount.getAccountNature())
+                .status(chartOfAccount.getStatus())
+                .createdAt(chartOfAccount.getCreatedAt())
+                .updatedAt(chartOfAccount.getUpdatedAt())
+                .deletedAt(chartOfAccount.getDeletedAt())
+                .build();
+    }
+
+    private ThirdPartyDTO toThirdPartyDto(ThirdParty entity) {
+        if (entity == null) {
+            return null;
+        }
+        List<Long> roleIds = entity.getRoles() == null ? List.of()
+                : entity.getRoles().stream().map(ThirdPartyRoleCatalog::getId).toList();
+
+        return ThirdPartyDTO.builder()
+                .id(entity.getId())
+                .thirdPartyCode(entity.getThirdPartyCode())
+                .nit(entity.getNit())
+                .dv(entity.getDv())
+                .businessName(entity.getBusinessName())
+                .roles(toRoleCatalogDtoList(entity.getRoles()))
+                .roleIds(roleIds)
+                .status(toStatusCatalogDto(entity.getStatus()))
+                .statusId(entity.getStatus() != null ? entity.getStatus().getId() : null)
+                .blockingReason(entity.getBlockingReason())
+                .municipality(toMunicipalityDto(entity.getMunicipality()))
+                .municipalityId(entity.getMunicipality() != null ? entity.getMunicipality().getId() : null)
+                .typeOrganization(toTypeOrganizationDto(entity.getTypeOrganization()))
+                .typeOrganizationId(entity.getTypeOrganization() != null ? entity.getTypeOrganization().getId() : null)
+                .typeRegimen(toTypeRegimenDto(entity.getTypeRegimen()))
+                .typeRegimenId(entity.getTypeRegimen() != null ? entity.getTypeRegimen().getId() : null)
+                .withholdings(toWithholdingDtoList(entity.getWithholdingAssignments()))
+                .withholdingIds(toWithholdingIdList(entity.getWithholdingAssignments()))
+                .creditLimit(entity.getCreditLimit())
+                .paymentTerms(entity.getPaymentTerms())
+                .marketSegment(entity.getMarketSegment())
+                .contacts(toContactDtoList(entity.getContacts()))
+                .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
+                .build();
+    }
+
+    private List<ThirdPartyRoleCatalogDTO> toRoleCatalogDtoList(Set<ThirdPartyRoleCatalog> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return List.of();
+        }
+        return roles.stream()
+                .map(role -> ThirdPartyRoleCatalogDTO.builder()
+                        .id(role.getId())
+                        .name(role.getName())
+                        .build())
+                .toList();
+    }
+
+    private ThirdPartyStatusCatalogDTO toStatusCatalogDto(ThirdPartyStatusCatalog status) {
+        if (status == null) {
+            return null;
+        }
+        return ThirdPartyStatusCatalogDTO.builder()
+                .id(status.getId())
+                .name(status.getName())
+                .build();
+    }
+
+    private MunicipalityDTO toMunicipalityDto(Municipality municipality) {
+        if (municipality == null) {
+            return null;
+        }
+        return MunicipalityDTO.builder()
+                .id(municipality.getId())
+                .name(municipality.getName())
+                .code(municipality.getCode())
+                .country(toCountryDto(municipality.getCountry()))
+                .createdAt(municipality.getCreatedAt())
+                .updatedAt(municipality.getUpdatedAt())
+                .deletedAt(municipality.getDeletedAt())
+                .build();
+    }
+
+    private CountryDTO toCountryDto(Country country) {
+        if (country == null) {
+            return null;
+        }
+        return CountryDTO.builder()
+                .id(country.getId())
+                .name(country.getName())
+                .code(country.getCode())
+                .createdAt(country.getCreatedAt())
+                .updatedAt(country.getUpdatedAt())
+                .deletedAt(country.getDeletedAt())
+                .build();
+    }
+
+    private TypeOrganizationDTO toTypeOrganizationDto(TypeOrganization typeOrganization) {
+        if (typeOrganization == null) {
+            return null;
+        }
+        return TypeOrganizationDTO.builder()
+                .id(typeOrganization.getId())
+                .name(typeOrganization.getName())
+                .code(typeOrganization.getCode())
+                .createdAt(typeOrganization.getCreatedAt())
+                .updatedAt(typeOrganization.getUpdatedAt())
+                .deletedAt(typeOrganization.getDeletedAt())
+                .build();
+    }
+
+    private TypeRegimenDTO toTypeRegimenDto(TypeRegimen typeRegimen) {
+        if (typeRegimen == null) {
+            return null;
+        }
+        return TypeRegimenDTO.builder()
+                .id(typeRegimen.getId())
+                .name(typeRegimen.getName())
+                .code(typeRegimen.getCode())
+                .createdAt(typeRegimen.getCreatedAt())
+                .updatedAt(typeRegimen.getUpdatedAt())
+                .deletedAt(typeRegimen.getDeletedAt())
+                .build();
+    }
+
+    private WithholdingDTO toWithholdingDto(Withholding withholding) {
+        if (withholding == null) {
+            return null;
+        }
+        return WithholdingDTO.builder()
+                .id(withholding.getId())
+                .name(withholding.getName())
+                .code(withholding.getCode())
+                .createdAt(withholding.getCreatedAt())
+                .updatedAt(withholding.getUpdatedAt())
+                .deletedAt(withholding.getDeletedAt())
+                .build();
+    }
+
+    private List<Long> toWithholdingIdList(List<ThirdPartyWithholdingAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            return List.of();
+        }
+        return assignments.stream()
+                .map(ThirdPartyWithholdingAssignment::getWithholding)
+                .filter(w -> w != null && w.getId() != null)
+                .map(Withholding::getId)
+                .distinct()
+                .toList();
+    }
+
+    private List<WithholdingDTO> toWithholdingDtoList(List<ThirdPartyWithholdingAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            return List.of();
+        }
+        return assignments.stream()
+                .map(ThirdPartyWithholdingAssignment::getWithholding)
+                .filter(w -> w != null && w.getId() != null)
+                .collect(Collectors.toMap(Withholding::getId, w -> w, (a, b) -> a, java.util.LinkedHashMap::new))
+                .values().stream()
+                .map(this::toWithholdingDto)
+                .toList();
+    }
+
+    private List<ThirdContactDTO> toContactDtoList(List<ThirdContact> contacts) {
+        if (contacts == null || contacts.isEmpty()) {
+            return List.of();
+        }
+        return contacts.stream()
+                .map(contact -> ThirdContactDTO.builder()
+                        .id(contact.getId())
+                        .position(contact.getPosition())
+                        .phone(contact.getPhone())
+                        .email(contact.getEmail())
+                        .contactPerson(contact.getContactPerson())
+                        .createdAt(contact.getCreatedAt())
+                        .updatedAt(contact.getUpdatedAt())
+                        .deletedAt(contact.getDeletedAt())
+                        .build())
+                .toList();
     }
 }
