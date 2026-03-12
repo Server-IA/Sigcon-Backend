@@ -32,6 +32,4 @@ public class ArDataDTO {
     private BigDecimal overdueAmount; //Monto total vencido del cliente 
     @Schema(description = "Indica si los datos AR estan disponibles y si son validos", example = "true")
     private Boolean dataAvailable; //Indica si los datos AR estan disponibles y si son validos
-
-
 }

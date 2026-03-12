@@ -9,13 +9,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import lombok.RequiredArgsConstructor;
 
+import com.sigcon.backend.third_parties.ecl_segmentation.application.CalculateSegmentationRequest;
 import com.sigcon.backend.third_parties.ecl_segmentation.application.ManualAdjustmentRequest;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.service.EclSegmentationService;
 import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.ErrorRespondJson;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -44,11 +45,17 @@ public class EclSegmentationController {
         @ApiResponse(responseCode = "409", description = "Existe un ajuste manual vigente. El segmento solo puede recalcularse en el cierre mensual"),
         @ApiResponse(responseCode = "400", description = "ECL_003: Cliente no tiene rol CLIENTE activo")
     })
-    @PostMapping("/calculate/{clientId}")
+    @PostMapping("/calculate")
     @PreAuthorize("hasAuthority('PERM_CALCULATE_ECL_SEGMENT') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> calculateSegment(@PathVariable Long clientId, 
-        @RequestParam(defaultValue = "false") boolean isMonthlyClose) {
-        return eclSegmentationService.calculateSegmentation(clientId, isMonthlyClose);
+    public ResponseEntity<?> calculateSegment(@Valid @RequestBody CalculateSegmentationRequest request,
+        BindingResult bindingResult) {
+    if (bindingResult.hasErrors()) {
+        return ResponseEntity.badRequest()
+            .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+    }
+    return eclSegmentationService.calculateSegmentation(
+        request.getClientId(),
+        request.isMonthlyClose());
     }
 
     /**
@@ -64,12 +71,13 @@ public class EclSegmentationController {
         @ApiResponse(responseCode = "400", description = "ECL_003: Cliente no tiene rol CLIENTE activo"),
         @ApiResponse(responseCode = "404", description = "ECL_001: No existe segmento calculado previo para este cliente. ")
     })
-    @PutMapping("/adjust")
+    @PutMapping("/adjust/{clientId}")
     @PreAuthorize("hasAuthority('PERM_ADJUST_ECL_SEGMENT') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> applyManualAdjustment(
+            @PathVariable Long clientId, 
             @Valid @RequestBody ManualAdjustmentRequest request,
             BindingResult bindingResult) {
-        return eclSegmentationService.applyManualAdjustment(request, bindingResult);
+        return eclSegmentationService.applyManualAdjustment(clientId, request, bindingResult);
     }
 
     /**
