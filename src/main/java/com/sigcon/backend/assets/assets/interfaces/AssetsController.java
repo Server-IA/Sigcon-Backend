@@ -1,5 +1,6 @@
 package com.sigcon.backend.assets.assets.interfaces;
 
+import com.sigcon.backend.assets.assets.application.BulkAssetsUploadRequest;
 import com.sigcon.backend.assets.assets.application.CreateAssetsDTO;
 import com.sigcon.backend.assets.assets.application.UpdateAssetsDTO;
 import com.sigcon.backend.assets.assets.application.ViewAssetsDTO;
@@ -82,6 +83,33 @@ public class AssetsController {
                         Optional.of(asset)
                 )
         );
+    }
+
+    @PostMapping("/bulk/store")
+    @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(
+            summary = "Carga masiva de activos",
+            description = "Importa activos desde archivo CSV/XLSX enviado en base64. " +
+                    "Valida columnas, integridad y reglas contables antes de guardar."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Carga masiva procesada correctamente",
+                    content = @Content(schema = @Schema(implementation = Object.class))),
+            @ApiResponse(responseCode = "400", description = "Archivo invalido o error en alguna fila",
+                    content = @Content(schema = @Schema(implementation = Object.class))),
+            @ApiResponse(responseCode = "403", description = "Sin permisos",
+                    content = @Content(schema = @Schema(implementation = Object.class)))
+    })
+    public ResponseEntity<?> bulkStore(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "Nombre del archivo, contenido base64 y delimitador (si es CSV)."
+            )
+            @Valid @RequestBody BulkAssetsUploadRequest request,
+            @Parameter(hidden = true)
+            BindingResult bindingResult
+    ) {
+        return assetsService.bulkStore(request, bindingResult);
     }
 
     @PostMapping("/search")

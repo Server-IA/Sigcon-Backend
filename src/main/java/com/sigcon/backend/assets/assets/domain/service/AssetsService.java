@@ -1,11 +1,14 @@
 package com.sigcon.backend.assets.assets.domain.service;
 
+import com.sigcon.backend.assets.assets.application.BulkAssetsUploadRequest;
+import com.sigcon.backend.assets.assets.application.BulkAssetsUploadResponse;
 import com.sigcon.backend.assets.assets.application.CreateAssetsDTO;
 import com.sigcon.backend.assets.assets.application.UpdateAssetsDTO;
 import com.sigcon.backend.assets.assets.application.ViewAssetsDTO;
 import com.sigcon.backend.assets.assets.domain.model.Assets;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
+import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 //import com.sigcon.backend.assets.assets.domain.repository.AssetChartOfAccountBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetThirdPartyBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
@@ -42,25 +45,55 @@ import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyWit
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.SuccessRespondJson;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.validation.BindingResult;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
+import java.time.LocalDate;
 import java.time.Year;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class AssetsService {
+
+    private static final int MAX_BULK_ROWS = 10_000;
+    private static final String ASSET_NAME_REGEX = "^[\\p{L}0-9\\-_/.,\\s]{3,150}$";
+    private static final BigDecimal MIN_ACQUISITION_VALUE = new BigDecimal("0.01");
+    private static final LocalDate EXCEL_EPOCH = LocalDate.of(1899, 12, 30);
 
     private final AssetsRepository assetsRepository;
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
@@ -107,6 +140,112 @@ public class AssetsService {
 
         Assets savedAsset = assetsRepository.save(asset);
         return toViewDTO(savedAsset);
+    }
+
+    @Transactional
+    public ResponseEntity<?> bulkStore(BulkAssetsUploadRequest request, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+        if (request == null || request.getFileBase64() == null || request.getFileBase64().isBlank()) {
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+        }
+
+        byte[] fileBytes = decodeBase64Payload(request.getFileBase64());
+        String extension = resolveExtension(request.getFileName(), request.getFileBase64());
+        char delimiter = resolveDelimiter(request.getDelimiter());
+
+        List<BulkAssetRow> rows = switch (extension) {
+            case "csv" -> parseCsvRows(fileBytes, delimiter);
+            case "xlsx" -> parseXlsxRows(fileBytes);
+            default -> throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+        };
+
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+        }
+        if (rows.size() > MAX_BULK_ROWS) {
+            throw new IllegalArgumentException("BULK_003: Archivo excede limite maximo (10,000 registros).");
+        }
+
+        String currentUser = resolveCurrentUsername();
+        int year = Year.now().getValue();
+        java.util.concurrent.atomic.AtomicLong sequence = new java.util.concurrent.atomic.AtomicLong(
+                assetsRepository.count() + 1);
+        Set<String> seenAssetCodes = new HashSet<>();
+        List<Assets> toCreate = new ArrayList<>();
+
+        for (BulkAssetRow row : rows) {
+            validateBulkRow(row);
+
+            AssetClassification classification = resolveClassification(row.classification(), row.line());
+            AssetType type = resolveAssetType(row.type(), row.line());
+            AssetStatus status = resolveAssetStatus(row.status(), row.line());
+
+            Long accountingAccountId = parseRequiredLong(row.accountingAccountId(), "cuenta contable", row.line());
+            Long supplierId = parseRequiredLong(row.supplierId(), "proveedor", row.line());
+            Long depreciationRuleId = parseRequiredLong(row.depreciationRuleId(), "regla_depreciacion", row.line());
+            BigDecimal acquisitionValue = parseRequiredBigDecimal(row.acquisitionValue(), row.line());
+            LocalDate acquisitionDate = parseRequiredDate(row.acquisitionDate(), row.line());
+            Integer usefulLifeMonths = parseRequiredInt(row.usefulLifeMonths(), row.line());
+
+            AccountingAccount accountingAccount = resolveAccountingAccount(accountingAccountId);
+            ThirdParty supplier = resolveSupplier(supplierId);
+            DepretationRule depreciationRule =
+                    depretationRuleRepository.findByIdAndAccountingAccountId(depreciationRuleId, accountingAccountId);
+            if (depreciationRule == null) {
+                throw new IllegalArgumentException(
+                        "BULK_004: Error en linea " + row.line() + ": regla de depreciacion no valida.");
+            }
+
+            validateAssetClassification(classification, usefulLifeMonths);
+
+            Long accountsPayableRefId = parseOptionalLong(row.accountsPayableReferenceId(),
+                    "referencia cuentas por pagar", row.line());
+            Long bankCashRefId = parseOptionalLong(row.bankCashReferenceId(),
+                    "referencia bancos/cajas", row.line());
+
+            String assetCode = resolveBulkAssetCode(row.assetCode(), seenAssetCodes, year, sequence, row.line());
+
+            Assets asset = Assets.builder()
+                    .assetCode(assetCode)
+                    .assetName(row.name().trim())
+                    .description(normalizeOptionalText(row.description()))
+                    .classification(classification)
+                    .assetType(type)
+                    .supplier(supplier)
+                    .acquisitionValue(acquisitionValue)
+                    .acquisitionDate(acquisitionDate)
+                    .usefulLifeMonths(usefulLifeMonths)
+                    .depretationRule(depreciationRule)
+                    .accountsPayableReferenceId(accountsPayableRefId)
+                    .bankCashReferenceId(bankCashRefId)
+                    .accountingAccount(accountingAccount)
+                    .status(status)
+                    .observations(normalizeOptionalText(row.observations()))
+                    .createdBy(currentUser)
+                    .updatedBy(currentUser)
+                    .build();
+
+            toCreate.add(asset);
+        }
+
+        if (!toCreate.isEmpty()) {
+            assetsRepository.saveAll(toCreate);
+        }
+
+        BulkAssetsUploadResponse response = BulkAssetsUploadResponse.builder()
+                .totalProcessed(rows.size())
+                .created(toCreate.size())
+                .build();
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Carga masiva procesada exitosamente."),
+                        Optional.of(response)));
     }
 
     @Transactional
@@ -528,5 +667,728 @@ public class AssetsService {
                         .deletedAt(contact.getDeletedAt())
                         .build())
                 .toList();
+    }
+
+    private byte[] decodeBase64Payload(String fileBase64) {
+        String payload = fileBase64.trim();
+        int comma = payload.indexOf(',');
+        if (comma >= 0) {
+            payload = payload.substring(comma + 1);
+        }
+        try {
+            return Base64.getDecoder().decode(payload);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+        }
+    }
+
+    private String resolveExtension(String fileName, String fileBase64) {
+        if (fileName != null && fileName.contains(".")) {
+            String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+            if ("csv".equals(extension) || "xlsx".equals(extension)) {
+                return extension;
+            }
+        }
+
+        String payload = fileBase64 == null ? "" : fileBase64.toLowerCase(Locale.ROOT);
+        if (payload.startsWith("data:text/csv")) {
+            return "csv";
+        }
+        if (payload.startsWith("data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
+            return "xlsx";
+        }
+        return "";
+    }
+
+    private char resolveDelimiter(String delimiter) {
+        if (delimiter == null || delimiter.isBlank()) {
+            return ',';
+        }
+        return delimiter.charAt(0);
+    }
+
+    private List<BulkAssetRow> parseCsvRows(byte[] fileBytes, char delimiter) {
+        String content = new String(fileBytes, StandardCharsets.UTF_8);
+        String[] lines = content.split("\\r?\\n");
+        if (lines.length == 0) {
+            return List.of();
+        }
+
+        String headerLine = removeBom(lines[0]);
+        char effectiveDelimiter = detectDelimiter(headerLine, delimiter);
+        List<String> headers = parseCsvLine(headerLine, effectiveDelimiter);
+        Map<String, Integer> canonicalHeaderIndexes = mapCanonicalHeaderIndexes(headers);
+        validateRequiredHeaders(canonicalHeaderIndexes.keySet());
+
+        List<BulkAssetRow> rows = new ArrayList<>();
+        for (int i = 1; i < lines.length; i++) {
+            if (lines[i] == null || lines[i].trim().isEmpty()) {
+                continue;
+            }
+            List<String> values = parseCsvLine(lines[i], effectiveDelimiter);
+            rows.add(new BulkAssetRow(
+                    i + 1,
+                    getRowValue(values, canonicalHeaderIndexes, "asset_code"),
+                    getRowValue(values, canonicalHeaderIndexes, "name"),
+                    getRowValue(values, canonicalHeaderIndexes, "description"),
+                    getRowValue(values, canonicalHeaderIndexes, "classification"),
+                    getRowValue(values, canonicalHeaderIndexes, "type"),
+                    getRowValue(values, canonicalHeaderIndexes, "accounting_account_id"),
+                    getRowValue(values, canonicalHeaderIndexes, "supplier_id"),
+                    getRowValue(values, canonicalHeaderIndexes, "acquisition_value"),
+                    getRowValue(values, canonicalHeaderIndexes, "acquisition_date"),
+                    getRowValue(values, canonicalHeaderIndexes, "useful_life_months"),
+                    getRowValue(values, canonicalHeaderIndexes, "depreciation_rule_id"),
+                    getRowValue(values, canonicalHeaderIndexes, "accounts_payable_reference_id"),
+                    getRowValue(values, canonicalHeaderIndexes, "bank_cash_reference_id"),
+                    getRowValue(values, canonicalHeaderIndexes, "status"),
+                    getRowValue(values, canonicalHeaderIndexes, "observations")));
+        }
+        return rows;
+    }
+
+    private List<BulkAssetRow> parseXlsxRows(byte[] fileBytes) {
+        try {
+            Map<String, byte[]> entries = extractZipEntries(fileBytes);
+            List<String> sharedStrings = readSharedStrings(entries.get("xl/sharedStrings.xml"));
+            List<Map<Integer, String>> sheetRows = readXlsxRows(entries.get("xl/worksheets/sheet1.xml"), sharedStrings);
+            if (sheetRows.isEmpty()) {
+                return List.of();
+            }
+
+            Map<Integer, String> headersByIndex = sheetRows.get(0);
+            Map<String, Integer> canonicalHeaderIndexes = mapCanonicalHeaderIndexesByColumn(headersByIndex);
+            validateRequiredHeaders(canonicalHeaderIndexes.keySet());
+
+            List<BulkAssetRow> rows = new ArrayList<>();
+            for (int i = 1; i < sheetRows.size(); i++) {
+                Map<Integer, String> rowMap = sheetRows.get(i);
+                if (rowMap.values().stream().allMatch(v -> v == null || v.trim().isEmpty())) {
+                    continue;
+                }
+                rows.add(new BulkAssetRow(
+                        i + 1,
+                        getRowValue(rowMap, canonicalHeaderIndexes, "asset_code"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "name"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "description"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "classification"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "type"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "accounting_account_id"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "supplier_id"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "acquisition_value"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "acquisition_date"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "useful_life_months"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "depreciation_rule_id"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "accounts_payable_reference_id"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "bank_cash_reference_id"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "status"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "observations")));
+            }
+            return rows;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+        }
+    }
+
+    private String removeBom(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        if (value.charAt(0) == '\uFEFF') {
+            return value.substring(1);
+        }
+        return value;
+    }
+
+    private char detectDelimiter(String headerLine, char configuredDelimiter) {
+        if (headerLine == null || headerLine.isBlank()) {
+            return configuredDelimiter;
+        }
+
+        int commas = countChar(headerLine, ',');
+        int semicolons = countChar(headerLine, ';');
+        int pipes = countChar(headerLine, '|');
+        int tabs = countChar(headerLine, '\t');
+
+        if (configuredDelimiter == ',' && semicolons > commas) {
+            return ';';
+        }
+        if (configuredDelimiter == ',' && pipes > commas) {
+            return '|';
+        }
+        if (configuredDelimiter == ',' && tabs > commas) {
+            return '\t';
+        }
+        if (configuredDelimiter == ';' && commas > semicolons) {
+            return ',';
+        }
+
+        return configuredDelimiter;
+    }
+
+    private int countChar(String text, char needle) {
+        int count = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == needle) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private List<String> parseCsvLine(String line, char delimiter) {
+        List<String> values = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch == delimiter && !inQuotes) {
+                values.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(ch);
+            }
+        }
+        values.add(current.toString().trim());
+        return values;
+    }
+
+    private Map<String, Integer> mapCanonicalHeaderIndexes(List<String> headers) {
+        Map<String, Integer> canonicalToIndex = new HashMap<>();
+        for (int i = 0; i < headers.size(); i++) {
+            String header = headers.get(i);
+            String canonical = resolveCanonicalHeader(header);
+            if (canonical != null) {
+                canonicalToIndex.put(canonical, i);
+            }
+        }
+        return canonicalToIndex;
+    }
+
+    private Map<String, Integer> mapCanonicalHeaderIndexesByColumn(Map<Integer, String> headersByColumn) {
+        Map<String, Integer> canonicalToIndex = new HashMap<>();
+        for (Map.Entry<Integer, String> entry : headersByColumn.entrySet()) {
+            String canonical = resolveCanonicalHeader(entry.getValue());
+            if (canonical != null) {
+                canonicalToIndex.put(canonical, entry.getKey());
+            }
+        }
+        return canonicalToIndex;
+    }
+
+    private String resolveCanonicalHeader(String header) {
+        if (header == null) {
+            return null;
+        }
+        String normalized = normalizeHeader(header);
+        if (Set.of("codigo_activo", "asset_code", "codigo", "code", "codigo_activo_fijo").contains(normalized)) {
+            return "asset_code";
+        }
+        if (Set.of("nombre", "nombre_activo", "asset_name", "name", "activo").contains(normalized)) {
+            return "name";
+        }
+        if (Set.of("descripcion", "description", "detalle", "detalle_activo").contains(normalized)) {
+            return "description";
+        }
+        if (Set.of("clasificacion", "classification", "clasificacion_activo").contains(normalized)) {
+            return "classification";
+        }
+        if (Set.of("tipo", "tipo_activo", "type", "asset_type").contains(normalized)) {
+            return "type";
+        }
+        if (Set.of("cuenta_contable", "cuenta_contable_id", "accounting_account",
+                "accounting_account_id", "cuenta").contains(normalized)) {
+            return "accounting_account_id";
+        }
+        if (Set.of("proveedor", "proveedor_id", "supplier", "supplier_id", "tercero", "tercero_id")
+                .contains(normalized)) {
+            return "supplier_id";
+        }
+        if (Set.of("valor_adquisicion", "acquisition_value", "valor_compra", "valor").contains(normalized)) {
+            return "acquisition_value";
+        }
+        if (Set.of("fecha_adquisicion", "acquisition_date", "fecha_compra", "fecha").contains(normalized)) {
+            return "acquisition_date";
+        }
+        if (Set.of("vida_util_meses", "vida_util", "useful_life_months", "useful_life").contains(normalized)) {
+            return "useful_life_months";
+        }
+        if (Set.of("regla_depreciacion", "regla_depreciacion_id", "depreciation_rule",
+                "depreciation_rule_id").contains(normalized)) {
+            return "depreciation_rule_id";
+        }
+        if (Set.of("referencia_cxp", "accounts_payable_reference_id", "cuentas_por_pagar", "ref_cxp")
+                .contains(normalized)) {
+            return "accounts_payable_reference_id";
+        }
+        if (Set.of("referencia_bancos", "bank_cash_reference_id", "bancos_cajas", "ref_bancos")
+                .contains(normalized)) {
+            return "bank_cash_reference_id";
+        }
+        if (Set.of("estado", "status", "estado_activo", "asset_status").contains(normalized)) {
+            return "status";
+        }
+        if (Set.of("observaciones", "observations", "notas", "nota").contains(normalized)) {
+            return "observations";
+        }
+        return null;
+    }
+
+    private void validateRequiredHeaders(Set<String> foundHeaders) {
+        List<String> required = List.of(
+                "name",
+                "classification",
+                "type",
+                "accounting_account_id",
+                "supplier_id",
+                "acquisition_value",
+                "acquisition_date",
+                "useful_life_months",
+                "depreciation_rule_id");
+        for (String key : required) {
+            if (!foundHeaders.contains(key)) {
+                throw new IllegalArgumentException(
+                        "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
+            }
+        }
+    }
+
+    private String getRowValue(List<String> values, Map<String, Integer> headerIndexes, String key) {
+        Integer index = headerIndexes.get(key);
+        if (index == null || index < 0 || index >= values.size()) {
+            return null;
+        }
+        return values.get(index);
+    }
+
+    private String getRowValue(Map<Integer, String> values, Map<String, Integer> headerIndexes, String key) {
+        Integer index = headerIndexes.get(key);
+        return index == null ? null : values.get(index);
+    }
+
+    private Map<String, byte[]> extractZipEntries(byte[] fileBytes) throws IOException {
+        Map<String, byte[]> entries = new HashMap<>();
+        try (ZipInputStream zipInputStream = new ZipInputStream(new ByteArrayInputStream(fileBytes))) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                entries.put(entry.getName(), zipInputStream.readAllBytes());
+            }
+        }
+        return entries;
+    }
+
+    private List<String> readSharedStrings(byte[] sharedStringsBytes) throws Exception {
+        if (sharedStringsBytes == null || sharedStringsBytes.length == 0) {
+            return List.of();
+        }
+
+        Document document = parseXml(sharedStringsBytes);
+        NodeList textNodes = document.getElementsByTagNameNS("*", "t");
+        List<String> sharedStrings = new ArrayList<>();
+        for (int i = 0; i < textNodes.getLength(); i++) {
+            sharedStrings.add(textNodes.item(i).getTextContent());
+        }
+        return sharedStrings;
+    }
+
+    private List<Map<Integer, String>> readXlsxRows(byte[] sheetBytes, List<String> sharedStrings) throws Exception {
+        if (sheetBytes == null || sheetBytes.length == 0) {
+            return List.of();
+        }
+
+        Document document = parseXml(sheetBytes);
+        NodeList rowNodes = document.getElementsByTagNameNS("*", "row");
+        List<Map<Integer, String>> rows = new ArrayList<>();
+
+        for (int i = 0; i < rowNodes.getLength(); i++) {
+            Node rowNode = rowNodes.item(i);
+            NodeList cellNodes = rowNode.getChildNodes();
+            Map<Integer, String> rowValues = new HashMap<>();
+            for (int j = 0; j < cellNodes.getLength(); j++) {
+                Node cellNode = cellNodes.item(j);
+                if (!"c".equals(cellNode.getLocalName())) {
+                    continue;
+                }
+                Node refNode = cellNode.getAttributes() != null ? cellNode.getAttributes().getNamedItem("r") : null;
+                int columnIndex = refNode == null ? -1
+                        : columnNameToIndex(refNode.getTextContent().replaceAll("\\d", ""));
+                if (columnIndex < 0) {
+                    continue;
+                }
+
+                String cellType = "";
+                Node typeNode = cellNode.getAttributes() != null ? cellNode.getAttributes().getNamedItem("t") : null;
+                if (typeNode != null) {
+                    cellType = typeNode.getTextContent();
+                }
+
+                String value = "";
+                NodeList cellChildren = cellNode.getChildNodes();
+                for (int k = 0; k < cellChildren.getLength(); k++) {
+                    Node child = cellChildren.item(k);
+                    if ("v".equals(child.getLocalName())) {
+                        value = child.getTextContent();
+                        break;
+                    }
+                }
+
+                if ("s".equals(cellType) && value != null && !value.isBlank()) {
+                    int sharedIndex = Integer.parseInt(value);
+                    if (sharedIndex >= 0 && sharedIndex < sharedStrings.size()) {
+                        value = sharedStrings.get(sharedIndex);
+                    }
+                }
+                rowValues.put(columnIndex, value == null ? null : value.trim());
+            }
+            rows.add(rowValues);
+        }
+
+        return rows;
+    }
+
+    private Document parseXml(byte[] xmlBytes) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        return factory.newDocumentBuilder().parse(new ByteArrayInputStream(xmlBytes));
+    }
+
+    private int columnNameToIndex(String columnName) {
+        if (columnName == null || columnName.isBlank()) {
+            return -1;
+        }
+        int result = 0;
+        for (int i = 0; i < columnName.length(); i++) {
+            char ch = Character.toUpperCase(columnName.charAt(i));
+            if (ch < 'A' || ch > 'Z') {
+                return -1;
+            }
+            result = result * 26 + (ch - 'A' + 1);
+        }
+        return result - 1;
+    }
+
+    private void validateBulkRow(BulkAssetRow row) {
+        if (row.name() == null || row.name().trim().isEmpty()) {
+            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": nombre es obligatorio.");
+        }
+        if (!row.name().trim().matches(ASSET_NAME_REGEX)) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": nombre de activo invalido.");
+        }
+        if (row.classification() == null || row.classification().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": clasificacion es obligatoria.");
+        }
+        if (row.type() == null || row.type().trim().isEmpty()) {
+            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": tipo es obligatorio.");
+        }
+        if (row.accountingAccountId() == null || row.accountingAccountId().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": cuenta contable es obligatoria.");
+        }
+        if (row.supplierId() == null || row.supplierId().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": proveedor es obligatorio.");
+        }
+        if (row.acquisitionValue() == null || row.acquisitionValue().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": valor adquisicion es obligatorio.");
+        }
+        if (row.acquisitionDate() == null || row.acquisitionDate().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": fecha adquisicion es obligatoria.");
+        }
+        if (row.usefulLifeMonths() == null || row.usefulLifeMonths().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": vida util es obligatoria.");
+        }
+        if (row.depreciationRuleId() == null || row.depreciationRuleId().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": regla de depreciacion es obligatoria.");
+        }
+        if (row.assetCode() != null && row.assetCode().trim().length() > 30) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": codigo de activo excede longitud permitida.");
+        }
+        if (row.description() != null && row.description().trim().length() > 500) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": descripcion excede 500 caracteres.");
+        }
+        if (row.observations() != null && row.observations().trim().length() > 500) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": observaciones excede 500 caracteres.");
+        }
+    }
+
+    private Long parseRequiredLong(String raw, String fieldName, int line) {
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": " + fieldName + " es obligatorio.");
+        }
+        try {
+            Long value = parseLongValue(raw);
+            if (value <= 0) {
+                throw new NumberFormatException("non-positive");
+            }
+            return value;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": " + fieldName + " invalido.");
+        }
+    }
+
+    private Long parseOptionalLong(String raw, String fieldName, int line) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            Long value = parseLongValue(raw);
+            if (value <= 0) {
+                throw new NumberFormatException("non-positive");
+            }
+            return value;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": " + fieldName + " invalida.");
+        }
+    }
+
+    private Long parseLongValue(String raw) {
+        String value = raw.trim();
+        if (value.matches("^\\d+$")) {
+            return Long.parseLong(value);
+        }
+        if (value.matches("^\\d+(\\.0+)?$")) {
+            int dot = value.indexOf('.');
+            return Long.parseLong(dot >= 0 ? value.substring(0, dot) : value);
+        }
+        if (value.matches("^\\d+(,0+)?$")) {
+            int comma = value.indexOf(',');
+            return Long.parseLong(comma >= 0 ? value.substring(0, comma) : value);
+        }
+        throw new NumberFormatException("invalid");
+    }
+
+    private Integer parseRequiredInt(String raw, int line) {
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": vida util es obligatoria.");
+        }
+        try {
+            long value = parseLongValue(raw);
+            if (value < 1 || value > Integer.MAX_VALUE) {
+                throw new NumberFormatException("non-positive");
+            }
+            return (int) value;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": vida util invalida.");
+        }
+    }
+
+    private BigDecimal parseRequiredBigDecimal(String raw, int line) {
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": valor adquisicion es obligatorio.");
+        }
+        try {
+            BigDecimal value = parseBigDecimal(raw);
+            if (value.compareTo(MIN_ACQUISITION_VALUE) < 0) {
+                throw new IllegalArgumentException("non-positive");
+            }
+            return value;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": valor adquisicion invalido.");
+        }
+    }
+
+    private BigDecimal parseBigDecimal(String raw) {
+        String value = raw.trim().replace(" ", "");
+        int lastComma = value.lastIndexOf(',');
+        int lastDot = value.lastIndexOf('.');
+        if (lastComma >= 0 && lastDot >= 0) {
+            if (lastComma > lastDot) {
+                value = value.replace(".", "");
+                value = value.replace(",", ".");
+            } else {
+                value = value.replace(",", "");
+            }
+        } else if (lastComma >= 0) {
+            value = value.replace(",", ".");
+        }
+        return new BigDecimal(value);
+    }
+
+    private LocalDate parseRequiredDate(String raw, int line) {
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": fecha adquisicion es obligatoria.");
+        }
+
+        LocalDate parsed = parseDate(raw);
+        if (parsed == null) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": fecha adquisicion invalida.");
+        }
+        return parsed;
+    }
+
+    private LocalDate parseDate(String raw) {
+        String value = raw.trim();
+        if (value.matches("^\\d+(\\.\\d+)?$")) {
+            double serial = Double.parseDouble(value);
+            long days = (long) Math.floor(serial);
+            if (days >= 0) {
+                return EXCEL_EPOCH.plusDays(days);
+            }
+        }
+
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ofPattern("d/M/yyyy"));
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+        } catch (DateTimeParseException ignored) {
+        }
+        return null;
+    }
+
+    private AssetClassification resolveClassification(String value, int line) {
+        String normalized = compactToken(value);
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": clasificacion invalida.");
+        }
+        if (normalized.contains("NONCURRENT") || normalized.contains("NOCORRI") || normalized.contains("NONCORR")) {
+            return AssetClassification.NON_CURRENT;
+        }
+        if (normalized.contains("CURRENT") || normalized.contains("CORRI")) {
+            return AssetClassification.CURRENT;
+        }
+        throw new IllegalArgumentException(
+                "BULK_004: Error en linea " + line + ": clasificacion invalida.");
+    }
+
+    private AssetType resolveAssetType(String value, int line) {
+        String normalized = compactToken(value);
+        if (normalized.contains("INTANG")) {
+            return AssetType.INTANGIBLE;
+        }
+        if (normalized.contains("TANG")) {
+            return AssetType.TANGIBLE;
+        }
+        throw new IllegalArgumentException(
+                "BULK_004: Error en linea " + line + ": tipo de activo invalido.");
+    }
+
+    private AssetStatus resolveAssetStatus(String value, int line) {
+        if (value == null || value.trim().isEmpty()) {
+            return AssetStatus.ACTIVE;
+        }
+        String normalized = compactToken(value);
+        if (normalized.contains("ACTIV")) {
+            return AssetStatus.ACTIVE;
+        }
+        if (normalized.contains("REPAR") || normalized.contains("REPAIR")) {
+            return AssetStatus.IN_REPAIR;
+        }
+        if (normalized.contains("DECOM") || normalized.contains("BAJA")) {
+            return AssetStatus.DECOMMISSIONED;
+        }
+        if (normalized.contains("TRANS") || normalized.contains("TRASL")) {
+            return AssetStatus.TRANSFERRED;
+        }
+        throw new IllegalArgumentException(
+                "BULK_004: Error en linea " + line + ": estado invalido.");
+    }
+
+    private String resolveBulkAssetCode(String rawAssetCode, Set<String> seenAssetCodes, int year,
+            java.util.concurrent.atomic.AtomicLong sequence, int line) {
+        if (rawAssetCode != null && !rawAssetCode.trim().isEmpty()) {
+            String cleaned = rawAssetCode.trim();
+            if (!seenAssetCodes.add(cleaned)) {
+                throw new IllegalArgumentException(
+                        "BULK_002: Linea " + line + ": codigo de activo duplicado en archivo/sistema.");
+            }
+            if (assetsRepository.existsByAssetCode(cleaned)) {
+                throw new IllegalArgumentException(
+                        "BULK_002: Linea " + line + ": codigo de activo duplicado en archivo/sistema.");
+            }
+            return cleaned;
+        }
+
+        while (true) {
+            String candidate = String.format("ACT%d%06d", year, sequence.getAndIncrement());
+            if (!seenAssetCodes.contains(candidate) && !assetsRepository.existsByAssetCode(candidate)) {
+                seenAssetCodes.add(candidate);
+                return candidate;
+            }
+        }
+    }
+
+    private String normalizeHeader(String value) {
+        return normalizeToken(value)
+                .replace(" ", "_")
+                .replace("/", "_")
+                .replace("-", "_")
+                .replace("(", "_")
+                .replace(")", "_")
+                .replace(".", "_")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeToken(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(value.trim(), Normalizer.Form.NFD);
+        normalized = normalized.replaceAll("\\p{M}", "");
+        return normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String compactToken(String value) {
+        return normalizeToken(value).replaceAll("[^A-Z0-9]", "");
+    }
+
+    private record BulkAssetRow(
+            int line,
+            String assetCode,
+            String name,
+            String description,
+            String classification,
+            String type,
+            String accountingAccountId,
+            String supplierId,
+            String acquisitionValue,
+            String acquisitionDate,
+            String usefulLifeMonths,
+            String depreciationRuleId,
+            String accountsPayableReferenceId,
+            String bankCashReferenceId,
+            String status,
+            String observations) {
     }
 }
