@@ -49,7 +49,7 @@ public class DepreciationCalculationController {
         @Operation(summary = "Calcular depreciación automática", description = "Ejecuta el cálculo automático de depreciación de activos (ACT-RF-02).\n\n"
                         +
                         "**El proceso realiza lo siguiente:**\n" +
-                        "1. Verifica que el periodo contable esté abierto con el módulo de Contabilidad General (CG).\n"
+                        "1. Verifica que el período contable esté abierto con el módulo de Contabilidad General (CG).\n"
                         +
                         "2. Consulta activos desde el módulo `assets` filtrando por: estado (ACTIVO o EN_USO), vida útil > 0 y método configurado.\n"
                         +
@@ -63,36 +63,24 @@ public class DepreciationCalculationController {
                         @ApiResponse(responseCode = "400", description = "Vida útil no definida | Método no reconocido o no permitido", content = @Content(schema = @Schema(implementation = Object.class))),
                         @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ROLE_SUPERADMIN)", content = @Content(schema = @Schema(implementation = Object.class))),
                         @ApiResponse(responseCode = "404", description = "Cuenta de depreciación faltante o inactiva", content = @Content(schema = @Schema(implementation = Object.class))),
-                        @ApiResponse(responseCode = "422", description = "Operación no permitida. Periodo contable cerrado", content = @Content(schema = @Schema(implementation = Object.class))),
+                        @ApiResponse(responseCode = "422", description = "Operación no permitida. Período contable cerrado", content = @Content(schema = @Schema(implementation = Object.class))),
                         @ApiResponse(responseCode = "500", description = "Error interno del servidor", content = @Content(schema = @Schema(implementation = Object.class)))
         })
         public ResponseEntity<?> calculate(
                         @Parameter(description = "Período contable en formato YYYY-MM (ej: 2026-03)", example = "2026-03", required = true) @RequestParam String period) {
                 // Validar formato del período (MEJORA 5)
                 if (period == null || !PERIOD_PATTERN.matcher(period.trim()).matches()) {
-                        return ResponseEntity.badRequest().body(
-                                        ErrorRespondJson.getErrorRespondMessage(
-                                                        Optional.of("Formato de período inválido. Use YYYY-MM (ej: 2026-03)")));
+                        throw new IllegalArgumentException("Formato de período inválido. Use YYYY-MM (ej: 2026-03)");
                 }
 
-                try {
-                        DepreciationCalculationResponseDTO response = depreciationCalculationService
-                                        .calculate(period.trim());
+                DepreciationCalculationResponseDTO response = depreciationCalculationService
+                                .calculate(period.trim());
 
-                        return ResponseEntity.ok(
-                                        SuccessRespondJson.getSuccessRespondMessage(
-                                                        Optional.of(response.getMessage()),
-                                                        Optional.of(response)));
+                return ResponseEntity.ok(
+                                SuccessRespondJson.getSuccessRespondMessage(
+                                                Optional.of(response.getMessage()),
+                                                Optional.of(response)));
 
-                } catch (IllegalStateException ex) {
-                        // Período contable cerrado u otra restricción de estado
-                        return ResponseEntity.status(422).body(
-                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
-
-                } catch (IllegalArgumentException ex) {
-                        // Error de validación de datos (vida útil, método, cuenta contable)
-                        return ResponseEntity.badRequest().body(
-                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
-                }
         }
 }
+
