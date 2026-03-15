@@ -168,10 +168,17 @@ public class EclSegmentationService {
 
         org.springframework.data.domain.Page<EclSegmentation> segments =
                 eclSegmentationRepository.findAll(spec, pageable);
+        
+        // Filtrar y mapear — ignorar segmentos cuyo cliente fue soft-deleted
+        List<EclSegmentationResponse> filtered = segments.getContent()
+            .stream()
+            .filter(seg -> thirdPartyRepository.findById(seg.getClient().getId()).isPresent())
+            .map(this::mapToResponse)
+            .collect(Collectors.toList());
 
         return ResponseEntity.ok(
                 com.sigcon.backend.utils.DataTableResponse.from(
-                        segments.map(this::mapToResponse),
+                        new org.springframework.data.domain.PageImpl<>(filtered, pageable, filtered.size()),
                         request.getDraw()
                 )
         );
@@ -348,21 +355,24 @@ public class EclSegmentationService {
      * Mapear EclSegmentation a EclSegmentationResponse.
      */
     private EclSegmentationResponse mapToResponse(EclSegmentation segmentation) {
+        ThirdParty client = thirdPartyRepository.findById(segmentation.getClient().getId())
+            .orElseThrow(() -> new IllegalArgumentException(
+                    "ECL_003: Cliente no encontrado con id: " + segmentation.getClient().getId()));
         return EclSegmentationResponse.builder()
                 .id(segmentation.getId())
-                .clientId(segmentation.getClient().getId())
+                .clientId(client.getId())
                 .thirdParty(ThirdPartyDTO.builder()
-                        .id(segmentation.getClient().getId())
-                        .thirdPartyCode(segmentation.getClient().getThirdPartyCode())
-                        .nit(segmentation.getClient().getNit())
-                        .dv(segmentation.getClient().getDv())
-                        .businessName(segmentation.getClient().getBusinessName())
-                        .blockingReason(segmentation.getClient().getBlockingReason())
-                        .creditLimit(segmentation.getClient().getCreditLimit())
-                        .paymentTerms(segmentation.getClient().getPaymentTerms())
-                        .marketSegment(segmentation.getClient().getMarketSegment())
-                        .createdAt(segmentation.getClient().getCreatedAt())
-                        .updatedAt(segmentation.getClient().getUpdatedAt())
+                        .id(client.getId())
+                        .thirdPartyCode(client.getThirdPartyCode())
+                        .nit(client.getNit())
+                        .dv(client.getDv())
+                        .businessName(client.getBusinessName())
+                        .blockingReason(client.getBlockingReason())
+                        .creditLimit(client.getCreditLimit())
+                        .paymentTerms(client.getPaymentTerms())
+                        .marketSegment(client.getMarketSegment())
+                        .createdAt(client.getCreatedAt())
+                        .updatedAt(client.getUpdatedAt())
                         .build())
                 .autoSegment(segmentation.getAutoSegment())
                 .finalSegment(segmentation.getFinalSegment())
@@ -378,21 +388,24 @@ public class EclSegmentationService {
      * Mapear EclSegmentationHistory a EclSegmentationHistoryResponse.
      */
     private EclSegmentationHistoryResponse mapToHistoryResponse(EclSegmentationHistory history) {
+        ThirdParty client = thirdPartyRepository.findById(history.getClient().getId())
+            .orElseThrow(() -> new IllegalArgumentException(
+                    "ECL_003: Cliente no encontrado con id: " + history.getClient().getId()));
         return EclSegmentationHistoryResponse.builder()
                 .id(history.getId())
-                .clientId(history.getClient().getId())
+                .clientId(client.getId())
                 .thirdParty(ThirdPartyDTO.builder()
-                        .id(history.getClient().getId())
-                        .thirdPartyCode(history.getClient().getThirdPartyCode())
-                        .nit(history.getClient().getNit())
-                        .dv(history.getClient().getDv())
-                        .businessName(history.getClient().getBusinessName())
-                        .blockingReason(history.getClient().getBlockingReason())
-                        .creditLimit(history.getClient().getCreditLimit())
-                        .paymentTerms(history.getClient().getPaymentTerms())
-                        .marketSegment(history.getClient().getMarketSegment())
-                        .createdAt(history.getClient().getCreatedAt())
-                        .updatedAt(history.getClient().getUpdatedAt())
+                        .id(client.getId())
+                        .thirdPartyCode(client.getThirdPartyCode())
+                        .nit(client.getNit())
+                        .dv(client.getDv())
+                        .businessName(client.getBusinessName())
+                        .blockingReason(client.getBlockingReason())
+                        .creditLimit(client.getCreditLimit())
+                        .paymentTerms(client.getPaymentTerms())
+                        .marketSegment(client.getMarketSegment())
+                        .createdAt(client.getCreatedAt())
+                        .updatedAt(client.getUpdatedAt())
                         .build())
                 .previousSegment(history.getPreviousSegment())
                 .newSegment(history.getNewSegment())
