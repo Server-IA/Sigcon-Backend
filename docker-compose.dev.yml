@@ -20,12 +20,12 @@ services:
       # SPRING_PROFILES_ACTIVE: dev  # Habilita Swagger
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
       LOGGING_LEVEL_COM_SIGCON_BACKEND: DEBUG
-      SPRING_PROFILES_ACTIVE: dev
+      SPRING_PROFILES_ACTIVE: dev  
 
     deploy:
       resources:
         limits:
-          memory: 512M # Más memoria para desarrollo
+          memory: 512M  # Más memoria para desarrollo
 
   # db:
   #   image: postgres:14
