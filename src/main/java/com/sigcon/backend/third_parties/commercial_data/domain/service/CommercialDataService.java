@@ -1,12 +1,17 @@
 package com.sigcon.backend.third_parties.commercial_data.domain.service;
 
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
 import com.sigcon.backend.parametrization.resources.application.PaymentTermsDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
 import com.sigcon.backend.parametrization.resources.domain.model.PaymentTerms;
 import com.sigcon.backend.parametrization.resources.domain.repository.PaymentTermsRepository;
 import com.sigcon.backend.third_parties.commercial_data.application.CommercialDataDTO;
@@ -14,6 +19,10 @@ import com.sigcon.backend.third_parties.commercial_data.application.CommercialDa
 import com.sigcon.backend.third_parties.commercial_data.application.CommercialDataResponse;
 import com.sigcon.backend.third_parties.commercial_data.domain.model.CommercialData;
 import com.sigcon.backend.third_parties.commercial_data.domain.repository.CommercialDataRepository;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdContactDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRoleCatalogDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyStatusCatalogDTO;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -170,6 +179,19 @@ public class CommercialDataService {
         return CommercialDataResponse.builder()
                 .Id(entity.getId())
                 .thirdPartyId(entity.getThirdParty().getId())
+                .thirdParty(ThirdPartyDTO.builder()
+                        .id(entity.getThirdParty().getId())
+                        .thirdPartyCode(entity.getThirdParty().getThirdPartyCode())
+                        .nit(entity.getThirdParty().getNit())
+                        .dv(entity.getThirdParty().getDv())
+                        .businessName(entity.getThirdParty().getBusinessName())
+                        .blockingReason(entity.getThirdParty().getBlockingReason())
+                        .creditLimit(entity.getThirdParty().getCreditLimit())
+                        .paymentTerms(entity.getThirdParty().getPaymentTerms())
+                        .marketSegment(entity.getThirdParty().getMarketSegment())
+                        .createdAt(entity.getThirdParty().getCreatedAt())
+                        .updatedAt(entity.getThirdParty().getUpdatedAt())
+                        .build())
                 .paymentTerm(PaymentTermsDTO.builder()
                         .id(entity.getPaymentTerm().getId())
                         .name(entity.getPaymentTerm().getName())

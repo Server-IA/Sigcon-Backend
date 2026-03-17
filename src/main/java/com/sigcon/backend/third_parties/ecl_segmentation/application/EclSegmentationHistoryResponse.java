@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.SegmentationSource;
 
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,6 +24,8 @@ public class EclSegmentationHistoryResponse {
     private Long id; // Identificador unico del registro de segmentacion
     @Schema(description = "Identificador único del cliente", example = "1")
     private Long clientId; //Identificador unico (ID) del Cliente
+    @Schema(description = "Información del tercero asociado al cliente", example = "{ \"id\": 1, \"thirdPartyCode\": \"TP001\", \"nit\": \"123456789\", \"dv\": \"5\", \"businessName\": \"Empresa Ejemplo S.A.\" }")
+    private ThirdPartyDTO thirdParty; // Información del tercero asociado al cliente
     @Schema(description = "Segmento de riesgo anterior al cambio", example = "LOW")
     private RiskSegmentation previousSegment; // Segmento de riesgo anterior al cambio
     @Schema(description = "Segmento de riesgo nuevo asignado al cliente", example = "MEDIUM")

@@ -17,11 +17,18 @@ import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.EclSegment
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.SegmentationSource;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.repository.EclSegmentationHistoryRepository;
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
 import com.sigcon.backend.third_parties.ecl_segmentation.application.ArDataDTO;
 import com.sigcon.backend.third_parties.ecl_segmentation.application.EclSegmentationHistoryResponse;
 import com.sigcon.backend.third_parties.ecl_segmentation.application.EclSegmentationResponse;
 import com.sigcon.backend.third_parties.ecl_segmentation.application.ManualAdjustmentRequest;
-
+import com.sigcon.backend.third_parties.third_parties.application.ThirdContactDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRoleCatalogDTO;
+import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyStatusCatalogDTO;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty; // Import para validación de rol cliente activo
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository; // Import para validación de rol cliente activo
 
@@ -67,6 +74,7 @@ public class EclSegmentationService {
    Terceros-RF-08 -- Flujo 4,5,6 y 7: Ajuste manual del segmento de riesgo de un cliente.  
    */
   public ResponseEntity<?> applyManualAdjustment(
+    Long clientId,
     ManualAdjustmentRequest request, 
     org.springframework.validation.BindingResult bindingResult) {
 
@@ -78,11 +86,11 @@ public class EclSegmentationService {
         } 
 
         // Validar que el Cliente exista y tenga rol de cliente activo segun el ECL_003 del Requerimiento. Se asume que un cliente sin rol activo no puede ser segmentado, aunque tenga datos en AR.
-        validateClientRole(request.getClientId());
+        validateClientRole(clientId);
 
          // 2. Verificar que el cliente tiene segmento calculado previamente
         EclSegmentation current = eclSegmentationRepository
-                .findByClientIdAndDeletedAtIsNull(request.getClientId())
+                .findByClientIdAndDeletedAtIsNull(clientId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "ECL_001: No se pudo calcular segmento: datos AR no disponibles."));
 
@@ -95,7 +103,7 @@ public class EclSegmentationService {
 
         // 4. Registrar en histórico antes de modificar
         saveHistory(
-                current.getClientId(),
+                clientId,
                 current.getFinalSegment(),
                 request.getNewSegmentation(),
                 SegmentationSource.MANUAL,
@@ -160,10 +168,17 @@ public class EclSegmentationService {
 
         org.springframework.data.domain.Page<EclSegmentation> segments =
                 eclSegmentationRepository.findAll(spec, pageable);
+        
+        // Filtrar y mapear — ignorar segmentos cuyo cliente fue soft-deleted
+        List<EclSegmentationResponse> filtered = segments.getContent()
+            .stream()
+            .filter(seg -> thirdPartyRepository.findById(seg.getClient().getId()).isPresent())
+            .map(this::mapToResponse)
+            .collect(Collectors.toList());
 
         return ResponseEntity.ok(
                 com.sigcon.backend.utils.DataTableResponse.from(
-                        segments.map(this::mapToResponse),
+                        new org.springframework.data.domain.PageImpl<>(filtered, pageable, filtered.size()),
                         request.getDraw()
                 )
         );
@@ -278,7 +293,7 @@ public class EclSegmentationService {
             // Crear nuevo registro — primer cálculo del cliente
             segmentation = eclSegmentationRepository.save(
                     EclSegmentation.builder()
-                            .clientId(clientId)
+                            .client(ThirdParty.builder().id(clientId).build())
                             .autoSegment(autoSegment)
                             .finalSegment(finalSegment)
                             .segmentationSource(source)
@@ -307,7 +322,7 @@ public class EclSegmentationService {
 
         eclSegmentationHistoryRepository.save(
                 EclSegmentationHistory.builder()
-                        .clientId(clientId)
+                        .client(ThirdParty.builder().id(clientId).build())
                         .previousSegment(previousSegment)
                         .newSegment(newSegment)
                         .segmentationSource(source)
@@ -340,9 +355,25 @@ public class EclSegmentationService {
      * Mapear EclSegmentation a EclSegmentationResponse.
      */
     private EclSegmentationResponse mapToResponse(EclSegmentation segmentation) {
+        ThirdParty client = thirdPartyRepository.findById(segmentation.getClient().getId())
+            .orElseThrow(() -> new IllegalArgumentException(
+                    "ECL_003: Cliente no encontrado con id: " + segmentation.getClient().getId()));
         return EclSegmentationResponse.builder()
                 .id(segmentation.getId())
-                .clientId(segmentation.getClientId())
+                .clientId(client.getId())
+                .thirdParty(ThirdPartyDTO.builder()
+                        .id(client.getId())
+                        .thirdPartyCode(client.getThirdPartyCode())
+                        .nit(client.getNit())
+                        .dv(client.getDv())
+                        .businessName(client.getBusinessName())
+                        .blockingReason(client.getBlockingReason())
+                        .creditLimit(client.getCreditLimit())
+                        .paymentTerms(client.getPaymentTerms())
+                        .marketSegment(client.getMarketSegment())
+                        .createdAt(client.getCreatedAt())
+                        .updatedAt(client.getUpdatedAt())
+                        .build())
                 .autoSegment(segmentation.getAutoSegment())
                 .finalSegment(segmentation.getFinalSegment())
                 .segmentationSource(segmentation.getSegmentationSource())
@@ -357,9 +388,25 @@ public class EclSegmentationService {
      * Mapear EclSegmentationHistory a EclSegmentationHistoryResponse.
      */
     private EclSegmentationHistoryResponse mapToHistoryResponse(EclSegmentationHistory history) {
+        ThirdParty client = thirdPartyRepository.findById(history.getClient().getId())
+            .orElseThrow(() -> new IllegalArgumentException(
+                    "ECL_003: Cliente no encontrado con id: " + history.getClient().getId()));
         return EclSegmentationHistoryResponse.builder()
                 .id(history.getId())
-                .clientId(history.getClientId())
+                .clientId(client.getId())
+                .thirdParty(ThirdPartyDTO.builder()
+                        .id(client.getId())
+                        .thirdPartyCode(client.getThirdPartyCode())
+                        .nit(client.getNit())
+                        .dv(client.getDv())
+                        .businessName(client.getBusinessName())
+                        .blockingReason(client.getBlockingReason())
+                        .creditLimit(client.getCreditLimit())
+                        .paymentTerms(client.getPaymentTerms())
+                        .marketSegment(client.getMarketSegment())
+                        .createdAt(client.getCreatedAt())
+                        .updatedAt(client.getUpdatedAt())
+                        .build())
                 .previousSegment(history.getPreviousSegment())
                 .newSegment(history.getNewSegment())
                 .segmentationSource(history.getSegmentationSource())
