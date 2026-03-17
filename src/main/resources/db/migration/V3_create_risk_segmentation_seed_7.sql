@@ -25,6 +25,24 @@ CREATE TABLE IF NOT EXISTS risk_segmentation_history (
     CONSTRAINT fk_risk_segmentation_history_client_id
         FOREIGN KEY (client_id) REFERENCES third_parties(id)
 ); 
+--Limpiar los datos de segmentacion huerfanos cuando un tercero sea eliminado mediante soft delete
+UPDATE risk_segmentation 
+SET deleted_at = NOW() 
+WHERE deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM third_parties tp 
+      WHERE tp.id = risk_segmentation.client_id 
+        AND tp.deleted_at IS NULL
+  );
+
+UPDATE risk_segmentation_history 
+SET deleted_at = NOW() 
+WHERE deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM third_parties tp 
+      WHERE tp.id = risk_segmentation_history.client_id 
+        AND tp.deleted_at IS NULL
+  );
 --Dependencias pendientes para modulos no implementados aun: 
 --1. Cuentas por Cobrar (Accounts Receivable - AR) - modulo aun no implementado. 
 --una vez implementado el modulo se deben conectar los datos de la antiguedad de saldos y dias mora

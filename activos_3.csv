@@ -1,0 +1,4 @@
+asset_code,name,description,classification,type,accounting_account_id,supplier_id,acquisition_value,acquisition_date,useful_life_months,depreciation_rule_id,accounts_payable_reference_id,bank_cash_reference_id,status,observations
+ACT2026000101,Impresora laser oficina,Activo fijo area administrativa,NON_CURRENT,TANGIBLE,1,1,3200000.00,2026-01-15,60,1,1001,5001,ACTIVE,Pendiente de placa interna
+,Licencia ERP 3 años,Licencia software,NON_CURRENT,INTANGIBLE,1,1,12500000,2026-02-01,36,1,,,ACTIVE,
+ACT2026000102,Escritorio gerencia,Mobiliario,NON_CURRENT,TANGIBLE,1,1,850000,2026-01-20,48,1,,,IN_REPAIR,Requiere mantenimiento
