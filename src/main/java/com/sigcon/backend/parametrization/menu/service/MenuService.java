@@ -116,7 +116,9 @@ public class MenuService implements MenuUseCase {
             .map(Role::getId)
             .collect(Collectors.toList());
 
-        return menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds).values().stream()
+        boolean isAdmin = roleIds.contains(1L);
+
+        return menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds, isAdmin).values().stream()
             .flatMap(List::stream)
             .toList();
     }

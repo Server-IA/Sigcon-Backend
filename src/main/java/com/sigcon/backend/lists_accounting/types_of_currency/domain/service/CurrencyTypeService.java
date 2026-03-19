@@ -3,6 +3,10 @@ package com.sigcon.backend.lists_accounting.types_of_currency.domain.service;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeRequestDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeUpdateRequestDTO;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeRate;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.repository.ExchangeRateRepository;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeDeleteResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
@@ -19,7 +23,6 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -33,6 +36,9 @@ import org.springframework.validation.BindingResult;
 public class CurrencyTypeService {
 
     private final CurrencyTypeRepository currencyTypeRepository;
+    private final ExchangeRateRepository exchangeRateRepository;
+    private final AccountingAccountRepository accountingAccountRepository;
+
     private final DataTableSpecificationBuilder<CurrencyType> specificationBuilder = new DataTableSpecificationBuilder<>();
 
     @Transactional
@@ -143,30 +149,18 @@ public class CurrencyTypeService {
         CurrencyType existing = currencyTypeRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new java.util.NoSuchElementException("Moneda no encontrada"));
 
-        if (currencyTypeRepository.isCurrencyUsed(id)) {
-            throw new IllegalStateException(
-                    "No se puede eliminar: moneda asociada a transacciones/configuraciones. Ver detalles.");
+        String errorMessage = isCurrencyUsed(id);
+        if (errorMessage != null && !errorMessage.isEmpty()) {
+            throw new IllegalStateException(errorMessage);
         }
 
-        existing.setDeletedAt(java.time.LocalDateTime.now());
-
-        // Append a suffix to release the unique constraints for future records
-        // existing.setIsoCode(existing.getIsoCode() + "_DEL" + existing.getId());
-
-        // String deletedSuffix = " (DEL " + existing.getId() + ")";
-        // String newName = existing.getName();
-        // if (newName.length() + deletedSuffix.length() > 100) {
-        //     newName = newName.substring(0, 100 - deletedSuffix.length());
-        // }
-        // existing.setName(newName + deletedSuffix);
-
-        CurrencyType deleted = currencyTypeRepository.save(existing);
+        currencyTypeRepository.deleteById(id);
 
         return CurrencyTypeDeleteResponseDTO.builder()
-                .id(deleted.getId())
-                .isoCode(deleted.getIsoCode())
-                .name(deleted.getName())
-                .deletedAt(deleted.getDeletedAt())
+                .id(existing.getId())
+                .isoCode(existing.getIsoCode())
+                .name(existing.getName())
+                .deletedAt(existing.getDeletedAt())
                 .message("El tipo de moneda ha sido eliminado exitosamente")
                 .build();
     }
@@ -211,5 +205,18 @@ public class CurrencyTypeService {
                             "success", false,
                             "message", "Error al consultar monedas. Intente nuevamente o contacte al administrador"));
         }
+    }
+
+    private String isCurrencyUsed(Long currencyId) {
+        Optional<ExchangeRate> exchangeRate = exchangeRateRepository.findByCurrencyExchangeOrCurrencyExchanged(currencyId);
+        if (exchangeRate.isPresent()) {
+            return "No se puede eliminar: moneda asociada a tasas de cambio.";
+        }
+        
+        Optional<AccountingAccount> accountingAccount = accountingAccountRepository.findByCurrencyType_Id(currencyId);
+        if (accountingAccount.isPresent()) {
+            return "No se puede eliminar: moneda asociada a cuentas contables.";
+        }
+        return "";
     }
 }

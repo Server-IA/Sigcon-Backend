@@ -39,6 +39,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -48,6 +49,7 @@ public class DepretationRuleService {
 
     private final DepretationRuleRepository depretationRuleRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+
     private final UserRepository userRepository;
 
     /**
@@ -420,6 +422,13 @@ public class DepretationRuleService {
                 );
             }
 
+            String dependency = hasActiveDependencies(rule.getAccountingAccount().getId());
+            if (dependency != null) {
+                throw new IllegalArgumentException(dependency);
+            }
+
+
+
             // 4. Marcarlo como eliminado 
             rule.setDeletedAt(LocalDateTime.now());
             rule.setStatus(DepretationStatus.INACTIVE); // Opcional: marcar como inactiva también
@@ -451,5 +460,13 @@ public class DepretationRuleService {
         //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
         //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar la regla. Intente nuevamente")));
         // }
+    }
+
+    private String hasActiveDependencies(Long accountingAccountId) {
+        // List<DepretationRule> depretationRules = depretationRuleRepository.findByAccountingAccount_Id(accountingAccountId);
+        // if (!depretationRules.isEmpty()) {
+        //     return "No se puede eliminar la regla de depreciación, porque está vinculada a registros. Retire las dependencias e intente de nuevo";
+        // }
+        return null;
     }
 }

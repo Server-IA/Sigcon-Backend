@@ -1,6 +1,7 @@
 package com.sigcon.backend.lists_accounting.depretation_rules.domain.repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,4 +25,6 @@ public interface DepretationRuleRepository extends JpaRepository<DepretationRule
             DepretationRule findByIdAndAccountingAccountId(Long id, Long accountingAccountId);
 
             Optional<DepretationRule> findById(Long id);
+
+            List<DepretationRule> findByAccountingAccount_Id(Long accountingAccountId);
 }

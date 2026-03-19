@@ -11,8 +11,18 @@ import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.Enums.Exch
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long> {
+
+    @Query("""
+        SELECT e
+        FROM ExchangeRate e
+        WHERE e.currencyExchange.id = :currencyId
+        OR e.currencyExchanged.id = :currencyId
+        AND e.deletedAt IS NULL
+    """)
+    Optional<ExchangeRate> findByCurrencyExchangeOrCurrencyExchanged(Long currencyId);
 
     // VALIDACIÓN PARA CREAR
     // @Query("""
