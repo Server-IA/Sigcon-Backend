@@ -116,19 +116,13 @@ public class ExchangeRateService {
                 exchangeRates.map(exchangeRate -> ExchangeRateDTO.builder()
                     .id(exchangeRate.getId())
                     .currencyExchange(
-                        CurrencyTypeResponseDTO.builder()
-                            .id(exchangeRate.getCurrencyExchange().getId())
-                            .isoCode(exchangeRate.getCurrencyExchange().getIsoCode())
-                            .name(exchangeRate.getCurrencyExchange().getName())
-                            .createdAt(exchangeRate.getCurrencyExchange().getCreatedAt())
-                            .build()
+                        exchangeRate.getCurrencyExchange() != null ?
+                            getCurrencyTypeResponseDTO(exchangeRate.getCurrencyExchange())
+                            : null
                     ).currencyExchanged(
-                        CurrencyTypeResponseDTO.builder()
-                            .id(exchangeRate.getCurrencyExchanged().getId())
-                            .isoCode(exchangeRate.getCurrencyExchanged().getIsoCode())
-                            .name(exchangeRate.getCurrencyExchanged().getName())
-                            .createdAt(exchangeRate.getCurrencyExchanged().getCreatedAt())
-                            .build()
+                        exchangeRate.getCurrencyExchanged() != null ?
+                            getCurrencyTypeResponseDTO(exchangeRate.getCurrencyExchanged())
+                                : null
                     )
                     .exchangeType(exchangeRate.getExchangeType())
                     .value(exchangeRate.getValue())
@@ -230,5 +224,17 @@ public class ExchangeRateService {
         //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
         //     );
         // }
+    }
+
+    private CurrencyTypeResponseDTO getCurrencyTypeResponseDTO(CurrencyType currencyType) {
+        CurrencyType currencyTypeResponseDTO = currencyRepository.findById(currencyType.getId()).orElse(null);
+        if (currencyTypeResponseDTO != null) {
+            return CurrencyTypeResponseDTO.builder()
+                    .id(currencyTypeResponseDTO.getId())
+                    .isoCode(currencyTypeResponseDTO.getIsoCode())
+                    .name(currencyTypeResponseDTO.getName())
+                    .build();
+        }
+        return null;
     }
 }
