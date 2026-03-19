@@ -1,5 +1,7 @@
 package com.sigcon.backend.lists_accounting.accounting_lists.domain.service;
 
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.CreateChartOfAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.DeleteChartOfAccountDTO;
@@ -31,6 +33,9 @@ import java.util.List;
 public class ChartOfAccountService {
 
     private final ChartOfAccountRepository chartOfAccountRepository;
+    private final AccountingAccountRepository accountingAccountRepository;
+
+
     private final DataTableSpecificationBuilder<ChartOfAccount> chartOfAccountSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
 
@@ -147,9 +152,11 @@ public class ChartOfAccountService {
             throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
         }
 
-/*         if (hasActiveDependencies(account)) {
+        String dependency = hasActiveDependencies(account);
+
+        if (dependency != null) {
             throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
-        } */
+        }
 
         account.setDeletedAt(LocalDateTime.now());
 
@@ -297,6 +304,15 @@ public class ChartOfAccountService {
             case "nature" -> "accountNature";
             default -> columnName;
         };
+    }
+
+    private String hasActiveDependencies(ChartOfAccount account) {
+        Long id = account.getId();
+        List<AccountingAccount> dependencies = accountingAccountRepository.findByPucAccount_Id(id);
+        if (!dependencies.isEmpty()) {
+            return "No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo";
+        }
+        return null;
     }
 }
 

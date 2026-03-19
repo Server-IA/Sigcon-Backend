@@ -30,8 +30,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     }
 
     @Override
-    public Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List roles) {
-        return repository.findMenusByModuleIdAndRoles(moduleId, roles, parseStatus(MenuStatus.ACTIVE)).stream()
+    public Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List<Long> roles, boolean isAdmin) {
+        return repository.findMenusByModuleIdAndRoles(moduleId, roles, parseStatus(MenuStatus.ACTIVE), isAdmin).stream()
             .map(this::entityToMenu)
             .collect(Collectors.groupingBy(menu -> menu.getModuleId() != null ? menu.getModuleId() : 0L));
     }

@@ -1,6 +1,7 @@
 package com.sigcon.backend.lists_accounting.cost_centers.domain.service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -12,6 +13,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
@@ -29,6 +32,8 @@ import lombok.RequiredArgsConstructor;
 public class CostCenterService {
 
         private final CostCenterRepository costCenterRepository;
+        private final AccountingAccountRepository accountingAccountRepository;
+
         private final DataTableSpecificationBuilder<CostCenter> costCenterSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
         public ResponseEntity<?> getCostCentersPaged(DataTableRequest request) {
@@ -148,8 +153,15 @@ public class CostCenterService {
                         CostCenter costCenter = costCenterRepository.findByIdAndDeletedAtIsNull(id)
                                         .orElseThrow(() -> new RuntimeException("Centro de costo no encontrado"));
 
-                        // TODO: Check for active transactions before deletion if required by business
-                        // logic
+                        AccountingAccount accountingAccount = accountingAccountRepository.findByCostCenter_Id(id);
+                        if (accountingAccount != null) {
+                                throw new RuntimeException("No se puede eliminar: centro de costo asociado a cuentas contables.");
+                        }
+
+                        String dependency = hasActiveDependencies(id);
+                        if (dependency != null) {
+                                throw new RuntimeException(dependency);
+                        }
 
                         costCenter.setDeletedAt(LocalDateTime.now());
                         costCenter.setDeletionReason(reason);
@@ -186,5 +198,13 @@ public class CostCenterService {
                                 .updatedAt(costCenter.getUpdatedAt())
                                 .deletionReason(costCenter.getDeletionReason())
                                 .build();
+        }
+
+        private String hasActiveDependencies(Long costCenterId) {
+                AccountingAccount accountingAccount = accountingAccountRepository.findByCostCenter_Id(costCenterId);
+                if (accountingAccount != null) {
+                        return "No se puede eliminar el centro de costo, porque está vinculada a cuentas contables activas. Retire las dependencias e intente de nuevo";
+                }
+                return null;  
         }
 }
