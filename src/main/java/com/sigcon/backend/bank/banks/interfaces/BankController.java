@@ -43,14 +43,18 @@ public class BankController {
                 mediaType = "application/json",
                 schema = @Schema(implementation = BankDTO.class),
                 examples = @ExampleObject(value = """
-                    {
-                    "code": "001",
+    {
+                    "code": "0043",
                     "name": "BANCO DE PRUEBA",
                     "nameShort": "BANCO PRUEBA",
-                    "typeBank": "COMERCIAL",
-                    "nit": "900123456",
-                    "codeAch": "1234",
+                    "typeBank": "COMMERCIAL",
+                    "nit": "9001234225632",
+                    "swift": "COLOCOBOGXX2X23X",
+                    "codeAch": "12342223",
+                    "urlWebservice": "https://api.banco.com",
+                    "conciliationDays": 3,
                     "phone": "6011234567",
+                    "formatExtract": "TXT",
                     "countryId": 1
                     }
                     """)

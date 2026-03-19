@@ -43,7 +43,7 @@ public class Bank {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type_bank", nullable = false)
-    @NotBlank(message = "El tipo del banco no puede estar vacío")
+    @NotNull(message = "El tipo del banco no puede estar vacío")
     private BankType typeBank;
 
     @Column(name = "nit", nullable = false, length = 45)
