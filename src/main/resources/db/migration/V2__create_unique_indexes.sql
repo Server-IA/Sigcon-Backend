@@ -75,3 +75,5 @@ WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_ruler_tax_id_active
 ON tax_ruler_accounts (ruler_tax_id, accounting_account_id);
+
+

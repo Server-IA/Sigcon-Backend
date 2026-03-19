@@ -23,11 +23,11 @@ public interface SpringDataMenuRepository extends JpaRepository<MenuEntity, Long
       LEFT JOIN menu_permissions mp on mp.menu_id = m.id
       LEFT JOIN roles r on mp.role_id = r.id 
       WHERE m.module_id = :moduleId AND m.status = :status AND m.deleted_at IS NULL
-      AND r.id = :roles
+      AND (r.id = :roles OR :isAdmin = true)
       AND mp.deleted_at IS NULL
       ORDER BY m.menu_order ASC
       """, nativeQuery = true)
-    List<MenuEntity> findMenusByModuleIdAndRoles(Long moduleId, List roles, String status);
+    List<MenuEntity> findMenusByModuleIdAndRoles(Long moduleId, List<Long> roles, String status, boolean isAdmin);
 
     @Query(value = """
         SELECT * FROM menus m WHERE m.label = :label AND m.deleted_at IS NULL

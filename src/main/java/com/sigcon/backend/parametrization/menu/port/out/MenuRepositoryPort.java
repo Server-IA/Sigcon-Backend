@@ -18,7 +18,7 @@ public interface MenuRepositoryPort {
 
     Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable);
 
-    Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List roles);
+    Map<Long, List<Menu>> findMenusByModuleIdAndRoles(Long moduleId, List<Long> roles, boolean isAdmin);
     MenuEntity saveMenu(MenuEntity menuEntity);
     Optional<MenuEntity> findMenuByLabel(String label);
     Optional<MenuEntity> findMenuByPath(String path);
