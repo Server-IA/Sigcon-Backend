@@ -51,4 +51,3 @@ public class ThirdPartyDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
-

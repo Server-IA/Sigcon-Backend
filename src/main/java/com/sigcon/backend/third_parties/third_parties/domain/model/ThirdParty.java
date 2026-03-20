@@ -117,4 +117,3 @@ public class ThirdParty {
         this.updatedAt = LocalDateTime.now();
     }
 }
-
