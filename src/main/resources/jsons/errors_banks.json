@@ -1,0 +1,26 @@
+[
+  {
+    "code": "uk_banks_code_active",
+    "message": "El código del banco ya existe para un banco activo."
+  },
+  {
+    "code": "uk_banks_name_active",
+    "message": "El nombre del banco ya existe para un banco activo."
+  },
+  {
+    "code": "uk_banks_short_name_active",
+    "message": "El nombre corto del banco ya existe para un banco activo."
+  },
+  {
+    "code": "uk_banks_nit_active",
+    "message": "El NIT del banco ya existe para un banco activo."
+  },
+  {
+    "code": "uk_banks_swift_active",
+    "message": "El código SWIFT del banco ya existe para un banco activo."
+  },
+  {
+    "code": "uk_banks_ach_active",
+    "message": "El código ACH del banco ya existe para un banco activo."
+  }
+]

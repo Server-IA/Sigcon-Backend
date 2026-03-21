@@ -1,6 +1,7 @@
 package com.sigcon.backend.lists_accounting.accounting_account.domain.service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -23,6 +24,8 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums
 import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
+import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
@@ -43,6 +46,7 @@ public class AccountingAccountService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
     private final CostCenterRepository costCenterRepository;
+    private final DepretationRuleRepository depretationRuleRepository;
 
     private final DataTableSpecificationBuilder<AccountingAccount> accountingAccountSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -70,25 +74,17 @@ public class AccountingAccountService {
                     DataTableResponse.from(accountingAccounts.map(accountingAccount -> AccountingAccountDTO.builder()
                             .id(accountingAccount.getId())
                             .puc_id(accountingAccount.getPucAccount().getId())
-                            .pucAccount(ChartOfAccountResponseDTO.builder()
-                                    .id(accountingAccount.getPucAccount().getId())
-                                    .code(accountingAccount.getPucAccount().getCode())
-                                    .name(accountingAccount.getPucAccount().getName())
-                                    .build())
+                            .pucAccount(
+                                accountingAccount.getPucAccount() != null ?
+                                    getChartOfAccountResponseDTO(accountingAccount.getPucAccount())
+                                    : null
+                            )
                             .customName(accountingAccount.getCustomName())
                             .currencyType(accountingAccount.getCurrencyType() != null
-                                    ? CurrencyTypeResponseDTO.builder()
-                                            .id(accountingAccount.getCurrencyType().getId())
-                                            .isoCode(accountingAccount.getCurrencyType().getIsoCode())
-                                            .name(accountingAccount.getCurrencyType().getName())
-                                            .build()
+                                    ? getCurrencyTypeResponseDTO(accountingAccount.getCurrencyType())
                                     : null)
                             .costCenter(accountingAccount.getCostCenter() != null
-                                    ? CostCenterDTO.builder()
-                                            .id(accountingAccount.getCostCenter().getId())
-                                            .code(accountingAccount.getCostCenter().getCode())
-                                            .name(accountingAccount.getCostCenter().getName())
-                                            .build()
+                                    ? getCostCenterResponseDTO(accountingAccount.getCostCenter())
                                     : null)
                             .taxRuleId(accountingAccount.getTaxRuleId())
                             .nature(accountingAccount.getNature())
@@ -247,11 +243,12 @@ public class AccountingAccountService {
 
             // TODO: Validación de dependencias activas (pendiente módulo de transacciones)
             // CFG-RF-08 Excepción 2: Si tiene dependencias activas
-            // if (hasActiveDependencies(accountingAccount.getId())) {
-            // throw new IllegalArgumentException("No se puede inactivar la cuenta contable,
-            // porque está vinculada a registros activos. Retire las dependencias e intente
-            // de nuevo");
-            // }
+
+            String dependency = hasActiveDependencies(accountingAccount.getId());
+
+            if (dependency != null) {
+                throw new IllegalArgumentException(dependency);
+            }
 
             // Validación: Motivo de eliminación requerido
             if (reason == null || reason.trim().isEmpty()) {
@@ -286,5 +283,50 @@ public class AccountingAccountService {
                     .body(ErrorRespondJson.getErrorRespondMessage(
                             Optional.of("Error al registrar la eliminación. Intente nuevamente más tarde")));
         }
+    }
+
+    private String hasActiveDependencies(Long accountingAccountId) {
+        List<DepretationRule> depretationRules = depretationRuleRepository.findByAccountingAccount_Id(accountingAccountId);
+        if (!depretationRules.isEmpty()) {
+            return "No se puede inactivar la cuenta contable, porque está vinculada a registros de depreciación activos. Retire las dependencias e intente de nuevo";
+        }
+        return null;
+    }
+
+    private ChartOfAccountResponseDTO getChartOfAccountResponseDTO(ChartOfAccount chartOfAccount) {
+
+        ChartOfAccount chartOfAccountResponseDTO = chartOfAccountRepository.findById(chartOfAccount.getId()).orElse(null);
+        if (chartOfAccountResponseDTO != null) {
+            return ChartOfAccountResponseDTO.builder()
+                    .id(chartOfAccountResponseDTO.getId())
+                    .code(chartOfAccountResponseDTO.getCode())
+                    .name(chartOfAccountResponseDTO.getName())
+                    .build();
+        }
+        return null;
+    }
+
+    private CurrencyTypeResponseDTO getCurrencyTypeResponseDTO(CurrencyType currencyType) {
+        CurrencyType currencyTypeResponseDTO = currencyTypeRepository.findById(currencyType.getId()).orElse(null);
+        if (currencyTypeResponseDTO != null) {
+            return CurrencyTypeResponseDTO.builder()
+                    .id(currencyTypeResponseDTO.getId())
+                    .isoCode(currencyTypeResponseDTO.getIsoCode())
+                    .name(currencyTypeResponseDTO.getName())
+                    .build();
+        }
+        return null;
+    }
+
+    private CostCenterDTO getCostCenterResponseDTO(CostCenter costCenter) {
+        CostCenter costCenterResponseDTO = costCenterRepository.findById(costCenter.getId()).orElse(null);
+        if (costCenterResponseDTO != null) {
+            return CostCenterDTO.builder()
+                    .id(costCenterResponseDTO.getId())
+                    .code(costCenterResponseDTO.getCode())
+                    .name(costCenterResponseDTO.getName())
+                    .build();
+        }
+        return null;
     }
 }

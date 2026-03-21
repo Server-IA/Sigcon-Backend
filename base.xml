@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice>
+
+    <Header>
+        <Prefix>FAC</Prefix>
+        <Serial>000124</Serial>
+        <IssueDate>2026-03-18</IssueDate>
+        <DueDate>2026-04-18</DueDate>
+        <Status>ACTIVE</Status>
+    </Header>
+
+    <ThirdParty>
+        <Id>2</Id>
+        <NIT>901987654</NIT>
+        <DV>3</DV>
+        <Name>Comercializadora XYZ SAS</Name>
+        <Address>Carrera 10 #20-30</Address>
+    </ThirdParty>
+
+    <InvoiceType>
+        <Code>01</Code>
+        <Name>Factura de Venta</Name>
+    </InvoiceType>
+
+    <Totals>
+        <TotalPayment>238000.00</TotalPayment>
+        <TotalVAT>38000.00</TotalVAT>
+        <TotalWithholdings>0.00</TotalWithholdings>
+        <TotalDiscounts>0.00</TotalDiscounts>
+        <OutstandingBalance>238000.00</OutstandingBalance>
+    </Totals>
+
+    <Lines>
+
+        <!-- Línea 1 -->
+        <Line>
+            <Code>1</Code>
+            <Name>Producto A</Name>
+            <Description>Producto con cantidad mayor</Description>
+
+            <Quantity>3</Quantity>
+            <UnitPrice>50000.00</UnitPrice>
+            <Value>150000.00</Value>
+
+            <Taxes>
+                <Tax>
+                    <AccountId>1</AccountId>
+                    <Rate>19.00</Rate>
+                    <Base>150000.00</Base>
+                    <Amount>28500.00</Amount>
+                </Tax>
+            </Taxes>
+        </Line>
+
+        <!-- Línea 2 -->
+        <Line>
+            <Code>2</Code>
+            <Name>Producto B</Name>
+            <Description>Otro producto con varias unidades</Description>
+
+            <Quantity>2</Quantity>
+            <UnitPrice>25000.00</UnitPrice>
+            <Value>50000.00</Value>
+
+            <Taxes>
+                <Tax>
+                    <AccountId>1</AccountId>
+                    <Rate>19.00</Rate>
+                    <Base>50000.00</Base>
+                    <Amount>9500.00</Amount>
+                </Tax>
+            </Taxes>
+        </Line>
+
+    </Lines>
+
+</Invoice>

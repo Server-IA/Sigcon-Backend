@@ -1,15 +1,18 @@
 package com.sigcon.backend.assets.niif_alerts.application;
 
-import lombok.Builder;
-import lombok.Data;
+import lombok.*;
 
 import java.util.List;
 
 @Data
 @Builder
-public class NiifVerificationResponse {
+@NoArgsConstructor
+@AllArgsConstructor
+public class NiifVerificationResultDTO {
 
     private Long assetId;
+
+    private String assetName;
 
     private String result;
 

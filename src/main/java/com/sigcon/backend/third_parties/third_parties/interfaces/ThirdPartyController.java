@@ -88,6 +88,28 @@ public class ThirdPartyController {
                 return thirdPartyService.getDetail(id);
         }
 
+        @GetMapping("/roles")
+        @Operation(summary = "Catalogo de roles de terceros", description = "Retorna el catalogo simple de roles disponibles para terceros.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Catalogo obtenido correctamente"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        public ResponseEntity<?> rolesCatalog() {
+                return thirdPartyService.getRolesCatalog();
+        }
+
+        @GetMapping("/statuses")
+        @Operation(summary = "Catalogo de estados de terceros", description = "Retorna el catalogo simple de estados disponibles para terceros.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Catalogo obtenido correctamente"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        public ResponseEntity<?> statusesCatalog() {
+                return thirdPartyService.getStatusesCatalog();
+        }
+
         @PutMapping("/{id}")
         @Operation(summary = "Actualizar tercero", description = "RF03 - Actualiza la informacion de un tercero existente.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(mediaType = "application/json", schema = @Schema(implementation = ThirdPartyDTO.class), examples = @ExampleObject(value = "{\n  \"businessName\": \"EMPRESA ABC SAS ACTUALIZADA\",\n  \"municipalityId\": 2,\n  \"withholdingIds\": [2],\n  \"contacts\": [\n    {\n      \"position\": \"Tesoreria\",\n      \"phone\": \"3007654321\",\n      \"email\": \"tesoreria@empresa.com\",\n      \"contactPerson\": \"Ana Ruiz\"\n    }\n  ]\n}"))))
         @ApiResponses({
