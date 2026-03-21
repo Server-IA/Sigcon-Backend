@@ -740,6 +740,23 @@ public class CompanyService {
                 .build();
     }
 
+    private String mapDataTableColumn(String columnName) {
+        return switch (columnName) {
+            // Campos del DTO (lo que manda el frontend) -> rutas del entity (lo que espera JPA)
+            case "legalRepresentative" -> "legalRepresentative";
+
+            case "typeRegimeName" -> "typeRegimen.name";
+            case "typeRegimeCode" -> "typeRegimen.code";
+            case "typeRegimeId" -> "typeRegimen.id";
+
+            case "typeOrganizationName" -> "typeOrganization.name";
+            case "typeOrganizationCode" -> "typeOrganization.code";
+            case "typeOrganizationId" -> "typeOrganization.id";
+
+            default -> columnName;
+        };
+    }
+
     private DataTableRequest normalizeDataTableRequest(DataTableRequest request) {
         DataTableRequest safe = request != null ? request : new DataTableRequest();
 
@@ -755,6 +772,18 @@ public class CompanyService {
             safe.setSearch(new DataTableRequest.DataTableSearch("", false));
         }
 
+        // Normalizar nombres de columnas para que coincidan con los campos del entity
+        List<DataTableRequest.DataTableColumn> normalizedColumns = safe.getColumns().stream()
+                .map(column -> {
+                    if (column == null || !StringUtils.hasText(column.getData())) {
+                        return column;
+                    }
+                    column.setData(mapDataTableColumn(column.getData().trim()));
+                    return column;
+                })
+                .toList();
+        safe.setColumns(normalizedColumns);
+
         return safe;
     }
 
@@ -765,8 +794,11 @@ public class CompanyService {
         }
 
         Set<String> allowedFields = Set.of(
-                "id", "name", "nit", "dv", "status",
-                "typeRegimen.name",
+                "id", "name", "nit", "dv",
+                "legalRepresentative", "email", "phone", "logo", "size",
+                "status",
+                "typeRegimen.id", "typeRegimen.name", "typeRegimen.code",
+                "typeOrganization.id", "typeOrganization.name", "typeOrganization.code",
                 "createdAt", "updatedAt"
         );
 
