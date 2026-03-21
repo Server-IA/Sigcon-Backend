@@ -257,6 +257,36 @@ public class ThirdPartyService {
         return ResponseEntity.ok(DataTableResponse.from(thirdParties.map(this::toDto), safeRequest.getDraw()));
     }
 
+    public ResponseEntity<?> getRolesCatalog() {
+        List<ThirdPartyRoleCatalogDTO> roles = roleCatalogRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(ThirdPartyRoleCatalog::getId))
+                .map(role -> ThirdPartyRoleCatalogDTO.builder()
+                        .id(role.getId())
+                        .name(role.getName())
+                        .build())
+                .toList();
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Catalogo de roles obtenido correctamente."),
+                        Optional.of(roles)));
+    }
+
+    public ResponseEntity<?> getStatusesCatalog() {
+        List<ThirdPartyStatusCatalogDTO> statuses = statusCatalogRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(ThirdPartyStatusCatalog::getId))
+                .map(status -> ThirdPartyStatusCatalogDTO.builder()
+                        .id(status.getId())
+                        .name(status.getName())
+                        .build())
+                .toList();
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Catalogo de estados obtenido correctamente."),
+                        Optional.of(statuses)));
+    }
+
     public ResponseEntity<?> getDetail(Long id) {
         ThirdParty thirdParty = getThirdPartyOrThrow(id);
 
@@ -327,8 +357,7 @@ public class ThirdPartyService {
         }
         if (request.getWithholdingIds() != null) {
             List<Withholding> withholdings = resolveWithholdings(request.getWithholdingIds());
-            thirdParty.getWithholdingAssignments().clear();
-            thirdParty.getWithholdingAssignments().addAll(toWithholdingAssignments(withholdings, thirdParty));
+            syncWithholdingAssignments(thirdParty, withholdings);
         }
         if (request.getStatusId() != null) {
             ThirdPartyStatusCatalog targetStatus = resolveStatus(request.getStatusId());
@@ -1231,6 +1260,44 @@ public class ThirdPartyService {
                 .toList();
     }
 
+    private void syncWithholdingAssignments(ThirdParty thirdParty, List<Withholding> requestedWithholdings) {
+        List<ThirdPartyWithholdingAssignment> currentAssignments = thirdParty.getWithholdingAssignments();
+        Map<Long, ThirdPartyWithholdingAssignment> currentByWithholdingId = currentAssignments.stream()
+                .filter(a -> a.getWithholding() != null && a.getWithholding().getId() != null)
+                .collect(Collectors.toMap(
+                        a -> a.getWithholding().getId(),
+                        a -> a,
+                        (first, second) -> first));
+
+        Set<Long> requestedIds = requestedWithholdings == null ? Set.of()
+                : requestedWithholdings.stream()
+                        .map(Withholding::getId)
+                        .filter(id -> id != null && id > 0)
+                        .collect(Collectors.toSet());
+
+        // Remove assignments no longer requested (soft-delete via @SQLDelete +
+        // orphanRemoval).
+        currentAssignments.removeIf(assignment -> {
+            if (assignment.getWithholding() == null || assignment.getWithholding().getId() == null) {
+                return true;
+            }
+            return !requestedIds.contains(assignment.getWithholding().getId());
+        });
+
+        // Add only missing assignments to avoid duplicate key integrity errors.
+        for (Withholding withholding : requestedWithholdings) {
+            if (withholding == null || withholding.getId() == null) {
+                continue;
+            }
+            if (!currentByWithholdingId.containsKey(withholding.getId())) {
+                currentAssignments.add(ThirdPartyWithholdingAssignment.builder()
+                        .thirdParty(thirdParty)
+                        .withholding(withholding)
+                        .build());
+            }
+        }
+    }
+
     private List<ThirdContactDTO> toContactDtoList(List<ThirdContact> contacts) {
         if (contacts == null || contacts.isEmpty()) {
             return List.of();
@@ -1300,4 +1367,3 @@ public class ThirdPartyService {
             String dv) {
     }
 }
-

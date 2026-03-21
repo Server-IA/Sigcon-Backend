@@ -99,17 +99,17 @@ public class AssetsService {
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
     private final DepretationRuleRepository depretationRuleRepository;
 
-  //  private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
+    // private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
-    private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder =
-            new DataTableSpecificationBuilder<>();
+    private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     @Transactional
     public ViewAssetsDTO create(CreateAssetsDTO request) {
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
-        DepretationRule depreciationRule = depretationRuleRepository.findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
+        DepretationRule depreciationRule = depretationRuleRepository
+                .findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
         if (depreciationRule == null) {
             throw new IllegalArgumentException("Regla de depreciacion no encontrada");
         }
@@ -194,8 +194,8 @@ public class AssetsService {
 
             AccountingAccount accountingAccount = resolveAccountingAccount(accountingAccountId);
             ThirdParty supplier = resolveSupplier(supplierId);
-            DepretationRule depreciationRule =
-                    depretationRuleRepository.findByIdAndAccountingAccountId(depreciationRuleId, accountingAccountId);
+            DepretationRule depreciationRule = depretationRuleRepository
+                    .findByIdAndAccountingAccountId(depreciationRuleId, accountingAccountId);
             if (depreciationRule == null) {
                 throw new IllegalArgumentException(
                         "BULK_004: Error en linea " + row.line() + ": regla de depreciacion no valida.");
@@ -290,7 +290,8 @@ public class AssetsService {
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
-        DepretationRule depretationRule = depretationRuleRepository.findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
+        DepretationRule depretationRule = depretationRuleRepository
+                .findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
         if (depretationRule == null) {
             throw new IllegalArgumentException("Regla de depreciacion no encontrada");
         }
@@ -374,7 +375,6 @@ public class AssetsService {
 
         return candidate;
     }
-
 
     private String normalizeOptionalText(String text) {
         if (!StringUtils.hasText(text)) {
@@ -497,7 +497,7 @@ public class AssetsService {
                 .name(depretationRule.getName())
                 .build();
     }
-    
+
     private ThirdPartyDTO toThirdPartyDto(ThirdParty entity) {
         if (entity == null) {
             return null;
