@@ -62,4 +62,3 @@ public class ThirdPartyDetailDTO {
         private String marketSegment;
     }
 }
-
