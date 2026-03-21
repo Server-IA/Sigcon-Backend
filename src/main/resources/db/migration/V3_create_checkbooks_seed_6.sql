@@ -12,7 +12,7 @@ INSERT INTO checkbooks (
     created_at,
     updated_at
 )
-SELECT *
+SELECT * 
 FROM (
     VALUES
     (1, 'CHK-001', 'Bancolombia', 1000, 1100, 101, 0, 101, CURRENT_DATE, 'ACTIVA', NOW(), NOW())
