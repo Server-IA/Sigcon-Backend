@@ -22,5 +22,137 @@
   {
     "code": "uk_banks_ach_active",
     "message": "El código ACH del banco ya existe para un banco activo."
+  },
+  {
+    "code": "BNK-ERR-001",
+    "message": "Número de cuenta ya registrado en este banco"
+  },
+  {
+    "code": "BNK-ERR-002",
+    "message": "Cuenta contable no válida para bancos o libro contable"
+  },
+  {
+    "code": "BNK-ERR-003",
+    "message": "Moneda no válida o inactiva"
+  },
+  {
+    "code": "BNK-ERR-004",
+    "message": "Campos obligatorios no diligenciados o formatos inválidos"
+  },
+  {
+    "code": "BNK-ERR-005",
+    "message": "Límite de crédito requerido cuando se activa sobregiro"
+  },
+  {
+    "code": "BNK-ERR-006",
+    "message": "No se permite chequera para tarjetas de crédito"
+  },
+  {
+    "code": "BNK-ERR-007",
+    "message": "Saldo inicial no puede ser negativo"
+  },
+  {
+    "code": "BNK-ERR-008",
+    "message": "Fecha de apertura no puede ser futura"
+  },
+  {
+    "code": "BNK-ERR-009",
+    "message": "Error de conexión al guardar información"
+  },
+  {
+    "code": "BNK-ERR-010",
+    "message": "No se puede modificar el campo porque la cuenta tiene movimientos registrados"
+  },
+  {
+    "code": "BNK-ERR-011",
+    "message": "Permisos insuficientes para realizar cambios sensibles"
+  },
+  {
+    "code": "BNK-ERR-012",
+    "message": "Motivo de cambio requerido para esta modificación (mínimo 10 caracteres)"
+  },
+  {
+    "code": "BNK-ERR-013",
+    "message": "Límite de crédito requerido cuando se activa sobregiro"
+  },
+  {
+    "code": "BNK-ERR-014",
+    "message": "No se puede desactivar chequera con chequeras activas"
+  },
+  {
+    "code": "BNK-ERR-015",
+    "message": "Error de conexión al guardar cambios"
+  },
+  {
+    "code": "BNK-ERR-016",
+    "message": "Permisos insuficientes para eliminación"
+  },
+  {
+    "code": "BNK-ERR-017",
+    "message": "No se puede eliminar: existen dependencias"
+  },
+  {
+    "code": "BNK-ERR-018",
+    "message": "Motivo de eliminación/desactivación requerido"
+  },
+  {
+    "code": "BNK-ERR-019",
+    "message": "Confirmación de seguridad requerida"
+  },
+  {
+    "code": "BNK-ERR-020",
+    "message": "Permisos insuficientes"
+  },
+  {
+    "code": "BNK-ERR-021",
+    "message": "Operación no permitida por estado actual"
+  },
+  {
+    "code": "BNK-ERR-022",
+    "message": "Transición de estado no permitida"
+  },
+  {
+    "code": "BNK-ERR-023",
+    "message": "Fecha de cierre inválida"
+  },
+  {
+    "code": "BNK-ERR-024",
+    "message": "No se puede cerrar cuenta con saldo diferente de cero"
+  },
+  {
+    "code": "BNK-ERR-025",
+    "message": "No se puede cerrar cuenta con conciliaciones abiertas"
+  },
+  {
+    "code": "BNK-ERR-026",
+    "message": "No se puede cerrar cuenta con cheques pendientes"
+  },
+  {
+    "code": "BNK-ERR-027",
+    "message": "Motivo requerido para este cambio de estado (mínimo 10 caracteres)"
+  },
+  {
+    "code": "BNK-ERR-028",
+    "message": "Permisos insuficientes para consulta o exportación"
+  },
+  {
+    "code": "BNK-ERR-029",
+    "message": "Cuenta no encontrada"
+  },
+  {
+    "code": "BNK-ERR-030",
+    "message": "Filtros inválidos (formato/fechas incoherentes)"
+  },
+  {
+    "code": "BNK-ERR-031",
+    "message": "Límite de exportación excedido (máximo 1000 registros)"
+  },
+  {
+    "code": "BNK-ERR-032",
+    "message": "No se encontraron resultados con los criterios especificados"
+  },
+  {
+    "code": "BNK-ERR-033",
+    "message": "Tamaño de página no válido"
   }
 ]

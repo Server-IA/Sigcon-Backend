@@ -10,4 +10,6 @@ public interface CheckbookRepository extends JpaRepository<Checkbook, Long> {
     boolean existsByBankAccountIdAndCheckbookNumber(Long bankAccountId, String checkbookNumber);
 
     List<Checkbook> findByBankAccountId(Long bankAccountId);
+
+    long countByBankAccountId(Long bankAccountId);
 }
