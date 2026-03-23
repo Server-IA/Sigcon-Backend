@@ -8,6 +8,10 @@ CREATE INDEX IF NOT EXISTS idx_checks_status_issue_date
 ON checks (status_check, issue_date)
 WHERE deleted_at IS NULL;
 
+DROP INDEX IF EXISTS idx_checks_beneficiary;
+
+DROP INDEX IF EXISTS idx_checks_checkbook;
+
 CREATE INDEX IF NOT EXISTS idx_checks_financial_movement
 ON checks (financial_movement_id)
 WHERE deleted_at IS NULL;

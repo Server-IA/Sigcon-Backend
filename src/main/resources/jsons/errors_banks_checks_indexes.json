@@ -1,26 +1,14 @@
 [
   {
     "code": "uk_checks_number_active",
-    "message": "Numero de cheque ya ha sido emitido."
-  },
-  {
-    "code": "fk_checks_checkbook",
-    "message": "La chequera asociada no existe."
+    "message": "Ya existe un cheque activo con el mismo numero. Debe usar un numero de cheque diferente."
   },
   {
     "code": "idx_checks_status_issue_date",
-    "message": "Indice para busqueda por estado y fecha de emision."
-  },
-  {
-    "code": "idx_checks_beneficiary",
-    "message": "Indice para busqueda por beneficiario."
-  },
-  {
-    "code": "idx_checks_checkbook",
-    "message": "Indice para busqueda por chequera."
+    "message": "No se pudo procesar el cheque porque el estado o la fecha de expedicion son inconsistentes con las reglas del proceso."
   },
   {
     "code": "idx_checks_financial_movement",
-    "message": "Indice para busqueda por movimiento financiero."
+    "message": "No se pudo procesar el cheque porque el movimiento financiero asociado es invalido o no existe."
   }
 ]
