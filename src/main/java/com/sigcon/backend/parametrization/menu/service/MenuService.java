@@ -36,7 +36,6 @@ import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
-
 @RequiredArgsConstructor
 
 public class MenuService implements MenuUseCase {
@@ -44,29 +43,28 @@ public class MenuService implements MenuUseCase {
     private final ModuleRepository moduleRepository;
     private final UserRepository userRepository;
 
-    private final DataTableSpecificationBuilder<MenuEntity> menuSpecificationBuilder =
-        new DataTableSpecificationBuilder<>();
+    private final DataTableSpecificationBuilder<MenuEntity> menuSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     @Override
-    public ResponseEntity<?> getMenusDataTable  (DataTableRequest request) {
+    public ResponseEntity<?> getMenusDataTable(DataTableRequest request) {
 
-        try{
+        try {
 
-            int start  = Math.max(0, request.getStart());
+            int start = Math.max(0, request.getStart());
             int length = request.getLength();
 
             int safeLength = length <= 0 ? 10 : length;
             int page = start / safeLength;
 
             Pageable pageable = length == -1
-                ? Pageable.unpaged()
-                : PageRequest.of(page, safeLength);
+                    ? Pageable.unpaged()
+                    : PageRequest.of(page, safeLength);
 
             Specification<MenuEntity> spec = menuSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+                    .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
             Page<MenuEntity> menus = menuRepositoryPort.findAll(spec, pageable);
-    
+
             Page<Menu> menusResponse = menus.map(menu -> Menu.builder()
                     .id(menu.getId())
                     .label(menu.getLabel())
@@ -76,33 +74,29 @@ public class MenuService implements MenuUseCase {
                     .menuOrder(menu.getMenuOrder())
                     .status(menu.getStatus())
                     .parent(
-                        null != menu.getParent() ?
-                            Menu.builder()
-                                .id(menu.getParent().getId())
-                                .label(menu.getParent().getLabel())
-                                .build()
-                            : null
-                    )
+                            null != menu.getParent() ? Menu.builder()
+                                    .id(menu.getParent().getId())
+                                    .label(menu.getParent().getLabel())
+                                    .build()
+                                    : null)
                     .module(
-                        null != menu.getModule() ?
-                            ModuleDTO.builder()
-                                .id(menu.getModule().getId())
-                                .name(menu.getModule().getName())
-                                .build()
-                            : null
-                    )   
+                            null != menu.getModule() ? ModuleDTO.builder()
+                                    .id(menu.getModule().getId())
+                                    .name(menu.getModule().getName())
+                                    .build()
+                                    : null)
                     .menuOrder(menu.getMenuOrder())
                     .status(menu.getStatus())
                     .build());
-    
+
             return ResponseEntity.ok(DataTableResponse.from(
-                menusResponse
-                , request.getDraw()));
+                    menusResponse, request.getDraw()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
-    
+
     @Override
     public List<Menu> getMenusByModuleId(Long moduleId) {
 
@@ -113,19 +107,19 @@ public class MenuService implements MenuUseCase {
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         List<Long> roleIds = user.getRoles().stream()
-            .map(Role::getId)
-            .collect(Collectors.toList());
+                .map(Role::getId)
+                .collect(Collectors.toList());
 
         boolean isAdmin = roleIds.contains(1L);
 
         return menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds, isAdmin).values().stream()
-            .flatMap(List::stream)
-            .toList();
+                .flatMap(List::stream)
+                .toList();
     }
 
     @Override
     public ResponseEntity<?> saveMenu(
-        @Valid @RequestBody Menu menu, BindingResult bindingResult) {
+            @Valid @RequestBody Menu menu, BindingResult bindingResult) {
 
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -133,92 +127,105 @@ public class MenuService implements MenuUseCase {
 
         try {
 
-            if(menu.getLabel() != null) {
-                if(menuRepositoryPort.findMenuByLabel(menu.getLabel()).isPresent()) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del menú ya existe")));
+            if (menu.getLabel() != null) {
+                if (menuRepositoryPort.findMenuByLabel(menu.getLabel()).isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del menú ya existe")));
                 }
             }
 
-            if(menu.getPath() != null) {
-                if(menuRepositoryPort.findMenuByPath(menu.getPath()).isPresent()) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La URL ya existe")));
+            if (menu.getPath() != null) {
+                if (menuRepositoryPort.findMenuByPath(menu.getPath()).isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La URL ya existe")));
                 }
             }
 
-            if(menu.getComponent() != null) {
-                if(menuRepositoryPort.findMenuByComponent(menu.getComponent()).isPresent()) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El componente ya existe")));
+            if (menu.getComponent() != null) {
+                if (menuRepositoryPort.findMenuByComponent(menu.getComponent()).isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El componente ya existe")));
                 }
             }
 
-            if(menu.getParentId() != null) {
-                Menu parent = menuRepositoryPort.findMenuById(menu.getParentId()).orElseThrow(() -> new RuntimeException("Menú padre no encontrado"));
-                if(parent.getDeletedAt() != null) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El menú padre ya se encuentra eliminado")));
+            if (menu.getParentId() != null) {
+                Menu parent = menuRepositoryPort.findMenuById(menu.getParentId())
+                        .orElseThrow(() -> new RuntimeException("Menú padre no encontrado"));
+                if (parent.getDeletedAt() != null) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson
+                            .getErrorRespondMessage(Optional.of("El menú padre ya se encuentra eliminado")));
                 }
             }
 
-            if(menu.getModuleId() != null) {
-                ModuleEntity module = moduleRepository.findById(menu.getModuleId()).orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
-                if(module.getDeletedAt() != null) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El módulo ya se encuentra eliminado")));
+            if (menu.getModuleId() != null) {
+                ModuleEntity module = moduleRepository.findById(menu.getModuleId())
+                        .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+                if (module.getDeletedAt() != null) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson
+                            .getErrorRespondMessage(Optional.of("El módulo ya se encuentra eliminado")));
                 }
             }
 
             MenuEntity menuEntity = MenuEntity.builder()
-                .label(menu.getLabel())
-                .icon(menu.getIcon())
-                .path(menu.getPath())
-                .menuOrder(menu.getMenuOrder())
-                .parent(menu.getParentId() != null ? MenuEntity.builder()
-                    .id(menu.getParentId())
-                    .build() : null)
-                .module(ModuleEntity.builder()
-                    .id(menu.getModuleId())
-                    .build())
-                .status(menu.getStatus())
-                .component(menu.getComponent())
-                .deletedAt(menu.getDeletedAt())
-                .createdAt(menu.getCreatedAt())
-                .updatedAt(menu.getUpdatedAt())
-                .build();
+                    .label(menu.getLabel())
+                    .icon(menu.getIcon())
+                    .path(menu.getPath())
+                    .menuOrder(menu.getMenuOrder())
+                    .parent(menu.getParentId() != null ? MenuEntity.builder()
+                            .id(menu.getParentId())
+                            .build() : null)
+                    .module(ModuleEntity.builder()
+                            .id(menu.getModuleId())
+                            .build())
+                    .status(menu.getStatus())
+                    .component(menu.getComponent())
+                    .deletedAt(menu.getDeletedAt())
+                    .createdAt(menu.getCreatedAt())
+                    .updatedAt(menu.getUpdatedAt())
+                    .build();
 
             menuRepositoryPort.saveMenu(menuEntity);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú creado correctamente"), Optional.empty()));
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú creado correctamente"),
+                            Optional.empty()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
     @Override
     public ResponseEntity<?> updateMenu(
-        @Valid @RequestBody Menu menu, BindingResult bindingResult) {
+            @Valid @RequestBody Menu menu, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
-        try{
+        try {
 
             MenuEntity menuEntity = menuRepositoryPort.findById(menu.getId());
-            if(menuEntity == null) {
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Menú no encontrado")));
+            if (menuEntity == null) {
+                return ResponseEntity.badRequest()
+                        .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Menú no encontrado")));
             }
 
-            if(!menuEntity.getLabel().equals(menu.getLabel())) {
-                if(menuRepositoryPort.findMenuByLabel(menu.getLabel()).isPresent()) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del menú ya existe")));
+            if (!menuEntity.getLabel().equals(menu.getLabel())) {
+                if (menuRepositoryPort.findMenuByLabel(menu.getLabel()).isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del menú ya existe")));
                 }
             }
 
-            if(!menuEntity.getPath().equals(menu.getPath())) {
-                if(menuRepositoryPort.findMenuByPath(menu.getPath()).isPresent()) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La URL ya existe")));
+            if (!menuEntity.getPath().equals(menu.getPath())) {
+                if (menuRepositoryPort.findMenuByPath(menu.getPath()).isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La URL ya existe")));
                 }
             }
-            
-            if(!menuEntity.getComponent().equals(menu.getComponent())) {
-                if(menuRepositoryPort.findMenuByComponent(menu.getComponent()).isPresent()) {
-                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El componente ya existe")));
+
+            if (!menuEntity.getComponent().equals(menu.getComponent())) {
+                if (menuRepositoryPort.findMenuByComponent(menu.getComponent()).isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El componente ya existe")));
                 }
             }
 
@@ -227,14 +234,14 @@ public class MenuService implements MenuUseCase {
             menuEntity.setPath(menu.getPath());
             menuEntity.setMenuOrder(menu.getMenuOrder());
             menuEntity.setParent(
-                menu.getParentId() != null ? MenuEntity.builder()
-                    .id(menu.getParentId())
-                    .build() : null);
-                    
+                    menu.getParentId() != null ? MenuEntity.builder()
+                            .id(menu.getParentId())
+                            .build() : null);
+
             menuEntity.setModule(
-                menu.getModuleId() != null ? ModuleEntity.builder()
-                    .id(menu.getModuleId())
-                    .build() : null);
+                    menu.getModuleId() != null ? ModuleEntity.builder()
+                            .id(menu.getModuleId())
+                            .build() : null);
 
             menuEntity.setStatus(menu.getStatus());
             menuEntity.setComponent(menu.getComponent());
@@ -242,9 +249,11 @@ public class MenuService implements MenuUseCase {
 
             menuRepositoryPort.updateMenu(menuEntity);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú actualizado correctamente"), Optional.empty()));
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú actualizado correctamente"),
+                            Optional.empty()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -280,14 +289,15 @@ public class MenuService implements MenuUseCase {
     @Override
     public ResponseEntity<?> deleteMenu(Long id) {
 
-        try{
+        try {
             MenuEntity respond = menuRepositoryPort.deleteMenu(id);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú eliminado correctamente"), Optional.empty()));
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú eliminado correctamente"),
+                            Optional.empty()));
 
-        }
-        catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 }

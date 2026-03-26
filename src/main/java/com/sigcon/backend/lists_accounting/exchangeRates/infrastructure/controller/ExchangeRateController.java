@@ -18,7 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/exchange-rates")
 @RequiredArgsConstructor
-@Tag(name = "Tasas de Cambio", description = "Endpoints para la gestión de tasas de cambio")
+@Tag(name = "Módulo de Listas Contables", description = "Endpoints para la gestión de tasas de cambio")
 public class ExchangeRateController {
 
     private final ExchangeRateService service;
@@ -43,8 +43,7 @@ public class ExchangeRateController {
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @RequestBody UpdateExchangeRateRequest request,
-            BindingResult bindingResult
-    ) {
+            BindingResult bindingResult) {
         return service.update(id, request, bindingResult);
     }
 

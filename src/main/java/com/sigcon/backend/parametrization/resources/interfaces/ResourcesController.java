@@ -44,4 +44,25 @@ public class ResourcesController {
         return resourceService.getAllPaymentTerms(dtRequest);
     }
 
+    @PostMapping("/types-regimes")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_REGIMES') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Obtener tipos de regímenes", description = "Obtener tipos de regímenes del sistema <br> Permiso requerido: VIEW_TYPES_REGIMES")
+    public ResponseEntity<?> getTypesRegimes(@RequestBody(required = false) DataTableRequest dtRequest) {
+        return resourceService.getAllTypesRegimes(dtRequest);
+    }
+
+    @PostMapping("/types-organizations")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_ORGANIZATIONS') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Obtener tipos de organizaciones", description = "Obtener tipos de organizaciones del sistema <br> Permiso requerido: VIEW_TYPES_ORGANIZATIONS")
+    public ResponseEntity<?> getTypesOrganizations(@RequestBody(required = false) DataTableRequest dtRequest) {
+        return resourceService.getAllTypesOrganizations(dtRequest);
+    }
+
+    @PostMapping("/withholdings")
+    @PreAuthorize("hasAuthority('PERM_VIEW_WITHHOLDINGS') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Obtener retenciones", description = "Obtener retenciones del sistema <br> Permiso requerido: VIEW_WITHHOLDINGS")
+    public ResponseEntity<?> getWithholdings(@RequestBody(required = false) DataTableRequest dtRequest) {
+        return resourceService.getAllWithholdings(dtRequest);
+    }
+
 }

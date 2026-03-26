@@ -3,6 +3,8 @@ package com.sigcon.backend.parametrization.companies.domain.model;
 import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -52,8 +54,9 @@ public class CompanyLocation {
     @Column(name = "address", nullable = false, length = 255)
     private String address;
 
-    @Column(name = "status", length = 45, nullable = false)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 10, nullable = false)
+    private CompanyStatus status;
 
     @Column(name = "is_main", nullable = false)
     private Boolean isMain;

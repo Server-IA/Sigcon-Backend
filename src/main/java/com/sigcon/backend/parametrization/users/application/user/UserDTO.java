@@ -1,11 +1,13 @@
 package com.sigcon.backend.parametrization.users.application.user;
 
+import com.sigcon.backend.parametrization.companies.application.CompanyDTO;
 import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -35,7 +37,9 @@ public class UserDTO {
     private String avatar;
     private String role;
     private Status status;
-
+    @NotNull(message = "La empresa es obligatoria")
+    private Long companyId;
+    private CompanyDTO company;
     private Long id;
     private Set<String> roles;
     private List<PermissionDTO> permissions;

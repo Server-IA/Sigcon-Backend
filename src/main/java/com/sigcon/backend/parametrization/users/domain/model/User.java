@@ -1,5 +1,7 @@
 package com.sigcon.backend.parametrization.users.domain.model;
 
+import com.sigcon.backend.bank.banks.domain.model.BankBranch;
+import com.sigcon.backend.parametrization.companies.domain.model.Company;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -50,6 +52,10 @@ public class User implements UserDetails {
 
     @Column(length = 255)
     private String avatar;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_id")
+    private Company company;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

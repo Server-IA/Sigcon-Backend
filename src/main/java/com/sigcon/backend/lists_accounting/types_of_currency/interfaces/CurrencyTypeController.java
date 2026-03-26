@@ -34,7 +34,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/accounting-lists/currency-types")
 @RequiredArgsConstructor
-@Tag(name = "Lista de Monedas", description = "Endpoints para la gestión de tipos de moneda (ISO 4217)")
+@Tag(name = "Módulo de Listas Contables")
 public class CurrencyTypeController {
 
         private final CurrencyTypeService currencyTypeService;
@@ -48,7 +48,7 @@ public class CurrencyTypeController {
         })
         public ResponseEntity<?> getCurrencyTypesDataTable(
                         @Parameter(description = "Configuración de paginación y filtros de DataTable") @RequestBody(required = false) DataTableRequest request) {
-                
+
                 return currencyTypeService.getCurrencyTypesDataTable(request);
         }
 
@@ -92,26 +92,23 @@ public class CurrencyTypeController {
                 try {
                         CurrencyTypeDeleteResponseDTO response = currencyTypeService.deleteCurrencyType(id);
                         return ResponseEntity.ok(
-                                SuccessRespondJson.getSuccessRespondMessage(Optional.of(response.getMessage()), Optional.of(response))
-                        );
+                                        SuccessRespondJson.getSuccessRespondMessage(Optional.of(response.getMessage()),
+                                                        Optional.of(response)));
                 } catch (java.util.NoSuchElementException e) {
                         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-                        );
+                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 } catch (IllegalArgumentException e) {
                         return ResponseEntity.badRequest().body(
-                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-                        );
+                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 } catch (IllegalStateException e) {
                         return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-                        );
+                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 } catch (Exception e) {
                         log.error("Error técnico al eliminar la moneda: ", e);
                         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                .body(
-                                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al procesar la eliminación, contacte al administrador (código ERR-DB-01)"))
-                                );
+                                        .body(
+                                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                                                        "Error al procesar la eliminación, contacte al administrador (código ERR-DB-01)")));
                 }
         }
 
@@ -123,7 +120,6 @@ public class CurrencyTypeController {
                                 : "Debe ingresar un código ISO válido (ej. USD) y un nombre de moneda";
 
                 return ResponseEntity.badRequest().body(
-                                ErrorRespondJson.getErrorRespondMessage(Optional.of(message))
-                        );
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(message)));
         }
 }

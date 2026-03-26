@@ -1,6 +1,9 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 
 import com.sigcon.backend.general.storage.AvatarStorageService;
+import com.sigcon.backend.parametrization.companies.application.CompanyDTO;
+import com.sigcon.backend.parametrization.companies.domain.model.Company;
+import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
 import com.sigcon.backend.parametrization.parameters.application.UserParameterDTO;
 import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
@@ -49,28 +52,28 @@ public class UserService {
     private final ParameterRepository parameterRepository;
     private final UserParameterRepository userParameterRepository;
     private final RoleRepository roleRepository;
-    
+    private final CompanyRepository companyRepository;
+
     private final AvatarStorageService avatarStorageService;
-    private final DataTableSpecificationBuilder<User> userSpecificationBuilder =
-            new DataTableSpecificationBuilder<>();
+    private final DataTableSpecificationBuilder<User> userSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     public ResponseEntity<?> getUsers(DataTableRequest request) {
 
         try {
-            int start  = Math.max(0, request.getStart());
+            int start = Math.max(0, request.getStart());
             int length = request.getLength();
 
             int safeLength = length <= 0 ? 10 : length;
             int page = start / safeLength;
 
             Pageable pageable = length == -1
-                ? Pageable.unpaged()
-                : PageRequest.of(page, safeLength);
+                    ? Pageable.unpaged()
+                    : PageRequest.of(page, safeLength);
 
             Specification<User> spec = userSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+                    .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
-            Page<User> users =  userRepository.findAll(spec, pageable);
+            Page<User> users = userRepository.findAll(spec, pageable);
 
             Page<UserDTO> data = users.map(user -> {
                 UserDTO dto = new UserDTO();
@@ -85,23 +88,23 @@ public class UserService {
                         user.getRoles()
                                 .stream()
                                 .map(Role::getName)
-                                .collect(Collectors.toSet())
-                );
+                                .collect(Collectors.toSet()));
                 return dto;
             });
 
             DataTableResponse<UserDTO> response = DataTableResponse.from(data, request.getDraw());
             // response.setRecordsTotal(data.getTotalElements());
             // response.setRecordsFiltered(data.getTotalElements());
-            
+
             return ResponseEntity.ok(
-                response
-            );
+                    response);
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
+
     private boolean noFilters(UserDTO dto) {
         return isBlank(dto.getName())
                 && isBlank(dto.getLastname())
@@ -117,30 +120,42 @@ public class UserService {
 
     public ResponseEntity<?> store(UserDTO request, BindingResult bindingResult) {
         // try{
-            if(bindingResult.hasErrors()){
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
-            }
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
 
-            if(userRepository.existsByEmailAndDeletedAtIsNull(request.getEmail())){
-                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El correo electrónico ya está registrado")));
-            }
+        if (userRepository.existsByEmailAndDeletedAtIsNull(request.getEmail())) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El correo electrónico ya está registrado")));
 
-            User user = User.builder()
+        }
+        if (request.getCompanyId() == null) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La empresa es obligatoria")));
+        }
+
+        Company company = companyRepository.findById(request.getCompanyId())
+                .orElseThrow(() -> new RuntimeException("Empresa no encontrada"));
+
+        User user = User.builder()
                 .name(request.getName())
                 .lastname(request.getLastname())
                 .email(request.getEmail())
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
+                .company(company)
                 .status(Status.ACTIVE)
-                .roles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toSet()))
+                .roles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent)
+                        .map(Optional::get).collect(Collectors.toSet()))
                 .build();
-            userRepository.save(user);
-            return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario creado correctamente"), Optional.empty())
-            );
+        userRepository.save(user);
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario creado correctamente"),
+                        Optional.empty()));
 
         // }catch(Exception e){
-        //     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // return
+        // ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
     }
 
@@ -149,10 +164,10 @@ public class UserService {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             String email = auth.getName();
-    
+
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-    
+
             UserDTO response = new UserDTO();
             response.setId(user.getId());
             response.setName(user.getName());
@@ -160,61 +175,63 @@ public class UserService {
             response.setEmail(user.getEmail());
             response.setAvatar(user.getAvatar());
             response.setStatus(user.getStatus());
+            response.setCompany(CompanyDTO.builder()
+                    .id(user.getCompany().getId())
+                    .name(user.getCompany().getName())
+                    .nit(user.getCompany().getNit())
+                    .build());
             response.setRoles(
                     user.getRoles()
                             .stream()
                             .map(Role::getName)
-                            .collect(Collectors.toSet())
-            );
-    
+                            .collect(Collectors.toSet()));
+
             response.setPermissions(
-                permissionRepository.findByUserID(user.getId())
-                    .stream()
-                    .map(permission -> new PermissionDTO(
-                        null,
-                        permission.getName(),
-                        permission.getCode(),
-                        permission.getType(),
-                        null,
-                        null,
-                        permission.getDescription(),
-                        null
-                    ))
-                    .collect(Collectors.toList())
-            );
-    
+                    permissionRepository.findByUserID(user.getId())
+                            .stream()
+                            .map(permission -> new PermissionDTO(
+                                    null,
+                                    permission.getName(),
+                                    permission.getCode(),
+                                    permission.getType(),
+                                    null,
+                                    null,
+                                    permission.getDescription(),
+                                    null))
+                            .collect(Collectors.toList()));
+
             List<ParameterDTO> parameters = parameterRepository.findAll()
                     .stream()
                     .map(parameter -> new ParameterDTO(
-                        null,
-                        parameter.getName(),
-                        parameter.getValue(),
-                        userParameterRepository.findByUserAndParameter(user, parameter)
-                            .map(userParameter -> new UserParameterDTO(
-                                null,
-                                null,
-                                null,
-                                userParameter.getValue(),
-                                null,
-                                null,
-                                null,
-                                null
-                            )).orElse(null),
-                        parameter.getCategory(),
-                        parameter.getStatus(),
-                        null,
-                        null,
-                        null
-                    ))
+                            null,
+                            parameter.getName(),
+                            parameter.getValue(),
+                            userParameterRepository.findByUserAndParameter(user, parameter)
+                                    .map(userParameter -> new UserParameterDTO(
+                                            null,
+                                            null,
+                                            null,
+                                            userParameter.getValue(),
+                                            null,
+                                            null,
+                                            null,
+                                            null))
+                                    .orElse(null),
+                            parameter.getCategory(),
+                            parameter.getStatus(),
+                            null,
+                            null,
+                            null))
                     .collect(Collectors.toList());
-    
+
             response.setParameters(parameters);
-    
+
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario obtenida correctamente"), Optional.of(response))
-            );
+                    SuccessRespondJson.getSuccessRespondMessage(
+                            Optional.of("Información del usuario obtenida correctamente"), Optional.of(response)));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
 
     }
@@ -223,8 +240,7 @@ public class UserService {
 
         if (request == null) {
             return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("Datos inválidos"))
-            );
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Datos inválidos")));
         }
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -264,92 +280,103 @@ public class UserService {
         userDTO.setAvatar(user.getAvatar());
         userDTO.setStatus(user.getStatus());
         userDTO.setRoles(user.getRoles().stream().map(Role::getName).collect(Collectors.toSet()));
-        userDTO.setPermissions(permissionRepository.findByUserID(user.getId()).stream().map(permission -> new PermissionDTO(null, permission.getName(), permission.getCode(), permission.getType(), null, null, permission.getDescription(), null)).collect(Collectors.toList()));
+        userDTO.setPermissions(permissionRepository.findByUserID(user.getId()).stream()
+                .map(permission -> new PermissionDTO(null, permission.getName(), permission.getCode(),
+                        permission.getType(), null, null, permission.getDescription(), null))
+                .collect(Collectors.toList()));
 
         return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información actualizada correctamente"), Optional.of(userDTO))
-        );
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información actualizada correctamente"),
+                        Optional.of(userDTO)));
     }
-    public ResponseEntity<?> updateUser(Long id, UserDTO request){
+
+    public ResponseEntity<?> updateUser(Long id, UserDTO request) {
 
         // try{
 
-            Optional<User> userOpt = userRepository.findById(id);
-    
-            if (userOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario no encontrado"))
-                );
-            }
-    
-            User user = userOpt.get();
-    
-            if (request.getName() != null) {
-                user.setName(request.getName());
-            }
-    
-            if (request.getLastname() != null) {
-                user.setLastname(request.getLastname());
-            }
-    
-            if (request.getEmail() != null) {
-                user.setEmail(request.getEmail());
-            }        
-    
-            if (request.getPassword() != null && !request.getPassword().isBlank()) {
-                user.setPassword(passwordEncoder.encode(request.getPassword()));
-            }
-    
-            if (request.getStatus() != null) {
-                user.setStatus(request.getStatus());
-            }
-    
-            if (request.getRoles() != null) {
-                user.setRoles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toSet()));
-            }
+        Optional<User> userOpt = userRepository.findById(id);
 
-            if (request.getUsername() != null) {
-                user.setUsername(request.getUsername());
-            }
-    
-            user.setUpdatedAt(LocalDateTime.now());
-            userRepository.save(user);
-            
-            return ResponseEntity.ok(
-                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Información del usuario actualizada correctamente"), Optional.empty())
-            );
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario no encontrado")));
+        }
+
+        User user = userOpt.get();
+
+        if (request.getName() != null) {
+            user.setName(request.getName());
+        }
+
+        if (request.getLastname() != null) {
+            user.setLastname(request.getLastname());
+        }
+
+        if (request.getEmail() != null) {
+            user.setEmail(request.getEmail());
+        }
+
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
+
+        if (request.getStatus() != null) {
+            user.setStatus(request.getStatus());
+        }
+
+        if (request.getRoles() != null) {
+            user.setRoles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent)
+                    .map(Optional::get).collect(Collectors.toSet()));
+        }
+
+        if (request.getUsername() != null) {
+            user.setUsername(request.getUsername());
+        }
+
+        if (request.getCompanyId() != null) {
+            Company company = companyRepository.findById(request.getCompanyId())
+                    .orElseThrow(() -> new RuntimeException("Empresa no encontrada"));
+
+            user.setCompany(company);
+        }
+
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Información del usuario actualizada correctamente"), Optional.empty()));
         // }catch(Exception e){
-        //     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // return
+        // ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
     }
 
-    public ResponseEntity<?> deleteUser(Long id){
+    public ResponseEntity<?> deleteUser(Long id) {
 
         // try{
-            Optional<User> userOpt = userRepository.findById(id);
-    
-            if (userOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario no encontrado"))
-                );
-            }else if(userOpt.get().getDeletedAt() != null) {
-                return ResponseEntity.badRequest().body(
-                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario ya eliminado"))
-                );
-            }
-    
-            User user = userOpt.get();
-            // user.setStatus(Status.INACTIVE);
-            // user.setUpdatedAt(LocalDateTime.now());
-            user.setDeletedAt(LocalDateTime.now());
-            userRepository.save(user);
-    
-            return ResponseEntity.ok(
-                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"), Optional.empty())
-            );
-            
+        Optional<User> userOpt = userRepository.findById(id);
+
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario no encontrado")));
+        } else if (userOpt.get().getDeletedAt() != null) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Usuario ya eliminado")));
+        }
+
+        User user = userOpt.get();
+        // user.setStatus(Status.INACTIVE);
+        // user.setUpdatedAt(LocalDateTime.now());
+        user.setDeletedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"),
+                        Optional.empty()));
+
         // }catch(Exception e){
-        //     return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        // return
+        // ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
     }
 

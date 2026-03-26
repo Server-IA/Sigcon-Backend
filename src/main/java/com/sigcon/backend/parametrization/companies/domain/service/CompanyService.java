@@ -1,13 +1,16 @@
 package com.sigcon.backend.parametrization.companies.domain.service;
 
+import com.sigcon.backend.general.storage.AvatarStorageService;
 import com.sigcon.backend.parametrization.companies.application.CompanyDTO;
 import com.sigcon.backend.parametrization.companies.application.CompanyLocationDTO;
 import com.sigcon.backend.parametrization.companies.application.CreateCompanyLocationRequest;
 import com.sigcon.backend.parametrization.companies.application.CreateCompanyRequest;
+import com.sigcon.backend.parametrization.companies.application.LogoCompany;
 import com.sigcon.backend.parametrization.companies.application.UpdateCompanyLocationRequest;
 import com.sigcon.backend.parametrization.companies.application.UpdateCompanyRequest;
 import com.sigcon.backend.parametrization.companies.domain.model.Company;
 import com.sigcon.backend.parametrization.companies.domain.model.CompanyLocation;
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyStatus;
 import com.sigcon.backend.parametrization.companies.domain.model.CompanyWithholdingAssignment;
 import com.sigcon.backend.parametrization.companies.domain.repository.CompanyLocationRepository;
 import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
@@ -44,7 +47,10 @@ import org.springframework.validation.BindingResult;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -62,6 +68,8 @@ public class CompanyService {
     private final TypeOrganizationRepository typeOrganizationRepository;
     private final MunicipalityRepository municipalityRepository;
     private final WithholdingRepository withholdingRepository;
+
+    private final AvatarStorageService avatarStorageService;
 
     private final DataTableSpecificationBuilder<Company> dataTableSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
@@ -90,7 +98,7 @@ public class CompanyService {
         }
 
         // Validar que venga al menos una sede
-        if (request.getLocations() == null || request.getLocations().isEmpty()) {
+        if (request.getLocations() == null) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(
                             Optional.of("Debe proporcionar al menos una sede para la compañía (sede principal).")));
@@ -98,6 +106,17 @@ public class CompanyService {
 
         TypeRegimen typeRegimen = resolveTypeRegimen(request.getTypeRegimeId());
         TypeOrganization typeOrganization = resolveTypeOrganization(request.getTypeOrganizationId());
+
+        String logoName = null;
+        if(request.getLogo() != null) {
+            LogoCompany logo = request.getLogo();
+            String base64 = logo.getBase64();
+            String name = logo.getName();
+            if(!base64.isEmpty() && !name.isEmpty()) {
+                String logoPath = avatarStorageService.saveBase64Avatar(base64, name);
+                logoName = logoPath;
+            }
+        }
 
         Company company = Company.builder()
                 .name(request.getName().trim())
@@ -107,8 +126,8 @@ public class CompanyService {
                 .email(emptyToNull(request.getEmail()))
                 .size(emptyToNull(request.getSize()))
                 .phone(emptyToNull(request.getPhone()))
-                .logo(emptyToNull(request.getLogo()))
-                .status(normalizeStatus(request.getStatus()))
+                .logo(emptyToNull(logoName))
+                .status(request.getStatus() != null ? request.getStatus() : CompanyStatus.ACTIVE)
                 .typeRegimen(typeRegimen)
                 .typeOrganization(typeOrganization)
                 .build();
@@ -116,10 +135,23 @@ public class CompanyService {
         companyRepository.save(company);
 
         // Crear la primera sede como principal (is_main = true)
-        List<CompanyLocation> locations = createInitialLocations(company, request.getLocations());
+        CompanyLocation locations = createInitialLocations(company, request.getLocations());
+
+        if(request.getWithholdings() != null && !request.getWithholdings().isEmpty()) {
+            for(Long withholdingId : request.getWithholdings()) {
+                Withholding withholding = withholdingRepository.findById(withholdingId)
+                        .orElseThrow(() -> new IllegalArgumentException("La retencion no existe en el catalogo."));
+                CompanyWithholdingAssignment assignment = CompanyWithholdingAssignment.builder()
+                        .company(company)
+                        .withholding(withholding)
+                        .build();
+                companyWithholdingAssignmentRepository.save(assignment);
+            }
+        }
+
         List<CompanyWithholdingAssignment> withholdings = companyWithholdingAssignmentRepository.findByCompanyAndDeletedAtIsNull(company);
 
-        CompanyDTO dto = toDto(company, locations, withholdings);
+        CompanyDTO dto = toDto(company, Arrays.asList(locations), withholdings);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -129,9 +161,9 @@ public class CompanyService {
         );
     }
 
-    public ResponseEntity<?> findAllPaged(DataTableRequest request) {
-        DataTableRequest safeRequest = normalizeDataTableRequest(request);
-        validateDataTableRequest(safeRequest);
+    public ResponseEntity<?> findAllPaged(DataTableRequest safeRequest) {
+        // DataTableRequest safeRequest = normalizeDataTableRequest(request);
+        // validateDataTableRequest(safeRequest);
 
         int start = Math.max(0, safeRequest.getStart());
         int length = safeRequest.getLength();
@@ -208,16 +240,27 @@ public class CompanyService {
             company.setName(newName);
         }
 
+        String logoName = null;
+        if(request.getLogo() != null) {
+            LogoCompany logo = request.getLogo();
+            logoName = logo.getName();
+            if(!logoName.isEmpty() && logo.getBase64() != null) {
+                String base64 = logo.getBase64();
+                String logoPath = avatarStorageService.saveBase64Avatar(base64, logoName);
+                logoName = logoPath;
+            }
+        }
+
         company.setNit(targetNit);
         company.setDv(targetDv);
         company.setLegalRepresentative(emptyToNull(request.getLegalRepresentative()));
         company.setEmail(emptyToNull(request.getEmail()));
         company.setSize(emptyToNull(request.getSize()));
         company.setPhone(emptyToNull(request.getPhone()));
-        company.setLogo(emptyToNull(request.getLogo()));
+        company.setLogo(emptyToNull(logoName));
 
-        if (StringUtils.hasText(request.getStatus())) {
-            company.setStatus(normalizeStatus(request.getStatus()));
+        if (request.getStatus() != null) {
+            company.setStatus(request.getStatus());
         }
 
         if (request.getTypeRegimeId() != null) {
@@ -231,6 +274,9 @@ public class CompanyService {
         }
 
         companyRepository.save(company);
+
+        // Sincronizar retenciones si viene el campo (si viene null, no se toca)
+        syncWithholdingsIfProvided(company, request.getWithholdings());
 
         List<CompanyLocation> locations = companyLocationRepository.findByCompanyAndDeletedAtIsNull(company);
         List<CompanyWithholdingAssignment> withholdings = companyWithholdingAssignmentRepository.findByCompanyAndDeletedAtIsNull(company);
@@ -360,7 +406,7 @@ public class CompanyService {
                 .name(request.getName())
                 .description(emptyToNull(request.getDescription()))
                 .address(request.getAddress())
-                .status(normalizeStatus(request.getStatus()))
+                .status(request.getStatus() != null ? request.getStatus() : CompanyStatus.ACTIVE)
                 .isMain(isMain)
                 .build();
 
@@ -407,8 +453,8 @@ public class CompanyService {
         if (StringUtils.hasText(request.getAddress())) {
             location.setAddress(request.getAddress());
         }
-        if (StringUtils.hasText(request.getStatus())) {
-            location.setStatus(normalizeStatus(request.getStatus()));
+        if (request.getStatus() != null) {
+            location.setStatus(request.getStatus());
         }
         if (request.getMunicipalityId() != null) {
             Municipality municipality = resolveMunicipality(request.getMunicipalityId());
@@ -470,11 +516,66 @@ public class CompanyService {
         return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
-    private String normalizeStatus(String status) {
-        if (!StringUtils.hasText(status)) {
-            return "ACTIVE";
+    private void syncWithholdingsIfProvided(Company company, List<Long> incomingWithholdingIds) {
+        if (incomingWithholdingIds == null) {
+            return; // no tocar
         }
-        return status.trim().toUpperCase();
+
+        List<CompanyWithholdingAssignment> current =
+                companyWithholdingAssignmentRepository.findByCompanyAndDeletedAtIsNull(company);
+
+        // Si viene lista vacía: borrar (lógico) todas
+        if (incomingWithholdingIds.isEmpty()) {
+            if (!current.isEmpty()) {
+                LocalDateTime now = LocalDateTime.now();
+                for (CompanyWithholdingAssignment a : current) {
+                    a.setDeletedAt(now);
+                }
+                companyWithholdingAssignmentRepository.saveAll(current);
+            }
+            return;
+        }
+
+        // Validar y normalizar IDs (sin duplicados)
+        Set<Long> incomingSet = new HashSet<>();
+        for (Long id : incomingWithholdingIds) {
+            if (id == null || id <= 0) {
+                throw new IllegalArgumentException("Id de retencion invalido.");
+            }
+            incomingSet.add(id);
+        }
+
+        // Mapear actuales por withholdingId
+        Map<Long, CompanyWithholdingAssignment> currentByWithholdingId = current.stream()
+                .filter(a -> a.getWithholding() != null && a.getWithholding().getId() != null)
+                .collect(Collectors.toMap(a -> a.getWithholding().getId(), a -> a, (a, b) -> a));
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Eliminar (lógico) las que ya no vienen
+        for (CompanyWithholdingAssignment a : current) {
+            Long wid = a.getWithholding() != null ? a.getWithholding().getId() : null;
+            if (wid != null && !incomingSet.contains(wid)) {
+                a.setDeletedAt(now);
+            }
+        }
+        if (!current.isEmpty()) {
+            companyWithholdingAssignmentRepository.saveAll(current);
+        }
+
+        // Crear las nuevas que faltan
+        for (Long withholdingId : incomingSet) {
+            if (currentByWithholdingId.containsKey(withholdingId)) {
+                continue;
+            }
+            Withholding withholding = withholdingRepository.findById(withholdingId)
+                    .orElseThrow(() -> new IllegalArgumentException("La retencion no existe en el catalogo."));
+            CompanyWithholdingAssignment assignment = CompanyWithholdingAssignment.builder()
+                    .company(company)
+                    .withholding(withholding)
+                    .build();
+            companyWithholdingAssignmentRepository.save(assignment);
+        }
     }
 
     private TypeRegimen resolveTypeRegimen(Long typeRegimenId) {
@@ -557,7 +658,7 @@ public class CompanyService {
                 existing.setName(dto.getName());
                 existing.setDescription(emptyToNull(dto.getDescription()));
                 existing.setAddress(dto.getAddress());
-                existing.setStatus(normalizeStatus(dto.getStatus()));
+                existing.setStatus(dto.getStatus() != null ? dto.getStatus() : CompanyStatus.ACTIVE);
                 existing.setIsMain(isMain);
             } else {
                 CompanyLocation created = CompanyLocation.builder()
@@ -566,7 +667,7 @@ public class CompanyService {
                         .name(dto.getName())
                         .description(emptyToNull(dto.getDescription()))
                         .address(dto.getAddress())
-                        .status(normalizeStatus(dto.getStatus()))
+                        .status(dto.getStatus() != null ? dto.getStatus() : CompanyStatus.ACTIVE)
                         .isMain(isMain)
                         .build();
                 toPersist.add(created);
@@ -580,14 +681,9 @@ public class CompanyService {
                 .collect(Collectors.toList());
     }
 
-    private List<CompanyLocation> createInitialLocations(Company company, List<CreateCompanyLocationRequest> locationRequests) {
-        List<CompanyLocation> locations = new ArrayList<>();
-        for (int i = 0; i < locationRequests.size(); i++) {
-            CreateCompanyLocationRequest req = locationRequests.get(i);
-            Municipality municipality = resolveMunicipality(req.getMunicipalityId());
-            
-            // La primera sede siempre es principal (is_main = true)
-            boolean isMain = i == 0;
+    private CompanyLocation createInitialLocations(Company company, CreateCompanyLocationRequest req) {
+        
+        Municipality municipality = resolveMunicipality(req.getMunicipalityId());
             
             CompanyLocation location = CompanyLocation.builder()
                     .company(company)
@@ -595,12 +691,10 @@ public class CompanyService {
                     .name(req.getName())
                     .description(emptyToNull(req.getDescription()))
                     .address(req.getAddress())
-                    .status(normalizeStatus(req.getStatus()))
-                    .isMain(isMain)
+                    .status(req.getStatus() != null ? req.getStatus() : CompanyStatus.ACTIVE)
+                    .isMain(true)
                     .build();
-            locations.add(location);
-        }
-        return companyLocationRepository.saveAll(locations);
+        return companyLocationRepository.save(location);
     }
 
     private CompanyDTO toDto(Company company, List<CompanyLocation> locations, List<CompanyWithholdingAssignment> withholdings) {

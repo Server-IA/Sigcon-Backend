@@ -3,7 +3,12 @@ package com.sigcon.backend.general.config;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
-
+import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
+import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
+import com.sigcon.backend.parametrization.resources.domain.repository.MunicipalityRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.TypeOrganizationRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.TypeRegimenRepository;
 import com.sigcon.backend.parametrization.users.domain.model.Permission;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -27,6 +32,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.sigcon.backend.parametrization.companies.domain.model.Company;
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyLocation;
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyStatus;
+import com.sigcon.backend.parametrization.companies.domain.repository.CompanyLocationRepository;
+import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
 import com.sigcon.backend.parametrization.menuPermissions.domain.model.MenuPermissionsEntity;
@@ -51,21 +61,28 @@ public class DataInitializer implements CommandLineRunner {
         private final UserRepository userRepository;
         private final PasswordEncoder passwordEncoder;
 
+        private final CompanyRepository companyRepository;
+        private final TypeRegimenRepository typeRegimenRepository;
+        private final TypeOrganizationRepository typeOrganizationRepository;
+        private final CompanyLocationRepository companyLocationRepository;
+        private final MunicipalityRepository municipalityRepository;
+
         @Override
         public void run(String... args) {
+
+                // ✅ Ejecutar SQL desde archivo
+                executeScripts();
 
                 // Crear roles y asignar permisos
                 createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of()));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
-                // Crear usuarios
+                Long companyId = createCompany("Sigcon S.A.S.", "9001234567", "1", "Juan Vidarte", "juan.vidarte@gmail.com", "100", "1234567890", 1L, 1L, 1L, "Calle 123", "Sede Principal");
 
+                // Crear usuarios
                 createOrUpdateUser("SUPER", "ADMIN", "superadmin@gmail.com", "123456", "SUPERADMIN",
                                 Set.of()
-                , "superadmin");
-
-                // ✅ Ejecutar SQL desde archivo
-                executeScripts();
+                , "superadmin", companyId);
         }
 
 
@@ -80,7 +97,11 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         private void createOrUpdateUser(String name, String lastname, String email, String password, String role,
-                        Set<Permission> permissions, String username) {
+                        Set<Permission> permissions, String username, Long companyId) {
+
+                Company company = companyRepository.findById(companyId)
+                        .orElseThrow(() -> new RuntimeException("Company not found"));
+
                 User user = userRepository.findByEmail(email)
                                 .orElseGet(() -> User.builder()
                                                 .name(name)
@@ -92,8 +113,58 @@ public class DataInitializer implements CommandLineRunner {
                                                                                 "Role not found"))))
                                                 .status(Status.ACTIVE)
                                                 .username(username)
+                                                .company(company)
                                                 .build());
                 userRepository.save(user);
+        }
+
+        private Long createCompany(
+                String name,
+                String nit,
+                String dv,
+                String legalRepresentative,
+                String email,
+                String size,
+                String phone,
+                Long typeRegimeId,
+                Long typeOrganizationId,
+                Long municipalityId,
+                String address,
+                String sede
+        ) {
+                Company company = companyRepository.findByNameAndDeletedAtIsNull(name)
+                        .orElseGet(() -> Company.builder().name(name).build());
+
+                TypeRegimen typeRegimen = typeRegimenRepository.findById(typeRegimeId)
+                        .orElseThrow(() -> new RuntimeException("Type regimen not found"));
+                TypeOrganization typeOrganization = typeOrganizationRepository.findById(typeOrganizationId)
+                        .orElseThrow(() -> new RuntimeException("Type organization not found"));
+
+                Municipality municipality = municipalityRepository.findById(municipalityId)
+                        .orElseThrow(() -> new RuntimeException("Municipality not found"));
+
+                company.setNit(nit);
+                company.setDv(dv);
+                company.setLegalRepresentative(legalRepresentative);
+                company.setEmail(email);
+                company.setSize(size);
+                company.setPhone(phone);
+                company.setTypeRegimen(typeRegimen);
+                company.setTypeOrganization(typeOrganization);
+                company.setStatus(CompanyStatus.ACTIVE);
+                Company savedCompany = companyRepository.save(company);
+
+                CompanyLocation companyLocation = CompanyLocation.builder()
+                        .name(sede)
+                        .address(address)
+                        .status(CompanyStatus.ACTIVE)
+                        .company(savedCompany)
+                        .municipality(municipality)
+                        .isMain(true)
+                        .build();
+                companyLocationRepository.save(companyLocation);
+
+                return savedCompany.getId();
         }
 
         private void executeScripts() {

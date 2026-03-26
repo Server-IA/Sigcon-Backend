@@ -17,10 +17,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/parameters")
 @RequiredArgsConstructor
+@Tag(name = "Módulo de Parametrización")
 public class ParameterController {
 
     private final ParameterService parameterService;

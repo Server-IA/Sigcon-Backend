@@ -9,5 +9,5 @@ FROM (
     (now(),NULL::timestamp,'Gestión de bancos y cajas','ri-bank-line','Bancos y Cajas',5,'ACTIVE',now(),'cash-and-banks')
 ) AS v(created_at, deleted_at, description, icon, name, "position", status, updated_at, url)
 WHERE NOT EXISTS (
-    SELECT 1 FROM modules m WHERE m.name = v.name
+    SELECT 1 FROM modules m WHERE m.name = v.name 
 );

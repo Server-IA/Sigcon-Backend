@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyStatus;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -21,7 +23,7 @@ public class UpdateCompanyLocationRequest {
     @Size(max = 255, message = "La direccion no puede superar 255 caracteres")
     private String address;
 
-    private String status;
+    private CompanyStatus status;
 
     private Boolean isMain;
 

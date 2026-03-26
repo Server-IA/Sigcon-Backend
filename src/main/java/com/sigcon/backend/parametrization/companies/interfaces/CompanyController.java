@@ -17,6 +17,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
@@ -30,6 +34,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Optional;
 
 @RestController
@@ -306,5 +314,49 @@ public class CompanyController {
             @PathVariable Long withholdingId
     ) {
         return companyService.removeWithholding(companyId, withholdingId);
+    }
+
+    @GetMapping("/logo/{name}")
+    @Operation(
+            summary = "Obtener logo de compañía",
+            description = "Obtiene el logo de una compañía."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Logo obtenido correctamente",
+                    content = @Content(schema = @Schema(implementation = Object.class))),
+            @ApiResponse(responseCode = "400", description = "Logo no encontrado",
+                    content = @Content(schema = @Schema(implementation = Object.class))),
+            @ApiResponse(responseCode = "403", description = "Sin permisos",
+                    content = @Content(schema = @Schema(implementation = Object.class)))
+    })
+    public ResponseEntity<?> getLogo(@PathVariable String name) {
+        try {
+
+                Path basePath = Paths.get("uploads/avatars").toAbsolutePath().normalize();
+                Path filePath = basePath.resolve(name).normalize();
+        
+                // 🔐 Evita path traversal
+                if (!filePath.startsWith(basePath)) {
+                    return ResponseEntity.badRequest().build();
+                }
+        
+                if (!Files.exists(filePath)) {
+                    return ResponseEntity.notFound().build();
+                }
+        
+                Resource resource = new FileSystemResource(filePath);
+        
+                String contentType = Files.probeContentType(filePath);
+                if (contentType == null) {
+                    contentType = "application/octet-stream";
+                }
+        
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_TYPE, contentType)
+                        .body(resource);
+        
+            } catch (IOException e) {
+                return ResponseEntity.internalServerError().build();
+            }
     }
 }

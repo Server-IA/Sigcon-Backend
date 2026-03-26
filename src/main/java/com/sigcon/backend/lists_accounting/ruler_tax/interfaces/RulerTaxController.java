@@ -27,9 +27,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/ruler-tax")    
+@RequestMapping("/api/v1/ruler-tax")
 @RequiredArgsConstructor
-@Tag(name = "Reglas de impuesto", description = "Endpoints para la gestión de reglas de impuesto")
+@Tag(name = "Módulo de Listas Contables", description = "Endpoints para la gestión de reglas de impuesto")
 
 public class RulerTaxController {
 
@@ -41,7 +41,8 @@ public class RulerTaxController {
     @ApiResponse(responseCode = "400", description = "Error al crear la regla de impuesto")
 
     @PreAuthorize("hasAuthority('PERM_CREATE_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> createRulerTax(@Valid @RequestBody(required = false) CreateRuleTaxDTO createRuleTaxDTO, BindingResult bindingResult) {
+    public ResponseEntity<?> createRulerTax(@Valid @RequestBody(required = false) CreateRuleTaxDTO createRuleTaxDTO,
+            BindingResult bindingResult) {
         return ruleTaxService.create(createRuleTaxDTO, bindingResult);
     }
 
@@ -62,7 +63,8 @@ public class RulerTaxController {
     @ApiResponse(responseCode = "200", description = "Regla de impuesto actualizada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UpdateRuleTaxDTO.class)))
     @ApiResponse(responseCode = "400", description = "Error al actualizar la regla de impuesto")
     @PreAuthorize("hasAuthority('PERM_UPDATE_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> updateRulerTax(@PathVariable Long id, @Valid @RequestBody(required = false) UpdateRuleTaxDTO updateRuleTaxDTO, BindingResult bindingResult) {
+    public ResponseEntity<?> updateRulerTax(@PathVariable Long id,
+            @Valid @RequestBody(required = false) UpdateRuleTaxDTO updateRuleTaxDTO, BindingResult bindingResult) {
         return ruleTaxService.updateRuleTax(id, updateRuleTaxDTO, bindingResult);
     }
 
@@ -80,7 +82,9 @@ public class RulerTaxController {
     @ApiResponse(responseCode = "200", description = "Cuenta contable asignada correctamente")
     @ApiResponse(responseCode = "400", description = "Error al asignar la cuenta contable")
     @PreAuthorize("hasAuthority('PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> assignAccountingAccountToRulerTax(@Valid @RequestBody(required = false) AssignAccountingAccountToRulerTaxDTO assignAccountingAccountToRulerTaxDTO, BindingResult bindingResult) {
+    public ResponseEntity<?> assignAccountingAccountToRulerTax(
+            @Valid @RequestBody(required = false) AssignAccountingAccountToRulerTaxDTO assignAccountingAccountToRulerTaxDTO,
+            BindingResult bindingResult) {
         return ruleTaxService.assignAccountingAccountToRulerTax(assignAccountingAccountToRulerTaxDTO, bindingResult);
-    }   
+    }
 }

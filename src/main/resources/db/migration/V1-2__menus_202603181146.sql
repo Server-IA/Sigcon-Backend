@@ -30,7 +30,10 @@ FROM (
     ('SEGMENTATION', now(),NULL::timestamp,'ri-profile-line','Segmentacion Terceros',2,'segmentation','ACTIVE',now(),4,NULL::bigint),
 
     ('CASH_LIST', now(),NULL::timestamp,'ri-cash-line','Lista de cajas',1,'cash_list','ACTIVE',now(),5,NULL::bigint),
-    ('CHEQUES', now(),NULL::timestamp,'ri-folder-check-fill','Cheques',2,'cheqques','ACTIVE',now(),5,NULL::bigint)
+    ('CHEQUES', now(),NULL::timestamp,'ri-folder-check-fill','Cheques',2,'cheqques','ACTIVE',now(),5,NULL::bigint),
+    ('CATALOGO_BANCOS', now(),NULL::timestamp,'ri-shield-check-fill','Bancos',3,'banks','ACTIVE',now(),5,NULL::bigint),
+    ('SUCURSALES_BANCARIAS', now(),NULL::timestamp,'ri-home-office-fill','Sucursales Bancos',4,'bank-branches','ACTIVE',now(),5,NULL::bigint),
+    ('BANK_ACCOUNTS', now(),NULL::timestamp,'ri-bank-card-line','Cuentas Bancarias',5,'bank-accounts','ACTIVE',now(),5,NULL::bigint)
 
 ) AS v(component, created_at, deleted_at, icon, "label", menu_order, "path", status, updated_at, module_id, parent_id)
 WHERE NOT EXISTS (

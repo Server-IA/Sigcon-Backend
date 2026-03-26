@@ -15,6 +15,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +23,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/roles")
 @RequiredArgsConstructor
+@Tag(name = "Módulo de Parametrización")
 public class RoleController {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -34,7 +36,6 @@ public class RoleController {
                 .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(rootCause.getMessage())));
     }
 
-
     private final RoleService roleService;
 
     @PostMapping("/getRoles")
@@ -42,7 +43,6 @@ public class RoleController {
     public ResponseEntity<?> getRoles(@RequestBody(required = false) DataTableRequest request) {
         return roleService.getRoles(request);
     }
-
 
     @PostMapping("/createRole")
     @PreAuthorize("hasAuthority('PERM_CREATE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
@@ -76,7 +76,8 @@ public class RoleController {
 
     @PutMapping("/updatePermission/{id}")
     @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> updatePermission(@PathVariable Long id, @Valid @RequestBody PermissionDTO request, BindingResult bindingResult) {
+    public ResponseEntity<?> updatePermission(@PathVariable Long id, @Valid @RequestBody PermissionDTO request,
+            BindingResult bindingResult) {
         return roleService.updatePermission(id, request, bindingResult);
     }
 
@@ -93,18 +94,15 @@ public class RoleController {
         try {
             roleService.assignPermissions(request);
             return ResponseEntity.ok(
-                    Map.of("success", true, "message", "Permisos asignados correctamente al rol")
-            );
+                    Map.of("success", true, "message", "Permisos asignados correctamente al rol"));
 
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
-                    Map.of("success", false, "message", e.getMessage())
-            );
+                    Map.of("success", false, "message", e.getMessage()));
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    Map.of("success", false, "message", "Error al asignar permisos al rol")
-            );
+                    Map.of("success", false, "message", "Error al asignar permisos al rol"));
         }
     }
 

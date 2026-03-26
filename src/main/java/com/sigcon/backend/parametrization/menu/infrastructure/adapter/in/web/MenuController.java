@@ -2,7 +2,6 @@ package com.sigcon.backend.parametrization.menu.infrastructure.adapter.in.web;
 
 import java.util.List;
 
-
 import org.springframework.web.bind.annotation.*;
 
 import com.sigcon.backend.parametrization.menu.port.in.MenuUseCase;
@@ -17,10 +16,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
-
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/menus")
+@Tag(name = "Módulo de Parametrización")
 
 public class MenuController {
 
@@ -33,11 +33,9 @@ public class MenuController {
     @PostMapping("/datatable")
     @PreAuthorize("hasAuthority('PERM_VIEW_MENUS') or hasAuthority('ROLE_SUPERADMIN')")
     public ResponseEntity<?> getMenusDataTable(
-        @RequestBody(required = false) DataTableRequest request
-    ) {
+            @RequestBody(required = false) DataTableRequest request) {
         return menuUseCase.getMenusDataTable(request);
     }
-
 
     @PostMapping("store")
     @PreAuthorize("hasAuthority('PERM_CREATE_MENUS') or hasAuthority('ROLE_SUPERADMIN')")

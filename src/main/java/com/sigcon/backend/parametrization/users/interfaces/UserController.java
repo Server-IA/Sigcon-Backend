@@ -21,10 +21,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
+@Tag(name = "Módulo de Parametrización")
 public class UserController {
 
     private final UserService userService;
@@ -46,15 +48,14 @@ public class UserController {
         return userService.getUserInfo();
     }
 
-
     @PutMapping("/updateInfo")
-    public ResponseEntity<?> updateInfo(@RequestBody UserDTO request){
+    public ResponseEntity<?> updateInfo(@RequestBody UserDTO request) {
         return userService.updateInfo(request);
     }
 
     @PutMapping("/updateUser/{userId}")
     @PreAuthorize("hasAuthority('PERM_UPDATE_USER') or hasAuthority('ROLE_SUPERADMIN')")
-    public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UserDTO request){
+    public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UserDTO request) {
         return userService.updateUser(userId, request);
     }
 
@@ -65,37 +66,36 @@ public class UserController {
     }
 
     @GetMapping("/avatars/{filename}")
-public ResponseEntity<Resource> getAvatar(@PathVariable String filename) {
+    public ResponseEntity<Resource> getAvatar(@PathVariable String filename) {
 
-    try {
+        try {
 
-        Path basePath = Paths.get("uploads/avatars").toAbsolutePath().normalize();
-        Path filePath = basePath.resolve(filename).normalize();
+            Path basePath = Paths.get("uploads/avatars").toAbsolutePath().normalize();
+            Path filePath = basePath.resolve(filename).normalize();
 
-        // 🔐 Evita path traversal
-        if (!filePath.startsWith(basePath)) {
-            return ResponseEntity.badRequest().build();
+            // 🔐 Evita path traversal
+            if (!filePath.startsWith(basePath)) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            if (!Files.exists(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Resource resource = new FileSystemResource(filePath);
+
+            String contentType = Files.probeContentType(filePath);
+            if (contentType == null) {
+                contentType = "application/octet-stream";
+            }
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_TYPE, contentType)
+                    .body(resource);
+
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().build();
         }
-
-        if (!Files.exists(filePath)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        Resource resource = new FileSystemResource(filePath);
-
-        String contentType = Files.probeContentType(filePath);
-        if (contentType == null) {
-            contentType = "application/octet-stream";
-        }
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .body(resource);
-
-    } catch (IOException e) {
-        return ResponseEntity.internalServerError().build();
     }
-}
-
 
 }

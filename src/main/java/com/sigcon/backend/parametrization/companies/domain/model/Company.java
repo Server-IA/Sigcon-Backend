@@ -2,14 +2,19 @@ package com.sigcon.backend.parametrization.companies.domain.model;
 
 import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
 import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
+import com.sigcon.backend.parametrization.users.domain.model.User;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -21,6 +26,7 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "companies")
@@ -68,8 +74,9 @@ public class Company {
     @Column(name = "logo", length = 255)
     private String logo;
 
-    @Column(name = "status", length = 45, nullable = false)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 10, nullable = false)
+    private CompanyStatus status;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -91,4 +98,3 @@ public class Company {
         this.updatedAt = LocalDateTime.now();
     }
 }
-

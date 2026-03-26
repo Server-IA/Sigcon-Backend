@@ -3,6 +3,7 @@ package com.sigcon.backend.parametrization.companies.application;
 import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
 import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,7 +27,7 @@ public class CompanyDTO {
     private String size;
     private String phone;
     private String logo;
-    private String status;
+    private CompanyStatus status;
 
     private Long typeRegimeId;
     private String typeRegimeName;

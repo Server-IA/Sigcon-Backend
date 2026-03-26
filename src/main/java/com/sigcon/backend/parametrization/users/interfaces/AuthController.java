@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.Map;
 import java.util.Optional;
@@ -18,6 +19,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Tag(name = "Módulo de Parametrización")
 public class AuthController {
 
     private final AuthService authService;
@@ -37,12 +39,11 @@ public class AuthController {
         try {
             authService.sendResetPasswordLink(request);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Se ha enviado un enlace para restablecer la contraseña."), Optional.empty())
-            );
+                    SuccessRespondJson.getSuccessRespondMessage(
+                            Optional.of("Se ha enviado un enlace para restablecer la contraseña."), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -51,12 +52,11 @@ public class AuthController {
         try {
             authService.resetPassword(request);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("La contraseña se ha restablecido correctamente."), Optional.empty())
-            );
+                    SuccessRespondJson.getSuccessRespondMessage(
+                            Optional.of("La contraseña se ha restablecido correctamente."), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-            );
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
@@ -65,7 +65,5 @@ public class AuthController {
         String token = authHeader.replace("Bearer ", "");
         return authService.logout(token);
     }
-
-
 
 }

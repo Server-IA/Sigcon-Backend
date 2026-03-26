@@ -8,12 +8,11 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 // import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
 import com.sigcon.backend.assets.assets_depreciation.application.DepreciationCalculationResponseDTO;
-import com.sigcon.backend.assets.assets_depreciation.domain.model.AssetDepreciation;
-import com.sigcon.backend.assets.assets_depreciation.domain.repository.AssetDepreciationRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
-// import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
+import com.sigcon.backend.assets.assets_depreciation.domain.model.AssetDepreciation;
+import com.sigcon.backend.assets.assets_depreciation.domain.repository.AssetDepreciationRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
@@ -90,9 +89,10 @@ public class DepreciationCalculationService {
 
             // // 3. Validar método de depreciación
             // if (asset.getDepretationRule() == null
-            //         || asset.getDepretationRule().getDepretationType() == DepretationType.OTHER) {
-            //     skipped.add(buildSkipped(asset, SkipReason.NO_DEPRECIATION_METHOD));
-            //     continue;
+            // || asset.getDepretationRule().getDepretationType() == DepretationType.OTHER)
+            // {
+            // skipped.add(buildSkipped(asset, SkipReason.NO_DEPRECIATION_METHOD));
+            // continue;
             // }
 
             // 4. UNITS_OF_PRODUCTION no aplica para cálculo por período contable
@@ -104,7 +104,8 @@ public class DepreciationCalculationService {
             // 5. Buscar regla de depreciación activa para el método del activo
             DepretationType requiredType = asset.getDepretationRule().getDepretationType();
 
-            Optional<DepretationRule> depretationRule = depretationRuleRepository.findById(asset.getDepretationRule().getId());
+            Optional<DepretationRule> depretationRule = depretationRuleRepository
+                    .findById(asset.getDepretationRule().getId());
 
             if (depretationRule.isEmpty()) {
                 skipped.add(buildSkipped(asset, SkipReason.NO_ACTIVE_RULE));
@@ -113,7 +114,9 @@ public class DepreciationCalculationService {
 
             DepretationRule rule = depretationRule.get();
 
-            // 6. Validar cuenta contable de la regla
+
+
+            // 7. Validar cuenta contable de la regla
             AccountingAccount depreciationAccount = rule.getAccountingAccount();
             if (depreciationAccount == null
                     || depreciationAccount.getStatus() != AccountStatus.ACTIVE) {
@@ -121,13 +124,13 @@ public class DepreciationCalculationService {
                 continue;
             }
 
-            // 7. Calcular valor actual en libros (si no tiene uno previo, usar
+            // 8. Calcular valor actual en libros (si no tiene uno previo, usar
             // acquisitionValue)
             BigDecimal bookValue = asset.getCurrentBookValue() != null
                     ? asset.getCurrentBookValue()
                     : asset.getAcquisitionValue();
 
-            // 8. Delegar cálculo al DepreciationCalculator (sin fórmulas aquí)
+            // 9. Delegar cálculo al DepreciationCalculator (sin fórmulas aquí)
             BigDecimal depreciationAmount = computeDepreciation(
                     rule.getDepretationType(),
                     asset.getAcquisitionValue(),
@@ -136,7 +139,7 @@ public class DepreciationCalculationService {
                     rule.getDepretationRate(),
                     asset.getUsefulLifeMonths());
 
-            // 9. No depreciar por debajo del valor residual
+            // 10. No depreciar por debajo del valor residual
             BigDecimal newBookValue = bookValue.subtract(depreciationAmount);
             BigDecimal safeResidual = rule.getResidualValue() != null ? rule.getResidualValue() : BigDecimal.ZERO;
             if (newBookValue.compareTo(safeResidual) < 0) {
@@ -144,7 +147,7 @@ public class DepreciationCalculationService {
                 depreciationAmount = bookValue.subtract(safeResidual);
             }
 
-            // 10. Acumular resultado
+            // 11. Acumular resultado
             totalDepreciation = totalDepreciation.add(depreciationAmount);
 
             results.add(AssetDepreciationResultDTO.builder()
@@ -159,18 +162,20 @@ public class DepreciationCalculationService {
                             .id(asset.getSupplier().getId())
                             .businessName(asset.getSupplier().getBusinessName())
                             .build() : null)
-                    // .accountingCode(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getCode() : null)
-                    // .accountingName(asset.getChartOfAccount() != null ? asset.getChartOfAccount().getName() : null)
+                    // .accountingCode(asset.getChartOfAccount() != null ?
+                    // asset.getChartOfAccount().getCode() : null)
+                    // .accountingName(asset.getChartOfAccount() != null ?
+                    // asset.getChartOfAccount().getName() : null)
                     // .accountingAccount(AccountingAccountDTO.builder()
-                    //         .id(depreciationAccount.getId())
-                    //         .code(depreciationAccount.getCode())
-                    //         .name(depreciationAccount.getName())
-                    //         .build())
+                    // .id(depreciationAccount.getId())
+                    // .code(depreciationAccount.getCode())
+                    // .name(depreciationAccount.getName())
+                    // .build())
                     // .depreciationAccountName(depreciationAccount.getCustomName())
                     .calculationDate(calculationDate)
                     .build());
 
-            // 11. Actualizar activo en memoria
+            // 12. Actualizar activo en memoria
             asset.setCurrentBookValue(newBookValue);
             asset.setLastDepreciationDate(calculationDate);
             toSave.add(asset);
@@ -191,8 +196,6 @@ public class DepreciationCalculationService {
         if (!toSave.isEmpty()) {
             assetsRepository.saveAll(toSave);
         }
-
-        // 14. Persistir histórico de depreciaciones en batch
         if (!historyToSave.isEmpty()) {
             assetDepreciationRepository.saveAll(historyToSave);
         }
@@ -224,30 +227,18 @@ public class DepreciationCalculationService {
     }
 
     /**
-     * Mapea el DepreciationMethod del activo al DepretationType de las reglas.
+     * Mapea el DepretationType de la regla al enum DepreciationMethod requerido por
+     * el servicio.
      */
     // private DepretationType mapMethodToType(DepreciationMethod method) {
-    //     return switch (method) {
-    //         case STRAIGHT_LINE -> DepretationType.LINEAR;
-    //         case DECLINING_BALANCE -> DepretationType.DECREASING;
-    //         case UNITS_OF_PRODUCTION -> DepretationType.PRODUCTION_UNITS;
-    //         case OTHER -> throw new IllegalArgumentException("Método no reconocido o no permitido");
-    //     };
+    // return switch (method) {
+    // case STRAIGHT_LINE -> DepretationType.LINEAR;
+    // case DECLINING_BALANCE -> DepretationType.DECREASING;
+    // case UNITS_OF_PRODUCTION -> DepretationType.PRODUCTION_UNITS;
+    // case OTHER -> throw new IllegalArgumentException("Método no reconocido o no
+    // permitido");
+    // };
     // }
-
-    /**
-     * Busca la regla de depreciación activa más reciente para un tipo dado.
-     * Retorna la primera regla activa ordenada descendentemente por effectiveDate.
-     */
-    private Optional<DepretationRule> findActiveRule(DepretationType type) {
-        return depretationRuleRepository
-                .findAll()
-                .stream()
-                .filter(r -> r.getDepretationType() == type
-                        && r.getStatus() == DepretationStatus.ACTIVE
-                        && r.getDeletedAt() == null)
-                .max((a, b) -> a.getEffectiveDate().compareTo(b.getEffectiveDate()));
-    }
 
     /**
      * Delega el cálculo al utilitario DepreciationCalculator según el método.

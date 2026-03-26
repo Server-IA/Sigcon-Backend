@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/third-parties")
 @RequiredArgsConstructor
-@Tag(name = "Terceros", description = "Endpoints para gestion de terceros")
+@Tag(name = "Modulo de Terceros", description = "Endpoints para gestion de terceros")
 @SecurityRequirement(name = "bearerAuth")
 public class ThirdPartyController {
 

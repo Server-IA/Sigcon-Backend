@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyStatus;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -42,10 +44,9 @@ public class CreateCompanyRequest {
     @Size(max = 12, message = "El telefono no puede superar 12 caracteres")
     private String phone;
 
-    @Size(max = 255, message = "La URL del logo no puede superar 255 caracteres")
-    private String logo;
+    private LogoCompany logo;
 
-    private String status;
+    private CompanyStatus status;
 
     @NotNull(message = "El tipo de regimen es obligatorio")
     private Long typeRegimeId;
@@ -55,6 +56,9 @@ public class CreateCompanyRequest {
 
     @NotNull(message = "Debe proporcionar al menos una sede para la compañía")
     @jakarta.validation.Valid
-    private List<CreateCompanyLocationRequest> locations;
+    private CreateCompanyLocationRequest locations;
+
+    @NotNull(message = "Debe proporcionar al menos una retencion para la compañía")
+    private List<Long> withholdings;
 }
 

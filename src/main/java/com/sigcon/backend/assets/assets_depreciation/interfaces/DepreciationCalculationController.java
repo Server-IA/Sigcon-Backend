@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping("/api/v1/assets/depreciation")
 @RequiredArgsConstructor
-@Tag(name = "Assets - Depreciación", description = "ACT-RF-02: Cálculo automático de depreciación de activos")
+@Tag(name = "Módulo de Activos")
 public class DepreciationCalculationController {
 
         private static final Pattern PERIOD_PATTERN = Pattern.compile("^\\d{4}-(0[1-9]|1[0-2])$");

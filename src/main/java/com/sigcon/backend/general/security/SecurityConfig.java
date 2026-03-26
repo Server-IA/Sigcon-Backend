@@ -61,7 +61,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> {
                     // Auth endpoints públicos
-                    authorize.requestMatchers("/auth/**", "/users/avatar/**").permitAll();
+                    authorize.requestMatchers("/auth/**", "/users/avatar/**", "/api/v1/companies/logo/**").permitAll();
 
                     // Permitir acceso a Swagger/OpenAPI solo en perfil dev
                     if (isDev) {
