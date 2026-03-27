@@ -1,4 +1,4 @@
-package com.sigcon.backend.checkbooks.domain.model.enums;
+package com.sigcon.backend.banks.checkbooks.domain.model.enums;
 
 public enum CheckbookStatus {
     ACTIVA,

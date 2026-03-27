@@ -11,4 +11,6 @@ public interface CheckRepository extends JpaRepository<Check, Long>, JpaSpecific
     boolean existsByNumberCheckAndDeletedAtIsNull(Integer numberCheck);
 
     Optional<Check> findByIdAndDeletedAtIsNull(Long id);
+    
+    long countByCheckbook_Id(Long checkbookId);
 }

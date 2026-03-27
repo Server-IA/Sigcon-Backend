@@ -1,13 +1,13 @@
 package com.sigcon.backend.banks.checks.domain.service;
 
+import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
+import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.banks.checks.application.CheckDTO;
 import com.sigcon.backend.banks.checks.application.CheckbookDTO;
 import com.sigcon.backend.banks.checks.application.EmitCheckRequest;
 import com.sigcon.backend.banks.checks.application.ReconcileCheckRequest;
 import com.sigcon.backend.banks.checks.application.ReportLostCheckRequest;
 import com.sigcon.backend.banks.checks.application.VoidCheckRequest;
-import com.sigcon.backend.checkbooks.domain.model.Checkbook;
-import com.sigcon.backend.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.banks.checks.domain.model.Check;
 import com.sigcon.backend.banks.checks.domain.model.enums.CheckStatus;
 import com.sigcon.backend.banks.checks.domain.model.enums.CheckType;
@@ -397,7 +397,11 @@ public class CheckService {
         }
         return CheckbookDTO.builder()
                 .id(checkbook.getId())
-                .bankAccountId(checkbook.getBankAccountId())
+                .bankAccountId(
+                    checkbook.getBankAccount() != null 
+                        ? checkbook.getBankAccount().getId() 
+                        : null
+                )
                 .checkbookNumber(checkbook.getCheckbookNumber())
                 .issuingBank(checkbook.getIssuingBank())
                 .checkStartNumber(checkbook.getCheckStartNumber())

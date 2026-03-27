@@ -17,4 +17,5 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, Long>,
     boolean existsByBankIdAndAccountNumberAndIdNotAndDeletedAtIsNull(Long bankId, String accountNumber, Long excludeId);
 
     Optional<BankAccount> findByIdAndDeletedAtIsNull(Long id);
+
 }

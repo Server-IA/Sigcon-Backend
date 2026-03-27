@@ -5,11 +5,11 @@ import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountType;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.bank.banks.domain.model.Bank;
 import com.sigcon.backend.bank.banks.domain.model.BankBranch;
 import com.sigcon.backend.bank.banks.domain.repository.BankBranchRepository;
 import com.sigcon.backend.bank.banks.domain.repository.BankRepository;
-import com.sigcon.backend.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.repository.ChartOfAccountRepository;
@@ -231,7 +231,7 @@ public class BankAccountService {
             return error("BNK-ERR-029", "Cuenta no encontrada");
         }
 
-        long chequerasCount = checkbookRepository.countByBankAccountId(id);
+        long chequerasCount = checkbookRepository.countByBankAccount_Id(id);
         if (chequerasCount > 0) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(
@@ -294,7 +294,7 @@ public class BankAccountService {
             if (account.getInitialBalance().compareTo(BigDecimal.ZERO) != 0) {
                 return error("BNK-ERR-024", "No se puede cerrar cuenta con saldo diferente de cero");
             }
-            long chequerasCount = checkbookRepository.countByBankAccountId(id);
+            long chequerasCount = checkbookRepository.countByBankAccount_Id(id);
             if (chequerasCount > 0) {
                 return error("BNK-ERR-026", "No se puede cerrar cuenta con chequeras activas");
             }

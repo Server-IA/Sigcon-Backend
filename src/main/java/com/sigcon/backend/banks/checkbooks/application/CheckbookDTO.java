@@ -1,34 +1,35 @@
-package com.sigcon.backend.banks.checks.application;
+package com.sigcon.backend.banks.checkbooks.application;
 
-import lombok.AllArgsConstructor;
+import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
-
 @Data
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
 public class CheckbookDTO {
+
     private Long id;
     private Long bankAccountId;
+
     private String checkbookNumber;
     private String issuingBank;
+
     private Long checkStartNumber;
     private Long checkEndNumber;
+
     private Integer totalChecks;
     private Integer usedChecks;
     private Integer availableChecks;
+
     private LocalDate receivedDate;
     private LocalDate activationDate;
+
     private CheckbookStatus status;
     private String observations;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private LocalDateTime deletedAt;
 }

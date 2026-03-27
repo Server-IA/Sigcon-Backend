@@ -1,10 +1,11 @@
 package com.sigcon.backend.banks.checks.domain.model;
 
+import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
 import com.sigcon.backend.banks.checks.domain.model.enums.CheckStatus;
 import com.sigcon.backend.banks.checks.domain.model.enums.CheckType;
 import com.sigcon.backend.banks.checks.domain.model.enums.ConciliationMethod;
 import com.sigcon.backend.banks.checks.domain.model.enums.IncidentType;
-import com.sigcon.backend.checkbooks.domain.model.Checkbook;
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
