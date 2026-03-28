@@ -412,12 +412,16 @@ public class AssetsService {
                 .description(asset.getDescription())
                 .classification(asset.getClassification())
                 .type(asset.getAssetType())
-                // .accountingAccount(toAccountingAccountDto(asset.getAccountingAccount()))
+
+                .accountingAccount(toAccountingAccountDto(asset.getAccountingAccount()))
+
                 .supplier(toThirdPartyDto(asset.getSupplier()))
                 .acquisitionValue(asset.getAcquisitionValue())
                 .acquisitionDate(asset.getAcquisitionDate())
                 .usefulLifeMonths(asset.getUsefulLifeMonths())
-                // .depretationRule(toDepretationRuleDto(asset.getDepretationRule()))
+
+                .depretationRule(toDepretationRuleDto(asset.getDepretationRule()))
+
                 .accountsPayableReferenceId(asset.getAccountsPayableReferenceId())
                 .bankCashReferenceId(asset.getBankCashReferenceId())
                 .status(asset.getStatus())
