@@ -10,6 +10,7 @@ import java.util.Optional;
 public interface BankBranchRepository extends JpaRepository<BankBranch, Long>, JpaSpecificationExecutor<BankBranch> {
 
     boolean existsByAddressAndDeletedAtIsNull(String address);
+
     boolean existsByAddressAndIdNotAndDeletedAtIsNull(String address, Long id);
 
     Optional<BankBranch> findByIdAndDeletedAtIsNull(Long id);
@@ -18,7 +19,8 @@ public interface BankBranchRepository extends JpaRepository<BankBranch, Long>, J
 
     Optional<BankBranch> findByBankIdAndMainBranchTrueAndDeletedAtIsNull(Long bankId);
 
-    List<BankBranch> findByCityContainingIgnoreCaseAndDeletedAtIsNull(String city);
+    List<BankBranch> findByMunicipalityNameContainingIgnoreCaseAndDeletedAtIsNull(String municipalityName);
 
-    List<BankBranch> findByBankIdAndCityContainingIgnoreCaseAndDeletedAtIsNull(Long bankId, String city);
+    List<BankBranch> findByBankIdAndMunicipalityNameContainingIgnoreCaseAndDeletedAtIsNull(Long bankId,
+            String municipalityName);
 }

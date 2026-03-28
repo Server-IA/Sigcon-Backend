@@ -1,6 +1,8 @@
 package com.sigcon.backend.bank.banks.application;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -25,9 +27,15 @@ public class BankBranchDTO {
     @Schema(description = "Dirección física de la sucursal", example = "Calle 50 # 10-20")
     private String address;
 
-    @NotBlank(message = "La ciudad de la sucursal no puede ser nula")
-    @Schema(description = "Ciudad donde se ubica la sucursal", example = "Bogotá")
-    private String city;
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @Schema(description = "Municipio donde se ubica la sucursal")
+    private MunicipalityDTO municipality;
+
+    // Solo escritura: ID que se recibe al crear o actualizar
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) // ← faltaba
+    @NotNull(message = "El ID del municipio no puede ser nulo") // ← faltaba
+    @Schema(description = "ID del municipio", example = "5")
+    private Long municipalityId;
 
     @Schema(description = "Indica si es la sucursal principal del banco", example = "false")
     private Boolean mainBranch;

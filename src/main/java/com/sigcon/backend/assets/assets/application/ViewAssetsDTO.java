@@ -47,6 +47,9 @@ public class ViewAssetsDTO {
     @Schema(description = "Cuenta contable asociada (DTO completo)")
     private AccountingAccountDTO accountingAccount;
 
+    @Schema(description = "ID cuenta contable")
+    private Long accountingAccountId;
+
     @Schema(description = "Proveedor asociado (DTO completo)")
     private ThirdPartyDTO supplier;
 
@@ -61,6 +64,9 @@ public class ViewAssetsDTO {
 
     @Schema(description = "Regla de depreciacion asociada (DTO completo)")
     private DepretationRuleDTO depretationRule;
+
+    @Schema(description = "ID regla depreciacion")
+    private Long depreciationRuleId;
 
     @Schema(description = "Referencia de Cuentas por Pagar (pendiente de integrar)", example = "1001")
     private Long accountsPayableReferenceId;

@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
+import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -23,7 +25,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "bank_branches")  // ⚠️ corregido: era "banks", debe ser su propia tabla
+@Table(name = "bank_branches")
 @SQLDelete(sql = "UPDATE bank_branches SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @Data
@@ -39,9 +41,6 @@ public class BankBranch {
     @Column(name = "address", nullable = false, length = 45)
     private String address;
 
-    @Column(name = "city", nullable = false, length = 45)
-    private String city;
-
     @Column(name = "main_branch", nullable = false)
     private Boolean mainBranch;
 
@@ -51,6 +50,10 @@ public class BankBranch {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "municipality_id", nullable = false)
+    private Municipality municipality;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
