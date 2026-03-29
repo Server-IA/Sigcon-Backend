@@ -184,26 +184,6 @@ public class CheckbookService {
     }
 
     // =========================
-    // PAGINACIÓN
-    // =========================
-    int start = request.getStart() != null ? request.getStart() : 0;
-    int length = request.getLength() != null ? request.getLength() : 10;
-
-    int end = Math.min(start + length, filtered.size());
-
-    List<CheckbookDTO> pageData = filtered
-            .subList(start, end)
-            .stream()
-            .map(this::toDto)
-            .toList();
-
-    // =========================
-    // RESPUESTA DATATABLES
-    // =========================
-    return DataTableResponse.from(pageData, request.getDraw() != null ? request.getDraw() : 1);
-}
-
-    // =========================
     // MAPPER
     // =========================
     private CheckbookDTO toDto(Checkbook entity) {
