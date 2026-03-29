@@ -9,6 +9,7 @@ import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
 import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
 import com.sigcon.backend.utils.ErrorRespondJson;
+import com.sigcon.backend.utils.DataTableResponse;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -131,23 +132,82 @@ public class CheckbookService {
     // =========================
     // SEARCH
     // =========================
-    public Object search(CheckbookQueryRequest request) {
+  public Object search(CheckbookQueryRequest request) {
 
-        List<Checkbook> list = repository.findAll();
+    List<Checkbook> list = repository.findAll();
 
-        List<CheckbookDTO> result = list.stream()
-                .filter(cb -> request.getCheckbookNumber() == null || cb.getCheckbookNumber().contains(request.getCheckbookNumber()))
-                .filter(cb -> request.getIssuingBank() == null || cb.getIssuingBank().contains(request.getIssuingBank()))
-                .filter(cb -> request.getStatus() == null || cb.getStatus().name().equals(request.getStatus()))
-                .filter(cb -> request.getBankAccountId() == null || cb.getBankAccount().getId().equals(request.getBankAccountId()))
-                .map(this::toDto)
-                .collect(Collectors.toList());
+    // =========================
+    // FILTROS ESPECÍFICOS
+    // =========================
+    List<Checkbook> filtered = list.stream()
 
-        if (result.isEmpty())
-            return ErrorRespondJson.getErrorRespondMessage(Optional.of("Sin resultados"));
+            .filter(cb -> request.getCheckbookNumber() == null ||
+                    cb.getCheckbookNumber().toLowerCase()
+                            .contains(request.getCheckbookNumber().toLowerCase()))
 
-        return result;
+            .filter(cb -> request.getIssuingBank() == null ||
+                    cb.getIssuingBank().toLowerCase()
+                            .contains(request.getIssuingBank().toLowerCase()))
+
+            .filter(cb -> request.getStatus() == null ||
+                    cb.getStatus().name().equalsIgnoreCase(request.getStatus()))
+
+            .filter(cb -> request.getBankAccountId() == null ||
+                    cb.getBankAccount().getId().equals(request.getBankAccountId()))
+
+            .filter(cb -> request.getReceivedDateFrom() == null ||
+                    !cb.getReceivedDate().isBefore(request.getReceivedDateFrom()))
+
+            .filter(cb -> request.getReceivedDateTo() == null ||
+                    !cb.getReceivedDate().isAfter(request.getReceivedDateTo()))
+
+            .filter(cb -> request.getActivationDateFrom() == null ||
+                    (cb.getActivationDate() != null &&
+                     !cb.getActivationDate().isBefore(request.getActivationDateFrom())))
+
+            .filter(cb -> request.getActivationDateTo() == null ||
+                    (cb.getActivationDate() != null &&
+                     !cb.getActivationDate().isAfter(request.getActivationDateTo())))
+
+            .toList();
+
+    // =========================
+    // BÚSQUEDA GLOBAL (DataTables)
+    // =========================
+    if (request.getSearch() != null &&
+        request.getSearch().getValue() != null &&
+        !request.getSearch().getValue().isBlank()) {
+
+        String searchValue = request.getSearch().getValue().toLowerCase();
+
+        filtered = filtered.stream()
+                .filter(cb ->
+                        cb.getCheckbookNumber().toLowerCase().contains(searchValue) ||
+                        cb.getIssuingBank().toLowerCase().contains(searchValue) ||
+                        cb.getStatus().name().toLowerCase().contains(searchValue)
+                )
+                .toList();
     }
+
+    // =========================
+    // PAGINACIÓN
+    // =========================
+    int start = request.getStart() != null ? request.getStart() : 0;
+    int length = request.getLength() != null ? request.getLength() : 10;
+
+    int end = Math.min(start + length, filtered.size());
+
+    List<CheckbookDTO> pageData = filtered
+            .subList(start, end)
+            .stream()
+            .map(this::toDto)
+            .toList();
+
+    // =========================
+    // RESPUESTA DATATABLES
+    // =========================
+    return DataTableResponse.from(pageData, request.getDraw() != null ? request.getDraw() : 1);
+}
 
     // =========================
     // MAPPER

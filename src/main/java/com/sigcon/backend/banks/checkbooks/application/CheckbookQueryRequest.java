@@ -6,6 +6,14 @@ import java.time.LocalDate;
 @Data
 public class CheckbookQueryRequest {
 
+    // DataTables
+    private Integer draw;
+    private Integer start;
+    private Integer length;
+
+    private Search search;
+
+    // filtros específicos
     private String checkbookNumber;
     private String issuingBank;
     private String status;
@@ -16,4 +24,10 @@ public class CheckbookQueryRequest {
 
     private LocalDate activationDateFrom;
     private LocalDate activationDateTo;
+
+    @Data
+    public static class Search {
+        private String value;
+        private Boolean regex;
+    }
 }
