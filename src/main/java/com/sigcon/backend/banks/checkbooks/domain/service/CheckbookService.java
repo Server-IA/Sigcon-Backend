@@ -8,23 +8,30 @@ import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
 import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
 import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
-import com.sigcon.backend.utils.ErrorRespondJson;
-import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.*;
 
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class CheckbookService {
 
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final CheckbookRepository repository;
     private final BankAccountRepository bankAccountRepository;
     private final CheckRepository checkRepository;
+
+    private final DataTableSpecificationBuilder<Checkbook> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     // =========================
     // CREATE / UPDATE
@@ -100,11 +107,11 @@ public class CheckbookService {
 
         Checkbook saved = repository.save(entity);
 
-        return toDto(saved); // ✅ CLAVE
+        return toDto(saved);
     }
 
     // =========================
-    // DELETE / INACTIVATE
+    // DELETE
     // =========================
     public Object delete(CheckbookDeleteRequest request) {
 
@@ -130,63 +137,50 @@ public class CheckbookService {
     }
 
     // =========================
-    // SEARCH
+    // SEARCH (🔥 CORREGIDO)
     // =========================
-  public Object search(CheckbookQueryRequest request) {
+    public ResponseEntity<?> search(DataTableRequest request) {
 
-    List<Checkbook> list = repository.findAll();
+        DataTableRequest safeRequest = normalizeDataTableRequest(request);
 
-    // =========================
-    // FILTROS ESPECÍFICOS
-    // =========================
-    List<Checkbook> filtered = list.stream()
+        int start = Math.max(0, safeRequest.getStart());
+        int length = safeRequest.getLength();
+        int safeLength = length <= 0 ? 20 : Math.min(length, MAX_PAGE_SIZE);
+        int page = start / safeLength;
 
-            .filter(cb -> request.getCheckbookNumber() == null ||
-                    cb.getCheckbookNumber().toLowerCase()
-                            .contains(request.getCheckbookNumber().toLowerCase()))
+        Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
 
-            .filter(cb -> request.getIssuingBank() == null ||
-                    cb.getIssuingBank().toLowerCase()
-                            .contains(request.getIssuingBank().toLowerCase()))
+        Specification<Checkbook> specification = dataTableSpecificationBuilder.build(safeRequest)
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
-            .filter(cb -> request.getStatus() == null ||
-                    cb.getStatus().name().equalsIgnoreCase(request.getStatus()))
+        Page<Checkbook> result = repository.findAll(specification, pageable);
 
-            .filter(cb -> request.getBankAccountId() == null ||
-                    cb.getBankAccount().getId().equals(request.getBankAccountId()))
-
-            .filter(cb -> request.getReceivedDateFrom() == null ||
-                    !cb.getReceivedDate().isBefore(request.getReceivedDateFrom()))
-
-            .filter(cb -> request.getReceivedDateTo() == null ||
-                    !cb.getReceivedDate().isAfter(request.getReceivedDateTo()))
-
-            .filter(cb -> request.getActivationDateFrom() == null ||
-                    (cb.getActivationDate() != null &&
-                     !cb.getActivationDate().isBefore(request.getActivationDateFrom())))
-
-            .filter(cb -> request.getActivationDateTo() == null ||
-                    (cb.getActivationDate() != null &&
-                     !cb.getActivationDate().isAfter(request.getActivationDateTo())))
-
-            .toList();
-
-    // =========================
-    // BÚSQUEDA GLOBAL (DataTables)
-    // =========================
-    if (request.getSearch() != null &&
-        request.getSearch().getValue() != null &&
-        !request.getSearch().getValue().isBlank()) {
-
-        String searchValue = request.getSearch().getValue().toLowerCase();
-
-        filtered = filtered.stream()
-                .filter(cb ->
-                        cb.getCheckbookNumber().toLowerCase().contains(searchValue) ||
-                        cb.getIssuingBank().toLowerCase().contains(searchValue) ||
-                        cb.getStatus().name().toLowerCase().contains(searchValue)
+        return ResponseEntity.ok(
+                DataTableResponse.from(
+                        result.map(this::toDto),
+                        safeRequest.getDraw()
                 )
-                .toList();
+        );
+    }
+
+    // =========================
+    // NORMALIZER (CLAVE)
+    // =========================
+    private DataTableRequest normalizeDataTableRequest(DataTableRequest request) {
+        DataTableRequest safe = request != null ? request : new DataTableRequest();
+
+        if (safe.getLength() == 0) {
+            safe.setLength(20);
+        }
+        if (safe.getColumns() == null) {
+            safe.setColumns(new ArrayList<>());
+        }
+        if (safe.getSearch() == null) {
+            safe.setSearch(new DataTableRequest.DataTableSearch("", false));
+        }
+        return safe;
     }
 
     // =========================
