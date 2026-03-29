@@ -71,7 +71,6 @@ public class CheckbookController {
             required = false,
             content = @Content(
                 mediaType = "application/json",
-                schema = @Schema(implementation = DataTableRequest.class),
                 examples = @ExampleObject(
                     value = "{\n" +
                             "  \"draw\": 1,\n" +

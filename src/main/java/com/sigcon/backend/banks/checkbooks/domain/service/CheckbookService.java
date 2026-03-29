@@ -137,7 +137,7 @@ public class CheckbookService {
     }
 
     // =========================
-    // SEARCH (🔥 CORREGIDO)
+    // SEARCH 
     // =========================
     public ResponseEntity<?> search(DataTableRequest request) {
 
