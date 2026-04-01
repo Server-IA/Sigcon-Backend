@@ -122,58 +122,39 @@ INSERT INTO third_parties (
     created_at,
     updated_at
 )
-SELECT
-    'TER2026000001',
-    '9001234567',
-    '1',
-    'TERCERO DEMO CLIENTE SAS',
-    (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
-    50000000,
-    '30 dias',
-    'CORPORATIVO',
-    NOW(),
-    NOW()
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM third_parties tp
-    WHERE tp.deleted_at IS NULL
-      AND (
-          (tp.nit = '9001234567' AND tp.dv = '1')
-          OR tp.third_party_code = 'TER2026000001'
-      )
-);
+SELECT * FROM (
+    VALUES(
+        'TER2026000001',
+        '9001234567',
+        '1',
+        'TERCERO DEMO CLIENTE SAS',
+        (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
+        50000000,
+        '30 dias',
+        'CORPORATIVO', NOW(),NOW()
+    ),
+    (
+        'TER2026000002',
+        '9019876543',
+        '5',
+        'TERCERO DEMO EMPLEADO',
+        (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
+        0,
+        'CONTADO',
+        'PERSONA NATURAL',
+        NOW(),
+        NOW()
+    )
 
-INSERT INTO third_parties (
-    third_party_code,
-    nit,
-    dv,
-    business_name,
-    status_id,
-    credit_limit,
-    payment_terms,
-    market_segment,
-    created_at,
-    updated_at
-)
-SELECT
-    'TER2026000002',
-    '9019876543',
-    '5',
-    'TERCERO DEMO EMPLEADO',
-    (SELECT id FROM third_party_status_catalog WHERE name = 'ACTIVO'),
-    0,
-    'CONTADO',
-    'PERSONA NATURAL',
-    NOW(),
-    NOW()
+) AS v (third_party_code, nit, dv, business_name, status_id, credit_limit, payment_terms, market_segment, created_at, updated_at)
 WHERE NOT EXISTS (
     SELECT 1
     FROM third_parties tp
-    WHERE tp.deleted_at IS NULL
-      AND (
-          (tp.nit = '9019876543' AND tp.dv = '5')
-          OR tp.third_party_code = 'TER2026000002'
-      )
+    WHERE 
+    v.third_party_code = tp.third_party_code
+    AND v.nit = tp.nit
+    AND v.dv = tp.dv
+    AND tp.deleted_at IS NULL
 );
 
 INSERT INTO third_party_role_assignments (third_party_id, role_id)
