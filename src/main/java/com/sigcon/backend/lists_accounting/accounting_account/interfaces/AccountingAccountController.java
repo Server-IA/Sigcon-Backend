@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/accounting-accounts")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Listas Contables")
+@Tag(name = "2. Módulo de Listas Contables - Cuentas contables", description = "Endpoints para gestion de cuentas contables")
 public class AccountingAccountController {
 
         private final AccountingAccountService accountingAccountService;

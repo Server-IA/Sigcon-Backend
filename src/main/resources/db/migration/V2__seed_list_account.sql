@@ -1,28 +1,28 @@
 -- PUC
 
-INSERT INTO cfg_chart_of_accounts
-(account_code, account_name, account_class, account_level, account_nature, account_status, created_at, updated_at)
-SELECT '1', 'Activo', 'ASSET', 'CLASS', 'DEBIT', 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (
-    SELECT 1 FROM cfg_chart_of_accounts 
-    WHERE account_code = '1' AND deleted_at IS NULL
-);
+-- INSERT INTO cfg_chart_of_accounts
+-- (account_code, account_name, account_class, account_level, account_nature, account_status, created_at, updated_at)
+-- SELECT '1', 'Activo', 'ASSET', 'CLASS', 'DEBIT', 'ACTIVE', NOW(), NOW()
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM cfg_chart_of_accounts 
+--     WHERE account_code = '1' AND deleted_at IS NULL
+-- );
 
-INSERT INTO cfg_chart_of_accounts
-(account_code, account_name, account_class, account_level, account_nature, account_status, created_at, updated_at)
-SELECT '2', 'Pasivo', 'LIABILITY', 'CLASS', 'CREDIT', 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (
-    SELECT 1 FROM cfg_chart_of_accounts 
-    WHERE account_code = '2' AND deleted_at IS NULL
-);
+-- INSERT INTO cfg_chart_of_accounts
+-- (account_code, account_name, account_class, account_level, account_nature, account_status, created_at, updated_at)
+-- SELECT '2', 'Pasivo', 'LIABILITY', 'CLASS', 'CREDIT', 'ACTIVE', NOW(), NOW()
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM cfg_chart_of_accounts 
+--     WHERE account_code = '2' AND deleted_at IS NULL
+-- );
 
-INSERT INTO cfg_chart_of_accounts
-(account_code, account_name, account_class, account_level, account_nature, account_status, created_at, updated_at)
-SELECT '3', 'Patrimonio', 'EQUITY', 'CLASS', 'CREDIT', 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (
-    SELECT 1 FROM cfg_chart_of_accounts 
-    WHERE account_code = '3' AND deleted_at IS NULL
-);
+-- INSERT INTO cfg_chart_of_accounts
+-- (account_code, account_name, account_class, account_level, account_nature, account_status, created_at, updated_at)
+-- SELECT '3', 'Patrimonio', 'EQUITY', 'CLASS', 'CREDIT', 'ACTIVE', NOW(), NOW()
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM cfg_chart_of_accounts 
+--     WHERE account_code = '3' AND deleted_at IS NULL
+-- );
 
 -- Type Currency
 

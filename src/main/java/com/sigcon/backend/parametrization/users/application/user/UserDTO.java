@@ -2,6 +2,7 @@ package com.sigcon.backend.parametrization.users.application.user;
 
 import com.sigcon.backend.parametrization.companies.application.CompanyDTO;
 import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 
@@ -44,5 +45,4 @@ public class UserDTO {
     private Set<String> roles;
     private List<PermissionDTO> permissions;
     private List<ParameterDTO> parameters;
-
 }

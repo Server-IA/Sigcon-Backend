@@ -34,7 +34,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/accounting-lists/currency-types")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Listas Contables")
+@Tag(name = "2. Módulo de Listas Contables - Tipos de moneda", description = "Endpoints para la gestión de tipos de moneda: búsqueda paginada, creación, actualización y eliminación lógica.")
 public class CurrencyTypeController {
 
         private final CurrencyTypeService currencyTypeService;

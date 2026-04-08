@@ -14,6 +14,7 @@ import com.sigcon.backend.banks.cash_management.domain.model.enums.CashType;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
 import jakarta.persistence.Column;
@@ -79,11 +80,11 @@ public class Cash {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "principal_responsible_id", nullable = false)
     @NotNull(message = "El responsable principal es obligatorio")
-    private ThirdParty principalResponsible;
+    private User principalResponsible;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "alternate_responsible_id", nullable = true)
-    private ThirdParty alternateResponsible;
+    private User alternateResponsible;
 
     @Column(name = "operation_schedule", length = 20)
     private String operationSchedule;

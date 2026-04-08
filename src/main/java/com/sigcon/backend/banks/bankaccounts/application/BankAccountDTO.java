@@ -2,6 +2,11 @@ package com.sigcon.backend.banks.bankaccounts.application;
 
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountType;
+import com.sigcon.backend.banks.banks.application.BankDTO;
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,35 +39,17 @@ public class BankAccountDTO {
     @Schema(description = "Tipo de cuenta")
     private BankAccountType accountType;
 
-    @Schema(description = "ID del banco")
-    private Long bankId;
-
-    @Schema(description = "Nombre del banco")
-    private String bankName;
-
-    @Schema(description = "ID del tipo de moneda")
-    private Long currencyTypeId;
-
-    @Schema(description = "Código ISO de la moneda")
-    private String currencyCode;
+    @Schema(description = "Banco")
+    private BankDTO bankDTO;
+    
+    @Schema(description = "Moneda de la cuenta")
+    private CurrencyTypeResponseDTO currencyTypeDTO;
 
     @Schema(description = "Saldo inicial")
     private BigDecimal initialBalance;
 
-    @Schema(description = "ID de la cuenta contable")
-    private Long chartOfAccountId;
-
-    @Schema(description = "Código de la cuenta contable")
-    private String chartOfAccountCode;
-
-    @Schema(description = "Nombre de la cuenta contable")
-    private String chartOfAccountName;
-
-    @Schema(description = "ID de la empresa")
-    private Long companyId;
-
-    @Schema(description = "Nombre de la empresa")
-    private String companyName;
+    @Schema(description = "Cuenta contable")
+    private AccountingAccountDTO accountingAccountDTO;
 
     @Schema(description = "Estado de la cuenta")
     private BankAccountStatus status;

@@ -27,7 +27,7 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/ecl-segmentation")
 @RequiredArgsConstructor
-@Tag(name = "Modulo de Terceros")
+@Tag(name = "3. Módulo de Terceros - Segmentación de riesgo ECL", description = "Endpoints para la gestión de segmentación de riesgo ECL")
 public class EclSegmentationController {
 
         private final EclSegmentationService eclSegmentationService;

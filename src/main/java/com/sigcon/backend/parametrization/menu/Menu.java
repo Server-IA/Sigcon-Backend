@@ -47,6 +47,8 @@ public class Menu {
     
     private MenuStatus status;
 
+    private Boolean visible;
+
     private String component;
     private List<PermissionDTO> permissions;
     private List<Menu> childrens;

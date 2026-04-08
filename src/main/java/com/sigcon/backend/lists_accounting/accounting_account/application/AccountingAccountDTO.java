@@ -1,11 +1,13 @@
 package com.sigcon.backend.lists_accounting.accounting_account.application;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
 import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
+import com.sigcon.backend.lists_accounting.ruler_tax.application.RuleTaxDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -40,8 +42,8 @@ public class AccountingAccountDTO {
     @Schema(description = "Centro de costos asociado a la cuenta", nullable = true)
     private CostCenterDTO costCenter;
 
-    @Schema(description = "ID de la regla tributaria aplicada a esta cuenta", nullable = true)
-    private Long taxRuleId;
+    @Schema(description = "Reglas tributarias aplicadas a esta cuenta", nullable = true)
+    private List<RuleTaxDTO> taxRules;
 
     @Schema(description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", example = "DEBIT", allowableValues = {
             "DEBIT", "CREDIT" })

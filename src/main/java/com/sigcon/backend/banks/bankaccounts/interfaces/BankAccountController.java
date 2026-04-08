@@ -24,7 +24,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/bank-accounts")
 @RequiredArgsConstructor
-@Tag(name = "Cuentas Bancarias", description = "Endpoints para gestión de cuentas bancarias")
+@Tag(name = "5. Módulo de Bancos - Cuentas Bancarias", description = "Endpoints para gestión de cuentas bancarias")
 @SecurityRequirement(name = "bearerAuth")
 public class BankAccountController {
 

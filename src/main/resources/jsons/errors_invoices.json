@@ -1,0 +1,51 @@
+[
+    {
+        "code": "uk_invoices_res_type",
+        "message": "Ya existe una factura con el mismo tipo de documento y resolución."
+    },
+    {
+        "code": "uk_invoices_res_invoice_company",
+        "message": "Ya existe una factura con la misma resolución."
+    },
+    {
+        "code": "chk_origin_destination_different",
+        "message": "La ubicación de origen y destino no pueden ser la misma."
+    },
+    {
+        "code": "uk_types_invoices_code",
+        "message": "Ya existe un tipo de documento con el mismo nombre y código."
+    },
+    {
+        "code": "uk_invoice_states_name_code_block",
+        "message": "Ya existe un estado de factura con el mismo nombre, código y bloque."
+    },
+    {
+        "code": "uk_payment_forms_code",
+        "message": "Ya existe un formulario de pago con el mismo código."
+    },
+    {
+        "code": "uk_payment_methods_code",
+        "message": "Ya existe un método de pago con el mismo código."
+    },
+
+    {
+        "code": "uk_voucher_types_code",
+        "message": "Ya existe un tipo de comprobante con el mismo código."
+    },
+    {
+        "code": "uk_vouchers_number",
+        "message": "Ya existe un comprobante con el mismo número y tipo de comprobante."
+    },
+    {
+        "code": "chk_origin_payment_not_null",
+        "message": "El origen de pago no puede ser nulo."
+    },
+    {
+        "code": "chk_amount_not_zero",
+        "message": "El monto no puede ser cero."
+    },
+    {
+        "code": "chk_amount_positive",
+        "message": "El monto debe ser mayor a cero."
+    }
+]

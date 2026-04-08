@@ -26,8 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/cost-centers")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Listas Contables", description = "Endpoints para la gestión de centros de costo: búsqueda paginada, creación, actualización y eliminación lógica.")
-@SecurityRequirement(name = "bearerAuth")
+@Tag(name = "2. Módulo de Listas Contables - Centros de costo", description = "Endpoints para la gestión de centros de costo: búsqueda paginada, creación, actualización y eliminación lógica.")
 public class CostCenterController {
 
         private final CostCenterService costCenterService;

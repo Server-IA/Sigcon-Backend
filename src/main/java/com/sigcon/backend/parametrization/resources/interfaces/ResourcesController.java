@@ -17,7 +17,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/resources")
 @RequiredArgsConstructor
-@Tag(name = "Recursos", description = "Recursos del sistema")
+@Tag(name = "1. Módulo de Parametrización - Recursos", description = "Endpoints para gestion de recursos")
 
 public class ResourcesController {
 
@@ -63,6 +63,13 @@ public class ResourcesController {
     @Operation(summary = "Obtener retenciones", description = "Obtener retenciones del sistema <br> Permiso requerido: VIEW_WITHHOLDINGS")
     public ResponseEntity<?> getWithholdings(@RequestBody(required = false) DataTableRequest dtRequest) {
         return resourceService.getAllWithholdings(dtRequest);
+    }
+
+    @PostMapping("/payment-forms")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_FORM') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Obtener formas de pago", description = "Obtener formas de pago del sistema <br> Permiso requerido: VIEW_PAYMENT_FORM")
+    public ResponseEntity<?> getPaymentForms(@RequestBody(required = false) DataTableRequest dtRequest) {
+        return resourceService.getAllPaymentForms(dtRequest);
     }
 
 }

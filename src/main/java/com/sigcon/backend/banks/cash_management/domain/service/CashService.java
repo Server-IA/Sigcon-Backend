@@ -3,8 +3,11 @@ package com.sigcon.backend.banks.cash_management.domain.service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
@@ -27,6 +30,10 @@ import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCe
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
+import com.sigcon.backend.parametrization.users.application.user.UserDTO;
+import com.sigcon.backend.parametrization.users.domain.model.Role;
+import com.sigcon.backend.parametrization.users.domain.model.User;
+import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
@@ -35,6 +42,7 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -51,7 +59,9 @@ public class CashService {
     private final ThirdPartyRepository thirdPartyRepository;
     private final FinancialMovementsStub financialMovementsStub;
     private final AuditStub auditStub;
+    private final UserRepository userRepository;
 
+    private final UserUtil userUtil;
     /*
      * BNK-RF-10 — Flujo crear: Registrar una nueva caja de efectivo.
      */
@@ -81,12 +91,12 @@ public class CashService {
                         "BNK-ERR-064: Cuenta contable no válida para caja/libro."));
 
         // 5. Resolver y validar responsable principal (BNK-ERR-061)
-        ThirdParty principalResponsible = resolveEmployee(request.getPrincipalResponsibleId());
+        User principalResponsible = existsUser(request.getPrincipalResponsibleId());
 
         // 6. Resolver responsable suplente (opcional) (BNK-ERR-061)
-        ThirdParty alternateResponsible = null;
+        User alternateResponsible = null;
         if (request.getAlternateResponsibleId() != null) {
-            alternateResponsible = resolveEmployee(request.getAlternateResponsibleId());
+            alternateResponsible = existsUser(request.getAlternateResponsibleId());
         }
 
         // 7. Resolver centro de costos (opcional)
@@ -178,12 +188,12 @@ public class CashService {
                         "BNK-ERR-064: Cuenta contable no válida para caja/libro."));
 
         // 7. Resolver y validar responsable principal (BNK-ERR-061)
-        ThirdParty principalResponsible = resolveEmployee(request.getPrincipalResponsibleId());
+        User principalResponsible = existsUser(request.getPrincipalResponsibleId());
 
         // 8. Resolver responsable suplente (opcional)
-        ThirdParty alternateResponsible = null;
+        User alternateResponsible = null;
         if (request.getAlternateResponsibleId() != null) {
-            alternateResponsible = resolveEmployee(request.getAlternateResponsibleId());
+            alternateResponsible = existsUser(request.getAlternateResponsibleId());
         }
 
         // 9. Resolver centro de costos (opcional)
@@ -361,14 +371,21 @@ public class CashService {
         int safeLength = length <= 0 ? 10 : length;
         int page = start / safeLength;
 
-        org.springframework.data.domain.Pageable pageable = length == -1
-                ? org.springframework.data.domain.Pageable.unpaged()
-                : org.springframework.data.domain.PageRequest.of(page, safeLength);
+        Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
 
-        org.springframework.data.jpa.domain.Specification<Cash> spec = 
+        Specification<Cash> spec = 
                 new DataTableSpecificationBuilder<Cash>()
                 .build(request)
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+        
+        User user = userUtil.getUser();
+        spec = spec.and(
+                (root, query, cb) -> cb.equal(root.get("accountingAccount").get("companyId"), user.getCompany())
+        );
+
+
 
        org.springframework.data.domain.Page<Cash> cashes = 
                    cashRepository.findAll(spec, pageable);
@@ -409,20 +426,20 @@ public class CashService {
      * Validar que un ThirdParty existe y tiene rol EMPLEADO activo.
      * BNK-ERR-061: Responsable inexistente o inactivo.
      */
-    private ThirdParty resolveEmployee(Long responsibleId) {
-        ThirdParty thirdParty = thirdPartyRepository.findById(responsibleId)
+    private User existsUser(Long responsibleId) {
+        User user = userRepository.findById(responsibleId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "BNK-ERR-061: Responsable inexistente o inactivo."));
 
-        boolean hasEmployeeRole = thirdParty.getRoles().stream()
-                .anyMatch(role -> "EMPLEADO".equalsIgnoreCase(role.getName()));
+        // boolean hasEmployeeRole = thirdParty.getRoles().stream()
+        //         .anyMatch(role -> "EMPLEADO".equalsIgnoreCase(role.getName()));
 
-        if (!hasEmployeeRole) {
-            throw new IllegalArgumentException(
-                    "BNK-ERR-061: Responsable inexistente o inactivo.");
-        }
+        // if (!hasEmployeeRole) {
+        //     throw new IllegalArgumentException(
+        //             "BNK-ERR-061: Responsable inexistente o inactivo.");
+        // }
 
-        return thirdParty;
+        return user;
     }
 
     /**
@@ -477,13 +494,13 @@ public class CashService {
      */
     private CashResponse mapToResponse(Cash cash) {
 
-        ThirdParty principalResponsible = cash.getPrincipalResponsible() != null
-                ? thirdPartyRepository.findById(cash.getPrincipalResponsible().getId())
+        User principalResponsible = cash.getPrincipalResponsible() != null
+                ? userRepository.findById(cash.getPrincipalResponsible().getId())
                         .orElse(null)
                 : null;
 
-        ThirdParty alternateResponsible = cash.getAlternateResponsible() != null
-                ? thirdPartyRepository.findById(cash.getAlternateResponsible().getId())
+        User alternateResponsible = cash.getAlternateResponsible() != null
+                ? userRepository.findById(cash.getAlternateResponsible().getId())
                         .orElse(null)
                 : null;
 
@@ -506,7 +523,7 @@ public class CashService {
         return CashResponse.builder()
                 .id(cash.getId())
                 .cashCode(cash.getCashCode())
-                .cahsName(cash.getCashName())
+                .cashName(cash.getCashName())
                 .cashType(cash.getCashType())
                 .cashStatus(cash.getCashStatus())
                 .description(cash.getDescription())
@@ -514,35 +531,21 @@ public class CashService {
                 .principalResponsibleId(principalResponsible != null
                         ? principalResponsible.getId() : null)
                 .principalResponsible(principalResponsible != null
-                        ? ThirdPartyDTO.builder()
+                        ? UserDTO.builder()
                                 .id(principalResponsible.getId())
-                                .thirdPartyCode(principalResponsible.getThirdPartyCode())
-                                .nit(principalResponsible.getNit())
-                                .dv(principalResponsible.getDv())
-                                .businessName(principalResponsible.getBusinessName())
-                                .blockingReason(principalResponsible.getBlockingReason())
-                                .creditLimit(principalResponsible.getCreditLimit())
-                                .paymentTerms(principalResponsible.getPaymentTerms())
-                                .marketSegment(principalResponsible.getMarketSegment())
-                                .createdAt(principalResponsible.getCreatedAt())
-                                .updatedAt(principalResponsible.getUpdatedAt())
+                                .name(principalResponsible.getName())
+                                .email(principalResponsible.getEmail())
+                                .roles(principalResponsible.getRoles().stream().map(Role::getName).collect(Collectors.toSet()))
                                 .build()
                         : null)
                 .alternateResponsibleId(alternateResponsible != null
                         ? alternateResponsible.getId() : null)
                 .alternateResponsible(alternateResponsible != null
-                        ? ThirdPartyDTO.builder()
+                        ? UserDTO.builder()
                                 .id(alternateResponsible.getId())
-                                .thirdPartyCode(alternateResponsible.getThirdPartyCode())
-                                .nit(alternateResponsible.getNit())
-                                .dv(alternateResponsible.getDv())
-                                .businessName(alternateResponsible.getBusinessName())
-                                .blockingReason(alternateResponsible.getBlockingReason())
-                                .creditLimit(alternateResponsible.getCreditLimit())
-                                .paymentTerms(alternateResponsible.getPaymentTerms())
-                                .marketSegment(alternateResponsible.getMarketSegment())
-                                .createdAt(alternateResponsible.getCreatedAt())
-                                .updatedAt(alternateResponsible.getUpdatedAt())
+                                .name(alternateResponsible.getName())
+                                .email(alternateResponsible.getEmail())
+                                .roles(alternateResponsible.getRoles().stream().map(Role::getName).collect(Collectors.toSet()))
                                 .build()
                         : null)
                 .operationSchedule(cash.getOperationSchedule())

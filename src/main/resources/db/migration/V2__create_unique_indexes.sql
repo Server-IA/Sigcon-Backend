@@ -42,9 +42,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_puc_code_active
 ON cfg_chart_of_accounts (account_code)
 WHERE deleted_at IS NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_puc_name_active
-ON cfg_chart_of_accounts (account_name)
-WHERE deleted_at IS NULL;
+DROP INDEX IF EXISTS uk_puc_name_active;
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_puc_name_active
+-- ON cfg_chart_of_accounts (account_name)
+-- WHERE deleted_at IS NULL;
 
 -- Centros de costo
 
@@ -68,12 +69,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_custom_name_company_acti
 ON accounting_accounts (custom_name, company_id)
 WHERE deleted_at IS NULL;
 
--- Reglas de impuestos
-CREATE UNIQUE INDEX IF NOT EXISTS uk_ruler_tax_type_ruler_tax_name_company_active
-ON ruler_tax (type_ruler_tax, name, company_id)
-WHERE deleted_at IS NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_ruler_tax_id_active
-ON tax_ruler_accounts (ruler_tax_id, accounting_account_id);
-
-
+DROP INDEX IF EXISTS uk_ruler_tax_type_ruler_tax_name_company_active;
+DROP INDEX IF EXISTS uk_accounting_account_ruler_tax_id_active;

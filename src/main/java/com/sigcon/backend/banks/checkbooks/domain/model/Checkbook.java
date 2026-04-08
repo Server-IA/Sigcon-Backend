@@ -2,6 +2,7 @@ package com.sigcon.backend.banks.checkbooks.domain.model;
 
 import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
+import com.sigcon.backend.parametrization.companies.domain.model.Company;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -51,9 +52,6 @@ public class Checkbook {
     private CheckbookStatus status;
 
     private String observations;
-
-    @Column(name = "company_id")
-    private Long companyId;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

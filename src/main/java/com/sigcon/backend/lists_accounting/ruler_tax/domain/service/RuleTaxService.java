@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.BindingResult;
 
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
+import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.ruler_tax.application.AssignAccountingAccountToRulerTaxDTO;
 import com.sigcon.backend.lists_accounting.ruler_tax.application.CreateRuleTaxDTO;
 import com.sigcon.backend.lists_accounting.ruler_tax.application.RuleTaxDTO;
@@ -24,11 +26,13 @@ import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.TaxRulerEntity
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax;
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.repository.RuleTaxRepository;
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.repository.TaxRulerAccountRepository;
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -39,11 +43,12 @@ public class RuleTaxService {
     private final RuleTaxRepository ruleTaxRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final TaxRulerAccountRepository taxRulerAccountRepository;
+
+    private final UserUtil userUtil;
+
     private final DataTableSpecificationBuilder<TaxRulerEntity> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
     
     public ResponseEntity<?> create(CreateRuleTaxDTO createRuleTaxDTO, BindingResult bindingResult) {
-
-        System.out.println("createRuleTaxDTO: " + createRuleTaxDTO);
 
         if(bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -53,6 +58,9 @@ public class RuleTaxService {
             throw new RuntimeException("La fecha inicio no puede ser mayor a la fecha fin");
         }
 
+        AccountingAccount accountingAccount = accountingAccountRepository.findById(createRuleTaxDTO.getAccountingAccountId())
+        .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada"));
+
         TaxRulerEntity taxRulerEntity = TaxRulerEntity.builder()
             .name(createRuleTaxDTO.getName())
             .percentage(createRuleTaxDTO.getPercentage())
@@ -61,7 +69,7 @@ public class RuleTaxService {
             .dateStart(createRuleTaxDTO.getDateStart())
             .dateEnd(createRuleTaxDTO.getDateEnd())
             .typeRulerTax(createRuleTaxDTO.getTypeRulerTax())
-            .companyId(createRuleTaxDTO.getCompanyId())
+            .accountingAccount(accountingAccount)
             .status(StatusRulerTax.ACTIVE)
             .build();
 
@@ -89,6 +97,9 @@ public class RuleTaxService {
 
         Specification<TaxRulerEntity> spec = dataTableSpecificationBuilder.build(request);
 
+        User user = userUtil.getUser();
+        spec = spec.and((root, query, cb) -> cb.equal(root.get("accountingAccount").get("companyId"), user.getCompany()));
+
         Page<TaxRulerEntity> taxRulerEntities = ruleTaxRepository.findAll(spec, pageable);
 
         System.out.println("request ruler tax: " + request);
@@ -105,6 +116,9 @@ public class RuleTaxService {
             throw new RuntimeException("La fecha inicio no puede ser mayor a la fecha fin");
         }
 
+        AccountingAccount accountingAccount = accountingAccountRepository.findById(updateRuleTaxDTO.getAccountingAccountId())
+        .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada"));
+
         TaxRulerEntity taxRulerEntity = ruleTaxRepository.findById(id).orElseThrow(() -> new RuntimeException("Regla de impuesto no encontrada"));
 
         taxRulerEntity.setName(updateRuleTaxDTO.getName());
@@ -115,6 +129,7 @@ public class RuleTaxService {
         taxRulerEntity.setDateEnd(updateRuleTaxDTO.getDateEnd());
         taxRulerEntity.setTypeRulerTax(updateRuleTaxDTO.getTypeRulerTax());
         taxRulerEntity.setStatus(updateRuleTaxDTO.getStatusRulerTax());
+        taxRulerEntity.setAccountingAccount(accountingAccount);
         
         ruleTaxRepository.save(taxRulerEntity);
 
@@ -147,12 +162,15 @@ public class RuleTaxService {
             .dateEnd(taxRulerEntity.getDateEnd())
             .typeRulerTax(taxRulerEntity.getTypeRulerTax())
             .statusRulerTax(taxRulerEntity.getStatus())
-            .companyId(taxRulerEntity.getCompanyId())
-            .accountingAccountIds(
-                taxRulerAccountRepository.findAllByTaxRulerId(taxRulerEntity.getId())
-                .stream().map(TaxRulerAccount::getAccountingAccount)
-                .map(AccountingAccount::getId).collect(Collectors.toList())
-            )
+            .accountingAccount(AccountingAccountDTO.builder()
+                .id(taxRulerEntity.getAccountingAccount().getId())
+                .customName(taxRulerEntity.getAccountingAccount().getCustomName())
+                .pucAccount(ChartOfAccountResponseDTO.builder()
+                    .id(taxRulerEntity.getAccountingAccount().getPucAccount().getId())
+                    .name(taxRulerEntity.getAccountingAccount().getPucAccount().getName())
+                    .code(taxRulerEntity.getAccountingAccount().getPucAccount().getCode())
+                    .build())
+                .build())
             .build();
     }
 

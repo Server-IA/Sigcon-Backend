@@ -2,8 +2,9 @@ package com.sigcon.backend.banks.bankaccounts.domain.model;
 
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountType;
-import com.sigcon.backend.bank.banks.domain.model.Bank;
-import com.sigcon.backend.bank.banks.domain.model.BankBranch;
+import com.sigcon.backend.banks.banks.domain.model.Bank;
+import com.sigcon.backend.banks.banks.domain.model.BankBranch;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
@@ -59,8 +60,8 @@ public class BankAccount {
     private BigDecimal initialBalance;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chart_of_account_id", nullable = false)
-    private ChartOfAccount chartOfAccount;
+    @JoinColumn(name = "accounting_account_id", nullable = false)
+    private AccountingAccount accountingAccount;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "company_id", nullable = false)
@@ -69,9 +70,6 @@ public class BankAccount {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bank_branch_id")
     private BankBranch bankBranch;
-
-    @Column(name = "branch_name", length = 100)
-    private String branchName;
 
     @Column(name = "account_executive", length = 100)
     private String accountExecutive;
@@ -139,6 +137,9 @@ public class BankAccount {
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
             this.status = BankAccountStatus.ACTIVA;
+        }
+        if (this.handlesCheckbook == null) {
+            this.handlesCheckbook = false;
         }
     }
 

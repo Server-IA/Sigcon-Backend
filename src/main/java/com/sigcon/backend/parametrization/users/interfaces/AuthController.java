@@ -19,7 +19,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Autenticación")
 public class AuthController {
 
     private final AuthService authService;

@@ -1,6 +1,5 @@
 INSERT INTO checkbooks (
     bank_account_id,
-    company_id,
     checkbook_number,
     issuing_bank,
     check_start_number,
@@ -16,7 +15,6 @@ INSERT INTO checkbooks (
 )
 SELECT 
     ba.id,
-    ba.company_id,
     'CHK-001',
     'Bancolombia',
     1000,

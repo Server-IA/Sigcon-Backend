@@ -3,11 +3,18 @@ package com.sigcon.backend.parametrization.users.domain.service;
 import com.sigcon.backend.general.storage.AvatarStorageService;
 import com.sigcon.backend.parametrization.companies.application.CompanyDTO;
 import com.sigcon.backend.parametrization.companies.domain.model.Company;
+import com.sigcon.backend.parametrization.companies.domain.model.CompanyWithholdingAssignment;
 import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
+import com.sigcon.backend.parametrization.companies.domain.repository.CompanyWithholdingAssignmentRepository;
 import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
 import com.sigcon.backend.parametrization.parameters.application.UserParameterDTO;
 import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
 import com.sigcon.backend.parametrization.parameters.domain.repository.UserParameterRepository;
+import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
+import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
+import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
+import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
+import com.sigcon.backend.parametrization.resources.domain.repository.WithholdingRepository;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
@@ -53,6 +60,8 @@ public class UserService {
     private final UserParameterRepository userParameterRepository;
     private final RoleRepository roleRepository;
     private final CompanyRepository companyRepository;
+    private final WithholdingRepository withholdingRepository;
+    private final CompanyWithholdingAssignmentRepository companyWithholdingAssignmentRepository;
 
     private final AvatarStorageService avatarStorageService;
     private final DataTableSpecificationBuilder<User> userSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -175,11 +184,37 @@ public class UserService {
             response.setEmail(user.getEmail());
             response.setAvatar(user.getAvatar());
             response.setStatus(user.getStatus());
+
+            List<CompanyWithholdingAssignment> companyWithholdingAssignments =
+            companyWithholdingAssignmentRepository.findByCompanyAndDeletedAtIsNull(user.getCompany());
+
+            List<WithholdingDTO> companyWithholdingDTOs = companyWithholdingAssignments.stream()
+                    .map(companyWithholdingAssignment -> new WithholdingDTO(
+                            companyWithholdingAssignment.getWithholding().getId(),
+                            companyWithholdingAssignment.getWithholding().getName(),
+                            companyWithholdingAssignment.getWithholding().getCode(),
+                            null,
+                            null,
+                            null
+                    )).collect(Collectors.toList());
+
             response.setCompany(CompanyDTO.builder()
                     .id(user.getCompany().getId())
                     .name(user.getCompany().getName())
                     .nit(user.getCompany().getNit())
+                    .typeOrganization(TypeOrganizationDTO.builder()
+                            .id(user.getCompany().getTypeOrganization().getId())
+                            .name(user.getCompany().getTypeOrganization().getName())
+                            .code(user.getCompany().getTypeOrganization().getCode())
+                            .build())
+                    .typeRegimen(TypeRegimenDTO.builder()
+                            .id(user.getCompany().getTypeRegimen().getId())
+                            .name(user.getCompany().getTypeRegimen().getName())
+                            .code(user.getCompany().getTypeRegimen().getCode())
+                            .build())
+                    .withholdings(companyWithholdingDTOs)
                     .build());
+
             response.setRoles(
                     user.getRoles()
                             .stream()

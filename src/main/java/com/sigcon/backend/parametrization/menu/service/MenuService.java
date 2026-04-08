@@ -87,6 +87,7 @@ public class MenuService implements MenuUseCase {
                                     : null)
                     .menuOrder(menu.getMenuOrder())
                     .status(menu.getStatus())
+                    .visible(menu.getVisible())
                     .build());
 
             return ResponseEntity.ok(DataTableResponse.from(
@@ -178,6 +179,7 @@ public class MenuService implements MenuUseCase {
                             .id(menu.getModuleId())
                             .build())
                     .status(menu.getStatus())
+                    .visible(menu.getVisible())
                     .component(menu.getComponent())
                     .deletedAt(menu.getDeletedAt())
                     .createdAt(menu.getCreatedAt())
@@ -233,6 +235,7 @@ public class MenuService implements MenuUseCase {
             menuEntity.setIcon(menu.getIcon());
             menuEntity.setPath(menu.getPath());
             menuEntity.setMenuOrder(menu.getMenuOrder());
+            menuEntity.setVisible(menu.getVisible());
             menuEntity.setParent(
                     menu.getParentId() != null ? MenuEntity.builder()
                             .id(menu.getParentId())

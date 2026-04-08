@@ -33,7 +33,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("api/v1/cash")
 @RequiredArgsConstructor
-@Tag(name = "Cajas", description = "Gestión del ciclo de vida de cajas: creación, edición, eliminación, cambio de estado y consulta.")
+@Tag(name = "5. Módulo de Bancos - Cajas", description = "Gestión del ciclo de vida de cajas: creación, edición, eliminación, cambio de estado y consulta.")
 public class CashController {
 
      private final CashService cashService;

@@ -10,8 +10,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import com.sigcon.backend.invoices.domain.model.PaymentForms;
 import com.sigcon.backend.parametrization.resources.application.CountryDTO;
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.PaymentFormsDTO;
+import com.sigcon.backend.parametrization.resources.application.PaymentMethodDTO;
 import com.sigcon.backend.parametrization.resources.application.PaymentTermsDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
@@ -24,6 +27,7 @@ import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
 import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
 import com.sigcon.backend.parametrization.resources.domain.repository.CountryRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.MunicipalityRepository;
+import com.sigcon.backend.parametrization.resources.domain.repository.PaymentFormRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.PaymentTermsRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.TypeOrganizationRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.TypeRegimenRepository;
@@ -46,6 +50,7 @@ public class ResourceService {
     private final TypeRegimenRepository typesRegimeRepository;
     private final TypeOrganizationRepository typesOrganizationRepository;
     private final WithholdingRepository withholdingRepository;
+    private final PaymentFormRepository paymentFormsRepository;
 
     private final DataTableSpecificationBuilder<PaymentTerms> paymentTermsSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
@@ -63,6 +68,9 @@ public class ResourceService {
     new DataTableSpecificationBuilder<>();
 
     private final DataTableSpecificationBuilder<Withholding> withholdingSpecificationBuilder =
+    new DataTableSpecificationBuilder<>();
+
+    private final DataTableSpecificationBuilder<PaymentForms> paymentFormSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
 
     public ResponseEntity<?> getMunicipalities(DataTableRequest dtRequest) {
@@ -213,6 +221,29 @@ public class ResourceService {
         }
     }
 
+    public ResponseEntity<?> getAllPaymentForms(DataTableRequest dtRequest) {
+        try {
+            int start = Math.max(0, dtRequest.getStart());
+            int length = dtRequest.getLength();
+            
+            int safeLength = length <= 0 ? 10 : length > 100 ? 100 : length;
+            int page = start / safeLength;
+
+            Pageable pageable = length == -1
+                ? Pageable.unpaged()
+                : PageRequest.of(page, safeLength);
+
+            Specification<PaymentForms> specification = paymentFormSpecificationBuilder.build(dtRequest);
+
+            Page<PaymentForms> paymentForms = paymentFormsRepository.findAll(specification, pageable);
+
+            return ResponseEntity.ok(
+                DataTableResponse.from(paymentForms.map(this::toPaymentFormDTO), dtRequest.getDraw())
+            );
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
+    }
 
     // Mappeadores
 
@@ -287,6 +318,14 @@ public class ResourceService {
             .id(withholding.getId())
             .name(withholding.getName())
             .code(withholding.getCode())
+            .build();
+    }
+
+    private PaymentFormsDTO toPaymentFormDTO(PaymentForms paymentForm) {
+        return PaymentFormsDTO.builder()
+            .id(paymentForm.getId())
+            .name(paymentForm.getName())
+            .code(paymentForm.getCode())
             .build();
     }
 

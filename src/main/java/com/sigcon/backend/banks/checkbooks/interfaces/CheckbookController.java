@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/banks/checkbooks")
 @RequiredArgsConstructor
-@Tag(name = "Chequeras", description = "Endpoints para gestión de chequeras")
+@Tag(name = "5. Módulo de Bancos - Chequeras", description = "Endpoints para gestión de chequeras")
 @SecurityRequirement(name = "bearerAuth")
 public class CheckbookController {
 

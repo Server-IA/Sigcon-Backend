@@ -22,7 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/parameters")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Parámetros", description = "Endpoints para gestion de parámetros")
 public class ParameterController {
 
     private final ParameterService parameterService;

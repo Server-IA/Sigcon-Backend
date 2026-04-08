@@ -154,5 +154,13 @@
   {
     "code": "BNK-ERR-033",
     "message": "Tamaño de página no válido"
+  },
+  {
+    "code": "uk_bank_accounts_code_company_active",
+    "message": "Ya existe una cuenta bancaria con este código"
+  },
+  {
+    "code": "uk_bank_accounts_number_bank_active",
+    "message": "Ya existe una cuenta bancaria con este número de cuenta"
   }
 ]

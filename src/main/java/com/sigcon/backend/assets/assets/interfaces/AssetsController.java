@@ -36,7 +36,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/assets")
 @RequiredArgsConstructor
-@Tag(name = "Activos", description = "Endpoints para gestionar activos (CRU)")
+@Tag(name = "4. Módulo de Activos - Activos", description = "Endpoints para gestionar activos (CRU)")
 public class AssetsController {
 
         private final AssetsService assetsService;

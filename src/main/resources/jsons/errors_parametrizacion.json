@@ -38,5 +38,17 @@
     {
         "code": "45000",
         "message": "Debe existir al menos un usuario con SUPERADMIN."
+    },
+    {
+        "code": "uk_companies_nit_active",
+        "message": "Ya existe una empresa activo con ese NIT."
+    },
+    {
+        "code": "uk_companies_ass_whitholding",
+        "message": "Ya existe una asignación de retención activo con esa empresa y retención."
+    },
+    {
+        "code": "uk_assets_taxes_retention_tax_rule_id_asset_id",
+        "message": "Ya existe una asignación de regla de impuesto con ese activo."
     }
 ]

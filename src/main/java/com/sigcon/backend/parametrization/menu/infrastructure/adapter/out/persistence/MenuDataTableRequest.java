@@ -19,6 +19,7 @@ public class MenuDataTableRequest {
     private String icon;
     private Integer position;
     private String status;
+    private Boolean visible;
     private Long moduleId;
     private Long parentId;
 }

@@ -1,7 +1,11 @@
 package com.sigcon.backend.utils;
 
+import java.lang.reflect.Field;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.*;
@@ -22,6 +26,11 @@ public class DataTableSpecificationBuilder<T> {
                     && !request.getSearch().getValue().isBlank()) {
     
                 String globalValue = request.getSearch().getValue().trim();
+
+                if (!globalValue.matches("^[a-zA-Z0-9_\\-\\s%,.]+$")) {
+                    throw new IllegalArgumentException("Entrada de busqueda inválida");
+                }
+
                 boolean regex = request.getSearch().isRegex();
     
                 Predicate globalPredicate = cb.disjunction();
@@ -36,13 +45,13 @@ public class DataTableSpecificationBuilder<T> {
     
                     /* -------- STRING -------- */
                     if (String.class.equals(type)) {
-    
                         if (regex) {
+                            String palabra = verifyValue(globalValue);
                             globalPredicate = cb.or(
                                     globalPredicate,
                                     cb.like(
-                                            cb.lower(path.as(String.class)),
-                                            "%" + globalValue.toLowerCase() + "%"
+                                        cb.lower(path.as(String.class)),
+                                        palabra
                                     )
                             );
                         } else {
@@ -78,33 +87,35 @@ public class DataTableSpecificationBuilder<T> {
                     /* -------- NUMERIC / BOOLEAN -------- */
                     else if(type.equals(Long.class) || type.equals(Integer.class) || type.equals(Double.class)) {
                         // Permitir enteros y decimales
-    if (globalValue.matches("\\d+(\\.\\d+)?")) {
+                        if (globalValue.matches("\\d+(\\.\\d+)?")) {
 
-        Object convertedValue = convertValue(globalValue, type);
+                            Object convertedValue = convertValue(globalValue, type);
 
-        if (regex) {
+                            if (regex) {
 
-            // 🔥 Convertir número a texto usando to_char (Postgres)
-            Expression<String> numberAsString = cb.function(
-                    "to_char",
-                    String.class,
-                    path,
-                    cb.literal("FM999999999999.000000")
-            );
+                                // 🔥 Convertir número a texto usando to_char (Postgres)
+                                Expression<String> numberAsString = cb.function(
+                                        "to_char",
+                                        String.class,
+                                        path,
+                                        cb.literal("FM999999999999.000000")
+                                );
+                                
+                                String palabra = verifyValue(globalValue);
 
-            globalPredicate = cb.or(
-                    globalPredicate,
-                    cb.like(numberAsString, "%" + globalValue + "%")
-            );
+                                globalPredicate = cb.or(
+                                        globalPredicate,
+                                        cb.like(numberAsString, palabra)
+                                );
 
-        } else {
+                            } else {
 
-            globalPredicate = cb.or(
-                    globalPredicate,
-                    cb.equal(path, convertedValue)
-            );
-        }
-    }
+                                globalPredicate = cb.or(
+                                        globalPredicate,
+                                        cb.equal(path, convertedValue)
+                                );
+                            }
+                        }
                     }
 
                     
@@ -136,6 +147,11 @@ public class DataTableSpecificationBuilder<T> {
     
                     String field = column.getData();
                     String searchValue = column.getSearch().getValue().trim();
+
+                    if (!searchValue.matches("^[a-zA-Z0-9_\\-\\s%,.]+$")) {
+                        throw new IllegalArgumentException("Entrada de busqueda inválida");
+                    }
+
                     boolean regex = column.getSearch().isRegex();
     
                     Path<?> path = getPath(root, field);
@@ -143,18 +159,30 @@ public class DataTableSpecificationBuilder<T> {
     
                     /* -------- IN (multi-select) -------- */
                     if (searchValue.contains(",")) {
-    
-                        List<Object> convertedValues = List.of(searchValue.split(","))
-                                .stream()
+
+                        List<String> values = Arrays
+                        .stream(searchValue.split(","))
                                 .map(String::trim)
                                 .filter(v -> !v.isBlank())
-                                .map(v -> convertValue(v, type))
                                 .toList();
-    
-                        if (!convertedValues.isEmpty()) {
-                            predicate = cb.and(predicate, path.in(convertedValues));
+                    
+                        if (!values.isEmpty()) {
+                    
+                            if (regex) {
+                                List<Predicate> likePredicates = values.stream()
+                                        .map(v -> cb.like(cb.lower(path.as(String.class)),  verifyValue(v)))
+                                        .toList();
+                    
+                                predicate = cb.and(predicate, cb.or(likePredicates.toArray(new Predicate[0])));
+                            } else {
+                                List<Object> convertedValues = values.stream()
+                                        .map(v -> convertValue(v, type))
+                                        .toList();
+                    
+                                predicate = cb.and(predicate, path.in(convertedValues));
+                            }
                         }
-    
+                    
                         continue;
                     }
     
@@ -162,11 +190,12 @@ public class DataTableSpecificationBuilder<T> {
                     if (String.class.equals(type)) {
     
                         if (regex) {
+                            String palabra = verifyValue(searchValue);
                             predicate = cb.and(
                                     predicate,
                                     cb.like(
                                             cb.lower(path.as(String.class)),
-                                            "%" + searchValue.toLowerCase() + "%"
+                                            palabra
                                     )
                             );
                         } else {
@@ -200,6 +229,10 @@ public class DataTableSpecificationBuilder<T> {
                         predicate = cb.and(predicate, enumPredicate);
                     }
 
+                    else if(type.equals(Boolean.class)){
+                        predicate = cb.and(predicate, cb.equal(path, Boolean.valueOf(searchValue)));
+                    }
+
     
                     /* -------- NUMERIC / BOOLEAN -------- */
                     else {
@@ -207,9 +240,11 @@ public class DataTableSpecificationBuilder<T> {
                             Object convertedValue = convertValue(searchValue, type);
     
                             if(regex) {
+                                String palabra = verifyValue(searchValue);
+                                
                                 predicate = cb.and(
                                         predicate,
-                                        cb.like(path.as(String.class), "%" + convertedValue + "%")
+                                        cb.like(path.as(String.class), palabra)
                                 );
                             } else {
                                 predicate = cb.and(
@@ -273,6 +308,40 @@ public class DataTableSpecificationBuilder<T> {
         // if (LocalDate.class.equals(type)) return LocalDate.parse(value);
 
         return value;
+    }
+
+    private String verifyValue(String value){
+        String palabra = value.toLowerCase();
+        long count = palabra.chars().filter(ch -> ch == '%').count();
+        if (count == 0) {
+            // no tiene %, agregar a ambos lados
+            palabra = "%" + palabra + "%";
+        } else {
+            // validar posición de %
+            if (
+                !(palabra.startsWith("%") || palabra.endsWith("%"))
+                || palabra.indexOf('%') != palabra.lastIndexOf('%') && !(palabra.startsWith("%") && palabra.endsWith("%"))
+            ) {
+                throw new IllegalArgumentException("Parámetro de búsqueda no válido");
+            }
+        }
+        return palabra;
+    }
+
+    private Map<String, String> buildFieldMapping(Class<?> dtoClass) {
+        Map<String, String> map = new HashMap<>();
+    
+        for (Field field : dtoClass.getDeclaredFields()) {
+            EntityField annotation = field.getAnnotation(EntityField.class);
+    
+            if (annotation != null) {
+                map.put(field.getName(), annotation.value());
+            } else {
+                map.put(field.getName(), field.getName());
+            }
+        }
+    
+        return map;
     }
 
 }

@@ -77,7 +77,8 @@ public class DataInitializer implements CommandLineRunner {
                 createOrUpdateRole("SUPERADMIN", new HashSet<>(Set.of()));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
 
-                Long companyId = createCompany("Sigcon S.A.S.", "9001234567", "1", "Juan Vidarte", "juan.vidarte@gmail.com", "100", "1234567890", 1L, 1L, 1L, "Calle 123", "Sede Principal");
+                Long companyId = createCompany("Sigcon S.A.S.", "9001234567", "1", "Juan Vidarte", "juan.vidarte@gmail.com", "100", 
+                "1234567890", 2L, 1L, 1L, "Calle 123", "Sede Principal");
 
                 // Crear usuarios
                 createOrUpdateUser("SUPER", "ADMIN", "superadmin@gmail.com", "123456", "SUPERADMIN",
@@ -261,5 +262,33 @@ public class DataInitializer implements CommandLineRunner {
                 }
             
                 return statements;
+        }
+
+        private int extractVersion(String filename) {
+                try {
+                    String version = filename.split("__")[0]  // V10
+                                            .replace("V", ""); // 10
+                    return Integer.parseInt(version);
+                } catch (Exception e) {
+                    return Integer.MAX_VALUE; // manda al final si falla
+                }
+            }
+
+        private List<Integer> extractVersionParts(String filename) {
+                try {
+                        String version = filename.split("__")[0]  // V1-10
+                                                .replace("V", ""); // 1-10
+                
+                        String[] parts = version.split("-");
+                
+                        List<Integer> numbers = new ArrayList<>();
+                        for (String part : parts) {
+                                numbers.add(Integer.parseInt(part));
+                        }
+                
+                        return numbers;
+                } catch (Exception e) {
+                        return List.of(Integer.MAX_VALUE);
+                }
         }
 }

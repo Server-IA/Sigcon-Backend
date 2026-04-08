@@ -8,9 +8,9 @@ CREATE TABLE IF NOT EXISTS type_regimen (
 );
 
 INSERT INTO type_regimen (name, code, created_at, updated_at)
-SELECT 'PERSONA NATURAL', 'NATURAL', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM type_regimen WHERE UPPER(code) = 'NATURAL' AND deleted_at IS NULL);
+SELECT 'NO RESPONSABLE DE IVA', 'NO_RESPONSABLE_IVA', NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM type_regimen WHERE UPPER(code) = 'NO_RESPONSABLE_IVA' AND deleted_at IS NULL);
 
 INSERT INTO type_regimen (name, code, created_at, updated_at)
-SELECT 'PERSONA JURIDICA', 'JURIDICA', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM type_regimen WHERE UPPER(code) = 'JURIDICA' AND deleted_at IS NULL);
+SELECT 'RESPONSABLE DE IVA', 'RESPONSABLE_IVA', NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM type_regimen WHERE UPPER(code) = 'RESPONSABLE_IVA' AND deleted_at IS NULL);

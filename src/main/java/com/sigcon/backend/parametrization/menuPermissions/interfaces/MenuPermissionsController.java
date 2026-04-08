@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 @RestController
 @RequestMapping("/api/menu-permissions")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Permisos de menú", description = "Endpoints para gestion de permisos de menú")
 public class MenuPermissionsController {
 
     private final MenuPermissionsService menuPermissionsService;

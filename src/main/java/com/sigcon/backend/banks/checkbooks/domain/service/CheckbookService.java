@@ -1,13 +1,16 @@
 package com.sigcon.backend.banks.checkbooks.domain.service;
 
+import com.sigcon.backend.banks.bankaccounts.application.BankAccountDTO;
 import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.banks.application.BankDTO;
 import com.sigcon.backend.banks.checkbooks.application.*;
 import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
 import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
 import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.*;
 
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,8 @@ public class CheckbookService {
     private final CheckbookRepository repository;
     private final BankAccountRepository bankAccountRepository;
     private final CheckRepository checkRepository;
+
+    private final UserUtil userUtil;
 
     private final DataTableSpecificationBuilder<Checkbook> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -61,6 +66,17 @@ public class CheckbookService {
         if (request.getCheckEndNumber() <= request.getCheckStartNumber())
             return ErrorRespondJson.getErrorRespondMessage(Optional.of("Rango inválido"));
 
+        //  VALIDACIÓN ESTADO INICIAL
+        if (!isUpdate) {
+            if (request.getStatus() == CheckbookStatus.AGOTADA ||
+                request.getStatus() == CheckbookStatus.ANULADA) {
+
+                return ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Estado inicial no permitido - no se puede crear en estado AGOTADA/ANULADA")
+                );
+            }
+        }
+
         if (!isUpdate &&
                 repository.existsByBankAccount_IdAndCheckbookNumber(
                         request.getBankAccountId(),
@@ -80,8 +96,10 @@ public class CheckbookService {
                 return ErrorRespondJson.getErrorRespondMessage(Optional.of("Rango superpuesto"));
         }
 
+        // User user = userUtil.getUser();
+
         entity.setBankAccount(bankAccount);
-        entity.setCompanyId(bankAccount.getCompany().getId());
+        // entity.setCompany(user.getCompany());
 
         entity.setCheckbookNumber(request.getCheckbookNumber());
         entity.setIssuingBank(request.getIssuingBank());
@@ -154,12 +172,37 @@ public class CheckbookService {
 
         Specification<Checkbook> specification = dataTableSpecificationBuilder.build(safeRequest)
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+      
+        User user = userUtil.getUser();
+
+        specification = specification.and((root, query, cb) -> cb.equal(
+            root.get("bankAccount").get("company"), user.getCompany())
+        );
 
         Page<Checkbook> result = repository.findAll(specification, pageable);
 
+        // FILTROS MANUALES DE FECHA
+        List<Checkbook> filtered = result.getContent().stream()
+
+                .filter(cb -> safeRequest.getReceivedDateFrom() == null ||
+                        !cb.getReceivedDate().isBefore(safeRequest.getReceivedDateFrom()))
+
+                .filter(cb -> safeRequest.getReceivedDateTo() == null ||
+                        !cb.getReceivedDate().isAfter(safeRequest.getReceivedDateTo()))
+
+                .filter(cb -> safeRequest.getActivationDateFrom() == null ||
+                        (cb.getActivationDate() != null &&
+                                !cb.getActivationDate().isBefore(safeRequest.getActivationDateFrom())))
+
+                .filter(cb -> safeRequest.getActivationDateTo() == null ||
+                        (cb.getActivationDate() != null &&
+                                !cb.getActivationDate().isAfter(safeRequest.getActivationDateTo())))
+
+                .toList();
+
         return ResponseEntity.ok(
                 DataTableResponse.from(
-                        result.map(this::toDto),
+                        filtered.stream().map(this::toDto).toList(),
                         safeRequest.getDraw()
                 )
         );
@@ -191,7 +234,15 @@ public class CheckbookService {
 
         return CheckbookDTO.builder()
                 .id(entity.getId())
-                .bankAccountId(entity.getBankAccount().getId())
+                .bankAccount(BankAccountDTO.builder()
+                        .id(entity.getBankAccount().getId())
+                        .accountName(entity.getBankAccount().getAccountName())
+                        .accountType(entity.getBankAccount().getAccountType())
+                        .bankDTO(BankDTO.builder()
+                                .id(entity.getBankAccount().getBank().getId())
+                                .name(entity.getBankAccount().getBank().getName())
+                                .build())
+                        .build())
                 .checkbookNumber(entity.getCheckbookNumber())
                 .issuingBank(entity.getIssuingBank())
                 .checkStartNumber(entity.getCheckStartNumber())

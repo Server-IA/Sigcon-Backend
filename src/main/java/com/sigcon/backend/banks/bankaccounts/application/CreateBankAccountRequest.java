@@ -51,12 +51,8 @@ public class CreateBankAccountRequest {
     private BigDecimal initialBalance;
 
     @NotNull(message = "La cuenta contable es obligatoria")
-    @Schema(description = "ID de la cuenta del plan contable (PUC)", example = "1", required = true)
-    private Long chartOfAccountId;
-
-    @NotNull(message = "La empresa es obligatoria")
-    @Schema(description = "ID de la empresa propietaria", example = "1", required = true)
-    private Long companyId;
+    @Schema(description = "ID de la cuenta contable", example = "1", required = true)
+    private Long accountingAccountId;
 
     @Schema(description = "ID de la sucursal del banco (opcional)")
     private Long bankBranchId;
@@ -69,10 +65,10 @@ public class CreateBankAccountRequest {
     @Schema(description = "Nombre del ejecutivo de cuenta")
     private String accountExecutive;
 
-    @Size(max = 20)
-    @Pattern(regexp = "^[0-9]{7,20}$", message = "El teléfono debe tener entre 7 y 20 dígitos")
-    @Schema(description = "Teléfono de contacto del banco")
-    private String bankPhone;
+    // @Size(max = 20)
+    // @Pattern(regexp = "^[0-9]{7,20}$", message = "El teléfono debe tener entre 7 y 20 dígitos")
+    // @Schema(description = "Teléfono de contacto del banco")
+    // private String bankPhone;
 
     @Size(max = 500)
     @Schema(description = "Descripción adicional o notas")

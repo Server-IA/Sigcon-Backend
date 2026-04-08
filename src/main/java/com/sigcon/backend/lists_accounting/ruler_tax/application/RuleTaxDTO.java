@@ -6,6 +6,7 @@ import lombok.Builder;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax;
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.TypeRulerTax;
 
@@ -29,8 +30,6 @@ public class RuleTaxDTO {
     private TypeRulerTax typeRulerTax;
     private StatusRulerTax statusRulerTax;
 
-    private Long companyId;
-
-    private List<Long> accountingAccountIds;
+    private AccountingAccountDTO accountingAccount;
 
 }

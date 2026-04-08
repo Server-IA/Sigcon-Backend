@@ -37,7 +37,7 @@ public class CreateRuleTaxDTO {
     private LocalDate dateStart;
     @NotNull(message = "La fecha de fin es requerida")
     private LocalDate dateEnd;
-    @NotNull(message = "La compañía es requerida")
-    private Long companyId;
+    @NotNull(message = "La cuenta contable es requerida")
+    private Long accountingAccountId;
 
 }

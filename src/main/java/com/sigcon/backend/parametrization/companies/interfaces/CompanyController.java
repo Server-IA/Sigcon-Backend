@@ -43,7 +43,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/companies")
 @RequiredArgsConstructor
-@Tag(name = "Companies", description = "Endpoints para gestion de compañías y sus sedes")
+@Tag(name = "1. Módulo de Parametrización - Compañías", description = "Endpoints para gestion de compañías y sus sedes")
 @SecurityRequirement(name = "bearerAuth")
 public class CompanyController {
 

@@ -20,7 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/menus")
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Menús", description = "Endpoints para gestion de menús")
 
 public class MenuController {
 

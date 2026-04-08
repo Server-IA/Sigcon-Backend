@@ -23,7 +23,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/depreciation-rules")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Listas Contables", description = "Endpoints para la gestión de reglas de depreciación: búsqueda paginada, creación, actualización y eliminación lógica.")
+@Tag(name = "2. Módulo de Listas Contables - Reglas de depreciación", description = "Endpoints para la gestión de reglas de depreciación: búsqueda paginada, creación, actualización y eliminación lógica.")
 public class DepretationRuleController {
 
     private final DepretationRuleService depretationRuleService;

@@ -51,6 +51,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .path(e.getPath())
             .menuOrder(e.getMenuOrder())
             .parentId(e.getParent() != null ? e.getParent().getId() : null)
+            .visible(e.getVisible())
             .parent(
                 null != e.getParent() ?
                     Menu.builder()

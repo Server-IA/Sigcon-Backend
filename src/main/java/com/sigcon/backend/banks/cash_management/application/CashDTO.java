@@ -11,6 +11,7 @@ import com.sigcon.backend.banks.cash_management.domain.model.enums.CashType;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
+import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -43,11 +44,11 @@ public class CashDTO {
     @Schema(description = "ID del principla responsable de la caja", example = "1")
     private Long principalResponsibleId;
     @Schema(description = "Datos del Responsable principal de la caja")
-    private ThirdPartyDTO principalResponsible;
+    private UserDTO principalResponsible;
     @Schema(description = "ID del Responsable alternativo o secundario de la caja(opcional)", example = "1")
     private Long alternateResponsibleId;
     @Schema(description = "Datos del responsable alternativo o secundario de la caja")
-    private ThirdPartyDTO alternateResponsible;
+    private UserDTO alternateResponsible;
     @Schema(description = "Horario de operacion de la caja", example = "08:00-17:00")
     private String operationSchedule;
     @Schema(description = "ID del tipo de moneda de la caja", example = "1")

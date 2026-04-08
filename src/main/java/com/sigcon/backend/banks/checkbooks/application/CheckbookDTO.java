@@ -1,5 +1,6 @@
 package com.sigcon.backend.banks.checkbooks.application;
 
+import com.sigcon.backend.banks.bankaccounts.application.BankAccountDTO;
 import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
 import lombok.Builder;
 import lombok.Data;
@@ -12,7 +13,7 @@ import java.time.LocalDateTime;
 public class CheckbookDTO {
 
     private Long id;
-    private Long bankAccountId;
+    private BankAccountDTO bankAccount;
 
     private String checkbookNumber;
     private String issuingBank;

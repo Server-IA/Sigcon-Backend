@@ -26,14 +26,19 @@ import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
+import com.sigcon.backend.lists_accounting.ruler_tax.application.RuleTaxDTO;
+import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.TaxRulerEntity;
+import com.sigcon.backend.lists_accounting.ruler_tax.domain.repository.RuleTaxRepository;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -47,6 +52,9 @@ public class AccountingAccountService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final CostCenterRepository costCenterRepository;
     private final DepretationRuleRepository depretationRuleRepository;
+    private final RuleTaxRepository ruleTaxRepository;
+
+    private final UserUtil userUtil;
 
     private final DataTableSpecificationBuilder<AccountingAccount> accountingAccountSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -68,6 +76,10 @@ public class AccountingAccountService {
             Specification<AccountingAccount> spec = accountingAccountSpecificationBuilder.build(request)
                     .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
+            User user = userUtil.getUser();
+            
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("companyId"), user.getCompany()));
+
             Page<AccountingAccount> accountingAccounts = accountingAccountRepository.findAll(spec, pageable);
 
             return ResponseEntity.ok(
@@ -86,7 +98,12 @@ public class AccountingAccountService {
                             .costCenter(accountingAccount.getCostCenter() != null
                                     ? getCostCenterResponseDTO(accountingAccount.getCostCenter())
                                     : null)
-                            .taxRuleId(accountingAccount.getTaxRuleId())
+                            .taxRules(
+                                ruleTaxRepository.findByAccountingAccountId(accountingAccount.getId())
+                                .stream().map(this::convertRuleTaxToDTO)
+                                .toList()
+                            )
+                            // .taxRuleId(accountingAccount.getTaxRuleId())
                             .nature(accountingAccount.getNature())
                             .status(accountingAccount.getStatus())
                             .createdAt(accountingAccount.getCreatedAt())
@@ -134,6 +151,8 @@ public class AccountingAccountService {
                                 "El centro de costos seleccionado no está disponible o no existe"));
             }
 
+            User user = userUtil.getUser();
+
             AccountingAccount accountingAccount = AccountingAccount.builder()
                     .pucAccount(ChartOfAccount.builder().id(request.getPuc_id()).build())
                     .customName(request.getCustom_name())
@@ -142,7 +161,7 @@ public class AccountingAccountService {
                     .taxRuleId(request.getTax_rule_id())
                     .nature(request.getNature())
                     .status(AccountStatus.ACTIVE)
-                    .companyId(companyId)
+                    .companyId(user.getCompany())
                     .createdBy(userId)
                     .build();
 
@@ -328,5 +347,19 @@ public class AccountingAccountService {
                     .build();
         }
         return null;
+    }
+
+    private RuleTaxDTO convertRuleTaxToDTO(TaxRulerEntity taxRulerEntity) {
+        return RuleTaxDTO.builder()
+            .id(taxRulerEntity.getId())
+            .name(taxRulerEntity.getName())
+            .percentage(taxRulerEntity.getPercentage())
+            .description(taxRulerEntity.getDescription())
+            .scope(taxRulerEntity.getScope())
+            .dateStart(taxRulerEntity.getDateStart())
+            .dateEnd(taxRulerEntity.getDateEnd())
+            .typeRulerTax(taxRulerEntity.getTypeRulerTax())
+            .statusRulerTax(taxRulerEntity.getStatus())
+            .build();
     }
 }

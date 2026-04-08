@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
@@ -18,6 +19,7 @@ import com.sigcon.backend.lists_accounting.accounting_account.application.Accoun
 import com.sigcon.backend.lists_accounting.accounting_lists.application.ChartOfAccountResponseDTO;
 import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
+import com.sigcon.backend.vouchers.application.VoucherDTO;
 
 @Data
 @Builder
@@ -56,6 +58,9 @@ public class ViewAssetsDTO {
     @Schema(description = "Valor de adquisicion", example = "3200000.00")
     private BigDecimal acquisitionValue;
 
+    @Schema(description = "Valor de impuestos", example = "320000.00")
+    private BigDecimal taxValue;
+
     @Schema(description = "Fecha de adquisicion", example = "2026-01-15")
     private LocalDate acquisitionDate;
 
@@ -80,8 +85,14 @@ public class ViewAssetsDTO {
     @Schema(description = "Observaciones administrativas", example = "Pendiente de placa interna")
     private String observations;
 
+    @Schema(description = "Comprobantes asociados (DTO completo)")
+    private List<VoucherDTO> vouchers;
+
     @Schema(description = "Usuario creador", example = "admin@sigcon.com")
     private String createdBy;
+
+    @Schema(description = "Impuestos o retenciones")
+    private List<ViewAssetTaxesRetentionDTO> taxesRetention;
 
     @Schema(description = "Usuario que edito por ultima vez", example = "admin@sigcon.com")
     private String updatedBy;

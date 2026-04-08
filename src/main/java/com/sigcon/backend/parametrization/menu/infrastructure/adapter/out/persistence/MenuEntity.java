@@ -67,6 +67,9 @@ public class MenuEntity {
     @Column(name = "component")
     private String component;
 
+    @Column(name = "visible")
+    private Boolean visible = true;
+
     @Column(name = "created_at")
     @Temporal(TemporalType.TIMESTAMP)
     @CreationTimestamp

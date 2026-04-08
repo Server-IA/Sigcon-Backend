@@ -19,7 +19,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/modules")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Módulos", description = "Endpoints para gestion de módulos")
 
 public class ModuleController {
 

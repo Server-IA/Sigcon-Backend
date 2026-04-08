@@ -1,13 +1,14 @@
 package com.sigcon.backend.bnk_cash_flow.domain.service;
 
-import com.sigcon.backend.bnk_cash_flow.application.CreateCashFlowProjectionDTO;
-import com.sigcon.backend.bnk_cash_flow.application.UpdateCashFlowProjectionDTO;
-import com.sigcon.backend.bnk_cash_flow.application.ViewCashFlowProjectionDTO;
-import com.sigcon.backend.bnk_cash_flow.domain.model.CashFlowProjection;
-import com.sigcon.backend.bnk_cash_flow.domain.model.enums.ProjectionPeriodicity;
-import com.sigcon.backend.bnk_cash_flow.domain.model.enums.ProjectionStatus;
-import com.sigcon.backend.bnk_cash_flow.domain.model.enums.ProjectionType;
-import com.sigcon.backend.bnk_cash_flow.domain.repository.CashFlowProjectionRepository;
+import com.sigcon.backend.banks.bnk_cash_flow.application.CreateCashFlowProjectionDTO;
+import com.sigcon.backend.banks.bnk_cash_flow.application.UpdateCashFlowProjectionDTO;
+import com.sigcon.backend.banks.bnk_cash_flow.application.ViewCashFlowProjectionDTO;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.model.CashFlowProjection;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.model.enums.ProjectionPeriodicity;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.model.enums.ProjectionStatus;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.model.enums.ProjectionType;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.repository.CashFlowProjectionRepository;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.service.CashFlowProjectionService;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

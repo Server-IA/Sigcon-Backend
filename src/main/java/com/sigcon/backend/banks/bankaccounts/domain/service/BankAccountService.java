@@ -5,25 +5,33 @@ import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountType;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.banks.application.BankDTO;
+import com.sigcon.backend.banks.banks.domain.model.Bank;
+import com.sigcon.backend.banks.banks.domain.model.BankBranch;
+import com.sigcon.backend.banks.banks.domain.repository.BankBranchRepository;
+import com.sigcon.backend.banks.banks.domain.repository.BankRepository;
 import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
-import com.sigcon.backend.bank.banks.domain.model.Bank;
-import com.sigcon.backend.bank.banks.domain.model.BankBranch;
-import com.sigcon.backend.bank.banks.domain.repository.BankBranchRepository;
-import com.sigcon.backend.bank.banks.domain.repository.BankRepository;
+import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.repository.ChartOfAccountRepository;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
+import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
 import com.sigcon.backend.parametrization.companies.domain.model.Company;
 import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
+
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -55,11 +63,13 @@ public class BankAccountService {
     private final BankAccountRepository bankAccountRepository;
     private final BankRepository bankRepository;
     private final BankBranchRepository bankBranchRepository;
-    private final ChartOfAccountRepository chartOfAccountRepository;
+    private final AccountingAccountRepository accountingAccountRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
     private final CompanyRepository companyRepository;
     private final CostCenterRepository costCenterRepository;
     private final CheckbookRepository checkbookRepository;
+
+    private final UserUtil userUtil;
 
     private final DataTableSpecificationBuilder<BankAccount> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -69,14 +79,12 @@ public class BankAccountService {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
-        validateCreateBusinessRules(request);
-
         Bank bank = getBankOrThrow(request.getBankId());
         CurrencyType currencyType = getCurrencyTypeOrThrow(request.getCurrencyTypeId());
-        ChartOfAccount chartOfAccount = getChartOfAccountOrThrow(request.getChartOfAccountId());
-        Company company = getCompanyOrThrow(request.getCompanyId());
+        AccountingAccount accountingAccount = getAccountingAccountOrThrow(request.getAccountingAccountId());
+        User user = userUtil.getUser();
 
-        validateChartOfAccountForBanks(chartOfAccount);
+        validateAccountingAccountForBanks(accountingAccount);
         validateBankActive(bank);
         validateCurrencyActive(currencyType);
 
@@ -107,12 +115,11 @@ public class BankAccountService {
                 .bank(bank)
                 .currencyType(currencyType)
                 .initialBalance(request.getInitialBalance())
-                .chartOfAccount(chartOfAccount)
-                .company(company)
+                .accountingAccount(accountingAccount)
+                .company(user.getCompany())
                 .bankBranch(bankBranch)
-                .branchName(emptyToNull(request.getBranchName()))
                 .accountExecutive(emptyToNull(request.getAccountExecutive()))
-                .bankPhone(emptyToNull(request.getBankPhone()))
+                // .bankPhone(emptyToNull(request.getBankPhone()))
                 .description(emptyToNull(request.getDescription()))
                 .openingDate(request.getOpeningDate())
                 .allowsOverdraft(Boolean.TRUE.equals(request.getAllowsOverdraft()))
@@ -131,14 +138,15 @@ public class BankAccountService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Cuenta bancaria creada exitosamente."),
-                        Optional.of(toDetailDto(entity))
+                        Optional.of(toDto(entity))
                 )
         );
     }
 
     public ResponseEntity<?> findAllPaged(DataTableRequest request) {
         DataTableRequest safeRequest = normalizeDataTableRequest(request);
-        validateDataTableRequest(safeRequest);
+        User user = userUtil.getUser();
+        // validateDataTableRequest(safeRequest);
 
         int start = Math.max(0, safeRequest.getStart());
         int length = safeRequest.getLength();
@@ -148,6 +156,7 @@ public class BankAccountService {
         Pageable pageable = length == -1 ? Pageable.unpaged() : PageRequest.of(page, safeLength);
 
         Specification<BankAccount> spec = dataTableSpecificationBuilder.build(safeRequest)
+                .and((root, query, cb) -> cb.equal(root.get("company"), user.getCompany()))
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
         Page<BankAccount> pageResult = bankAccountRepository.findAll(spec, pageable);
@@ -170,7 +179,7 @@ public class BankAccountService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Información detallada obtenida correctamente."),
-                        Optional.of(toDetailDto(account))
+                        Optional.of(toDto(account))
                 )
         );
     }
@@ -194,7 +203,6 @@ public class BankAccountService {
         }
 
         account.setAccountName(request.getAccountName().trim());
-        account.setBranchName(emptyToNull(request.getBranchName()));
         account.setAccountExecutive(emptyToNull(request.getAccountExecutive()));
         account.setBankPhone(emptyToNull(request.getBankPhone()));
         account.setDescription(emptyToNull(request.getDescription()));
@@ -215,7 +223,7 @@ public class BankAccountService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Cuenta bancaria actualizada exitosamente."),
-                        Optional.of(toDetailDto(account))
+                        Optional.of(toDto(account))
                 )
         );
     }
@@ -268,7 +276,7 @@ public class BankAccountService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Cuenta bancaria desactivada exitosamente."),
-                        Optional.of(toDetailDto(account))
+                        Optional.of(toDto(account))
                 )
         );
     }
@@ -308,22 +316,22 @@ public class BankAccountService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Estado de cuenta actualizado exitosamente."),
-                        Optional.of(toDetailDto(account))
+                        Optional.of(toDto(account))
                 )
         );
     }
 
-    private void validateCreateBusinessRules(CreateBankAccountRequest request) {
-        if (bankAccountRepository.existsByCompanyIdAndCodeAndDeletedAtIsNull(request.getCompanyId(), request.getCode().trim())) {
-            throw new IllegalArgumentException("BNK-ERR-004: El código de cuenta ya existe para esta empresa.");
-        }
-        if (bankAccountRepository.existsByBankIdAndAccountNumberAndDeletedAtIsNull(request.getBankId(), request.getAccountNumber().trim())) {
-            throw new IllegalArgumentException("BNK-ERR-001: Número de cuenta ya registrado en este banco.");
-        }
-    }
+    // private void validateCreateBusinessRules(CreateBankAccountRequest request) {
+    //     if (bankAccountRepository.existsByCompanyIdAndCodeAndDeletedAtIsNull(request.getCompanyId(), request.getCode().trim())) {
+    //         throw new IllegalArgumentException("BNK-ERR-004: El código de cuenta ya existe para esta empresa.");
+    //     }
+    //     if (bankAccountRepository.existsByBankIdAndAccountNumberAndDeletedAtIsNull(request.getBankId(), request.getAccountNumber().trim())) {
+    //         throw new IllegalArgumentException("BNK-ERR-001: Número de cuenta ya registrado en este banco.");
+    //     }
+    // }
 
-    private void validateChartOfAccountForBanks(ChartOfAccount coa) {
-        if (coa.getAccountClass() != AccountClass.ASSET) {
+    private void validateAccountingAccountForBanks(AccountingAccount accountingAccount) {
+        if (accountingAccount.getPucAccount().getAccountClass() != AccountClass.ASSET) {
             throw new IllegalArgumentException("BNK-ERR-002: Cuenta contable no válida para bancos (debe ser clase ACTIVO).");
         }
     }
@@ -347,22 +355,31 @@ public class BankAccountService {
     }
 
     private BankAccountDTO toDto(BankAccount e) {
+
+        boolean used = false;
+
         return BankAccountDTO.builder()
                 .id(e.getId())
                 .code(e.getCode())
-                .accountNumberMasked(maskAccountNumber(e.getAccountNumber()))
+                .accountNumberMasked(used ? maskAccountNumber(e.getAccountNumber()) : e.getAccountNumber())
                 .accountName(e.getAccountName())
                 .accountType(e.getAccountType())
-                .bankId(e.getBank() != null ? e.getBank().getId() : null)
-                .bankName(e.getBank() != null ? e.getBank().getName() : null)
-                .currencyTypeId(e.getCurrencyType() != null ? e.getCurrencyType().getId() : null)
-                .currencyCode(e.getCurrencyType() != null ? e.getCurrencyType().getIsoCode() : null)
+                .bankDTO(e.getBank() != null ? BankDTO.builder()
+                    .id(e.getBank().getId())
+                    .name(e.getBank().getName())
+                    .build()
+                    : null)
+                .currencyTypeDTO(e.getCurrencyType() != null ? CurrencyTypeResponseDTO.builder()
+                    .id(e.getCurrencyType().getId())
+                    .isoCode(e.getCurrencyType().getIsoCode())
+                    .build()
+                    : null)
                 .initialBalance(e.getInitialBalance())
-                .chartOfAccountId(e.getChartOfAccount() != null ? e.getChartOfAccount().getId() : null)
-                .chartOfAccountCode(e.getChartOfAccount() != null ? e.getChartOfAccount().getCode() : null)
-                .chartOfAccountName(e.getChartOfAccount() != null ? e.getChartOfAccount().getName() : null)
-                .companyId(e.getCompany() != null ? e.getCompany().getId() : null)
-                .companyName(e.getCompany() != null ? e.getCompany().getName() : null)
+                .accountingAccountDTO(e.getAccountingAccount() != null ? AccountingAccountDTO.builder()
+                    .id(e.getAccountingAccount().getId())
+                    .customName(e.getAccountingAccount().getCustomName())
+                    .build()
+                    : null)
                 .status(e.getStatus())
                 .openingDate(e.getOpeningDate())
                 .createdAt(e.getCreatedAt())
@@ -370,43 +387,43 @@ public class BankAccountService {
                 .build();
     }
 
-    private BankAccountDetailDTO toDetailDto(BankAccount e) {
-        return BankAccountDetailDTO.builder()
-                .id(e.getId())
-                .code(e.getCode())
-                .accountNumberMasked(maskAccountNumber(e.getAccountNumber()))
-                .accountName(e.getAccountName())
-                .accountType(e.getAccountType())
-                .bankId(e.getBank() != null ? e.getBank().getId() : null)
-                .bankName(e.getBank() != null ? e.getBank().getName() : null)
-                .currencyTypeId(e.getCurrencyType() != null ? e.getCurrencyType().getId() : null)
-                .currencyCode(e.getCurrencyType() != null ? e.getCurrencyType().getIsoCode() : null)
-                .initialBalance(e.getInitialBalance())
-                .chartOfAccountId(e.getChartOfAccount() != null ? e.getChartOfAccount().getId() : null)
-                .chartOfAccountCode(e.getChartOfAccount() != null ? e.getChartOfAccount().getCode() : null)
-                .chartOfAccountName(e.getChartOfAccount() != null ? e.getChartOfAccount().getName() : null)
-                .companyId(e.getCompany() != null ? e.getCompany().getId() : null)
-                .companyName(e.getCompany() != null ? e.getCompany().getName() : null)
-                .status(e.getStatus())
-                .openingDate(e.getOpeningDate())
-                .createdAt(e.getCreatedAt())
-                .updatedAt(e.getUpdatedAt())
-                .deletedAt(e.getDeletedAt())
-                .bankBranchId(e.getBankBranch() != null ? e.getBankBranch().getId() : null)
-                .branchName(e.getBranchName())
-                .accountExecutive(e.getAccountExecutive())
-                .bankPhone(e.getBankPhone())
-                .description(e.getDescription())
-                .allowsOverdraft(e.getAllowsOverdraft())
-                .creditLimit(e.getCreditLimit())
-                .notifyLowBalance(e.getNotifyLowBalance())
-                .minimumBalance(e.getMinimumBalance())
-                .handlesCheckbook(e.getHandlesCheckbook())
-                .costCenterId(e.getCostCenter() != null ? e.getCostCenter().getId() : null)
-                .bookId(e.getBookId())
-                .closingDate(e.getClosingDate())
-                .build();
-    }
+    // private BankAccountDetailDTO toDetailDto(BankAccount e) {
+    //     return BankAccountDetailDTO.builder()
+    //             .id(e.getId())
+    //             .code(e.getCode())
+    //             .accountNumberMasked(maskAccountNumber(e.getAccountNumber()))
+    //             .accountName(e.getAccountName())
+    //             .accountType(e.getAccountType())
+    //             .bankId(e.getBank() != null ? e.getBank().getId() : null)
+    //             .bankName(e.getBank() != null ? e.getBank().getName() : null)
+    //             .currencyTypeId(e.getCurrencyType() != null ? e.getCurrencyType().getId() : null)
+    //             .currencyCode(e.getCurrencyType() != null ? e.getCurrencyType().getIsoCode() : null)
+    //             .initialBalance(e.getInitialBalance())
+    //             .chartOfAccountId(e.getChartOfAccount() != null ? e.getChartOfAccount().getId() : null)
+    //             .chartOfAccountCode(e.getChartOfAccount() != null ? e.getChartOfAccount().getCode() : null)
+    //             .chartOfAccountName(e.getChartOfAccount() != null ? e.getChartOfAccount().getName() : null)
+    //             .companyId(e.getCompany() != null ? e.getCompany().getId() : null)
+    //             .companyName(e.getCompany() != null ? e.getCompany().getName() : null)
+    //             .status(e.getStatus())
+    //             .openingDate(e.getOpeningDate())
+    //             .createdAt(e.getCreatedAt())
+    //             .updatedAt(e.getUpdatedAt())
+    //             .deletedAt(e.getDeletedAt())
+    //             .bankBranchId(e.getBankBranch() != null ? e.getBankBranch().getId() : null)
+    //             .branchName(e.getBranchName())
+    //             .accountExecutive(e.getAccountExecutive())
+    //             .bankPhone(e.getBankPhone())
+    //             .description(e.getDescription())
+    //             .allowsOverdraft(e.getAllowsOverdraft())
+    //             .creditLimit(e.getCreditLimit())
+    //             .notifyLowBalance(e.getNotifyLowBalance())
+    //             .minimumBalance(e.getMinimumBalance())
+    //             .handlesCheckbook(e.getHandlesCheckbook())
+    //             .costCenterId(e.getCostCenter() != null ? e.getCostCenter().getId() : null)
+    //             .bookId(e.getBookId())
+    //             .closingDate(e.getClosingDate())
+    //             .build();
+    // }
 
     private Bank getBankOrThrow(Long id) {
         return bankRepository.findById(id)
@@ -418,8 +435,8 @@ public class BankAccountService {
                 .orElseThrow(() -> new IllegalArgumentException("Sucursal no encontrada."));
     }
 
-    private ChartOfAccount getChartOfAccountOrThrow(Long id) {
-        return chartOfAccountRepository.findById(id)
+    private AccountingAccount getAccountingAccountOrThrow(Long id) {
+        return accountingAccountRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("BNK-ERR-002: Cuenta contable no encontrada."));
     }
 

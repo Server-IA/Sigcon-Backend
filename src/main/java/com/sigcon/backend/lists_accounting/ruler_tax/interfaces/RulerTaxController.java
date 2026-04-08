@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/ruler-tax")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Listas Contables", description = "Endpoints para la gestión de reglas de impuesto")
+@Tag(name = "2. Módulo de Listas Contables - Reglas de impuesto", description = "Endpoints para la gestión de reglas de impuesto")
 
 public class RulerTaxController {
 

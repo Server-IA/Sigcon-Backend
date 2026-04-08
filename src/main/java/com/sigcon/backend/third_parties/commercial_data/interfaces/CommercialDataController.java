@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/commercial-data")
 @RequiredArgsConstructor
-@Tag(name = "Modulo de Terceros")
+@Tag(name = "3. Módulo de Terceros - Datos comerciales", description = "Endpoints para la gestión de datos comerciales")
 public class CommercialDataController {
     private final CommercialDataService commercialDataService;
 

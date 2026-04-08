@@ -1,5 +1,6 @@
 package com.sigcon.backend.utils;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -9,8 +10,8 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-
 public class DataTableRequest {
+
     // ===== DataTables =====
     private int draw;
     private int start;
@@ -21,6 +22,12 @@ public class DataTableRequest {
 
     // ===== Filtro Global =====
     private DataTableSearch search;
+
+    // ===== FILTROS PERSONALIZADOS (FECHAS) =====
+    private LocalDate receivedDateFrom;
+    private LocalDate receivedDateTo;
+    private LocalDate activationDateFrom;
+    private LocalDate activationDateTo;
 
     @Data
     @AllArgsConstructor
@@ -39,5 +46,5 @@ public class DataTableRequest {
     public static class DataTableSearch {
         private String value;
         private boolean regex;
-    } 
+    }
 }

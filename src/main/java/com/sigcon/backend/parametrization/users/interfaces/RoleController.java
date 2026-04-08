@@ -23,7 +23,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/roles")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Roles y permisos del sistema", description = "Endpoints para gestion de roles y permisos del sistema")
 public class RoleController {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

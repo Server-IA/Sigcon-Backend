@@ -37,7 +37,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/v1/chart-of-accounts")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Listas Contables", description = "Endpoints para gestionar el catalogo de cuentas (PUC)")
+@Tag(name = "2. Módulo de Listas Contables - Catalogo de cuentas (PUC)", description = "Endpoints para gestionar el catalogo de cuentas (PUC)")
 public class ChartOfAccountController {
 
         private final ChartOfAccountService chartOfAccountService;

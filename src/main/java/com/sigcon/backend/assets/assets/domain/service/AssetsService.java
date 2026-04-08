@@ -2,13 +2,17 @@ package com.sigcon.backend.assets.assets.domain.service;
 
 import com.sigcon.backend.assets.assets.application.BulkAssetsUploadRequest;
 import com.sigcon.backend.assets.assets.application.BulkAssetsUploadResponse;
+import com.sigcon.backend.assets.assets.application.CreateAssetTaxesRetention;
 import com.sigcon.backend.assets.assets.application.CreateAssetsDTO;
 import com.sigcon.backend.assets.assets.application.UpdateAssetsDTO;
+import com.sigcon.backend.assets.assets.application.ViewAssetTaxesRetentionDTO;
 import com.sigcon.backend.assets.assets.application.ViewAssetsDTO;
 import com.sigcon.backend.assets.assets.domain.model.Assets;
+import com.sigcon.backend.assets.assets.domain.model.AssetsTaxesRetention;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
+import com.sigcon.backend.assets.assets.domain.repository.AssetTaxesRetentionRepository;
 //import com.sigcon.backend.assets.assets.domain.repository.AssetChartOfAccountBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetThirdPartyBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
@@ -22,6 +26,9 @@ import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDT
 import com.sigcon.backend.lists_accounting.depretation_rules.application.DepretationRuleDTO;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
+import com.sigcon.backend.lists_accounting.ruler_tax.application.RuleTaxDTO;
+import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.TaxRulerEntity;
+import com.sigcon.backend.lists_accounting.ruler_tax.domain.repository.RuleTaxRepository;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.parametrization.resources.application.CountryDTO;
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
@@ -33,6 +40,7 @@ import com.sigcon.backend.parametrization.resources.domain.model.Municipality;
 import com.sigcon.backend.parametrization.resources.domain.model.TypeOrganization;
 import com.sigcon.backend.parametrization.resources.domain.model.TypeRegimen;
 import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdContactDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRoleCatalogDTO;
@@ -47,6 +55,13 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.vouchers.application.CreateVoucherDTO;
+import com.sigcon.backend.vouchers.application.VoucherDTO;
+import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
+import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
+import com.sigcon.backend.vouchers.domain.service.VoucherService;
+
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -95,9 +110,17 @@ public class AssetsService {
     private static final BigDecimal MIN_ACQUISITION_VALUE = new BigDecimal("0.01");
     private static final LocalDate EXCEL_EPOCH = LocalDate.of(1899, 12, 30);
 
+    private final VoucherService voucherService;
+
+    private final UserUtil userUtil;
+
     private final AssetsRepository assetsRepository;
+    private final AssetTaxesRetentionRepository assetTaxesRetentionRepository;
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
     private final DepretationRuleRepository depretationRuleRepository;
+    private final VoucherRepository voucherRepository;
+
+    private final RuleTaxRepository taxRuleRepository;
 
     // private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
@@ -105,6 +128,8 @@ public class AssetsService {
 
     @Transactional
     public ViewAssetsDTO create(CreateAssetsDTO request) {
+
+        User user = userUtil.getUser();
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
@@ -118,7 +143,16 @@ public class AssetsService {
 
         String currentUser = resolveCurrentUsername();
 
+        BigDecimal taxValue = BigDecimal.ZERO;
+        if(user.getCompany().getTypeRegimen().getId() == 2){
+            TaxRulerEntity ruleTax = taxRuleRepository.findById(request.getRulerTax() != null ? request.getRulerTax() : 0L)
+                    .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
+            BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
+            taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+        }
+
         Assets asset = Assets.builder()
+                .company(user.getCompany())
                 .assetCode(generateAssetCode())
                 .assetName(request.getName().trim())
                 .description(normalizeOptionalText(request.getDescription()))
@@ -126,19 +160,80 @@ public class AssetsService {
                 .assetType(request.getType())
                 .supplier(supplier)
                 .acquisitionValue(request.getAcquisitionValue())
+                .taxValue(taxValue)
                 .acquisitionDate(request.getAcquisitionDate())
                 .usefulLifeMonths(request.getUsefulLifeMonths())
                 .depretationRule(depreciationRule)
                 .accountsPayableReferenceId(request.getAccountsPayableReferenceId())
                 .bankCashReferenceId(request.getBankCashReferenceId())
                 .accountingAccount(accountingAccount)
-                .status(request.getStatus())
+                // .status(request.getStatus())
                 .observations(normalizeOptionalText(request.getObservations()))
                 .createdBy(currentUser)
                 .updatedBy(currentUser)
-                .build();
+                .build(); 
 
         Assets savedAsset = assetsRepository.save(asset);
+
+        if(user.getCompany().getTypeRegimen().getId() == 2){
+            TaxRulerEntity ruleTax = taxRuleRepository.findById(request.getRulerTax())
+                    .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
+            BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
+            taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+
+            AssetsTaxesRetention assetTaxesRetention = AssetsTaxesRetention.builder()
+                    .asset(savedAsset)
+                    .taxRule(ruleTax)
+                    .percentage(percentage)
+                    .amount(taxValue)
+                    .build();
+            assetTaxesRetentionRepository.save(assetTaxesRetention);
+        }
+
+        for (CreateAssetTaxesRetention taxesRetention : request.getTaxesRetention()) {
+
+            TaxRulerEntity ruleTax = taxRuleRepository.findById(taxesRetention.getTaxRuleId())
+                    .orElseThrow(() -> new IllegalArgumentException("Regla de impuesto no encontrada"));
+            BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
+            BigDecimal amount = BigDecimal.ZERO;
+
+            if(user.getCompany().getTypeRegimen().getId() == 2){
+                if(ruleTax.getAccountingAccount().getPucAccount().getCode().startsWith("2367")){
+                    percentage = percentage.multiply(taxValue).divide(BigDecimal.valueOf(100));
+                    amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+                }else{
+                    amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+                }
+            }else{
+                amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+            }
+
+            AssetsTaxesRetention assetTaxesRetention = AssetsTaxesRetention.builder()
+                    .asset(savedAsset)
+                    .taxRule(taxRuleRepository.findById(taxesRetention.getTaxRuleId())
+                            .orElseThrow(() -> new IllegalArgumentException("Regla de impuesto no encontrada")))
+                    .percentage(taxesRetention.getPercentage() != null ? taxesRetention.getPercentage() : null)
+                    .amount(amount)
+                    .build();
+            assetTaxesRetentionRepository.save(assetTaxesRetention);
+        }
+
+        BigDecimal totalAmount = request.getAcquisitionValue().add(taxValue);
+
+        CreateVoucherDTO voucherDTO = CreateVoucherDTO.builder()
+        .voucherTypeId(1L)
+        .date(request.getAcquisitionDate())
+        .amount(totalAmount)
+        .description("Compra de activo: " + savedAsset.getAssetName())
+        .paymentFormId(request.getPaymentFormId())
+        .bankAccountId(request.getBankAccountId() != null ? request.getBankAccountId() : null)
+        .cashAccountId(request.getCashAccountId() != null ? request.getCashAccountId() : null)
+        .checkId(request.getCheckId() != null ? request.getCheckId() : null)
+        .assetId(savedAsset.getId())
+        .build();
+
+        voucherService.createVoucher(voucherDTO);
+
         return toViewDTO(savedAsset);
     }
 
@@ -254,6 +349,8 @@ public class AssetsService {
             request = new DataTableRequest();
         }
 
+        User user = userUtil.getUser();
+
         int draw = Math.max(0, request.getDraw());
         int start = Math.max(0, request.getStart());
         int length = request.getLength();
@@ -264,7 +361,8 @@ public class AssetsService {
                 ? Pageable.unpaged()
                 : PageRequest.of(page, safeLength);
 
-        Specification<Assets> specification = dataTableSpecificationBuilder.build(request);
+        Specification<Assets> specification = dataTableSpecificationBuilder.build(request)
+        .and((root, query, cb) -> cb.equal(root.get("company").get("id"), user.getCompany().getId()));
 
         Page<Assets> assetsPage = assetsRepository.findAll(specification, pageable);
         return DataTableResponse.from(assetsPage.map(this::toViewDTO), draw);
@@ -405,6 +503,10 @@ public class AssetsService {
     }
 
     private ViewAssetsDTO toViewDTO(Assets asset) {
+
+        List<VouchersEntity> vouchers = voucherRepository.findAllByAssetIdAndDeletedAtIsNull(asset.getId());
+        List<AssetsTaxesRetention> taxesRetention = assetTaxesRetentionRepository.findAllByAssetIdAndDeletedAtIsNull(asset.getId());
+
         return ViewAssetsDTO.builder()
                 .id(asset.getId())
                 .assetCode(asset.getAssetCode())
@@ -417,8 +519,13 @@ public class AssetsService {
 
                 .supplier(toThirdPartyDto(asset.getSupplier()))
                 .acquisitionValue(asset.getAcquisitionValue())
+                .taxValue(asset.getTaxValue())
                 .acquisitionDate(asset.getAcquisitionDate())
                 .usefulLifeMonths(asset.getUsefulLifeMonths())
+
+                .vouchers(toVoucherDtoList(vouchers))
+
+                .taxesRetention(toTaxesRetentionDtoList(taxesRetention))
 
                 .depretationRule(toDepretationRuleDto(asset.getDepretationRule()))
 
@@ -430,6 +537,59 @@ public class AssetsService {
                 .updatedBy(asset.getUpdatedBy())
                 .createdAt(asset.getCreatedAt())
                 .updatedAt(asset.getUpdatedAt())
+                .build();
+    }
+
+    private List<VoucherDTO> toVoucherDtoList(List<VouchersEntity> vouchers) {
+        if (vouchers == null || vouchers.isEmpty()) {
+            return List.of();
+        }
+        return vouchers.stream()
+                .map(this::toVoucherDto)
+                .toList();
+    }
+
+    private VoucherDTO toVoucherDto(VouchersEntity voucher) {
+        if (voucher == null) {
+            return null;
+        }
+        return VoucherDTO.builder()
+            .id(voucher.getId())
+            .number(voucher.getNumber())
+            .date(voucher.getDate())
+            .amount(voucher.getAmount())
+            .description(voucher.getDescription())
+        .build();
+    }
+
+    private List<ViewAssetTaxesRetentionDTO> toTaxesRetentionDtoList(List<AssetsTaxesRetention> taxesRetention) {
+        if (taxesRetention == null || taxesRetention.isEmpty()) {
+            return List.of();
+        }
+        return taxesRetention.stream()
+                .map(this::toTaxesRetentionDto)
+                .toList();
+    }
+
+    private ViewAssetTaxesRetentionDTO toTaxesRetentionDto(AssetsTaxesRetention taxesRetention) {
+        if (taxesRetention == null) {
+            return null;
+        }
+        return ViewAssetTaxesRetentionDTO.builder()
+                .id(taxesRetention.getId())
+                .taxRule(toTaxRuleDto(taxesRetention.getTaxRule()))
+                .percentage(taxesRetention.getPercentage())
+                .amount(taxesRetention.getAmount())
+                .build();
+    }
+
+    private RuleTaxDTO toTaxRuleDto(TaxRulerEntity taxRule) {
+        if (taxRule == null) {
+            return null;
+        }
+        return RuleTaxDTO.builder()
+                .id(taxRule.getId())
+                .name(taxRule.getName())
                 .build();
     }
 
@@ -465,7 +625,9 @@ public class AssetsService {
                                 .deletionReason(accountingAccount.getCostCenter().getDeletionReason())
                                 .build()
                         : null)
-                .taxRuleId(accountingAccount.getTaxRuleId())
+                // .taxRules(ruleTaxRepository.findByAccountingAccountId(accountingAccount.getId())
+                //                 .stream().map(this::convertRuleTaxToDTO)
+                //                 .toList())
                 .nature(accountingAccount.getNature())
                 .status(accountingAccount.getStatus())
                 .createdAt(accountingAccount.getCreatedAt())

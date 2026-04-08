@@ -1,6 +1,6 @@
 package com.sigcon.backend.parametrization.users.domain.model;
 
-import com.sigcon.backend.bank.banks.domain.model.BankBranch;
+import com.sigcon.backend.banks.banks.domain.model.BankBranch;
 import com.sigcon.backend.parametrization.companies.domain.model.Company;
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 import jakarta.persistence.*;

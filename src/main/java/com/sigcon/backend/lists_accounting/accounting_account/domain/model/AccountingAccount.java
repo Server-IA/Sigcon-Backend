@@ -10,6 +10,7 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
+import com.sigcon.backend.parametrization.companies.domain.model.Company;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -69,8 +70,9 @@ public class AccountingAccount {
     @Column(name = "status", nullable = false)
     private AccountStatus status;
 
-    @Column(name = "company_id", nullable = false)
-    private Long companyId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_id", nullable = false)
+    private Company companyId;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

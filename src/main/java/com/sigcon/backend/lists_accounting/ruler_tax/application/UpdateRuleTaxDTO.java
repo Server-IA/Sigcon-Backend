@@ -38,4 +38,6 @@ public class UpdateRuleTaxDTO {
     @NotNull(message = "El tipo de regla de impuesto es requerido")
     private TypeRulerTax typeRulerTax;
     private StatusRulerTax statusRulerTax;
+    @NotNull(message = "La cuenta contable es requerida")
+    private Long accountingAccountId;
 }

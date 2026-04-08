@@ -34,15 +34,6 @@ BEGIN
         FOREIGN KEY (bank_account_id)
         REFERENCES bank_accounts(id);
     END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_checkbooks_company'
-    ) THEN
-        ALTER TABLE checkbooks
-        ADD CONSTRAINT fk_checkbooks_company
-        FOREIGN KEY (company_id)
-        REFERENCES companies(id);
-    END IF;
 END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_checkbook_account_number_active
@@ -50,10 +41,9 @@ ON checkbooks (bank_account_id, checkbook_number)
 WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_checkbooks_account
-ON checkbooks (bank_account_id);
-
-CREATE INDEX IF NOT EXISTS idx_checkbooks_company
-ON checkbooks (company_id);
+ON checkbooks (bank_account_id)
+WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_checkbooks_status
-ON checkbooks (status);
+ON checkbooks (status)
+WHERE deleted_at IS NULL;

@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
-@Tag(name = "Módulo de Parametrización")
+@Tag(name = "1. Módulo de Parametrización - Usuarios", description = "Endpoints para la gestión de usuarios")
 public class UserController {
 
     private final UserService userService;
