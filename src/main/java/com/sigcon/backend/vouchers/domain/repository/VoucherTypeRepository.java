@@ -5,6 +5,6 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.sigcon.backend.vouchers.domain.models.VoucherTypesEntity;
 
-public interface VoucerTypeRepository extends JpaRepository<VoucherTypesEntity, Long>, JpaSpecificationExecutor<VoucherTypesEntity> {
+public interface VoucherTypeRepository extends JpaRepository<VoucherTypesEntity, Long>, JpaSpecificationExecutor<VoucherTypesEntity> {
 
 }

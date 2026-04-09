@@ -16,7 +16,7 @@ import com.sigcon.backend.banks.cash_management.application.AuditStub;
 import com.sigcon.backend.banks.cash_management.application.CashResponse;
 import com.sigcon.backend.banks.cash_management.application.ChangeCashStatusRequest;
 import com.sigcon.backend.banks.cash_management.application.CreateCashRequest;
-import com.sigcon.backend.banks.cash_management.application.FinancialMovementsStub;
+import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.banks.cash_management.application.UpdateCashRequest;
 import com.sigcon.backend.banks.cash_management.domain.model.Cash;
 import com.sigcon.backend.banks.cash_management.domain.model.enums.CashStatus;
@@ -57,7 +57,7 @@ public class CashService {
     private final CostCenterRepository costCenterRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
     private final ThirdPartyRepository thirdPartyRepository;
-    private final FinancialMovementsStub financialMovementsStub;
+    private final FinancialMovementRepository financialMovementRepository;
     private final AuditStub auditStub;
     private final UserRepository userRepository;
 
@@ -168,7 +168,7 @@ public class CashService {
         }
 
         // 4. Verificar si la caja tiene movimientos — cambios sensibles requieren motivo
-        boolean hasMovements = financialMovementsStub.hasMovements(id);
+        boolean hasMovements = financialMovementRepository.existsByCash_Id(id);
         if (hasMovements) {
             if (request.getChangeReason() == null || request.getChangeReason().trim().length() < 10) {
                 throw new IllegalArgumentException(
@@ -256,9 +256,9 @@ public class CashService {
         }
 
         // 3. Verificar dependencias con stubs
-        boolean hasMovements = financialMovementsStub.hasMovements(id);
+        boolean hasMovements = financialMovementRepository.existsByCash_Id(id);
         boolean hasOpenAudits = auditStub.hasOpenAudits(id);
-        long movementsCount = financialMovementsStub.countMovements(id);
+        long movementsCount = financialMovementRepository.countByCash_Id(id);
         long auditsCount = auditStub.countAudits(id);
 
         // 4. Flujo alternativo: si hay dependencias, desactivar en lugar de eliminar

@@ -116,6 +116,9 @@ public class BankAccount {
     @Column(name = "closing_date")
     private LocalDate closingDate;
 
+    @Column(name = "last_reconciliation_date")
+    private LocalDate lastReconciliationDate;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

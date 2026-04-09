@@ -16,6 +16,18 @@ import com.sigcon.backend.assets.assets.domain.repository.AssetTaxesRetentionRep
 //import com.sigcon.backend.assets.assets.domain.repository.AssetChartOfAccountBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetThirdPartyBridgeRepository;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
+import com.sigcon.backend.banks.bankaccounts.application.BankAccountDTO;
+import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
+import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.cash_management.application.CashDTO;
+import com.sigcon.backend.banks.cash_management.domain.model.Cash;
+import com.sigcon.backend.banks.cash_management.domain.repository.CashRepository;
+import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
+import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
+import com.sigcon.backend.banks.checks.application.CheckDTO;
+import com.sigcon.backend.banks.checks.domain.model.Check;
+import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
+import com.sigcon.backend.invoices.domain.model.PaymentForms;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus;
@@ -32,6 +44,7 @@ import com.sigcon.backend.lists_accounting.ruler_tax.domain.repository.RuleTaxRe
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.parametrization.resources.application.CountryDTO;
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
+import com.sigcon.backend.parametrization.resources.application.PaymentFormsDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
 import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
 import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
@@ -58,6 +71,8 @@ import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
 import com.sigcon.backend.vouchers.application.CreateVoucherDTO;
 import com.sigcon.backend.vouchers.application.VoucherDTO;
+import com.sigcon.backend.vouchers.application.VoucherTypeDTO;
+import com.sigcon.backend.vouchers.domain.models.VoucherTypesEntity;
 import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
 import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
 import com.sigcon.backend.vouchers.domain.service.VoucherService;
@@ -119,6 +134,10 @@ public class AssetsService {
     private final AssetThirdPartyBridgeRepository thirdPartyRepository;
     private final DepretationRuleRepository depretationRuleRepository;
     private final VoucherRepository voucherRepository;
+    private final BankAccountRepository bankAccountRepository;
+    private final CheckbookRepository checkbookRepository;
+    private final CashRepository cashRepository;
+    private final CheckRepository checkRepository;
 
     private final RuleTaxRepository taxRuleRepository;
 
@@ -149,6 +168,45 @@ public class AssetsService {
                     .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
             BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
             taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+
+            BigDecimal totalAssetValue = request.getAcquisitionValue().add(taxValue);
+
+            if(request.getBankAccountId() != null || request.getCashAccountId() != null){
+                if(request.getBankAccountId() != null){
+                    BankAccount bankAccount = bankAccountRepository.findById(request.getBankAccountId())
+                            .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
+
+                    BigDecimal bankAccountBalance = bankAccount.getInitialBalance().add(bankAccount.getCreditLimit());
+
+                    if(bankAccountBalance.compareTo(totalAssetValue) < 0){
+                        throw new IllegalArgumentException("El saldo de la cuenta bancaria no es suficiente para cubrir el valor del activo");
+                    }
+                }else if(request.getCheckId() != null){
+                    Check check = checkRepository.findById(request.getCheckId())
+                            .orElseThrow(() -> new IllegalArgumentException("Chequera no encontrada"));
+                    BigDecimal checkbookBalance = check.getCheckbook().getBankAccount().getInitialBalance().add(check.getCheckbook().getBankAccount().getCreditLimit());
+                    if(checkbookBalance.compareTo(totalAssetValue) < 0){
+                        throw new IllegalArgumentException("El saldo de la chequera no es suficiente para cubrir el valor del activo");
+                    }else if(check.getValue().compareTo(totalAssetValue) != 0){
+                        throw new IllegalArgumentException("El valor del cheque no coincide con el valor del activo");
+                    }
+                }
+            }
+
+            if(request.getCashAccountId() != null){
+                Cash cash = cashRepository.findById(request.getCashAccountId())
+                        .orElseThrow(() -> new IllegalArgumentException("Caja no encontrada"));
+                if(cash.getMaxLimit().compareTo(totalAssetValue) < 0){
+                    throw new IllegalArgumentException("El limite maximo de la caja no es suficiente para cubrir el valor del activo");
+                }else if(cash.getMinLimit().compareTo(totalAssetValue) > 0){
+                    throw new IllegalArgumentException("El limite minimo de la caja no es suficiente para cubrir el valor del activo");
+                }
+                BigDecimal cashBalance = cash.getInitialBalance();
+                if(cashBalance.compareTo(totalAssetValue) < 0){
+                    throw new IllegalArgumentException("El saldo de la caja no es suficiente para cubrir el valor del activo");
+                }
+            }
+
         }
 
         Assets asset = Assets.builder()
@@ -304,8 +362,10 @@ public class AssetsService {
                     "referencia bancos/cajas", row.line());
 
             String assetCode = resolveBulkAssetCode(row.assetCode(), seenAssetCodes, year, sequence, row.line());
+            User user = userUtil.getUser();
 
             Assets asset = Assets.builder()
+                    .company(user.getCompany())
                     .assetCode(assetCode)
                     .assetName(row.name().trim())
                     .description(normalizeOptionalText(row.description()))
@@ -370,6 +430,9 @@ public class AssetsService {
 
     @Transactional
     public ViewAssetsDTO getById(Long id) {
+
+
+
         Assets asset = assetsRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("El activo seleccionado no existe."));
         return toViewDTO(asset);
@@ -423,11 +486,11 @@ public class AssetsService {
 
     private void validateAssetClassification(AssetClassification classification, Integer usefulLifeMonths) {
         if (classification == AssetClassification.CURRENT && usefulLifeMonths != null && usefulLifeMonths > 12) {
-            throw new IllegalArgumentException("Los datos ingresados no cumplen las politicas contables.");
+            throw new IllegalArgumentException("La clasificiacion del activo no puede ser corriente si la vida util es mayor a 12 meses.");
         }
 
         if (classification == AssetClassification.NON_CURRENT && usefulLifeMonths != null && usefulLifeMonths <= 12) {
-            throw new IllegalArgumentException("Los datos ingresados no cumplen las politicas contables.");
+            throw new IllegalArgumentException("La clasificiacion del activo no puede ser no corriente si la vida util es menor o igual a 12 meses.");
         }
     }
 
@@ -559,7 +622,63 @@ public class AssetsService {
             .date(voucher.getDate())
             .amount(voucher.getAmount())
             .description(voucher.getDescription())
+            .paymentForm(toPaymentFormDto(voucher.getPaymentForm()))
+            .voucherType(toVoucherTypeDto(voucher.getVoucherType()))
+            .cashAccount(toCashAccountsDto(voucher.getCash()))
+            .check(toChecksDTO(voucher.getCheck()))
+            .bankAccount(toBankAccountDto(voucher.getBankAccount()))
         .build();
+    }
+
+    private CashDTO toCashAccountsDto(Cash cashAccount) {
+        if (cashAccount == null) {
+            return null;
+        }
+        return CashDTO.builder()
+                .id(cashAccount.getId())
+                .cahsName(cashAccount.getCashName())
+                .build();
+    }
+
+    private CheckDTO toChecksDTO(Check check) {
+        if (check == null) {
+            return null;
+        }
+        return CheckDTO.builder()
+                .id(check.getId())
+                .numberCheck(check.getNumberCheck())
+                .build();
+    }
+
+    private BankAccountDTO toBankAccountDto(BankAccount bankAccount) {
+        if (bankAccount == null) {
+            return null;
+        }
+        return BankAccountDTO.builder()
+                .id(bankAccount.getId())
+                .accountName(bankAccount.getAccountName())
+                .accountNumberMasked(bankAccount.getAccountNumber())
+                .build();
+    }
+
+    private PaymentFormsDTO toPaymentFormDto(PaymentForms paymentForm) {
+        if (paymentForm == null) {
+            return null;
+        }
+        return PaymentFormsDTO.builder()
+                .id(paymentForm.getId())
+                .name(paymentForm.getName())
+                .build();
+    }
+
+    private VoucherTypeDTO toVoucherTypeDto(VoucherTypesEntity voucherType) {
+        if (voucherType == null) {
+            return null;
+        }
+        return VoucherTypeDTO.builder()
+                .id(voucherType.getId())
+                .name(voucherType.getName())
+                .build();
     }
 
     private List<ViewAssetTaxesRetentionDTO> toTaxesRetentionDtoList(List<AssetsTaxesRetention> taxesRetention) {
@@ -1556,5 +1675,9 @@ public class AssetsService {
             String bankCashReferenceId,
             String status,
             String observations) {
+    }
+
+    private BigDecimal calculateTotalBalance(BigDecimal acquisitionValue, BigDecimal taxValue) {
+        return acquisitionValue.add(taxValue);
     }
 }

@@ -2,6 +2,13 @@ package com.sigcon.backend.banks.bankaccounts.interfaces;
 
 import com.sigcon.backend.banks.bankaccounts.application.*;
 import com.sigcon.backend.banks.bankaccounts.domain.service.BankAccountService;
+import com.sigcon.backend.banks.financialmovements.application.CreateBankFinancialMovementRequest;
+import com.sigcon.backend.banks.financialmovements.application.MatchVoucherRequest;
+import com.sigcon.backend.banks.financialmovements.application.UpdateLastReconciliationRequest;
+import com.sigcon.backend.banks.financialmovements.domain.service.FinancialMovementService;
+import com.sigcon.backend.banks.reconciliation.application.CreateBankReconciliationSessionRequest;
+import com.sigcon.backend.banks.reconciliation.application.UpdateBankReconciliationStatementBalancesRequest;
+import com.sigcon.backend.banks.reconciliation.domain.service.BankReconciliationSessionService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,10 +21,12 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Optional;
 
@@ -29,6 +38,8 @@ import java.util.Optional;
 public class BankAccountController {
 
     private final BankAccountService bankAccountService;
+    private final FinancialMovementService financialMovementService;
+    private final BankReconciliationSessionService bankReconciliationSessionService;
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleBusinessException(IllegalArgumentException ex) {
@@ -146,5 +157,125 @@ public class BankAccountController {
                 request.getMotivo(),
                 request.getClosingDate()
         );
+    }
+
+    @GetMapping("/{id}/financial-movements")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Listar movimientos financieros de la cuenta",
+            description = "Movimientos registrados para conciliación. Use unmatchedOnly=true para pendientes de emparejar con cheques.")
+    public ResponseEntity<?> listFinancialMovements(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean unmatchedOnly) {
+        return financialMovementService.listForBankAccount(id, unmatchedOnly);
+    }
+
+    @PostMapping("/{id}/financial-movements")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Registrar movimiento bancario manual",
+            description = "Alta de línea de extracto u operación bancaria para conciliación (importe negativo = egreso).")
+    public ResponseEntity<?> createFinancialMovement(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateBankFinancialMovementRequest request,
+            BindingResult bindingResult) {
+        return financialMovementService.createForBankAccount(id, request, bindingResult);
+    }
+
+    @PutMapping("/{id}/last-reconciliation")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Registrar fecha de última conciliación",
+            description = "Cierra el período de extracto hasta la fecha indicada.")
+    public ResponseEntity<?> updateLastReconciliation(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateLastReconciliationRequest request,
+            BindingResult bindingResult) {
+        return bankAccountService.updateLastReconciliationDate(id, request, bindingResult);
+    }
+
+    @GetMapping("/{id}/reconciliation-sessions")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Listar sesiones de conciliación de la cuenta")
+    public ResponseEntity<?> listReconciliationSessions(@PathVariable Long id) {
+        return bankReconciliationSessionService.listByBankAccount(id);
+    }
+
+    @PostMapping("/{id}/reconciliation-sessions")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Crear sesión de conciliación (borrador)")
+    public ResponseEntity<?> createReconciliationSession(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateBankReconciliationSessionRequest request,
+            BindingResult bindingResult) {
+        return bankReconciliationSessionService.create(id, request, bindingResult);
+    }
+
+    @PutMapping("/{id}/reconciliation-sessions/{sessionId}/close")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Cerrar sesión de conciliación", description = "Marca la sesión como cerrada y actualiza la fecha de última conciliación de la cuenta.")
+    public ResponseEntity<?> closeReconciliationSession(
+            @PathVariable Long id,
+            @PathVariable Long sessionId) {
+        return bankReconciliationSessionService.close(id, sessionId);
+    }
+
+    @GetMapping("/{id}/reconciliation-sessions/{sessionId}/summary")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Resumen numérico de conciliación",
+            description = "Cuadre: aritmética del extracto (saldo inicial + movimientos del periodo vs saldo final) y comparación con saldo libro aproximado (saldo inicial cuenta + comprobantes hasta la fecha fin).")
+    public ResponseEntity<?> getReconciliationSummary(
+            @PathVariable Long id,
+            @PathVariable Long sessionId) {
+        return bankReconciliationSessionService.getSummary(id, sessionId);
+    }
+
+    @PutMapping("/{id}/reconciliation-sessions/{sessionId}/statement-balances")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Actualizar saldos del extracto en borrador",
+            description = "Solo sesiones en estado borrador. Envíe los campos que desee cambiar.")
+    public ResponseEntity<?> updateReconciliationStatementBalances(
+            @PathVariable Long id,
+            @PathVariable Long sessionId,
+            @Valid @RequestBody UpdateBankReconciliationStatementBalancesRequest request,
+            BindingResult bindingResult) {
+        return bankReconciliationSessionService.updateStatementBalances(id, sessionId, request, bindingResult);
+    }
+
+    @PostMapping(value = "/{id}/financial-movements/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Importar movimientos desde CSV",
+            description = "Formato por línea: fecha;importe;descripcion;referencia (punto o coma decimal). Primera línea puede ser encabezado.")
+    public ResponseEntity<?> importFinancialMovementsCsv(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) Long reconciliationSessionId) {
+        return financialMovementService.importCsv(id, reconciliationSessionId, file);
+    }
+
+    @GetMapping("/{id}/financial-movements/{movementId}/voucher-suggestions")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Sugerencias de comprobantes para emparejar un movimiento")
+    public ResponseEntity<?> voucherSuggestions(
+            @PathVariable Long id,
+            @PathVariable Long movementId) {
+        return financialMovementService.suggestVouchers(id, movementId);
+    }
+
+    @PutMapping("/{id}/financial-movements/{movementId}/match-voucher")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Emparejar movimiento con comprobante (voucher)")
+    public ResponseEntity<?> matchMovementToVoucher(
+            @PathVariable Long id,
+            @PathVariable Long movementId,
+            @Valid @RequestBody MatchVoucherRequest request,
+            BindingResult bindingResult) {
+        return financialMovementService.matchVoucher(id, movementId, request, bindingResult);
+    }
+
+    @PutMapping("/{id}/financial-movements/{movementId}/unmatch")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+    @Operation(summary = "Quitar emparejamiento con comprobante")
+    public ResponseEntity<?> unmatchMovement(
+            @PathVariable Long id,
+            @PathVariable Long movementId) {
+        return financialMovementService.unmatch(id, movementId);
     }
 }

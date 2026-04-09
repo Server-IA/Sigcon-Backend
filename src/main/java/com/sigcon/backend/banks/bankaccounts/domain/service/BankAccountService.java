@@ -1,10 +1,12 @@
 package com.sigcon.backend.banks.bankaccounts.domain.service;
 
 import com.sigcon.backend.banks.bankaccounts.application.*;
+import com.sigcon.backend.banks.financialmovements.application.UpdateLastReconciliationRequest;
 import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountType;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.banks.application.BankBranchDTO;
 import com.sigcon.backend.banks.banks.application.BankDTO;
 import com.sigcon.backend.banks.banks.domain.model.Bank;
 import com.sigcon.backend.banks.banks.domain.model.BankBranch;
@@ -17,6 +19,7 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.repository.ChartOfAccountRepository;
+import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
@@ -163,7 +166,7 @@ public class BankAccountService {
 
         if (pageResult.isEmpty()) {
             return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("BNK-ERR-032: No se encontraron resultados con los criterios especificados.")));
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("BNK-ERR-032: No se encontraron cuentas bancarias con los resultados con los criterios especificados.")));
         }
 
         DataTableResponse<BankAccountDTO> response = DataTableResponse.from(pageResult.map(this::toDto), safeRequest.getDraw());
@@ -204,7 +207,7 @@ public class BankAccountService {
 
         account.setAccountName(request.getAccountName().trim());
         account.setAccountExecutive(emptyToNull(request.getAccountExecutive()));
-        account.setBankPhone(emptyToNull(request.getBankPhone()));
+        // account.setBankPhone(emptyToNull(request.getBankPhone()));
         account.setDescription(emptyToNull(request.getDescription()));
         account.setAllowsOverdraft(Boolean.TRUE.equals(request.getAllowsOverdraft()));
         account.setCreditLimit(request.getCreditLimit());
@@ -321,6 +324,36 @@ public class BankAccountService {
         );
     }
 
+    @Transactional
+    public ResponseEntity<?> updateLastReconciliationDate(Long id, UpdateLastReconciliationRequest request, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+
+        User user = userUtil.getUser();
+        BankAccount account = getBankAccountOrThrow(id);
+        if (account.getDeletedAt() != null) {
+            return error("BNK-ERR-029", "Cuenta no encontrada");
+        }
+        if (!account.getCompany().getId().equals(user.getCompany().getId())) {
+            throw new IllegalArgumentException("No tiene acceso a esta cuenta bancaria.");
+        }
+        if (request.getLastReconciliationDate().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("La fecha de ultima conciliacion no puede ser futura.");
+        }
+
+        account.setLastReconciliationDate(request.getLastReconciliationDate());
+        account.setUpdatedBy(getCurrentUserId());
+        bankAccountRepository.save(account);
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Fecha de ultima conciliacion actualizada."),
+                        Optional.of(toDto(account))
+                )
+        );
+    }
+
     // private void validateCreateBusinessRules(CreateBankAccountRequest request) {
     //     if (bankAccountRepository.existsByCompanyIdAndCodeAndDeletedAtIsNull(request.getCompanyId(), request.getCode().trim())) {
     //         throw new IllegalArgumentException("BNK-ERR-004: El código de cuenta ya existe para esta empresa.");
@@ -369,6 +402,11 @@ public class BankAccountService {
                     .name(e.getBank().getName())
                     .build()
                     : null)
+                .bankBranchDTO(e.getBankBranch() != null ? BankBranchDTO.builder()
+                    .id(e.getBankBranch().getId())
+                    .address(e.getBankBranch().getAddress())
+                    .build()
+                    : null)
                 .currencyTypeDTO(e.getCurrencyType() != null ? CurrencyTypeResponseDTO.builder()
                     .id(e.getCurrencyType().getId())
                     .isoCode(e.getCurrencyType().getIsoCode())
@@ -380,8 +418,15 @@ public class BankAccountService {
                     .customName(e.getAccountingAccount().getCustomName())
                     .build()
                     : null)
+                .costCenterDTO(e.getCostCenter() != null ? CostCenterDTO.builder()
+                    .id(e.getCostCenter().getId())
+                    .name(e.getCostCenter().getName())
+                    .build()
+                    : null)
+                .accountExecutive(e.getAccountExecutive() != null ? e.getAccountExecutive() : null)
                 .status(e.getStatus())
                 .openingDate(e.getOpeningDate())
+                .lastReconciliationDate(e.getLastReconciliationDate())
                 .createdAt(e.getCreatedAt())
                 .deletedAt(e.getDeletedAt())
                 .build();

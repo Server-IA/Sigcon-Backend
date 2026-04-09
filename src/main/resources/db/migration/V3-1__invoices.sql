@@ -93,7 +93,8 @@ WHERE deleted_at IS NULL;
 INSERT INTO voucher_types (name, code, description, created_at, updated_at)
 SELECT * FROM (
     VALUES
-    ('Pago de compra', 'PC', 'Pago de compra', now(), now())
+    ('Pago de compra', 'PC', 'Pago de compra', now(), now()),
+    ('Comprobante manual', 'CM', 'Comprobante manual', now(), now())
 ) AS v (name, code, description, created_at, updated_at)
 WHERE NOT EXISTS (
     SELECT 1 FROM voucher_types WHERE (name = v.name OR code = v.code) AND deleted_at IS NULL

@@ -2,8 +2,10 @@ package com.sigcon.backend.banks.bankaccounts.application;
 
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus;
 import com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountType;
+import com.sigcon.backend.banks.banks.application.BankBranchDTO;
 import com.sigcon.backend.banks.banks.application.BankDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.application.AccountingAccountDTO;
+import com.sigcon.backend.lists_accounting.cost_centers.application.CostCenterDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 
@@ -41,6 +43,9 @@ public class BankAccountDTO {
 
     @Schema(description = "Banco")
     private BankDTO bankDTO;
+
+    @Schema(description = "Sucursal bancaria")
+    private BankBranchDTO bankBranchDTO;
     
     @Schema(description = "Moneda de la cuenta")
     private CurrencyTypeResponseDTO currencyTypeDTO;
@@ -51,13 +56,19 @@ public class BankAccountDTO {
     @Schema(description = "Cuenta contable")
     private AccountingAccountDTO accountingAccountDTO;
 
+    @Schema(description = "Centro de costo")
+    private CostCenterDTO costCenterDTO;
+
+    @Schema(description = "Ejecutivo de cuenta")
+    private String accountExecutive;
+
     @Schema(description = "Estado de la cuenta")
     private BankAccountStatus status;
 
     @Schema(description = "Fecha de apertura")
     private LocalDate openingDate;
 
-    @Schema(description = "Fecha de última conciliación (placeholder)")
+    @Schema(description = "Fecha de última conciliación registrada (cierre de extracto)")
     private LocalDate lastReconciliationDate;
 
     @Schema(description = "Fecha de creación")

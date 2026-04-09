@@ -32,8 +32,8 @@ public class Check {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "checkbooks_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "checkbooks_id", nullable = false)
     private Checkbook checkbook;
 
     @Column(name = "number_check", nullable = false)

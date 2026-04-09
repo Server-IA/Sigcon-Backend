@@ -2,6 +2,8 @@ package com.sigcon.backend.banks.checks.domain.service;
 
 import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
 import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
+import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
+import com.sigcon.backend.banks.financialmovements.domain.service.FinancialMovementService;
 import com.sigcon.backend.banks.checks.application.CheckDTO;
 import com.sigcon.backend.banks.checks.application.CheckbookDTO;
 import com.sigcon.backend.banks.checks.application.EmitCheckRequest;
@@ -20,6 +22,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -51,6 +55,10 @@ public class CheckService {
     private final CheckbookRepository checkbookRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final FinancialMovementService financialMovementService;
+
+    private final UserUtil userUtil;
+
     private final DataTableSpecificationBuilder<Check> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     @Transactional
@@ -110,10 +118,17 @@ public class CheckService {
         int safeLength = length <= 0 ? 20 : Math.min(length, MAX_PAGE_SIZE);
         int page = start / safeLength;
 
+        User user = userUtil.getUser();
+
         Pageable pageable = length == -1 ? Pageable.unpaged() : PageRequest.of(page, safeLength);
 
         Specification<Check> specification = dataTableSpecificationBuilder.build(safeRequest)
-                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")))
+                .and((root, query, cb) -> cb.equal(
+                    root.get("checkbook").get("bankAccount")
+                    .get("company"),
+                    user.getCompany())
+                );
 
         Page<Check> checks = checkRepository.findAll(specification, pageable);
         return ResponseEntity.ok(DataTableResponse.from(checks.map(this::toDto), safeRequest.getDraw()));
@@ -194,7 +209,8 @@ public class CheckService {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
-        Check check = getCheckOrThrow(id);
+        Check check = checkRepository.findWithCheckbookAndBankById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Cheque no disponible"));
 
         if (Boolean.TRUE.equals(check.getBlockPayment()) || check.getStatusCheck() == CheckStatus.EXTRAVIADO) {
             throw new IllegalArgumentException("BNK-ERR-EXV-001: Cheque reportado como no cobrable");
@@ -209,6 +225,25 @@ public class CheckService {
             throw new IllegalArgumentException("Para conciliacion automatica debe informar idMovimientoFinanciero");
         }
 
+        FinancialMovement movementToMatch = null;
+        if (request.getConciliationMethod() == ConciliationMethod.AUTOMATICA) {
+            Long bankAccountId = check.getCheckbook().getBankAccount().getId();
+            Long companyId = userUtil.getUser().getCompany().getId();
+            movementToMatch = financialMovementService
+                    .findForAutomaticCheckReconcile(request.getFinancialMovementId(), bankAccountId, companyId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Movimiento financiero no encontrado o no corresponde a la cuenta bancaria del cheque."));
+            if (movementToMatch.getMatchedCheckId() != null) {
+                throw new IllegalArgumentException("El movimiento ya fue conciliado con otro cheque.");
+            }
+            if (movementToMatch.getAmount().compareTo(check.getValue().negate()) != 0) {
+                throw new IllegalArgumentException(
+                        "El importe del movimiento debe ser el negativo del valor del cheque (egreso en extracto).");
+            }
+        } else if (request.getFinancialMovementId() != null) {
+            throw new IllegalArgumentException("Solo la conciliacion automatica admite movimiento financiero asociado.");
+        }
+
         check.setCollectionDate(request.getCollectionDate());
         check.setConciliationMethod(request.getConciliationMethod());
         check.setCollectionReference(request.getCollectionReference().trim());
@@ -216,6 +251,10 @@ public class CheckService {
         check.setFinancialMovementId(request.getFinancialMovementId());
 
         checkRepository.save(check);
+
+        if (movementToMatch != null) {
+            financialMovementService.markMatchedToCheck(movementToMatch, check.getId());
+        }
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque conciliado exitosamente."),

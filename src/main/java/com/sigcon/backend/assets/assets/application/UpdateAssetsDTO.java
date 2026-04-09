@@ -12,6 +12,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetClassification;
 import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
@@ -21,6 +22,7 @@ import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.Deprecia
 @Data
 @Schema(description = "DTO para actualizar un activo")
 public class UpdateAssetsDTO {
+
 
         @NotBlank(message = "Faltan datos requeridos")
         @Pattern(regexp = "^[\\p{L}0-9\\-_/.,\\s]{3,150}$", message = "Faltan datos requeridos")
@@ -45,10 +47,16 @@ public class UpdateAssetsDTO {
         @Schema(description = "ID de la cuenta contable asociada al activo", example = "12")
         private Long accountingAccountId;
 
+        @Schema(description = "Estado del activo", example = "ACTIVE", allowableValues = { "ACTIVE", "IN_REPAIR", "DECOMMISSIONED", "TRANSFERRED" })
+        private AssetStatus status;
+
         @NotNull(message = "Faltan datos requeridos")
         @DecimalMin(value = "0.01", message = "Faltan datos requeridos")
         @Schema(description = "Valor de adquisicion", example = "3200000.00")
         private BigDecimal acquisitionValue;
+        
+        @Schema(description = "Regla tributaria para el calculo de impuestos", example = "1")
+        private Long rulerTax;
 
         @NotNull(message = "Faltan datos requeridos")
         @Schema(description = "Fecha de adquisicion", example = "2026-01-15")
@@ -68,10 +76,22 @@ public class UpdateAssetsDTO {
         @Schema(description = "ID del proveedor (modulo Terceros)", example = "1")
         private Long supplierId;
 
-        @NotBlank(message = "Faltan datos requeridos")
-        @Size(max = 120, message = "Faltan datos requeridos")
-        @Schema(description = "Condiciones de pago asociadas al activo", example = "30 dias")
-        private String paymentTerms;
+        @NotNull(message = "La forma de pago es requerida")
+        @Schema(description = "ID de forma de pago", example = "1")
+        private Long paymentFormId;
+
+        @NotNull(message = "El metodo de pago es requerido")
+        @Schema(description = "ID del metodo de pago", example = "1")
+        private Long paymentMethodId;
+
+        @Schema(description = "ID de la cuenta bancaria de origen", example = "1")
+        private Long bankAccountId;
+
+        @Schema(description = "ID de la cuenta de caja de origen", example = "1")
+        private Long cashAccountId;
+
+        @Schema(description = "ID del cheque de origen", example = "1")
+        private Long checkId;
 
         @Schema(description = "Referencia del modulo de Cuentas por Pagar (pendiente de integrar)", example = "1001")
         private Long accountsPayableReferenceId;
@@ -79,13 +99,15 @@ public class UpdateAssetsDTO {
         @Schema(description = "Referencia del modulo de Bancos/Cajas (pendiente de integrar)", example = "5001")
         private Long bankCashReferenceId;
 
-        @NotNull(message = "Faltan datos requeridos")
-        @Schema(description = "Estado del activo", example = "ACTIVE", allowableValues = {
-                        "ACTIVE", "IN_REPAIR", "DECOMMISSIONED", "TRANSFERRED"
-        })
-        private AssetStatus status;
+        // @Schema(description = "Estado inicial del activo", example = "ACTIVE", allowableValues = {
+        //                 "ACTIVE", "IN_REPAIR", "DECOMMISSIONED", "TRANSFERRED"
+        // })
+        // private AssetStatus status;
 
         @Size(max = 500, message = "Faltan datos requeridos")
         @Schema(description = "Observaciones administrativas", example = "Pendiente de placa interna")
         private String observations;
+
+        @Schema(description = "Impuestos o retenciones")
+        private List<CreateAssetTaxesRetention> taxesRetention;
 }

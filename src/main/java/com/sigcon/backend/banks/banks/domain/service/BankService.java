@@ -215,10 +215,13 @@ public class BankService {
                                 .nit(bank.getNit())
                                 .swift(bank.getSwift())
                                 .codeAch(bank.getCodeAch())
+                                .urlWebservice(bank.getUrlWebservice())
+                                .formatExtract(bank.getFormatExtract())
                                 .phone(bank.getPhone())
                                 .status(bank.getStatus())
                                 .country(country != null ? toCountryDto(country) : null)
                                 .countryId(country != null ? country.getId() : null)
+                                .conciliationDays(bank.getConciliationDays())
                                 .branches(branches != null // ← esto faltaba
                                                 ? branches.stream().map(this::toBranchDto).toList()
                                                 : List.of())

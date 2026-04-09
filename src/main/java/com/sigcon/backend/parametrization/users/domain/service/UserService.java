@@ -28,6 +28,7 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -63,6 +64,8 @@ public class UserService {
     private final WithholdingRepository withholdingRepository;
     private final CompanyWithholdingAssignmentRepository companyWithholdingAssignmentRepository;
 
+    private final UserUtil userUtil;
+
     private final AvatarStorageService avatarStorageService;
     private final DataTableSpecificationBuilder<User> userSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -78,9 +81,14 @@ public class UserService {
             Pageable pageable = length == -1
                     ? Pageable.unpaged()
                     : PageRequest.of(page, safeLength);
+            User userLogged = userUtil.getUser();
 
             Specification<User> spec = userSpecificationBuilder.build(request)
                     .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+
+                if(userLogged.getRoles().contains("SUPERADMIN")){
+                    spec = spec.and((root, query, cb) -> cb.equal(root.get("company"), userLogged.getCompany()));
+                }
 
             Page<User> users = userRepository.findAll(spec, pageable);
 
