@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.*;
 public class BankBranchController {
 
     private final BankBranchService bankBranchService;
-    // fddf
+    // fd
 
     @PostMapping("/store")
     @Operation(summary = "Registrar sucursal", description = "Crea una sucursal bancaria asociada a un banco.<br>Permiso requerido: CREATE_BANK_BRANCH", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Payload de creación de la sucursal", content = @Content(mediaType = "application/json", schema = @Schema(implementation = BankBranchDTO.class), examples = @ExampleObject(value = """
