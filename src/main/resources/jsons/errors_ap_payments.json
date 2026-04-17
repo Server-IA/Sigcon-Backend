@@ -1,0 +1,50 @@
+[
+  {
+    "code": "AP_PAY_001",
+    "message": "La factura no fue encontrada"
+  },
+  {
+    "code": "AP_PAY_002",
+    "message": "No se puede registrar un pago a una factura anulada"
+  },
+  {
+    "code": "AP_PAY_003",
+    "message": "No se puede registrar un pago a una factura liquidada"
+  },
+  {
+    "code": "AP_PAY_004",
+    "message": "La factura ya se encuentra totalmente pagada"
+  },
+  {
+    "code": "AP_PAY_005",
+    "message": "El monto del pago supera el saldo pendiente"
+  },
+  {
+    "code": "AP_PAY_006",
+    "message": "Ya existe un pago con esta referencia"
+  },
+  {
+    "code": "AP_PAY_007",
+    "message": "El tercero no fue encontrado"
+  },
+  {
+    "code": "AP_PAY_008",
+    "message": "El tercero no se encuentra activo"
+  },
+  {
+    "code": "AP_PAY_009",
+    "message": "El anticipo ya fue aplicado o no esta en estado pendiente"
+  },
+  {
+    "code": "AP_PAY_010",
+    "message": "El anticipo no corresponde al mismo tercero de la factura"
+  },
+  {
+    "code": "AP_PAY_011",
+    "message": "El monto a aplicar supera el valor del anticipo"
+  },
+  {
+    "code": "AP_PAY_012",
+    "message": "El monto a aplicar supera el saldo pendiente de la factura"
+  }
+]

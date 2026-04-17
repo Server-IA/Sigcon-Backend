@@ -14,8 +14,13 @@ import com.sigcon.backend.parametrization.resources.domain.repository.Municipali
 import com.sigcon.backend.parametrization.resources.domain.repository.TypeOrganizationRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.TypeRegimenRepository;
 import com.sigcon.backend.parametrization.resources.domain.repository.WithholdingRepository;
+import com.sigcon.backend.third_parties.change_history.domain.service.ThirdPartyChangeHistoryService;
+import com.sigcon.backend.third_parties.third_parties.domain.events.ThirdPartyCreatedEvent;
+import com.sigcon.backend.third_parties.third_parties.domain.events.ThirdPartyUpdatedEvent;
+import com.sigcon.backend.third_parties.third_parties.domain.events.ThirdPartyDeletedEvent;
 import com.sigcon.backend.third_parties.third_parties.application.BulkThirdPartyUploadRequest;
 import com.sigcon.backend.third_parties.third_parties.application.BulkThirdPartyUploadResponse;
+import com.sigcon.backend.third_parties.third_parties.application.DeleteThirdPartyRequest;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDetailDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRoleCatalogDTO;
@@ -30,16 +35,21 @@ import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdPartyWit
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRoleCatalogRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyStatusCatalogRepository;
+import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
+import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
+import com.sigcon.backend.third_parties.commercial_data.domain.repository.CommercialDataRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.utils.UserUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,8 +91,26 @@ public class ThirdPartyService {
     private final TypeOrganizationRepository typeOrganizationRepository;
     private final TypeRegimenRepository typeRegimenRepository;
     private final WithholdingRepository withholdingRepository;
+    private final ThirdPartyChangeHistoryService changeHistoryService;
+    private final AssetsRepository assetsRepository;
+    private final InvoiceRepository invoiceRepository;
+    private final CommercialDataRepository commercialDataRepository;
+    /** TER-10 x NOM: bloquea eliminacion si el tercero es empleado activo. */
+    private final com.sigcon.backend.nomina.domain.repository.EmployeeRepository employeeRepository;
+    private final UserUtil userUtil;
+    private final ApplicationEventPublisher eventPublisher;
     private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
+    /**
+     * Registra un nuevo tercero en el sistema.
+     * Valida unicidad del NIT (identificador tributario unico en Colombia), formato NIT+DV,
+     * resolucion de catalogos (roles, estado, municipio, organizacion, regimen, retenciones)
+     * y publica evento de dominio para integracion entre modulos.
+     *
+     * @param request       datos del tercero (NIT, DV, razon social, roles, contactos, etc.)
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con el tercero creado o errores de validacion
+     */
     public ResponseEntity<?> create(ThirdPartyDTO request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -91,8 +119,10 @@ public class ThirdPartyService {
         validateRequiredFields(request);
         validateNitAndDvFormat(request.getNit(), request.getDv());
 
-        if (thirdPartyRepository.existsByNitAndDvAndDeletedAtIsNull(request.getNit(), request.getDv())) {
-            throw new IllegalArgumentException("TERC_011: El NIT + DV ya existe en el sistema.");
+        // F-TER-005: Validar unicidad por NIT solamente (no NIT+DV)
+        // El NIT es identificador tributario único por empresa/persona en Colombia
+        if (thirdPartyRepository.existsByNitAndDeletedAtIsNull(request.getNit())) {
+            throw new IllegalArgumentException("TERC_011: El NIT ya existe en el sistema. El NIT es un identificador único por persona/empresa.");
         }
 
         Set<ThirdPartyRoleCatalog> roles = resolveRoles(request.getRoleIds());
@@ -124,12 +154,29 @@ public class ThirdPartyService {
 
         thirdPartyRepository.save(thirdParty);
 
+        // TER-06: Publicar evento de creacion
+        try {
+            eventPublisher.publishEvent(new ThirdPartyCreatedEvent(
+                    thirdParty.getId(), thirdParty.getNit(), thirdParty.getBusinessName()));
+        } catch (Exception e) {
+            // No fallar la operacion principal por un error de eventos
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero registrado exitosamente."),
                         Optional.of(toDto(thirdParty))));
     }
 
+    /**
+     * Carga masiva de terceros desde archivo CSV o XLSX (maximo 10,000 registros).
+     * Soporta modo sobreescritura: si overwrite=true, actualiza terceros existentes por NIT.
+     * Valida formato, columnas obligatorias, duplicados dentro del archivo y contra BD.
+     *
+     * @param request       contiene archivo en Base64, nombre, delimitador y flag de sobreescritura
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con resumen de registros creados y actualizados
+     */
     @Transactional
     public ResponseEntity<?> bulkStore(BulkThirdPartyUploadRequest request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -232,6 +279,14 @@ public class ThirdPartyService {
                         Optional.of(response)));
     }
 
+    /**
+     * Lista terceros activos con paginacion y filtros DataTable.
+     * Excluye terceros eliminados logicamente (deletedAt != null).
+     *
+     * @param request parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de terceros
+     * @throws IllegalArgumentException si no se encuentran terceros con los criterios dados
+     */
     public ResponseEntity<?> findAllPaged(DataTableRequest request) {
         DataTableRequest safeRequest = normalizeDataTableRequest(request);
 
@@ -287,6 +342,14 @@ public class ThirdPartyService {
                         Optional.of(statuses)));
     }
 
+    /**
+     * Obtiene el detalle completo de un tercero organizado en pestanas: general, fiscal y comercial.
+     * Incluye contactos, retenciones asignadas, regimen tributario, limite de credito, etc.
+     *
+     * @param id ID del tercero a consultar
+     * @return ResponseEntity con ThirdPartyDetailDTO estructurado en tabs
+     * @throws IllegalArgumentException si el tercero no existe o fue eliminado
+     */
     public ResponseEntity<?> getDetail(Long id) {
         ThirdParty thirdParty = getThirdPartyOrThrow(id);
 
@@ -323,6 +386,16 @@ public class ThirdPartyService {
                         Optional.of(detail)));
     }
 
+    /**
+     * Actualiza un tercero existente con actualizacion parcial (solo campos enviados).
+     * Captura valores previos y posteriores para registrar historial de cambios (TER-03).
+     * Publica evento de actualizacion con los campos modificados (TER-06).
+     *
+     * @param id            ID del tercero a actualizar
+     * @param request       datos a actualizar (campos nulos se ignoran)
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con el tercero actualizado o errores de validacion
+     */
     public ResponseEntity<?> update(Long id, ThirdPartyDTO request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -330,10 +403,13 @@ public class ThirdPartyService {
 
         ThirdParty thirdParty = getThirdPartyOrThrow(id);
 
+        // TER-03: Capturar valores anteriores para historial de cambios
+        Map<String, String> beforeValues = captureTrackableFields(thirdParty);
+
         String targetNit = request.getNit() != null ? request.getNit().trim() : thirdParty.getNit();
         String targetDv = request.getDv() != null ? request.getDv().trim() : thirdParty.getDv();
         validateNitAndDvFormat(targetNit, targetDv);
-        if (thirdPartyRepository.existsByNitAndDvAndIdNotAndDeletedAtIsNull(targetNit, targetDv, id)) {
+        if (thirdPartyRepository.existsByNitAndIdNotAndDeletedAtIsNull(targetNit, id)) {
             throw new IllegalArgumentException("TERC_011: El NIT + DV ya existe en el sistema.");
         }
 
@@ -387,12 +463,49 @@ public class ThirdPartyService {
         }
 
         thirdPartyRepository.save(thirdParty);
+
+        // TER-03: Registrar cambios detectados en el historial
+        Map<String, String> afterValues = captureTrackableFields(thirdParty);
+        Long currentUserId = null;
+        try {
+            currentUserId = userUtil.getUser().getId();
+        } catch (Exception e) {
+            // Si no se puede obtener el usuario, se registra sin changedBy
+        }
+        changeHistoryService.trackChanges(thirdParty.getId(), beforeValues, afterValues, currentUserId);
+
+        // TER-06: Publicar evento de actualizacion
+        try {
+            Map<String, String> changedFields = new HashMap<>();
+            for (Map.Entry<String, String> entry : afterValues.entrySet()) {
+                String before = beforeValues.getOrDefault(entry.getKey(), "");
+                if (!entry.getValue().equals(before)) {
+                    changedFields.put(entry.getKey(), entry.getValue());
+                }
+            }
+            if (!changedFields.isEmpty()) {
+                eventPublisher.publishEvent(new ThirdPartyUpdatedEvent(
+                        thirdParty.getId(), thirdParty.getNit(), thirdParty.getBusinessName(), changedFields));
+            }
+        } catch (Exception e) {
+            // No fallar la operacion principal
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero actualizado exitosamente."),
                         Optional.of(toDto(thirdParty))));
     }
 
+    /**
+     * Actualiza exclusivamente los roles y estado de un tercero.
+     * Permite cambiar entre estados activo/bloqueado con motivo de bloqueo obligatorio.
+     *
+     * @param id            ID del tercero a actualizar
+     * @param request       nuevos roles, estado y motivo de bloqueo opcional
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con el tercero actualizado o errores de validacion
+     */
     public ResponseEntity<?> updateRolesAndStatus(Long id, UpdateThirdPartyRolesStatusRequest request,
             BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -413,13 +526,74 @@ public class ThirdPartyService {
                         Optional.of(toDto(thirdParty))));
     }
 
-    public ResponseEntity<?> delete(Long id) {
+    /**
+     * TER-10: Eliminacion logica con justificacion obligatoria y validacion de dependencias.
+     *
+     * @param id      ID del tercero a eliminar
+     * @param request request con justificacion de la eliminacion
+     * @return respuesta de exito o error si tiene dependencias activas
+     */
+    public ResponseEntity<?> delete(Long id, DeleteThirdPartyRequest request) {
         ThirdParty thirdParty = getThirdPartyOrThrow(id);
+
+        // Validar dependencias activas antes de eliminar
+        List<String> dependencies = new ArrayList<>();
+
+        if (assetsRepository.existsBySupplierId(thirdParty.getId())) {
+            dependencies.add("activos fijos (proveedor)");
+        }
+        if (invoiceRepository.existsByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())) {
+            dependencies.add("facturas");
+        }
+        if (commercialDataRepository.existsByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())) {
+            dependencies.add("datos comerciales activos");
+        }
+        // TER-10 x NOM: el tercero puede ser empleado de nomina
+        if (employeeRepository.existsByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())) {
+            dependencies.add("empleado activo de nomina");
+        }
+
+        if (!dependencies.isEmpty()) {
+            String depList = String.join(", ", dependencies);
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("No se puede eliminar el tercero porque tiene registros asociados en: " + depList + ".")));
+        }
+
+        thirdParty.setDeletedReason(request.getJustification());
+        thirdPartyRepository.save(thirdParty);
         thirdPartyRepository.delete(thirdParty);
+
+        // TER-06: Publicar evento de eliminacion
+        try {
+            eventPublisher.publishEvent(new ThirdPartyDeletedEvent(
+                    thirdParty.getId(), thirdParty.getNit(), thirdParty.getBusinessName(), request.getJustification()));
+        } catch (Exception e) {
+            // No fallar la operacion principal
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero eliminado exitosamente."),
                         Optional.empty()));
+    }
+
+    /**
+     * TER-03: Captura los valores de los campos rastreables de un tercero para comparacion.
+     *
+     * @param tp entidad tercero
+     * @return mapa con nombre del campo y su valor como String
+     */
+    private Map<String, String> captureTrackableFields(ThirdParty tp) {
+        Map<String, String> values = new HashMap<>();
+        values.put("businessName", String.valueOf(tp.getBusinessName()));
+        values.put("nit", String.valueOf(tp.getNit()));
+        values.put("dv", String.valueOf(tp.getDv()));
+        values.put("blockingReason", String.valueOf(tp.getBlockingReason()));
+        values.put("creditLimit", String.valueOf(tp.getCreditLimit()));
+        values.put("paymentTerms", String.valueOf(tp.getPaymentTerms()));
+        values.put("marketSegment", String.valueOf(tp.getMarketSegment()));
+        return values;
     }
 
     private byte[] decodeBase64Payload(String fileBase64) {
@@ -1076,6 +1250,13 @@ public class ThirdPartyService {
                         "BULK_004: Error en linea " + line + ": municipio no valido."));
     }
 
+    /**
+     * Busca un tercero por ID o lanza excepcion si no existe.
+     *
+     * @param id ID del tercero a buscar
+     * @return entidad ThirdParty encontrada
+     * @throws IllegalArgumentException si el tercero no existe o fue eliminado
+     */
     private ThirdParty getThirdPartyOrThrow(Long id) {
         return thirdPartyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("TERC_021: El tercero no existe o fue eliminado."));

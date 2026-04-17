@@ -21,8 +21,20 @@ public class LineInvoiceDTO {
     @Schema(description = "ID de la línea de la factura")
     private Long id;
 
-    @Schema(description = "Activos asociados a la línea de la factura")
+    @Schema(description = "Activos asociados a la línea de la factura (opcional)")
     private ViewAssetsDTO asset;
+
+    @Schema(description = "ID de la cuenta contable asociada a la línea (opcional)")
+    private Long accountingAccountId;
+
+    @Schema(description = "Código de la cuenta contable asociada a la línea (opcional)")
+    private String accountingAccountCode;
+
+    @Schema(description = "Nombre de la cuenta contable asociada a la línea (opcional)")
+    private String accountingAccountName;
+
+    @Schema(description = "Descripción libre del item facturado")
+    private String description;
 
     @Schema(description = "Cantidad de la línea de la factura")
     private Double quantity;

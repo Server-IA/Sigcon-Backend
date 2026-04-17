@@ -29,7 +29,6 @@ import com.sigcon.backend.parametrization.users.domain.model.User;
 
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
-import com.sigcon.backend.utils.UserUtil;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -52,8 +51,6 @@ public class DepretationRuleService {
     private final AccountingAccountRepository accountingAccountRepository;
 
     private final UserRepository userRepository;
-
-    private final UserUtil userUtil;
 
     /**
      * CFG-RF-13: Crear nueva regla de depreciación
@@ -299,11 +296,6 @@ public class DepretationRuleService {
             Specification<DepretationRule> spec = new com.sigcon.backend.utils.DataTableSpecificationBuilder<DepretationRule>()
                     .build(request)
                     .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
-
-            User user = userUtil.getUser();
-
-            spec = spec.and((root, query, cb) -> cb.equal(
-                root.get("accountingAccount").get("companyId"), user.getCompany()));
 
             Page<DepretationRule> rules = depretationRuleRepository.findAll(spec, pageable);
 

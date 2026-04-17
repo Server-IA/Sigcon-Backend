@@ -1,0 +1,42 @@
+[
+  {
+    "code": "JE_001",
+    "message": "El periodo contable esta cerrado o bloqueado."
+  },
+  {
+    "code": "JE_002",
+    "message": "Partida doble desbalanceada: debitos != creditos."
+  },
+  {
+    "code": "JE_003",
+    "message": "Cuenta contable no encontrada."
+  },
+  {
+    "code": "JE_004",
+    "message": "La cuenta contable no esta activa."
+  },
+  {
+    "code": "JE_005",
+    "message": "Solo se pueden contabilizar asientos en estado BORRADOR."
+  },
+  {
+    "code": "JE_006",
+    "message": "Solo se pueden reversar asientos CONTABILIZADOS."
+  },
+  {
+    "code": "JE_007",
+    "message": "Solo se pueden eliminar asientos en estado BORRADOR."
+  },
+  {
+    "code": "JE_008",
+    "message": "Asiento contable no encontrado."
+  },
+  {
+    "code": "JE_009",
+    "message": "El asiento debe tener al menos una linea."
+  },
+  {
+    "code": "JE_010",
+    "message": "Centro de costo no encontrado."
+  }
+]

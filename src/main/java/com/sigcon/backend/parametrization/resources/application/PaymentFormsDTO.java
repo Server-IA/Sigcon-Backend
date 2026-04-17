@@ -13,4 +13,5 @@ public class PaymentFormsDTO {
     private Long id;
     private String name;
     private String code;
+    private Boolean isContado;
 }

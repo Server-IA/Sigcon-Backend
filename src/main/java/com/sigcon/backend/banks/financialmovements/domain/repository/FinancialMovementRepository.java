@@ -28,21 +28,19 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
     boolean existsByMatchedVoucherId(Long matchedVoucherId);
 
     @Query("SELECT fm FROM FinancialMovement fm WHERE fm.id = :id AND fm.bankAccount.id = :bankAccountId "
-            + "AND fm.company.id = :companyId AND fm.matchedCheckId IS NULL AND fm.matchedVoucherId IS NULL")
+            + "AND fm.matchedCheckId IS NULL AND fm.matchedVoucherId IS NULL")
     Optional<FinancialMovement> findForCheckReconcile(
             @Param("id") Long id,
-            @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId);
+            @Param("bankAccountId") Long bankAccountId);
 
-    Optional<FinancialMovement> findByIdAndBankAccount_IdAndCompany_Id(Long id, Long bankAccountId, Long companyId);
+    Optional<FinancialMovement> findByIdAndBankAccount_Id(Long id, Long bankAccountId);
 
     Optional<FinancialMovement> findByMatchedVoucherId(Long matchedVoucherId);
 
     @Query("SELECT COALESCE(SUM(fm.amount), 0) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
-            + "AND fm.company.id = :companyId AND fm.movementDate >= :from AND fm.movementDate <= :to")
+            + "AND fm.movementDate >= :from AND fm.movementDate <= :to")
     BigDecimal sumAmountByBankAccountAndPeriod(
             @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
@@ -50,28 +48,25 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
     BigDecimal sumAmountByReconciliationSessionId(@Param("sessionId") Long sessionId);
 
     @Query("SELECT COALESCE(SUM(fm.amount), 0) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
-            + "AND fm.company.id = :companyId AND fm.movementDate >= :from AND fm.movementDate <= :to "
+            + "AND fm.movementDate >= :from AND fm.movementDate <= :to "
             + "AND fm.matchedVoucherId IS NULL AND fm.matchedCheckId IS NULL")
     BigDecimal sumUnmatchedAmountByBankAccountAndPeriod(
             @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
     @Query("SELECT COUNT(fm) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
-            + "AND fm.company.id = :companyId AND fm.movementDate >= :from AND fm.movementDate <= :to "
+            + "AND fm.movementDate >= :from AND fm.movementDate <= :to "
             + "AND fm.matchedVoucherId IS NULL AND fm.matchedCheckId IS NULL")
     long countUnmatchedByBankAccountAndPeriod(
             @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
     @Query("SELECT COUNT(fm) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
-            + "AND fm.company.id = :companyId AND fm.movementDate >= :from AND fm.movementDate <= :to")
+            + "AND fm.movementDate >= :from AND fm.movementDate <= :to")
     long countByBankAccountAndPeriod(
             @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 }

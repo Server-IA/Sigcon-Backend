@@ -21,4 +21,7 @@ public interface ParameterRepository extends JpaRepository<Parameter, Long>, Jpa
 
     boolean existsByNameAndIdNot(String name, Long id);
     boolean existsByNameAndCategoryAndIdNot(String name, CategoryParameter category, Long id);
+
+    List<Parameter> findByCategoryAndDeletedAtIsNull(CategoryParameter category);
+    Optional<Parameter> findByNameAndDeletedAtIsNull(String name);
 }

@@ -1,7 +1,7 @@
 package com.sigcon.backend.parametrization.users.domain.model;
 
 import com.sigcon.backend.banks.banks.domain.model.BankBranch;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -53,10 +53,6 @@ public class User implements UserDetails {
     @Column(length = 255)
     private String avatar;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_id")
-    private Company company;
-
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "users_roles",
@@ -76,6 +72,13 @@ public class User implements UserDetails {
 
     @Column(name = "deleted_at", nullable = true)
     private LocalDateTime deletedAt;
+
+    @Column(name = "failed_login_attempts")
+    @Builder.Default
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
 
     @PrePersist
     protected void onCreate() {
@@ -126,6 +129,9 @@ public class User implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
+        if (lockedUntil != null && lockedUntil.isAfter(LocalDateTime.now())) {
+            return false;
+        }
         return true;
     }
 

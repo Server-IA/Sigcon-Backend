@@ -25,13 +25,13 @@ public class ExchangeRateController {
 
     @PostMapping
     @Operation(summary = "Crear una nueva tasa de cambio", description = "Crea una nueva tasa de cambio en la base de datos")
-    @PreAuthorize("hasAuthority('PERM_CREATE_EXCHANGE_RATES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_EXCHANGE_RATES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> create(@RequestBody CreateExchangeRateRequest request, BindingResult bindingResult) {
         return service.create(request, bindingResult);
     }
 
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_EXCHANGE_RATES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_EXCHANGE_RATES') or hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Consultar tasas de cambio para DataTable", description = "Retorna una lista paginada de tasas de cambio compatible con DataTables, permitiendo filtros.")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest filter) {
         return service.findAll(filter);
@@ -39,7 +39,7 @@ public class ExchangeRateController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Actualizar una tasa de cambio", description = "Actualiza una tasa de cambio en la base de datos")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_EXCHANGE_RATES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_EXCHANGE_RATES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @RequestBody UpdateExchangeRateRequest request,
@@ -49,7 +49,7 @@ public class ExchangeRateController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Eliminar una tasa de cambio", description = "Elimina una tasa de cambio en la base de datos")
-    @PreAuthorize("hasAuthority('PERM_DELETE_EXCHANGE_RATES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_EXCHANGE_RATES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         return service.delete(id);
     }

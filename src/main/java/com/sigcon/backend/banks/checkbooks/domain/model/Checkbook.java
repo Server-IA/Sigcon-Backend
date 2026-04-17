@@ -2,7 +2,7 @@ package com.sigcon.backend.banks.checkbooks.domain.model;
 
 import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 
 import jakarta.persistence.*;
 import lombok.*;

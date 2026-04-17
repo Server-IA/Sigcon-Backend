@@ -14,4 +14,7 @@ public interface MenuPermissionsRepository extends JpaRepository<MenuPermissions
     Optional<MenuPermissionsEntity> findByMenuIdAndRoleIdAndDeletedAtIsNull(Long menuId, Long roleId);
     Optional<MenuPermissionsEntity> findByMenuIdAndRoleIdAndIdNotAndDeletedAtIsNull(Long menuId, Long roleId, Long idNot);
     Optional<MenuPermissionsEntity> findByMenuAndRoleAndDeletedAtIsNull(MenuEntity menu, Role role);
+
+    /** Verifica si un menu tiene permisos activos asociados (para validar antes de eliminar) */
+    boolean existsByMenuIdAndDeletedAtIsNull(Long menuId);
 }

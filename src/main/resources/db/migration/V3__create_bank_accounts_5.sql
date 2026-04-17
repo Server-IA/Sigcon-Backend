@@ -44,8 +44,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_bank_accounts_account') THEN
         ALTER TABLE bank_accounts ADD CONSTRAINT fk_bank_accounts_account FOREIGN KEY (accounting_account_id) REFERENCES accounting_accounts(id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_bank_accounts_company') THEN
-        ALTER TABLE bank_accounts ADD CONSTRAINT fk_bank_accounts_company FOREIGN KEY (company_id) REFERENCES companies(id);
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'bank_accounts' AND column_name = 'company_id') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_bank_accounts_company') THEN
+            ALTER TABLE bank_accounts ADD CONSTRAINT fk_bank_accounts_company FOREIGN KEY (company_id) REFERENCES companies(id);
+        END IF;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_bank_accounts_bank_branch') THEN
         ALTER TABLE bank_accounts ADD CONSTRAINT fk_bank_accounts_bank_branch FOREIGN KEY (bank_branch_id) REFERENCES bank_branches(id);
@@ -59,8 +61,17 @@ DROP INDEX IF EXISTS uk_bank_accounts_number_bank_active;
 
 DROP INDEX IF EXISTS uk_bank_accounts_code_company_active;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_code_company_active
-    ON bank_accounts (company_id, code) WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_number_bank_active
-    ON bank_accounts (bank_id, account_number, company_id) WHERE deleted_at IS NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'bank_accounts' AND column_name = 'company_id') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_code_company_active
+            ON bank_accounts (company_id, code) WHERE deleted_at IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_number_bank_active
+            ON bank_accounts (bank_id, account_number, company_id) WHERE deleted_at IS NULL;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_code_active
+            ON bank_accounts (code) WHERE deleted_at IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_number_bank_active_v2
+            ON bank_accounts (bank_id, account_number) WHERE deleted_at IS NULL;
+    END IF;
+END $$;

@@ -8,6 +8,11 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
 // import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
 import com.sigcon.backend.assets.assets_depreciation.application.DepreciationCalculationResponseDTO;
+import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
+import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
+import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
+import com.sigcon.backend.general.accounting.AccountingPeriodService;
+import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationStatus;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
@@ -20,6 +25,7 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums
 import com.sigcon.backend.utils.DepreciationCalculator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -41,6 +47,7 @@ import java.util.Optional;
  * </ul>
  * Este servicio NO contiene fórmulas matemáticas.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DepreciationCalculationService {
@@ -50,6 +57,8 @@ public class DepreciationCalculationService {
     private final AssetsRepository assetsRepository;
     private final DepretationRuleRepository depretationRuleRepository;
     private final AssetDepreciationRepository assetDepreciationRepository;
+    private final JournalEntryService journalEntryService;
+    private final AccountingPeriodService accountingPeriodService;
 
     /**
      * Ejecuta el cálculo de depreciación para todos los activos elegibles en el
@@ -200,6 +209,11 @@ public class DepreciationCalculationService {
             assetDepreciationRepository.saveAll(historyToSave);
         }
 
+        // 14. Generar asiento contable consolidado para las depreciaciones del periodo
+        if (!historyToSave.isEmpty()) {
+            createDepreciationJournalEntry(period, historyToSave, candidates);
+        }
+
         return DepreciationCalculationResponseDTO.builder()
                 .period(period)
                 .processedCount(results.size())
@@ -216,14 +230,25 @@ public class DepreciationCalculationService {
     // -------------------------------------------------------------------------
 
     /**
-     * Valida que el período contable esté abierto.
-     * TODO: integrar con el módulo de períodos contables cuando esté disponible.
+     * ACT-02: Valida que el periodo contable (formato "YYYY-MM") este abierto
+     * antes de permitir el calculo de depreciacion.
+     * Delega en {@link AccountingPeriodService#validatePeriodOpen}.
+     *
+     * @param period periodo en formato "YYYY-MM"
+     * @throws IllegalArgumentException si el formato es invalido
+     * @throws IllegalStateException    si el periodo esta cerrado/bloqueado
      */
     private void validateAccountingPeriodIsOpen(String period) {
-        boolean accountingPeriodOpen = true;
-        if (!accountingPeriodOpen) {
-            throw new IllegalStateException("Operación no permitida. Periodo contable cerrado");
+        if (period == null || !period.matches("\\d{4}-\\d{2}")) {
+            throw new IllegalArgumentException(
+                    "Periodo invalido: '" + period + "'. Formato esperado: YYYY-MM");
         }
+        String[] parts = period.split("-");
+        int year = Integer.parseInt(parts[0]);
+        int month = Integer.parseInt(parts[1]);
+        // Usa una fecha del primer dia del mes como referencia para el periodo.
+        java.time.LocalDate referenceDate = java.time.LocalDate.of(year, month, 1);
+        accountingPeriodService.validatePeriodOpen(referenceDate);
     }
 
     /**
@@ -256,8 +281,17 @@ public class DepreciationCalculationService {
                 DepreciationCalculator.calculateStraightLine(acquisitionValue, residualValue, usefulLifeMonths);
             case DECREASING ->
                 DepreciationCalculator.calculateDecliningBalance(currentBookValue, annualRate);
-            default ->
-                throw new IllegalArgumentException("Método no reconocido o no permitido");
+            case ACCELERATED ->
+                // Depreciación acelerada: el doble de la línea recta
+                DepreciationCalculator.calculateStraightLine(acquisitionValue, residualValue, usefulLifeMonths)
+                    .multiply(BigDecimal.valueOf(2));
+            case PRODUCTION_UNITS ->
+                // Unidades de producción: se calcula como línea recta por defecto
+                // TODO: Integrar con datos de producción real cuando estén disponibles
+                DepreciationCalculator.calculateStraightLine(acquisitionValue, residualValue, usefulLifeMonths);
+            case MINIMUN_USEFUL_LIFE ->
+                // Vida útil mínima: se usa línea recta con la vida útil configurada
+                DepreciationCalculator.calculateStraightLine(acquisitionValue, residualValue, usefulLifeMonths);
         };
     }
 
@@ -271,5 +305,91 @@ public class DepreciationCalculationService {
                 .assetName(asset.getAssetName())
                 .reason(reason)
                 .build();
+    }
+
+    /**
+     * Genera un asiento contable consolidado para todas las depreciaciones calculadas en el periodo.
+     * <p>
+     * Para cada activo depreciado se crean dos lineas:
+     * <ul>
+     *   <li><b>Debito:</b> cuenta de gasto por depreciacion (regla de depreciacion).</li>
+     *   <li><b>Credito:</b> cuenta contable del activo (depreciacion acumulada).</li>
+     * </ul>
+     * Si la creacion del asiento falla, se registra una advertencia en el log
+     * pero no se interrumpe el proceso de depreciacion.
+     *
+     * @param period        periodo contable en formato YYYY-MM
+     * @param depreciations registros de depreciacion recien guardados
+     * @param candidates    lista de activos candidatos (para acceder a relaciones)
+     */
+    private void createDepreciationJournalEntry(String period,
+                                                 List<AssetDepreciation> depreciations,
+                                                 List<Assets> candidates) {
+        try {
+            List<CreateJournalEntryLineRequest> journalLines = new ArrayList<>();
+
+            for (AssetDepreciation depreciation : depreciations) {
+                Assets asset = depreciation.getAsset();
+                BigDecimal amount = depreciation.getDepreciationAmount();
+
+                if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+
+                // Linea debito: cuenta de gasto por depreciacion (desde la regla)
+                Long depreciationAccountId = asset.getDepretationRule() != null
+                        && asset.getDepretationRule().getAccountingAccount() != null
+                        ? asset.getDepretationRule().getAccountingAccount().getId()
+                        : null;
+
+                // Linea credito: cuenta contable del activo (depreciacion acumulada)
+                Long assetAccountId = asset.getAccountingAccount() != null
+                        ? asset.getAccountingAccount().getId()
+                        : null;
+
+                if (depreciationAccountId == null || assetAccountId == null) {
+                    log.warn("Activo {} sin cuentas contables configuradas, se omite del asiento.",
+                            asset.getAssetCode());
+                    continue;
+                }
+
+                // Debito: gasto depreciacion
+                journalLines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(depreciationAccountId)
+                        .debitAmount(amount)
+                        .creditAmount(BigDecimal.ZERO)
+                        .description("Depreciacion " + asset.getAssetCode() + " - " + asset.getAssetName())
+                        .build());
+
+                // Credito: depreciacion acumulada del activo
+                journalLines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(assetAccountId)
+                        .debitAmount(BigDecimal.ZERO)
+                        .creditAmount(amount)
+                        .description("Depreciacion acumulada " + asset.getAssetCode() + " - " + asset.getAssetName())
+                        .build());
+            }
+
+            if (journalLines.isEmpty()) {
+                log.info("No se generaron lineas de asiento contable para el periodo {}", period);
+                return;
+            }
+
+            CreateJournalEntryRequest journalRequest = CreateJournalEntryRequest.builder()
+                    .entryDate(LocalDate.now())
+                    .description("Depreciacion de activos periodo " + period)
+                    .sourceModule(JournalSourceModule.ACT)
+                    .lines(journalLines)
+                    .build();
+
+            journalEntryService.createEntry(journalRequest, "sistema");
+
+            log.info("Asiento contable de depreciacion creado exitosamente para el periodo {} con {} lineas.",
+                    period, journalLines.size());
+
+        } catch (Exception e) {
+            log.warn("No se pudo crear el asiento contable de depreciacion para el periodo {}: {}",
+                    period, e.getMessage());
+        }
     }
 }

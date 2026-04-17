@@ -20,6 +20,13 @@ public class ApplyNiifCorrectionRequest {
 
     private BigDecimal newBookValue;
 
+    /**
+     * ACT-14: Nueva regla de depreciacion (ID) a aplicar cuando la correccion
+     * es de tipo {@code DEPRECIATION_METHOD_CHANGE}. La regla apunta a un metodo
+     * (LINEAR/DECREASING/...) y tasa definidos en CFG.
+     */
+    private Long newDepretationRuleId;
+
     private String observations;
 
 }

@@ -32,7 +32,7 @@ public class CheckbookController {
     // CREATE
     // =========================
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_CREATE_CHECKBOOK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_CHECKBOOK') or hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Crear chequera")
     public ResponseEntity<?> create(@Valid @RequestBody CheckbookRequest request) {
         return ResponseEntity.ok(service.save(request, null));
@@ -42,7 +42,7 @@ public class CheckbookController {
     // UPDATE
     // =========================
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_CHECKBOOK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_CHECKBOOK') or hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Actualizar chequera")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @Valid @RequestBody CheckbookRequest request) {
@@ -53,7 +53,7 @@ public class CheckbookController {
     // DELETE (INACTIVATE)
     // =========================
     @PostMapping("/delete")
-    @PreAuthorize("hasAuthority('PERM_DELETE_CHECKBOOK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_CHECKBOOK') or hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Anular/Bloquear chequera")
     public ResponseEntity<?> delete(@RequestBody CheckbookDeleteRequest request) {
         return ResponseEntity.ok(service.delete(request));
@@ -63,7 +63,7 @@ public class CheckbookController {
     // SEARCH (CLAVE 🔥)
     // =========================
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_CHECKBOOK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_CHECKBOOK') or hasAuthority('ROLE_ADMIN')")
     @Operation(
         summary = "Consultar chequeras",
         description = "Consulta paginada tipo DataTable",

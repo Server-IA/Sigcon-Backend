@@ -34,7 +34,6 @@ public class CheckbookService {
     private final BankAccountRepository bankAccountRepository;
     private final CheckRepository checkRepository;
 
-    private final UserUtil userUtil;
 
     private final DataTableSpecificationBuilder<Checkbook> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -99,7 +98,6 @@ public class CheckbookService {
         // User user = userUtil.getUser();
 
         entity.setBankAccount(bankAccount);
-        // entity.setCompany(user.getCompany());
 
         entity.setCheckbookNumber(request.getCheckbookNumber());
         entity.setIssuingBank(request.getIssuingBank());
@@ -172,12 +170,6 @@ public class CheckbookService {
 
         Specification<Checkbook> specification = dataTableSpecificationBuilder.build(safeRequest)
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
-      
-        User user = userUtil.getUser();
-
-        specification = specification.and((root, query, cb) -> cb.equal(
-            root.get("bankAccount").get("company"), user.getCompany())
-        );
 
         Page<Checkbook> result = repository.findAll(specification, pageable);
 

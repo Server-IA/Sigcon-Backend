@@ -1,0 +1,14 @@
+[
+  { "code": "AR_ADV_001", "message": "El tercero no fue encontrado" },
+  { "code": "AR_ADV_002", "message": "El monto del anticipo debe ser mayor a cero" },
+  { "code": "AR_ADV_003", "message": "El anticipo no fue encontrado" },
+  { "code": "AR_ADV_004", "message": "El anticipo ya fue totalmente aplicado" },
+  { "code": "AR_ADV_005", "message": "La factura no fue encontrada" },
+  { "code": "AR_ADV_006", "message": "No se puede aplicar anticipo a una factura anulada" },
+  { "code": "AR_ADV_007", "message": "La factura ya se encuentra totalmente pagada" },
+  { "code": "AR_ADV_008", "message": "El anticipo no corresponde al mismo tercero de la factura" },
+  { "code": "AR_ADV_009", "message": "El monto a aplicar debe ser mayor a cero" },
+  { "code": "AR_ADV_010", "message": "El monto a aplicar supera el saldo disponible del anticipo" },
+  { "code": "AR_ADV_011", "message": "El monto a aplicar supera el saldo pendiente de la factura" },
+  { "code": "AR_ADV_012", "message": "El periodo contable se encuentra cerrado o bloqueado" }
+]

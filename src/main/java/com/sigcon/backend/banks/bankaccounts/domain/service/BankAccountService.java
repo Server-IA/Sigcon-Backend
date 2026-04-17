@@ -25,8 +25,6 @@ import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCe
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
-import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
@@ -56,11 +54,26 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Servicio de gestion de cuentas bancarias.
+ * <p>
+ * Implementa las operaciones CRUD y cambios de estado para cuentas bancarias
+ * segun las historias de usuario del modulo BNK. Incluye validaciones de negocio
+ * como unicidad de codigo, restricciones de tipo de cuenta, transiciones de estado
+ * irreversibles (cierre) y verificacion de dependencias antes de eliminar.
+ * </p>
+ *
+ * @see com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount
+ * @see com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus
+ */
 @Service
 @RequiredArgsConstructor
 public class BankAccountService {
 
+    /** Tamano maximo de pagina para consultas DataTable (proteccion contra abuso). */
     private static final int MAX_PAGE_SIZE = 100;
+
+    /** Cantidad de digitos visibles al enmascarar el numero de cuenta (los ultimos N). */
     private static final int MASK_VISIBLE_DIGITS = 4;
 
     private final BankAccountRepository bankAccountRepository;
@@ -68,7 +81,6 @@ public class BankAccountService {
     private final BankBranchRepository bankBranchRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
-    private final CompanyRepository companyRepository;
     private final CostCenterRepository costCenterRepository;
     private final CheckbookRepository checkbookRepository;
 
@@ -76,30 +88,54 @@ public class BankAccountService {
 
     private final DataTableSpecificationBuilder<BankAccount> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
+    /**
+     * Crea una nueva cuenta bancaria validando reglas de negocio y datos obligatorios.
+     * <p>
+     * Validaciones aplicadas:
+     * <ul>
+     *   <li>La cuenta contable asociada debe ser de clase ACTIVO (normativa PUC colombiana)</li>
+     *   <li>El banco y la moneda deben estar activos (no eliminados)</li>
+     *   <li>Si se habilita sobregiro, el limite de credito debe ser positivo</li>
+     *   <li>Las tarjetas de credito no pueden manejar chequera</li>
+     *   <li>El saldo inicial no puede ser negativo ni la fecha de apertura futura</li>
+     * </ul>
+     * </p>
+     *
+     * @param request      datos de la cuenta bancaria a crear
+     * @param bindingResult resultado de validacion de campos (@NotNull, @NotBlank, etc.)
+     * @return ResponseEntity con la cuenta creada (BankAccountDTO) o error de validacion
+     * @throws IllegalArgumentException si las entidades relacionadas no existen o estan inactivas
+     */
     @Transactional
     public ResponseEntity<?> create(CreateBankAccountRequest request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
+        // Resolver entidades relacionadas obligatorias
         Bank bank = getBankOrThrow(request.getBankId());
         CurrencyType currencyType = getCurrencyTypeOrThrow(request.getCurrencyTypeId());
         AccountingAccount accountingAccount = getAccountingAccountOrThrow(request.getAccountingAccountId());
         User user = userUtil.getUser();
 
+        // Validar que la cuenta contable sea de clase ACTIVO (segun PUC colombiano, cuentas bancarias son activo)
         validateAccountingAccountForBanks(accountingAccount);
         validateBankActive(bank);
         validateCurrencyActive(currencyType);
 
+        // Sucursal y centro de costo son opcionales
         BankBranch bankBranch = request.getBankBranchId() != null ? getBankBranchOrThrow(request.getBankBranchId()) : null;
         CostCenter costCenter = request.getCostCenterId() != null ? getCostCenterOrThrow(request.getCostCenterId()) : null;
 
+        // Regla de negocio: sobregiro requiere limite de credito positivo
         if (Boolean.TRUE.equals(request.getAllowsOverdraft()) && (request.getCreditLimit() == null || request.getCreditLimit().compareTo(BigDecimal.ZERO) <= 0)) {
             return error("BNK-ERR-005", "Límite de crédito requerido cuando se activa sobregiro");
         }
+        // Regla de negocio: alertas de saldo bajo requieren saldo minimo definido
         if (Boolean.TRUE.equals(request.getNotifyLowBalance()) && (request.getMinimumBalance() == null || request.getMinimumBalance().compareTo(BigDecimal.ZERO) < 0)) {
             return error("BNK-ERR-004", "Saldo mínimo requerido cuando se activan alertas de saldo bajo");
         }
+        // Regla de negocio: tarjetas de credito no manejan chequera (instrumento incompatible)
         if (BankAccountType.TARJETA_CREDITO.equals(request.getAccountType()) && Boolean.TRUE.equals(request.getHandlesCheckbook())) {
             return error("BNK-ERR-006", "No se permite chequera para tarjetas de crédito");
         }
@@ -119,7 +155,6 @@ public class BankAccountService {
                 .currencyType(currencyType)
                 .initialBalance(request.getInitialBalance())
                 .accountingAccount(accountingAccount)
-                .company(user.getCompany())
                 .bankBranch(bankBranch)
                 .accountExecutive(emptyToNull(request.getAccountExecutive()))
                 // .bankPhone(emptyToNull(request.getBankPhone()))
@@ -146,9 +181,18 @@ public class BankAccountService {
         );
     }
 
+    /**
+     * Consulta paginada de cuentas bancarias con filtros dinamicos (DataTable).
+     * <p>
+     * Excluye automaticamente registros con soft delete (deletedAt != null).
+     * Soporta busqueda global y ordenamiento por columnas mapeadas.
+     * </p>
+     *
+     * @param request parametros de paginacion, busqueda y ordenamiento del DataTable
+     * @return ResponseEntity con DataTableResponse paginado de BankAccountDTO
+     */
     public ResponseEntity<?> findAllPaged(DataTableRequest request) {
         DataTableRequest safeRequest = normalizeDataTableRequest(request);
-        User user = userUtil.getUser();
         // validateDataTableRequest(safeRequest);
 
         int start = Math.max(0, safeRequest.getStart());
@@ -159,20 +203,20 @@ public class BankAccountService {
         Pageable pageable = length == -1 ? Pageable.unpaged() : PageRequest.of(page, safeLength);
 
         Specification<BankAccount> spec = dataTableSpecificationBuilder.build(safeRequest)
-                .and((root, query, cb) -> cb.equal(root.get("company"), user.getCompany()))
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
         Page<BankAccount> pageResult = bankAccountRepository.findAll(spec, pageable);
-
-        if (pageResult.isEmpty()) {
-            return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("BNK-ERR-032: No se encontraron cuentas bancarias con los resultados con los criterios especificados.")));
-        }
 
         DataTableResponse<BankAccountDTO> response = DataTableResponse.from(pageResult.map(this::toDto), safeRequest.getDraw());
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Obtiene el detalle completo de una cuenta bancaria por su ID.
+     *
+     * @param id identificador de la cuenta bancaria
+     * @return ResponseEntity con BankAccountDTO o error si no existe o fue eliminada
+     */
     public ResponseEntity<?> getDetail(Long id) {
         BankAccount account = getBankAccountOrThrow(id);
         if (account.getDeletedAt() != null) {
@@ -187,6 +231,19 @@ public class BankAccountService {
         );
     }
 
+    /**
+     * Actualiza los datos editables de una cuenta bancaria existente.
+     * <p>
+     * Solo se pueden modificar campos no estructurales (nombre, ejecutivo, descripcion,
+     * configuracion de sobregiro, saldo minimo y centro de costo). El codigo, numero de
+     * cuenta, banco y moneda no se modifican despues de la creacion.
+     * </p>
+     *
+     * @param id            identificador de la cuenta a actualizar
+     * @param request       datos actualizados de la cuenta
+     * @param bindingResult resultado de validacion de campos
+     * @return ResponseEntity con la cuenta actualizada o error de validacion
+     */
     @Transactional
     public ResponseEntity<?> update(Long id, UpdateBankAccountRequest request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -198,6 +255,7 @@ public class BankAccountService {
             return error("BNK-ERR-029", "Cuenta no encontrada");
         }
 
+        // Mismas reglas de negocio que en creacion para sobregiro y alertas
         if (Boolean.TRUE.equals(request.getAllowsOverdraft()) && (request.getCreditLimit() == null || request.getCreditLimit().compareTo(BigDecimal.ZERO) <= 0)) {
             return error("BNK-ERR-013", "Límite de crédito requerido cuando se activa sobregiro");
         }
@@ -231,6 +289,18 @@ public class BankAccountService {
         );
     }
 
+    /**
+     * Elimina (soft delete) una cuenta bancaria si no tiene dependencias activas.
+     * <p>
+     * Antes de eliminar, verifica que no existan chequeras asociadas. Si las hay,
+     * se recomienda desactivar en lugar de eliminar. Requiere motivo obligatorio
+     * de al menos 5 caracteres para trazabilidad.
+     * </p>
+     *
+     * @param id     identificador de la cuenta a eliminar
+     * @param motivo justificacion de la eliminacion (minimo 5 caracteres)
+     * @return ResponseEntity con confirmacion de eliminacion o error por dependencias
+     */
     @Transactional
     public ResponseEntity<?> delete(Long id, String motivo) {
         if (!StringUtils.hasText(motivo) || motivo.trim().length() < 5) {
@@ -242,6 +312,7 @@ public class BankAccountService {
             return error("BNK-ERR-029", "Cuenta no encontrada");
         }
 
+        // Verificar dependencias: no se puede eliminar si tiene chequeras asociadas
         long chequerasCount = checkbookRepository.countByBankAccount_Id(id);
         if (chequerasCount > 0) {
             return ResponseEntity.badRequest().body(
@@ -261,6 +332,17 @@ public class BankAccountService {
         );
     }
 
+    /**
+     * Desactiva una cuenta bancaria cambiando su estado a INACTIVA.
+     * <p>
+     * A diferencia de la eliminacion, la desactivacion no requiere validar dependencias
+     * y es reversible mediante un cambio de estado posterior.
+     * </p>
+     *
+     * @param id     identificador de la cuenta a desactivar
+     * @param motivo justificacion de la desactivacion (minimo 5 caracteres)
+     * @return ResponseEntity con la cuenta desactivada o error de validacion
+     */
     @Transactional
     public ResponseEntity<?> deactivate(Long id, String motivo) {
         if (!StringUtils.hasText(motivo) || motivo.trim().length() < 5) {
@@ -284,6 +366,20 @@ public class BankAccountService {
         );
     }
 
+    /**
+     * Cambia el estado de una cuenta bancaria aplicando reglas de transicion.
+     * <p>
+     * Transiciones permitidas: ACTIVA ↔ INACTIVA, ACTIVA/INACTIVA → CERRADA.
+     * El cierre es <b>irreversible</b>: una cuenta CERRADA no puede volver a otro estado.
+     * Para cerrar se requiere: saldo cero, sin chequeras activas y fecha de cierre valida.
+     * </p>
+     *
+     * @param id          identificador de la cuenta
+     * @param newStatus   nuevo estado deseado
+     * @param motivo      justificacion del cambio (obligatorio si no es reactivacion, minimo 10 caracteres)
+     * @param closingDate fecha de cierre (obligatoria solo si newStatus es CERRADA)
+     * @return ResponseEntity con la cuenta actualizada o error de validacion
+     */
     @Transactional
     public ResponseEntity<?> changeStatus(Long id, BankAccountStatus newStatus, String motivo, LocalDate closingDate) {
         BankAccount account = getBankAccountOrThrow(id);
@@ -291,10 +387,16 @@ public class BankAccountService {
             return error("BNK-ERR-029", "Cuenta no encontrada");
         }
 
+        // El cierre es irreversible: una cuenta cerrada no puede cambiar de estado
+        if (account.getStatus() == BankAccountStatus.CERRADA) {
+            return error("BNK-ERR-028", "Una cuenta cerrada no puede cambiar de estado. El cierre es irreversible.");
+        }
+
         if (newStatus != BankAccountStatus.ACTIVA && (!StringUtils.hasText(motivo) || motivo.trim().length() < 10)) {
             return error("BNK-ERR-027", "Motivo requerido para este cambio de estado (mínimo 10 caracteres)");
         }
 
+        // Validaciones especificas para cierre de cuenta
         if (newStatus == BankAccountStatus.CERRADA) {
             if (closingDate == null) {
                 return error("BNK-ERR-023", "Fecha de cierre inválida");
@@ -302,9 +404,11 @@ public class BankAccountService {
             if (closingDate.isAfter(LocalDate.now())) {
                 return error("BNK-ERR-023", "Fecha de cierre no puede ser futura");
             }
+            // Regla contable: no se puede cerrar una cuenta con saldo pendiente
             if (account.getInitialBalance().compareTo(BigDecimal.ZERO) != 0) {
                 return error("BNK-ERR-024", "No se puede cerrar cuenta con saldo diferente de cero");
             }
+            // Verificar que no haya chequeras activas antes de cerrar
             long chequerasCount = checkbookRepository.countByBankAccount_Id(id);
             if (chequerasCount > 0) {
                 return error("BNK-ERR-026", "No se puede cerrar cuenta con chequeras activas");
@@ -324,19 +428,28 @@ public class BankAccountService {
         );
     }
 
+    /**
+     * Actualiza la fecha de ultima conciliacion bancaria de una cuenta.
+     * <p>
+     * Esta fecha se usa como referencia para saber hasta cuando se han conciliado
+     * los movimientos de la cuenta con los extractos bancarios.
+     * </p>
+     *
+     * @param id            identificador de la cuenta bancaria
+     * @param request       contiene la nueva fecha de ultima conciliacion
+     * @param bindingResult resultado de validacion de campos
+     * @return ResponseEntity con la cuenta actualizada o error si la fecha es futura
+     * @throws IllegalArgumentException si la fecha de conciliacion es futura
+     */
     @Transactional
     public ResponseEntity<?> updateLastReconciliationDate(Long id, UpdateLastReconciliationRequest request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
-        User user = userUtil.getUser();
         BankAccount account = getBankAccountOrThrow(id);
         if (account.getDeletedAt() != null) {
             return error("BNK-ERR-029", "Cuenta no encontrada");
-        }
-        if (!account.getCompany().getId().equals(user.getCompany().getId())) {
-            throw new IllegalArgumentException("No tiene acceso a esta cuenta bancaria.");
         }
         if (request.getLastReconciliationDate().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("La fecha de ultima conciliacion no puede ser futura.");
@@ -363,6 +476,11 @@ public class BankAccountService {
     //     }
     // }
 
+    /**
+     * Valida que la cuenta contable asociada sea de clase ACTIVO.
+     * Segun el PUC colombiano, las cuentas bancarias solo pueden vincularse
+     * a cuentas de la clase 1 (Activo).
+     */
     private void validateAccountingAccountForBanks(AccountingAccount accountingAccount) {
         if (accountingAccount.getPucAccount().getAccountClass() != AccountClass.ASSET) {
             throw new IllegalArgumentException("BNK-ERR-002: Cuenta contable no válida para bancos (debe ser clase ACTIVO).");
@@ -381,14 +499,22 @@ public class BankAccountService {
         }
     }
 
+    /**
+     * Enmascara el numero de cuenta dejando visibles solo los ultimos N digitos.
+     * Ejemplo: "123456789" → "****6789". Proteccion basica de datos sensibles.
+     */
     private String maskAccountNumber(String accountNumber) {
         if (accountNumber == null || accountNumber.isEmpty()) return "****";
         if (accountNumber.length() <= MASK_VISIBLE_DIGITS) return "****" + accountNumber;
         return "****" + accountNumber.substring(accountNumber.length() - MASK_VISIBLE_DIGITS);
     }
 
+    /**
+     * Convierte una entidad BankAccount a su DTO de respuesta.
+     * Incluye DTOs anidados para banco, sucursal, moneda, cuenta contable y centro de costo.
+     */
     private BankAccountDTO toDto(BankAccount e) {
-
+        // Flag para controlar si se enmascara el numero de cuenta (deshabilitado temporalmente)
         boolean used = false;
 
         return BankAccountDTO.builder()
@@ -488,11 +614,6 @@ public class BankAccountService {
     private CurrencyType getCurrencyTypeOrThrow(Long id) {
         return currencyTypeRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("BNK-ERR-003: Moneda no encontrada."));
-    }
-
-    private Company getCompanyOrThrow(Long id) {
-        return companyRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Empresa no encontrada."));
     }
 
     private CostCenter getCostCenterOrThrow(Long id) {

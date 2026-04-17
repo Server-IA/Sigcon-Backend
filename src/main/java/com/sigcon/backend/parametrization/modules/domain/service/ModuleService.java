@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.SpringDataMenuRepository;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 import com.sigcon.backend.parametrization.menu.service.MenuService;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
@@ -42,6 +43,7 @@ public class ModuleService {
 
     private final ModuleRepository moduleRepository;
     private final MenuService menuService;
+    private final SpringDataMenuRepository menuRepository;
     private final DataTableSpecificationBuilder<ModuleEntity> moduleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
@@ -98,14 +100,50 @@ public class ModuleService {
         }
     }
 
+    /**
+     * Devuelve los modulos a los que el usuario autenticado tiene acceso.
+     *
+     * <p>Logica:
+     * <ul>
+     *   <li>ADMIN y SUPERADMIN: ven todos los modulos activos.</li>
+     *   <li>Otros roles: solo ven modulos donde tengan al menos UN permiso.
+     *       La autoridad {@code PERM_VIEW_MODULES_MENU} funciona como "pase libre"
+     *       si un rol quiere ver todo el menu sin otorgar permisos por modulo.</li>
+     * </ul>
+     */
     public ResponseEntity<?> getModulesMenu() {
         try {
+            List<ModuleEntity> modules = moduleRepository.findActiveModulesWithActiveMenus(
+                    parseStatus(ModelStatus.ACTIVE), parseStatus(MenuStatus.ACTIVE));
 
-            
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            boolean isAdmin = auth != null && auth.getAuthorities().stream().anyMatch(a ->
+                    "ROLE_ADMIN".equals(a.getAuthority()) ||
+                    "ROLE_SUPERADMIN".equals(a.getAuthority()));
 
-            List<ModuleEntity> modules = moduleRepository.findActiveModulesWithActiveMenus(parseStatus(ModelStatus.ACTIVE), parseStatus(MenuStatus.ACTIVE));
+            final List<ModuleEntity> visibleModules;
+            if (isAdmin) {
+                visibleModules = modules;
+            } else {
+                // Construir set de module_ids alcanzables por los permisos del usuario.
+                // Los authorities tienen formato 'PERM_<CODE>'; cruzamos con permissions.module_id.
+                java.util.Set<String> permCodesAuth = new java.util.HashSet<>();
+                if (auth != null) {
+                    for (var ga : auth.getAuthorities()) {
+                        if (ga.getAuthority().startsWith("PERM_")) {
+                            permCodesAuth.add(ga.getAuthority().substring(5));
+                        }
+                    }
+                }
+                java.util.Set<Long> accessibleModuleIds = permCodesAuth.isEmpty()
+                        ? java.util.Collections.emptySet()
+                        : moduleRepository.findModuleIdsByPermissionCodes(permCodesAuth);
+                visibleModules = modules.stream()
+                        .filter(m -> accessibleModuleIds.contains(m.getId()))
+                        .toList();
+            }
 
-            List<ModuleDTO> moduleDTOs = modules.stream()
+            List<ModuleDTO> moduleDTOs = visibleModules.stream()
                     .map(module -> ModuleDTO.builder()
                             .id(module.getId())
                             .name(module.getName())
@@ -114,8 +152,7 @@ public class ModuleService {
                             .icon(module.getIcon())
                             .position(module.getPosition())
                             .status(module.getStatus())
-                            .menus(
-                                    menuService.getMenusByModuleId(module.getId()))
+                            .menus(menuService.getMenusByModuleId(module.getId()))
                             .build())
                     .toList();
 
@@ -197,18 +234,72 @@ public class ModuleService {
         }
     }
 
+    /**
+     * PA-RF-17: Elimina un modulo de forma logica (soft delete).
+     *
+     * <p>Regla de negocio: no se puede eliminar un modulo que todavia tiene
+     * menus activos asociados. Esto preserva la integridad referencial y
+     * evita dejar menus huerfanos en la BD.
+     *
+     * @param id ID del modulo a eliminar
+     * @return 200 si la eliminacion fue exitosa; 400 si tiene menus activos o no existe
+     */
     public ResponseEntity<?> deleteModule(Long id) {
         try {
             ModuleEntity module = moduleRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Módulo no encontrado"));
+
+            // PA-RF-17: validar que el modulo no tenga menus activos antes de eliminarlo
+            if (menuRepository.existsByModule_IdAndDeletedAtIsNull(id)) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("No se puede eliminar el módulo porque tiene menús activos asociados"))
+                );
+            }
+
             module.setDeletedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo eliminado correctamente"), Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar el módulo"))
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
+        }
+    }
+
+    /**
+     * Retorna todas las rutas de menú del sistema (sin filtrar por permisos).
+     * Se usa en el frontend para distinguir 403 (sin permisos) de 404 (no existe).
+     */
+    public ResponseEntity<?> getAllMenuPaths() {
+        try {
+            List<ModuleEntity> modules = moduleRepository.findActiveModulesWithActiveMenus(
+                    parseStatus(ModelStatus.ACTIVE), parseStatus(MenuStatus.ACTIVE));
+            List<String> paths = new ArrayList<>();
+            for (ModuleEntity module : modules) {
+                List<com.sigcon.backend.parametrization.menu.Menu> menus = menuService.getMenusByModuleId(module.getId());
+                collectMenuPaths(menus, module.getUrl(), paths);
+            }
+            return ResponseEntity.ok(
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rutas obtenidas"), Optional.of(paths)));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    private void collectMenuPaths(List<com.sigcon.backend.parametrization.menu.Menu> menus, String parentPath, List<String> paths) {
+        if (menus == null) return;
+        for (com.sigcon.backend.parametrization.menu.Menu menu : menus) {
+            String menuPath = menu.getPath() != null ? menu.getPath() : "";
+            String fullPath = "/" + (parentPath != null ? parentPath : "");
+            if (!menuPath.isEmpty()) fullPath = fullPath + "/" + menuPath;
+            fullPath = fullPath.replaceAll("/+", "/");
+            paths.add(fullPath);
+            if (menu.getChildrens() != null && !menu.getChildrens().isEmpty()) {
+                collectMenuPaths(menu.getChildrens(), fullPath.replaceFirst("^/", ""), paths);
+            }
         }
     }
 

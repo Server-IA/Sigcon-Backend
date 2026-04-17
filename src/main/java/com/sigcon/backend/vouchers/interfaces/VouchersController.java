@@ -25,12 +25,12 @@ public class VouchersController {
     private final VoucherService voucherService;
 
     @PostMapping("/search")
-    @Operation(summary = "Buscar vouchers", description = "RF01 - Consulta paginada con filtros avanzados (DataTable).<br>Permiso requerido: PERM_SEARCH_VOUCHER o ROLE_SUPERADMIN")
+    @Operation(summary = "Buscar vouchers", description = "RF01 - Consulta paginada con filtros avanzados (DataTable).<br>Permiso requerido: PERM_SEARCH_VOUCHER o ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Vouchers encontrados"),
         @ApiResponse(responseCode = "400", description = "Error al buscar vouchers")
     })
-    @PreAuthorize("hasAuthority('PERM_SEARCH_VOUCHER') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_SEARCH_VOUCHER') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return voucherService.getVouchers(request);
     }

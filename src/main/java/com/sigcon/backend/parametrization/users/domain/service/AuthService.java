@@ -53,6 +53,13 @@ public class AuthService implements UserDetailsService {
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
+    /**
+     * Registra un nuevo usuario en el sistema con rol USER por defecto.
+     * Valida campos obligatorios, unicidad de email y genera token JWT tras el registro.
+     *
+     * @param request datos del usuario (nombre, apellido, email, password, avatar opcional)
+     * @return ResponseEntity con token JWT si el registro es exitoso, o mensaje de error
+     */
     public ResponseEntity<?> register(AuthRequest request) {
 
 
@@ -103,7 +110,25 @@ public class AuthService implements UserDetailsService {
         ));
     }
 
+    /**
+     * Autentica al usuario y genera un token JWT.
+     * Implementa contador de intentos fallidos: tras 5 intentos, la cuenta se bloquea por 15 minutos.
+     */
     public ResponseEntity<?> login(AuthRequest request){
+        // Verificar si la cuenta esta bloqueada
+        Optional<User> userOpt = userRepository.findByUsernameOrEmail(
+                request.getUsernameOrEmail(), request.getUsernameOrEmail());
+
+        if (userOpt.isPresent()) {
+            User foundUser = userOpt.get();
+            if (foundUser.getLockedUntil() != null && foundUser.getLockedUntil().isAfter(LocalDateTime.now())) {
+                return ResponseEntity.badRequest().body(
+                        ErrorRespondJson.getErrorRespondMessage(
+                                Optional.of("Cuenta bloqueada temporalmente por multiples intentos fallidos. Intente de nuevo mas tarde."))
+                );
+            }
+        }
+
         try {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getUsernameOrEmail(), request.getPassword())
@@ -111,16 +136,32 @@ public class AuthService implements UserDetailsService {
 
             User user = (User) auth.getPrincipal();
 
+            // Resetear contador de intentos fallidos
+            user.setFailedLoginAttempts(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
+
             String token = jwtService.generateToken(user);
 
             Map<String, Object> response = new HashMap<String, Object>();
             response.put("token", token);
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Inicio de sesión exitoso."), Optional.of(response))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Inicio de sesion exitoso."), Optional.of(response))
             );
 
         } catch (AuthenticationException e) {
+
+            // Incrementar contador de intentos fallidos
+            if (userOpt.isPresent()) {
+                User foundUser = userOpt.get();
+                int attempts = (foundUser.getFailedLoginAttempts() != null ? foundUser.getFailedLoginAttempts() : 0) + 1;
+                foundUser.setFailedLoginAttempts(attempts);
+                if (attempts >= 5) {
+                    foundUser.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                }
+                userRepository.save(foundUser);
+            }
 
             return ResponseEntity.badRequest()
                     .body(
@@ -129,6 +170,13 @@ public class AuthService implements UserDetailsService {
         }
     }
 
+    /**
+     * Genera un token de restablecimiento de contrasena y envia el enlace por correo electronico.
+     * El token tiene una vigencia de 10 minutos por seguridad.
+     *
+     * @param request contiene el email del usuario que solicita el restablecimiento
+     * @throws RuntimeException si el email no esta registrado o falla el envio del correo
+     */
     public void sendResetPasswordLink(AuthRequest request){
         try {
             User user = userRepository.findByEmail(request.getEmail())
@@ -200,6 +248,14 @@ public class AuthService implements UserDetailsService {
 
     }
 
+    /**
+     * Restablece la contrasena del usuario usando un token de un solo uso.
+     * Valida que el token no haya expirado ni sido usado, y aplica reglas de complejidad
+     * (minimo 6 caracteres, mayuscula, minuscula, numero, diferente a la anterior).
+     *
+     * @param request contiene el token de restablecimiento y la nueva contrasena
+     * @throws RuntimeException si el token es invalido, expirado o la contrasena no cumple requisitos
+     */
     public void resetPassword(ResetPasswordRequest request){
         PasswordResetToken resetToken = tokenRepository.findByTokenAndUsedFalse(request.getToken())
                 .orElseThrow(() -> new RuntimeException("El token es inválido o ya ha sido utilizado."));
@@ -233,6 +289,13 @@ public class AuthService implements UserDetailsService {
         tokenRepository.save(resetToken);
     }
 
+    /**
+     * Cierra la sesion del usuario invalidando su token JWT.
+     * Agrega el token a la lista negra para impedir su reutilizacion.
+     *
+     * @param token token JWT a invalidar
+     * @return ResponseEntity con mensaje de exito o error si el token ya fue invalidado
+     */
     public ResponseEntity<?> logout(String token){
         if (token == null || token.isEmpty()) {
             return ResponseEntity.badRequest().body(
@@ -261,6 +324,13 @@ public class AuthService implements UserDetailsService {
         return avatarValue;
     }
 
+    /**
+     * Carga un usuario por su nombre de usuario o email para la autenticacion de Spring Security.
+     *
+     * @param usernameOrEmail nombre de usuario o correo electronico
+     * @return entidad User que implementa UserDetails
+     * @throws RuntimeException si no se encuentra el usuario
+     */
     @Override
     public User loadUserByUsername(String usernameOrEmail) throws RuntimeException {
         return userRepository.findByUsernameOrEmail(usernameOrEmail, usernameOrEmail)

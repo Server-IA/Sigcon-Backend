@@ -1,0 +1,22 @@
+[
+  {
+    "code": "AP_NOTE_001",
+    "message": "La factura no fue encontrada"
+  },
+  {
+    "code": "AP_NOTE_002",
+    "message": "No se puede crear una nota para una factura anulada"
+  },
+  {
+    "code": "AP_NOTE_003",
+    "message": "Tipo de nota invalido"
+  },
+  {
+    "code": "AP_NOTE_004",
+    "message": "El valor de la nota credito excede el saldo pendiente"
+  },
+  {
+    "code": "AP_NOTE_005",
+    "message": "El periodo contable esta cerrado o bloqueado"
+  }
+]

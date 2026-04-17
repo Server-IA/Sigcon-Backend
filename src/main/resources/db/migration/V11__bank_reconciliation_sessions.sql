@@ -21,9 +21,11 @@ BEGIN
         ALTER TABLE bank_reconciliation_sessions
             ADD CONSTRAINT fk_brs_bank_account FOREIGN KEY (bank_account_id) REFERENCES bank_accounts (id);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_brs_company') THEN
-        ALTER TABLE bank_reconciliation_sessions
-            ADD CONSTRAINT fk_brs_company FOREIGN KEY (company_id) REFERENCES companies (id);
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'bank_reconciliation_sessions' AND column_name = 'company_id') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_brs_company') THEN
+            ALTER TABLE bank_reconciliation_sessions
+                ADD CONSTRAINT fk_brs_company FOREIGN KEY (company_id) REFERENCES companies (id);
+        END IF;
     END IF;
     IF EXISTS (
         SELECT 1 FROM information_schema.tables

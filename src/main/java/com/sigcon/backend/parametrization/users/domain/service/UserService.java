@@ -1,20 +1,11 @@
 package com.sigcon.backend.parametrization.users.domain.service;
 
 import com.sigcon.backend.general.storage.AvatarStorageService;
-import com.sigcon.backend.parametrization.companies.application.CompanyDTO;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
-import com.sigcon.backend.parametrization.companies.domain.model.CompanyWithholdingAssignment;
-import com.sigcon.backend.parametrization.companies.domain.repository.CompanyRepository;
-import com.sigcon.backend.parametrization.companies.domain.repository.CompanyWithholdingAssignmentRepository;
 import com.sigcon.backend.parametrization.parameters.application.ParameterDTO;
 import com.sigcon.backend.parametrization.parameters.application.UserParameterDTO;
 import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
 import com.sigcon.backend.parametrization.parameters.domain.repository.UserParameterRepository;
-import com.sigcon.backend.parametrization.resources.application.TypeOrganizationDTO;
-import com.sigcon.backend.parametrization.resources.application.TypeRegimenDTO;
-import com.sigcon.backend.parametrization.resources.application.WithholdingDTO;
-import com.sigcon.backend.parametrization.resources.domain.model.Withholding;
-import com.sigcon.backend.parametrization.resources.domain.repository.WithholdingRepository;
+import com.sigcon.backend.parametrization.parameters.domain.service.SystemInfoService;
 import com.sigcon.backend.parametrization.users.application.role.PermissionDTO;
 import com.sigcon.backend.parametrization.users.application.user.UserDTO;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
@@ -60,9 +51,7 @@ public class UserService {
     private final ParameterRepository parameterRepository;
     private final UserParameterRepository userParameterRepository;
     private final RoleRepository roleRepository;
-    private final CompanyRepository companyRepository;
-    private final WithholdingRepository withholdingRepository;
-    private final CompanyWithholdingAssignmentRepository companyWithholdingAssignmentRepository;
+    private final SystemInfoService systemInfoService;
 
     private final UserUtil userUtil;
 
@@ -81,14 +70,8 @@ public class UserService {
             Pageable pageable = length == -1
                     ? Pageable.unpaged()
                     : PageRequest.of(page, safeLength);
-            User userLogged = userUtil.getUser();
-
             Specification<User> spec = userSpecificationBuilder.build(request)
                     .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
-
-                if(userLogged.getRoles().contains("SUPERADMIN")){
-                    spec = spec.and((root, query, cb) -> cb.equal(root.get("company"), userLogged.getCompany()));
-                }
 
             Page<User> users = userRepository.findAll(spec, pageable);
 
@@ -146,21 +129,12 @@ public class UserService {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El correo electrónico ya está registrado")));
 
         }
-        if (request.getCompanyId() == null) {
-            return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("La empresa es obligatoria")));
-        }
-
-        Company company = companyRepository.findById(request.getCompanyId())
-                .orElseThrow(() -> new RuntimeException("Empresa no encontrada"));
-
         User user = User.builder()
                 .name(request.getName())
                 .lastname(request.getLastname())
                 .email(request.getEmail())
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .company(company)
                 .status(Status.ACTIVE)
                 .roles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent)
                         .map(Optional::get).collect(Collectors.toSet()))
@@ -193,35 +167,8 @@ public class UserService {
             response.setAvatar(user.getAvatar());
             response.setStatus(user.getStatus());
 
-            List<CompanyWithholdingAssignment> companyWithholdingAssignments =
-            companyWithholdingAssignmentRepository.findByCompanyAndDeletedAtIsNull(user.getCompany());
-
-            List<WithholdingDTO> companyWithholdingDTOs = companyWithholdingAssignments.stream()
-                    .map(companyWithholdingAssignment -> new WithholdingDTO(
-                            companyWithholdingAssignment.getWithholding().getId(),
-                            companyWithholdingAssignment.getWithholding().getName(),
-                            companyWithholdingAssignment.getWithholding().getCode(),
-                            null,
-                            null,
-                            null
-                    )).collect(Collectors.toList());
-
-            response.setCompany(CompanyDTO.builder()
-                    .id(user.getCompany().getId())
-                    .name(user.getCompany().getName())
-                    .nit(user.getCompany().getNit())
-                    .typeOrganization(TypeOrganizationDTO.builder()
-                            .id(user.getCompany().getTypeOrganization().getId())
-                            .name(user.getCompany().getTypeOrganization().getName())
-                            .code(user.getCompany().getTypeOrganization().getCode())
-                            .build())
-                    .typeRegimen(TypeRegimenDTO.builder()
-                            .id(user.getCompany().getTypeRegimen().getId())
-                            .name(user.getCompany().getTypeRegimen().getName())
-                            .code(user.getCompany().getTypeRegimen().getCode())
-                            .build())
-                    .withholdings(companyWithholdingDTOs)
-                    .build());
+            // Datos de empresa se leen desde parametros del sistema (mono-empresa)
+            Map<String, String> companyInfo = systemInfoService.getSystemInfo();
 
             response.setRoles(
                     user.getRoles()
@@ -375,13 +322,6 @@ public class UserService {
             user.setUsername(request.getUsername());
         }
 
-        if (request.getCompanyId() != null) {
-            Company company = companyRepository.findById(request.getCompanyId())
-                    .orElseThrow(() -> new RuntimeException("Empresa no encontrada"));
-
-            user.setCompany(company);
-        }
-
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
@@ -394,9 +334,20 @@ public class UserService {
         // }
     }
 
+    /**
+     * PA-RF-13: Eliminar un usuario del sistema via soft delete.
+     *
+     * <p>Reglas de negocio:
+     * <ul>
+     *   <li>No se puede eliminar un usuario que no existe o ya fue eliminado.</li>
+     *   <li>No se puede eliminar el usuario 'superadmin' (proteccion del usuario seed).</li>
+     *   <li>No se puede eliminar un usuario que tenga el rol ADMIN (roles criticos).</li>
+     * </ul>
+     *
+     * @param id ID del usuario a eliminar
+     * @return 200 si la eliminacion fue exitosa; 400 si hay violacion de reglas; 404 si no existe
+     */
     public ResponseEntity<?> deleteUser(Long id) {
-
-        // try{
         Optional<User> userOpt = userRepository.findById(id);
 
         if (userOpt.isEmpty()) {
@@ -408,19 +359,30 @@ public class UserService {
         }
 
         User user = userOpt.get();
-        // user.setStatus(Status.INACTIVE);
-        // user.setUpdatedAt(LocalDateTime.now());
+
+        // PA-RF-13: proteger usuario 'superadmin' del sistema (seed inicial, no eliminable)
+        if ("superadmin".equalsIgnoreCase(user.getUsername())) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("No se puede eliminar el usuario superadmin del sistema")));
+        }
+
+        // PA-RF-13: proteger usuarios con rol ADMIN (roles criticos)
+        boolean hasAdminRole = user.getRoles() != null && user.getRoles().stream()
+                .anyMatch(r -> "ADMIN".equalsIgnoreCase(r.getName())
+                        || "SUPERADMIN".equalsIgnoreCase(r.getName()));
+        if (hasAdminRole) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("No se puede eliminar un usuario con rol ADMIN")));
+        }
+
         user.setDeletedAt(LocalDateTime.now());
         userRepository.save(user);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"),
                         Optional.empty()));
-
-        // }catch(Exception e){
-        // return
-        // ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // }
     }
 
     private String resolveAvatarFilename(String avatarValue, String previousAvatarFilename) {

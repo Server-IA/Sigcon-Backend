@@ -98,12 +98,12 @@ public class GlobalExceptionHandler {
                 .findFirst();
 
         // Detectar mensaje del trigger directamente
-        if (rootMessage != null && rootMessage.contains("Debe existir al menos un usuario con SUPERADMIN")) {
+        if (rootMessage != null && rootMessage.contains("Debe existir al menos un usuario con ADMIN")) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
                             ErrorRespondJson.getErrorRespondMessage(
-                                    Optional.of("No se puede eliminar o modificar el único SUPERADMIN")));
+                                    Optional.of("No se puede eliminar o modificar el único ADMIN")));
         }
 
         if (errorMessage.isPresent()) {
@@ -118,14 +118,25 @@ public class GlobalExceptionHandler {
         // .status(HttpStatus.BAD_REQUEST)
         // .body(
         // ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe existir al menos un
-        // usuario con SUPERADMIN"))
+        // usuario con ADMIN"))
         // );
         // }
+
+        // ERR-MNT-TER-003: Mensaje descriptivo en vez de genérico
+        String descriptiveMessage = "Error de integridad de datos.";
+        if (rootMessage != null) {
+            if (rootMessage.contains("third_part") || rootMessage.contains("tercero"))
+                descriptiveMessage = "No es posible realizar esta operación porque el tercero tiene registros asociados en otros módulos. Verifique y retire las dependencias antes de continuar.";
+            else if (rootMessage.contains("compan") || rootMessage.contains("empresa"))
+                descriptiveMessage = "No es posible realizar esta operación porque la empresa tiene registros asociados.";
+            else if (rootMessage.contains("cost_center") || rootMessage.contains("centro"))
+                descriptiveMessage = "No es posible realizar esta operación porque el centro de costo tiene registros asociados.";
+        }
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(
-                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Error de integridad de datos.")));
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(descriptiveMessage)));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -149,6 +160,34 @@ public class GlobalExceptionHandler {
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
     }
 
+    /** Captura RuntimeException como HTTP 400 (errores de negocio) */
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<?> handleRuntimeException(RuntimeException ex) {
+        System.out.println("RuntimeException: " + ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of(ex.getMessage() != null ? ex.getMessage() : "Error en la operación.")));
+    }
+
+    /** Captura NoSuchElementException como HTTP 404 (recurso no encontrado) */
+    @ExceptionHandler(java.util.NoSuchElementException.class)
+    public ResponseEntity<?> handleNoSuchElement(java.util.NoSuchElementException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of(ex.getMessage() != null ? ex.getMessage() : "Recurso no encontrado.")));
+    }
+
+    /** Captura AccessDeniedException como HTTP 403 (sin permisos) */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<?> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("No tiene permisos para realizar esta acción.")));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleException(Exception ex) {
 
@@ -156,12 +195,12 @@ public class GlobalExceptionHandler {
 
         System.out.println("ex.getMessage() Exception: " + message);
 
-        if (message != null && message.contains("Debe existir al menos un usuario con SUPERADMIN")) {
+        if (message != null && message.contains("Debe existir al menos un usuario con ADMIN")) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
                             ErrorRespondJson.getErrorRespondMessage(
-                                    Optional.of("Debe existir al menos un usuario con SUPERADMIN.")));
+                                    Optional.of("Debe existir al menos un usuario con ADMIN.")));
         }
 
         return ResponseEntity

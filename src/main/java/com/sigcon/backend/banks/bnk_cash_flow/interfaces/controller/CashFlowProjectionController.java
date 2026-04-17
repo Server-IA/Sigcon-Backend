@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.*;
  * BNK-RF-29 / BNK-RF-30 / BNK-RF-31 / BNK-RF-32
  *
  * Controlador REST del módulo de Flujo de Caja.
- * Todos los endpoints están protegidos con ROLE_SUPERADMIN.
+ * Todos los endpoints están protegidos con ROLE_ADMIN.
  *
  * Base path: /api/v1/bnk/projections
  */
@@ -77,7 +77,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Error de validación (nombre duplicado, fechas inválidas, campos obligatorios)"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody(required = false) CreateCashFlowProjectionDTO request,
             BindingResult bindingResult) {
@@ -117,7 +117,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateCashFlowProjectionDTO request,
@@ -144,7 +144,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
 
         return cashFlowProjectionService.delete(id);
@@ -166,7 +166,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> inactivate(@PathVariable Long id) {
 
         return cashFlowProjectionService.inactivate(id);
@@ -206,7 +206,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "No se encontraron proyecciones o parámetros inválidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
 
         return cashFlowProjectionService.findAllPaged(request);
@@ -223,7 +223,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada o eliminada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> detail(@PathVariable Long id) {
 
         return cashFlowProjectionService.getDetail(id);

@@ -28,6 +28,10 @@ public class CreateBankFinancialMovementRequest {
     @Size(max = 100)
     private String externalReference;
 
-    /** Opcional: asociar el movimiento a una sesión de conciliación abierta */
+    /** Clasificacion NIC 7: OPERATIVA, INVERSION, FINANCIACION */
+    @Size(max = 20)
+    private String flowActivity;
+
+    /** Opcional: asociar el movimiento a una sesion de conciliacion abierta */
     private Long reconciliationSessionId;
 }

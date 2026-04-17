@@ -57,6 +57,13 @@ public class RoleService {
     private final DataTableSpecificationBuilder<Permission> permissionSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
+    /**
+     * Lista roles del sistema con paginacion y filtros DataTable.
+     * Excluye roles eliminados logicamente (deletedAt != null).
+     *
+     * @param request parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de roles y sus permisos asociados
+     */
     public ResponseEntity<?> getRoles(DataTableRequest request) {
 
         try {
@@ -101,6 +108,14 @@ public class RoleService {
         // return roleRepository.findAllAndDeletedAtIsNull(request.getPageable());
     }
 
+    /**
+     * Crea un nuevo rol en el sistema.
+     * Valida que el nombre sea obligatorio y unico (case-insensitive, se almacena en mayusculas).
+     * Opcionalmente asocia permisos existentes al rol.
+     *
+     * @param request datos del rol (nombre, IDs de permisos opcionales)
+     * @return ResponseEntity con el rol creado o mensaje de error por duplicidad
+     */
     public ResponseEntity<?> createRole(RoleRequest request) {
         try{
 
@@ -144,6 +159,14 @@ public class RoleService {
         }
     }
 
+    /**
+     * Actualiza un rol existente (nombre, permisos y estado).
+     * Valida unicidad del nombre excluyendo el registro actual para evitar falsos positivos.
+     *
+     * @param id      ID del rol a actualizar
+     * @param request datos actualizados del rol
+     * @return ResponseEntity con el rol actualizado o mensaje de error
+     */
     public ResponseEntity<?> updateRole(Long id, RoleRequest request){
 
         if (request.getName() == null || request.getName().isBlank()) {
@@ -183,6 +206,13 @@ public class RoleService {
         );
     }
 
+    /**
+     * Elimina un rol de forma logica (soft delete).
+     * Valida que no este asignado a ningun usuario antes de eliminar para evitar inconsistencias.
+     *
+     * @param id ID del rol a eliminar
+     * @return ResponseEntity con mensaje de exito o error si tiene usuarios asociados
+     */
     public ResponseEntity<?> deleteRole(Long id) {
 
         Role role = roleRepository.findById(id)
@@ -212,6 +242,13 @@ public class RoleService {
         );
     }
 
+    /**
+     * Asigna un rol a un usuario, reemplazando todos los roles previos.
+     * El sistema actual maneja un solo rol por usuario (reemplazo completo).
+     *
+     * @param request contiene userId y roleId para la asignacion
+     * @return ResponseEntity con mensaje de exito o error si usuario/rol no existe
+     */
     public ResponseEntity<?> assignRoleToUser(UpdateUserRole request){
 
         User user = userRepository.findById(request.getUserId())
@@ -230,6 +267,14 @@ public class RoleService {
         );
     }
 
+    /**
+     * Crea un nuevo permiso y opcionalmente lo asigna a roles existentes.
+     * Valida unicidad del codigo del permiso y existencia del modulo asociado.
+     *
+     * @param request       datos del permiso (nombre, codigo, tipo, modulo, roles opcionales)
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con el permiso creado o errores de validacion
+     */
     public ResponseEntity<?> createPermission(PermissionDTO request, BindingResult bindingResult){
 
         if (bindingResult.hasErrors()) {
@@ -280,6 +325,13 @@ public class RoleService {
         }
     }
 
+    /**
+     * Lista permisos del sistema con paginacion y filtros DataTable.
+     * Excluye permisos eliminados logicamente.
+     *
+     * @param request parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de permisos
+     */
     public ResponseEntity<?> getPermissions(DataTableRequest request) {
 
         try {
@@ -308,6 +360,15 @@ public class RoleService {
         }
     }
 
+    /**
+     * Actualiza un permiso existente (nombre, codigo, tipo, descripcion, modulo).
+     * Valida unicidad del codigo excluyendo el registro actual.
+     *
+     * @param id            ID del permiso a actualizar
+     * @param request       datos actualizados del permiso
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con el permiso actualizado o errores de validacion
+     */
     public ResponseEntity<?> updatePermission(Long id, PermissionDTO request, BindingResult bindingResult){
         try{
             if (bindingResult.hasErrors()) {
@@ -349,6 +410,13 @@ public class RoleService {
 
     }
 
+    /**
+     * Asigna un conjunto de permisos a un rol existente (operacion aditiva).
+     * Los permisos nuevos se agregan sin eliminar los ya asignados.
+     *
+     * @param request contiene el ID del rol y los IDs de permisos a asignar
+     * @return ResponseEntity con mensaje de exito o error si el rol/permisos no existen
+     */
     @Transactional
     public ResponseEntity<?> assignPermissions(RoleRequest request) {
 
@@ -373,6 +441,13 @@ public class RoleService {
         );
     }
 
+    /**
+     * Remueve permisos especificos de un rol.
+     * Solo elimina los permisos indicados, conservando los demas.
+     *
+     * @param request contiene el ID del rol y los IDs de permisos a remover
+     * @return ResponseEntity con mensaje de exito o error si el rol no tiene permisos
+     */
     @Transactional
     public ResponseEntity<?> removePermissions(RoleRequest request) {
 
@@ -403,6 +478,48 @@ public class RoleService {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al remover permisos del rol"))
+            );
+        }
+    }
+
+    /**
+     * PA-RF-24: Elimina un permiso del sistema de forma FISICA (hard delete).
+     *
+     * <p>La HU especifica "borrado fisico con confirmacion": el permiso
+     * se elimina definitivamente de la BD, no solo se marca como eliminado.
+     *
+     * <p>Reglas de negocio:
+     * <ul>
+     *   <li>El permiso debe existir.</li>
+     *   <li>No debe estar asignado a ningun rol antes de eliminarlo (integridad referencial).</li>
+     * </ul>
+     *
+     * @param id ID del permiso a eliminar
+     * @return 200 si la eliminacion fue exitosa; 400 si esta asignado a roles o no existe
+     */
+    public ResponseEntity<?> deletePermission(Long id) {
+        try {
+            Permission permission = permissionRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Permiso no encontrado"));
+
+            // Verificar si esta asignado a algun rol
+            long rolesCount = roleRepository.findAllByPermissions_Id(id).size();
+            if (rolesCount > 0) {
+                return ResponseEntity.badRequest().body(
+                        ErrorRespondJson.getErrorRespondMessage(
+                                Optional.of("No se puede eliminar el permiso porque esta asignado a " + rolesCount + " rol(es)"))
+                );
+            }
+
+            // PA-RF-24: borrado FISICO (no soft delete)
+            permissionRepository.delete(permission);
+
+            return ResponseEntity.ok(
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso eliminado correctamente"), Optional.empty())
+            );
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
             );
         }
     }

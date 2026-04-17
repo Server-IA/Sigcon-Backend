@@ -2,28 +2,35 @@
 
 DROP INDEX IF EXISTS uk_payment_methods_code;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_res_type
-ON invoices (type_invoice_id, resolution, company_id)
-WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_res_invoice_company
-ON invoices (resolution_invoice, company_id)
-WHERE deleted_at IS NULL;
-
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'chk_origin_destination_different'
-    ) THEN
-        ALTER TABLE invoices
-        ADD CONSTRAINT chk_origin_destination_different
-        CHECK (
-            location_origin_id IS NULL 
-            OR location_destination_id IS NULL 
-            OR location_origin_id <> location_destination_id
-        );
+    -- Nota: el indice global uk_invoices_res_invoice_v2 sobre resolution_invoice
+    -- fue eliminado (era contablemente incorrecto: una resolucion DIAN autoriza
+    -- un rango de facturas a un proveedor, por lo que varias facturas comparten
+    -- la misma resolucion). La unicidad real esta cubierta por AP-01 E2:
+    -- (supplier_invoice_number, third_party_id, YEAR(invoice_date)).
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'invoices' AND column_name = 'company_id') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_res_type
+            ON invoices (type_invoice_id, resolution, company_id) WHERE deleted_at IS NULL;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_invoices_res_type_v2
+            ON invoices (type_invoice_id, resolution) WHERE deleted_at IS NULL;
+    END IF;
+
+    -- Dropear el indice antiguo si todavia existe por startups previos
+    DROP INDEX IF EXISTS uk_invoices_res_invoice_v2;
+    DROP INDEX IF EXISTS uk_invoices_res_invoice_company;
+
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'invoices' AND column_name = 'location_origin_id') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_origin_destination_different') THEN
+            ALTER TABLE invoices
+            ADD CONSTRAINT chk_origin_destination_different
+            CHECK (
+                location_origin_id IS NULL
+                OR location_destination_id IS NULL
+                OR location_origin_id <> location_destination_id
+            );
+        END IF;
     END IF;
 END$$;
 
@@ -103,9 +110,16 @@ WHERE NOT EXISTS (
 -- comprobantes
 
 DROP INDEX IF EXISTS uk_vouchers_number;
-CREATE UNIQUE INDEX IF NOT EXISTS uk_vouchers_number
-ON vouchers (number, voucher_type_id, company_id)
-WHERE deleted_at IS NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vouchers' AND column_name = 'company_id') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_vouchers_number
+            ON vouchers (number, voucher_type_id, company_id) WHERE deleted_at IS NULL;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_vouchers_number_v2
+            ON vouchers (number, voucher_type_id) WHERE deleted_at IS NULL;
+    END IF;
+END $$;
 
 ALTER TABLE vouchers DROP CONSTRAINT IF EXISTS chk_origin_payment_not_null;
 ALTER TABLE vouchers

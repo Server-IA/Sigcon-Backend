@@ -8,8 +8,6 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
-
 public interface AccountingAccountRepository extends JpaRepository<AccountingAccount, Long>, JpaSpecificationExecutor<AccountingAccount> {
 
     Optional<AccountingAccount> findByIdAndDeletedAtIsNull(Long id);
@@ -25,9 +23,9 @@ public interface AccountingAccountRepository extends JpaRepository<AccountingAcc
     List<AccountingAccount> findByPucAccount_Id(Long pucId);
 
     
-    boolean existsByCustomNameAndCompanyIdAndDeletedAtIsNull(String customName, Company companyId);
-    
-    boolean existsByCustomNameAndCompanyIdAndIdNotAndDeletedAtIsNull(String customName, Company companyId, Long idNot);
+    boolean existsByCustomNameAndDeletedAtIsNull(String customName);
+
+    boolean existsByCustomNameAndIdNotAndDeletedAtIsNull(String customName, Long idNot);
 
     AccountingAccount findByCostCenter_Id(Long costCenterId);
     

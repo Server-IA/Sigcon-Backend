@@ -45,6 +45,13 @@ public class MenuService implements MenuUseCase {
 
     private final DataTableSpecificationBuilder<MenuEntity> menuSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
+    /**
+     * Lista menus del sistema con paginacion y filtros DataTable.
+     * Excluye menus eliminados logicamente e incluye datos del padre y modulo asociado.
+     *
+     * @param request parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de menus
+     */
     @Override
     public ResponseEntity<?> getMenusDataTable(DataTableRequest request) {
 
@@ -98,6 +105,13 @@ public class MenuService implements MenuUseCase {
         }
     }
 
+    /**
+     * Obtiene los menus de un modulo filtrados por los roles del usuario autenticado.
+     * Los administradores (roleId=1) ven todos los menus del modulo.
+     *
+     * @param moduleId ID del modulo cuyos menus se consultan
+     * @return lista de menus accesibles para el usuario actual
+     */
     @Override
     public List<Menu> getMenusByModuleId(Long moduleId) {
 
@@ -118,6 +132,15 @@ public class MenuService implements MenuUseCase {
                 .toList();
     }
 
+    /**
+     * Crea un nuevo menu en el sistema.
+     * Valida unicidad de label, path y component. Verifica que el menu padre y modulo existan
+     * y no esten eliminados logicamente.
+     *
+     * @param menu          datos del menu a crear
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con mensaje de exito o errores de validacion/duplicidad
+     */
     @Override
     public ResponseEntity<?> saveMenu(
             @Valid @RequestBody Menu menu, BindingResult bindingResult) {
@@ -181,6 +204,8 @@ public class MenuService implements MenuUseCase {
                     .status(menu.getStatus())
                     .visible(menu.getVisible())
                     .component(menu.getComponent())
+                    .method(menu.getMethod())
+                    .menuType(menu.getMenuType())
                     .deletedAt(menu.getDeletedAt())
                     .createdAt(menu.getCreatedAt())
                     .updatedAt(menu.getUpdatedAt())
@@ -188,7 +213,7 @@ public class MenuService implements MenuUseCase {
 
             menuRepositoryPort.saveMenu(menuEntity);
             return ResponseEntity.ok(
-                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú creado correctamente"),
+                    SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menu creado correctamente"),
                             Optional.empty()));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
@@ -196,6 +221,15 @@ public class MenuService implements MenuUseCase {
         }
     }
 
+    /**
+     * Actualiza un menu existente.
+     * Valida unicidad de label, path y component excluyendo el registro actual.
+     * Permite cambiar padre, modulo, visibilidad, orden, method y menuType.
+     *
+     * @param menu          datos actualizados del menu (debe incluir ID)
+     * @param bindingResult resultado de validacion de campos obligatorios
+     * @return ResponseEntity con mensaje de exito o errores de validacion
+     */
     @Override
     public ResponseEntity<?> updateMenu(
             @Valid @RequestBody Menu menu, BindingResult bindingResult) {
@@ -248,6 +282,8 @@ public class MenuService implements MenuUseCase {
 
             menuEntity.setStatus(menu.getStatus());
             menuEntity.setComponent(menu.getComponent());
+            menuEntity.setMethod(menu.getMethod());
+            menuEntity.setMenuType(menu.getMenuType());
             menuEntity.setUpdatedAt(LocalDateTime.now());
 
             menuRepositoryPort.updateMenu(menuEntity);
@@ -260,11 +296,23 @@ public class MenuService implements MenuUseCase {
         }
     }
 
+    /**
+     * Busca un menu por su etiqueta (label).
+     *
+     * @param label etiqueta del menu a buscar
+     * @return Optional con la entidad MenuEntity si existe
+     */
     @Override
     public Optional<MenuEntity> findMenuByLabel(String label) {
         return menuRepositoryPort.findMenuByLabel(label);
     }
 
+    /**
+     * Busca un menu por su ID.
+     *
+     * @param id ID del menu a buscar
+     * @return Optional con el dominio Menu si existe, vacio si id es null
+     */
     @Override
     public Optional<Menu> findMenuById(Long id) {
         if (id == null) {
@@ -273,6 +321,13 @@ public class MenuService implements MenuUseCase {
         return menuRepositoryPort.findMenuById(id);
     }
 
+    /**
+     * Consulta menus con especificacion JPA y paginacion.
+     *
+     * @param spec     especificacion de filtros JPA
+     * @param pageable parametros de paginacion
+     * @return pagina de entidades MenuEntity que cumplen los filtros
+     */
     @Override
     public Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable) {
         return menuRepositoryPort.findAll(spec, pageable);
@@ -289,6 +344,13 @@ public class MenuService implements MenuUseCase {
         }
     }
 
+    /**
+     * Elimina un menu de forma logica (soft delete).
+     * La validacion de dependencias (submenus activos) se realiza en el adaptador del repositorio.
+     *
+     * @param id ID del menu a eliminar
+     * @return ResponseEntity con mensaje de exito o error si tiene submenus activos
+     */
     @Override
     public ResponseEntity<?> deleteMenu(Long id) {
 

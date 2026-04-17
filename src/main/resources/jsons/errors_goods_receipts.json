@@ -1,0 +1,34 @@
+[
+  {
+    "code": "GR_001",
+    "message": "La orden de compra no fue encontrada"
+  },
+  {
+    "code": "GR_002",
+    "message": "Solo se pueden crear recepciones para ordenes aprobadas (APPROVED)"
+  },
+  {
+    "code": "GR_003",
+    "message": "La linea de orden de compra no fue encontrada"
+  },
+  {
+    "code": "GR_004",
+    "message": "La linea no pertenece a la orden de compra"
+  },
+  {
+    "code": "GR_005",
+    "message": "La cantidad recibida excede la cantidad pendiente"
+  },
+  {
+    "code": "GR_006",
+    "message": "La recepcion no fue encontrada"
+  },
+  {
+    "code": "GR_007",
+    "message": "La recepcion ya tiene una factura vinculada"
+  },
+  {
+    "code": "GR_008",
+    "message": "La factura no fue encontrada"
+  }
+]

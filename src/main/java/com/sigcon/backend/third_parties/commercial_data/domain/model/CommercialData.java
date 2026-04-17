@@ -4,8 +4,10 @@ import org.hibernate.annotations.Where;
 import org.hibernate.annotations.SQLDelete;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.parametrization.resources.domain.model.PaymentTerms;
 import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
@@ -55,7 +57,21 @@ public class CommercialData {
     private BigDecimal limitCredit;
     @Enumerated(EnumType.STRING)
     @Column(name = "risk_level")
-    private RiskSegmentation riskLevel; 
+    private RiskSegmentation riskLevel;
+
+    /** TER-11: Moneda asociada al limite de credito */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "currency_id")
+    private CurrencyType currency;
+
+    /** TER-12: Fecha de inicio de vigencia del dato comercial */
+    @Column(name = "validity_from")
+    private LocalDate validityFrom;
+
+    /** TER-12: Fecha de fin de vigencia del dato comercial */
+    @Column(name = "validity_to")
+    private LocalDate validityTo;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false)

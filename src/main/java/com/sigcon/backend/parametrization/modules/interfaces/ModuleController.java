@@ -26,34 +26,46 @@ public class ModuleController {
     private final ModuleService moduleService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_MODULES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_MODULES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> getModules(
             @RequestBody(required = false) DataTableRequest dtRequest) {
         return moduleService.getModulesPaged(dtRequest);
     }
 
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_MODULES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_MODULES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> storeModule(@Valid @RequestBody ModuleDTO request, BindingResult bindingResult) {
         return moduleService.storeModule(request, bindingResult);
     }
 
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_MODULES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_MODULES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> updateModule(@Valid @RequestBody ModuleDTO request, BindingResult bindingResult) {
         return moduleService.updateModule(request, bindingResult);
     }
 
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_MODULES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_MODULES') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> deleteModule(@PathVariable Long id) {
         return moduleService.deleteModule(id);
     }
 
+    /**
+     * Devuelve los modulos y menus que el usuario autenticado puede ver.
+     * Accesible a cualquier usuario logueado: el filtrado por rol se hace
+     * dentro del service (via menu_permissions). Si un menu no tiene
+     * permisos configurados, queda visible para todos (compat hacia atras).
+     */
     @GetMapping("/menu")
-    @PreAuthorize("hasAuthority('PERM_VIEW_MODULES_MENU') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getModulesMenu() {
         return moduleService.getModulesMenu();
+    }
+
+    /** Retorna todas las rutas del sistema para distinguir 403 vs 404 en el frontend */
+    @GetMapping("/menu/all-paths")
+    public ResponseEntity<?> getAllMenuPaths() {
+        return moduleService.getAllMenuPaths();
     }
 
 }

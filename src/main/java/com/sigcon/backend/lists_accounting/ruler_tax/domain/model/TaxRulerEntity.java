@@ -9,7 +9,7 @@ import org.hibernate.annotations.Where;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax;
 import com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.TypeRulerTax;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -76,6 +76,14 @@ public class TaxRulerEntity {
     @Column(name = "scope", nullable = true)
     @Size(min = 1, max = 1000, message = "El alcance debe tener entre 1 y 1000 caracteres")
     private String scope;
+
+    /** Tope minimo en UVT para aplicar la retencion (HU v2.0 AP-06) */
+    @Column(name = "min_amount_uvt")
+    private Double minAmountUvt;
+
+    /** Valor de la UVT del anio fiscal vigente */
+    @Column(name = "uvt_value_year")
+    private Double uvtValueYear;
 
     @Column(name = "start_date", nullable = false)
     private LocalDate dateStart;

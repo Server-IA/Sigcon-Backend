@@ -13,7 +13,7 @@ import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.cash_management.domain.model.Cash;
 import com.sigcon.backend.banks.checks.domain.model.Check;
 import com.sigcon.backend.invoices.domain.model.PaymentForms;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 import com.sigcon.backend.parametrization.users.domain.model.User;
 
 import jakarta.persistence.Column;
@@ -81,10 +81,6 @@ public class VouchersEntity {
     private Check check;
     // Fin origenes de pago
 
-
-    @ManyToOne
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
 
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)

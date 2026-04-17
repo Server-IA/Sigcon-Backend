@@ -32,8 +32,6 @@ public class BankAccountDetailDTO {
     private Long chartOfAccountId;
     private String chartOfAccountCode;
     private String chartOfAccountName;
-    private Long companyId;
-    private String companyName;
     private BankAccountStatus status;
     private LocalDate openingDate;
     private LocalDate lastReconciliationDate;

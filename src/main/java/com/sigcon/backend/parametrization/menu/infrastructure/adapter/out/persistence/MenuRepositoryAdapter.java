@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.sigcon.backend.parametrization.menu.port.out.MenuRepositoryPort;
+import com.sigcon.backend.parametrization.menuPermissions.domain.repository.MenuPermissionsRepository;
 import com.sigcon.backend.parametrization.modules.application.ModuleDTO;
 import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.menu.Menu;
@@ -19,9 +20,11 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 public class MenuRepositoryAdapter implements MenuRepositoryPort {
 
     private final SpringDataMenuRepository repository;
+    private final MenuPermissionsRepository menuPermissionsRepository;
 
-    public MenuRepositoryAdapter(SpringDataMenuRepository repository) {
+    public MenuRepositoryAdapter(SpringDataMenuRepository repository, MenuPermissionsRepository menuPermissionsRepository) {
         this.repository = repository;
+        this.menuPermissionsRepository = menuPermissionsRepository;
     }
     
     @Override
@@ -70,6 +73,8 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
                     : null)
             .status(e.getStatus())
             .component(e.getComponent())
+            .method(e.getMethod())
+            .menuType(e.getMenuType())
             .createdAt(e.getCreatedAt())
             .updatedAt(e.getUpdatedAt())
             .deletedAt(e.getDeletedAt())
@@ -172,7 +177,15 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
     public MenuEntity deleteMenu(Long id) {
         MenuEntity menu = findById(id);
         if(menu == null) {
-            throw new RuntimeException("Menú no encontrado");
+            throw new RuntimeException("Menu no encontrado");
+        }
+        // RF-21 E3: Validar submenús activos antes de eliminar
+        if (repository.existsByParent_IdAndDeletedAtIsNull(id)) {
+            throw new RuntimeException("No se puede eliminar el menú porque tiene submenús activos asociados");
+        }
+        // RF-21 E5: Validar permisos asociados antes de eliminar
+        if (menuPermissionsRepository.existsByMenuIdAndDeletedAtIsNull(id)) {
+            throw new RuntimeException("No se puede eliminar el menú porque tiene permisos asociados");
         }
         menu.setDeletedAt(LocalDateTime.now());
         return repository.save(menu);

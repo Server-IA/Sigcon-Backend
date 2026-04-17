@@ -66,7 +66,7 @@ public class BankController {
         @ApiResponse(responseCode = "400", description = "Error de validación"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_CREATE_BANK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_BANK') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody(required = false) BankDTO request,
             BindingResult bindingResult) {
@@ -103,7 +103,7 @@ public class BankController {
         @ApiResponse(responseCode = "403", description = "Sin permisos"),
         @ApiResponse(responseCode = "404", description = "Sin resultados")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
 
         return bankService.findAllPaged(request);
@@ -119,7 +119,7 @@ public class BankController {
         @ApiResponse(responseCode = "404", description = "Banco no encontrado"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> detail(@PathVariable Long id) {
 
         return bankService.getDetail(id);
@@ -150,7 +150,7 @@ public class BankController {
         @ApiResponse(responseCode = "404", description = "Banco no encontrado"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @Valid @RequestBody BankDTO request,
@@ -169,7 +169,7 @@ public class BankController {
         @ApiResponse(responseCode = "404", description = "Banco no encontrado"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_DELETE_BANK') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_BANK') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
 
         return bankService.delete(id);

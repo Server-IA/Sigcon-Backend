@@ -48,10 +48,6 @@ public class CostCenter {
     @Builder.Default
     private CostCenterStatus status = CostCenterStatus.ACTIVE;
 
-    @NotNull(message = "El ID de empresa es obligatorio")
-    @Column(name = "company_id")
-    private Long companyId;
-
     @Column(name = "created_at", updatable = false)
     @Temporal(TemporalType.TIMESTAMP)
     @CreationTimestamp

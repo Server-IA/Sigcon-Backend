@@ -73,6 +73,13 @@ public class ResourceService {
     private final DataTableSpecificationBuilder<PaymentForms> paymentFormSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
 
+    /**
+     * Lista municipios con paginacion y filtros DataTable.
+     * Incluye datos del pais asociado a cada municipio.
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de municipios
+     */
     public ResponseEntity<?> getMunicipalities(DataTableRequest dtRequest) {
         try {
 
@@ -98,6 +105,13 @@ public class ResourceService {
         }
     }
 
+    /**
+     * Lista paises con paginacion y filtros DataTable.
+     * Incluye la lista de municipios asociados a cada pais.
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de paises con sus municipios
+     */
     public ResponseEntity<?> getCountries(DataTableRequest dtRequest) {
         try {
             int start = Math.max(0, dtRequest.getStart());
@@ -122,6 +136,13 @@ public class ResourceService {
         }
     }
 
+    /**
+     * Lista terminos de pago con paginacion y filtros DataTable.
+     * Los terminos de pago definen los dias de plazo para facturas (ej: 30, 60, 90 dias).
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de terminos de pago
+     */
     public ResponseEntity<?> getAllPaymentTerms(DataTableRequest dtRequest) {
         try {
             int start = Math.max(0, dtRequest.getStart());
@@ -146,6 +167,13 @@ public class ResourceService {
         }
     }
 
+    /**
+     * Lista tipos de regimen tributario con paginacion y filtros DataTable.
+     * Regimenes segun normativa colombiana: comun, simplificado, gran contribuyente, etc.
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de regimenes tributarios
+     */
     public ResponseEntity<?> getAllTypesRegimes(DataTableRequest dtRequest) {
         try {
 
@@ -172,6 +200,13 @@ public class ResourceService {
         }
     }
 
+    /**
+     * Lista tipos de organizacion con paginacion y filtros DataTable.
+     * Clasificacion segun DIAN: persona natural, persona juridica, etc.
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de tipos de organizacion
+     */
     public ResponseEntity<?> getAllTypesOrganizations(DataTableRequest dtRequest) {
         try {
 
@@ -197,6 +232,13 @@ public class ResourceService {
         }
     }
 
+    /**
+     * Lista retenciones disponibles con paginacion y filtros DataTable.
+     * Catalogo de retenciones aplicables segun Estatuto Tributario colombiano.
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de retenciones
+     */
     public ResponseEntity<?> getAllWithholdings(DataTableRequest dtRequest) {
         try {
             int start = Math.max(0, dtRequest.getStart());
@@ -221,6 +263,13 @@ public class ResourceService {
         }
     }
 
+    /**
+     * Lista formas de pago con paginacion y filtros DataTable.
+     * Incluye el indicador isContado que diferencia pagos de contado vs credito.
+     *
+     * @param dtRequest parametros de paginacion, busqueda y orden del DataTable
+     * @return ResponseEntity con DataTableResponse de formas de pago
+     */
     public ResponseEntity<?> getAllPaymentForms(DataTableRequest dtRequest) {
         try {
             int start = Math.max(0, dtRequest.getStart());
@@ -243,6 +292,88 @@ public class ResourceService {
         } catch (Exception e) {
             throw new RuntimeException(e.getMessage());
         }
+    }
+
+    // ===== CRUD PAÍSES (HU-PA-RF-50 a 53) =====
+
+    /** HU-PA-RF-50: Crear país validando unicidad de código */
+    public ResponseEntity<?> createCountry(CountryDTO request) {
+        if (request.getName() == null || request.getName().trim().isEmpty())
+            throw new IllegalArgumentException("El nombre del país es obligatorio");
+        if (request.getCode() == null || request.getCode().trim().isEmpty())
+            throw new IllegalArgumentException("El código del país es obligatorio");
+        if (countryRepository.findByCodeIgnoreCase(request.getCode().trim()).isPresent())
+            throw new IllegalArgumentException("Ya existe un país con el código ingresado");
+        Country country = Country.builder().name(request.getName().trim()).code(request.getCode().trim().toUpperCase()).build();
+        countryRepository.save(country);
+        return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "País creado exitosamente"); }});
+    }
+
+    /** HU-PA-RF-52: Editar país */
+    public ResponseEntity<?> updateCountry(Long id, CountryDTO request) {
+        Country country = countryRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("País no encontrado"));
+        var existing = countryRepository.findByCodeIgnoreCase(request.getCode().trim());
+        if (existing.isPresent() && !existing.get().getId().equals(id))
+            throw new IllegalArgumentException("Ya existe otro país con ese código");
+        country.setName(request.getName().trim());
+        country.setCode(request.getCode().trim().toUpperCase());
+        countryRepository.save(country);
+        return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "País actualizado exitosamente"); }});
+    }
+
+    /** HU-PA-RF-53: Eliminar país validando municipios asociados */
+    public ResponseEntity<?> deleteCountry(Long id) {
+        Country country = countryRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("País no encontrado"));
+        var municipios = municipalityRepository.findByCountryId(id);
+        if (!municipios.isEmpty())
+            throw new IllegalArgumentException("No se puede eliminar: tiene " + municipios.size() + " municipio(s) asociado(s)");
+        country.setDeletedAt(java.time.LocalDateTime.now());
+        countryRepository.save(country);
+        return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "País eliminado exitosamente"); }});
+    }
+
+    // ===== CRUD MUNICIPIOS (HU-PA-RF-54 a 57) =====
+
+    /** HU-PA-RF-54: Crear municipio */
+    public ResponseEntity<?> createMunicipality(MunicipalityDTO request) {
+        if (request.getName() == null || request.getName().trim().isEmpty())
+            throw new IllegalArgumentException("El nombre del municipio es obligatorio");
+        if (request.getCode() == null || request.getCode().trim().isEmpty())
+            throw new IllegalArgumentException("El código del municipio es obligatorio");
+        if (request.getCountry() == null || request.getCountry().getId() == null)
+            throw new IllegalArgumentException("Debe seleccionar un país");
+        Country country = countryRepository.findById(request.getCountry().getId())
+            .orElseThrow(() -> new IllegalArgumentException("País no encontrado"));
+        if (municipalityRepository.findByCodeIgnoreCase(request.getCode().trim()).isPresent())
+            throw new IllegalArgumentException("Ya existe un municipio con ese código");
+        Municipality mun = Municipality.builder().name(request.getName().trim()).code(request.getCode().trim()).country(country).build();
+        municipalityRepository.save(mun);
+        return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "Municipio creado exitosamente"); }});
+    }
+
+    /** HU-PA-RF-56: Editar municipio */
+    public ResponseEntity<?> updateMunicipality(Long id, MunicipalityDTO request) {
+        Municipality mun = municipalityRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Municipio no encontrado"));
+        var existing = municipalityRepository.findByCodeIgnoreCase(request.getCode().trim());
+        if (existing.isPresent() && !existing.get().getId().equals(id))
+            throw new IllegalArgumentException("Ya existe otro municipio con ese código");
+        if (request.getCountry() != null && request.getCountry().getId() != null) {
+            Country country = countryRepository.findById(request.getCountry().getId())
+                .orElseThrow(() -> new IllegalArgumentException("País no encontrado"));
+            mun.setCountry(country);
+        }
+        mun.setName(request.getName().trim());
+        mun.setCode(request.getCode().trim());
+        municipalityRepository.save(mun);
+        return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "Municipio actualizado exitosamente"); }});
+    }
+
+    /** HU-PA-RF-57: Eliminar municipio */
+    public ResponseEntity<?> deleteMunicipality(Long id) {
+        Municipality mun = municipalityRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Municipio no encontrado"));
+        mun.setDeletedAt(java.time.LocalDateTime.now());
+        municipalityRepository.save(mun);
+        return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "Municipio eliminado exitosamente"); }});
     }
 
     // Mappeadores
@@ -326,6 +457,7 @@ public class ResourceService {
             .id(paymentForm.getId())
             .name(paymentForm.getName())
             .code(paymentForm.getCode())
+            .isContado(paymentForm.getIsContado())
             .build();
     }
 

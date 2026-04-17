@@ -1,0 +1,14 @@
+[
+  {
+    "code": "APR_001",
+    "message": "El proveedor no fue encontrado"
+  },
+  {
+    "code": "APR_002",
+    "message": "Error al generar el PDF"
+  },
+  {
+    "code": "APR_003",
+    "message": "No se encontraron facturas pendientes"
+  }
+]

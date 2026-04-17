@@ -1,0 +1,38 @@
+[
+  {
+    "code": "PO_001",
+    "message": "El proveedor no fue encontrado"
+  },
+  {
+    "code": "PO_002",
+    "message": "La orden de compra no fue encontrada"
+  },
+  {
+    "code": "PO_003",
+    "message": "Solo se pueden modificar ordenes en estado borrador (DRAFT)"
+  },
+  {
+    "code": "PO_004",
+    "message": "Solo se pueden enviar a aprobacion ordenes en estado borrador (DRAFT)"
+  },
+  {
+    "code": "PO_005",
+    "message": "Solo se pueden aprobar ordenes en estado pendiente (PENDING)"
+  },
+  {
+    "code": "PO_006",
+    "message": "Solo se pueden rechazar ordenes en estado pendiente (PENDING)"
+  },
+  {
+    "code": "PO_007",
+    "message": "Solo se pueden eliminar ordenes en estado borrador (DRAFT)"
+  },
+  {
+    "code": "PO_008",
+    "message": "La razon del rechazo es obligatoria"
+  },
+  {
+    "code": "PO_009",
+    "message": "La orden debe tener al menos una linea de detalle"
+  }
+]

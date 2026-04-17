@@ -33,9 +33,11 @@ BEGIN
                 ADD CONSTRAINT fk_fin_mov_cash FOREIGN KEY (cash_id) REFERENCES cash (id);
         END IF;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fin_mov_company') THEN
-        ALTER TABLE financial_movements
-            ADD CONSTRAINT fk_fin_mov_company FOREIGN KEY (company_id) REFERENCES companies (id);
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'financial_movements' AND column_name = 'company_id') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fin_mov_company') THEN
+            ALTER TABLE financial_movements
+                ADD CONSTRAINT fk_fin_mov_company FOREIGN KEY (company_id) REFERENCES companies (id);
+        END IF;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_fin_mov_matched_check') THEN
         ALTER TABLE financial_movements
@@ -45,6 +47,11 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_fin_mov_bank_account_date ON financial_movements (bank_account_id, movement_date DESC);
 CREATE INDEX IF NOT EXISTS idx_fin_mov_cash ON financial_movements (cash_id);
-CREATE INDEX IF NOT EXISTS idx_fin_mov_company ON financial_movements (company_id);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'financial_movements' AND column_name = 'company_id') THEN
+        CREATE INDEX IF NOT EXISTS idx_fin_mov_company ON financial_movements (company_id);
+    END IF;
+END $$;
 
 ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS last_reconciliation_date DATE NULL;

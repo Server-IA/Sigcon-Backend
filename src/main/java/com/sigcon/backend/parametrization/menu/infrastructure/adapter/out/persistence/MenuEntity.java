@@ -70,6 +70,12 @@ public class MenuEntity {
     @Column(name = "visible")
     private Boolean visible = true;
 
+    @Column(name = "method", length = 10)
+    private String method;
+
+    @Column(name = "menu_type", length = 50)
+    private String menuType;
+
     @Column(name = "created_at")
     @Temporal(TemporalType.TIMESTAMP)
     @CreationTimestamp

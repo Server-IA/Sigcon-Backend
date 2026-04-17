@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 /**
  * ACT-RF-02 — Consulta del histórico de depreciaciones.
  *
- * <p>Todos los endpoints están restringidos a {@code ROLE_SUPERADMIN}.</p>
+ * <p>Todos los endpoints están restringidos a {@code ROLE_ADMIN}.</p>
  *
  * <h2>Endpoints disponibles</h2>
  * <ul>
@@ -55,7 +55,7 @@ public class AssetDepreciationHistoryController {
      * ordenado por fecha de cálculo descendente.
      */
     @GetMapping("/history/{assetId}")
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @Operation(
             summary = "Histórico de depreciaciones por activo",
             description = "Retorna todos los registros históricos de depreciación de un activo " +
@@ -68,7 +68,7 @@ public class AssetDepreciationHistoryController {
                     content = @Content(schema = @Schema(implementation = ErrorRespondJson.class))),
             @ApiResponse(responseCode = "401", description = "No autenticado — se requiere token JWT válido",
                     content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado — se requiere ROLE_SUPERADMIN",
+            @ApiResponse(responseCode = "403", description = "Acceso denegado — se requiere ROLE_ADMIN",
                     content = @Content),
             @ApiResponse(responseCode = "500", description = "Error interno del servidor",
                     content = @Content(schema = @Schema(implementation = ErrorRespondJson.class)))
@@ -98,7 +98,7 @@ public class AssetDepreciationHistoryController {
      * Retorna todos los registros históricos de depreciación de un período contable.
      */
     @GetMapping("/history")
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @Operation(
             summary = "Histórico de depreciaciones por período",
             description = "Retorna todos los registros históricos de depreciación correspondientes al " +
@@ -111,7 +111,7 @@ public class AssetDepreciationHistoryController {
                     content = @Content(schema = @Schema(implementation = ErrorRespondJson.class))),
             @ApiResponse(responseCode = "401", description = "No autenticado — se requiere token JWT válido",
                     content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado — se requiere ROLE_SUPERADMIN",
+            @ApiResponse(responseCode = "403", description = "Acceso denegado — se requiere ROLE_ADMIN",
                     content = @Content),
             @ApiResponse(responseCode = "500", description = "Error interno del servidor",
                     content = @Content(schema = @Schema(implementation = ErrorRespondJson.class)))

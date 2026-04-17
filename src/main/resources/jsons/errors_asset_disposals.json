@@ -1,0 +1,7 @@
+[
+  {"code": "DSP_001", "message": "El activo no fue encontrado."},
+  {"code": "DSP_002", "message": "El activo no se puede dar de baja porque no esta activo."},
+  {"code": "DSP_003", "message": "El periodo contable esta cerrado para la fecha indicada."},
+  {"code": "DSP_004", "message": "Debe especificar el monto de enajenacion para bajas."},
+  {"code": "DSP_005", "message": "Debe especificar el motivo de la operacion."}
+]

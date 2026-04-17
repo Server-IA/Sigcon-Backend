@@ -42,29 +42,55 @@
 -- ---------------------------------------------------------------------------
 -- Cuentas contables (accounting_accounts) ligadas a PUC para tesorería e impuestos
 -- ---------------------------------------------------------------------------
-INSERT INTO accounting_accounts (
-    puc_id, custom_name, currency_type_id, cost_center_id, tax_rule_id, nature, status, company_id,
-    created_at, updated_at, created_by
-)
-SELECT p.id, v.custom_name, ct.id, NULL, NULL, v.nature::varchar, 'ACTIVE', c.id, NOW(), NOW(),
-       (SELECT u.id FROM users u WHERE u.username = 'superadmin' AND u.deleted_at IS NULL LIMIT 1)
-FROM (VALUES
-    ('1105', 'Caja general operativa', 'DEBIT'),
-    ('1110', 'Bancos', 'DEBIT'),
-    -- ('135530', 'PUC — Impuestos descontables (IVA crédito)', 'DEBIT'),
-    ('2408', 'Impuesto ventas por pagar', 'CREDIT'),
-    ('2365', 'Retención fuente por pagar', 'CREDIT'),
-    ('2367', 'Impuesto ventas retenido por pagar', 'CREDIT'),
-    ('2368', 'Impuesto industria y comercio retenido por pagar', 'CREDIT'),
-    ('1528', 'Equipo de computo','DEBIT'),
-    ('2205', 'Proveedores', 'DEBIT')
-) AS v (puc_code, custom_name, nature)
-JOIN cfg_chart_of_accounts p ON p.account_code = v.puc_code AND p.deleted_at IS NULL
-JOIN cfg_currency_types ct ON ct.iso_code = 'COP' AND ct.deleted_at IS NULL
-CROSS JOIN (SELECT co.id FROM companies co WHERE co.deleted_at IS NULL ORDER BY co.id LIMIT 1) c
-WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'accounting_accounts')
-  AND EXISTS (SELECT 1 FROM companies com WHERE com.deleted_at IS NULL)
-  AND NOT EXISTS (
-      SELECT 1 FROM accounting_accounts a
-      WHERE a.company_id = c.id AND a.custom_name = v.custom_name AND a.deleted_at IS NULL
-  );
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'accounting_accounts' AND column_name = 'company_id') THEN
+        INSERT INTO accounting_accounts (
+            puc_id, custom_name, currency_type_id, cost_center_id, tax_rule_id, nature, status, company_id,
+            created_at, updated_at, created_by
+        )
+        SELECT p.id, v.custom_name, ct.id, NULL, NULL, v.nature::varchar, 'ACTIVE', c.id, NOW(), NOW(),
+               (SELECT u.id FROM users u WHERE u.username = 'superadmin' AND u.deleted_at IS NULL LIMIT 1)
+        FROM (VALUES
+            ('1105', 'Caja general operativa', 'DEBIT'),
+            ('1110', 'Bancos', 'DEBIT'),
+            ('2408', 'Impuesto ventas por pagar', 'CREDIT'),
+            ('2365', 'Retencion fuente por pagar', 'CREDIT'),
+            ('2367', 'Impuesto ventas retenido por pagar', 'CREDIT'),
+            ('2368', 'Impuesto industria y comercio retenido por pagar', 'CREDIT'),
+            ('1528', 'Equipo de computo','DEBIT'),
+            ('2205', 'Proveedores', 'DEBIT')
+        ) AS v (puc_code, custom_name, nature)
+        JOIN cfg_chart_of_accounts p ON p.account_code = v.puc_code AND p.deleted_at IS NULL
+        JOIN cfg_currency_types ct ON ct.iso_code = 'COP' AND ct.deleted_at IS NULL
+        CROSS JOIN (SELECT co.id FROM companies co WHERE co.deleted_at IS NULL ORDER BY co.id LIMIT 1) c
+        WHERE EXISTS (SELECT 1 FROM companies com WHERE com.deleted_at IS NULL)
+          AND NOT EXISTS (
+              SELECT 1 FROM accounting_accounts a
+              WHERE a.company_id = c.id AND a.custom_name = v.custom_name AND a.deleted_at IS NULL
+          );
+    ELSE
+        INSERT INTO accounting_accounts (
+            puc_id, custom_name, currency_type_id, cost_center_id, tax_rule_id, nature, status,
+            created_at, updated_at, created_by
+        )
+        SELECT p.id, v.custom_name, ct.id, NULL, NULL, v.nature::varchar, 'ACTIVE', NOW(), NOW(),
+               (SELECT u.id FROM users u WHERE u.username = 'admin' AND u.deleted_at IS NULL LIMIT 1)
+        FROM (VALUES
+            ('1105', 'Caja general operativa', 'DEBIT'),
+            ('1110', 'Bancos', 'DEBIT'),
+            ('2408', 'Impuesto ventas por pagar', 'CREDIT'),
+            ('2365', 'Retencion fuente por pagar', 'CREDIT'),
+            ('2367', 'Impuesto ventas retenido por pagar', 'CREDIT'),
+            ('2368', 'Impuesto industria y comercio retenido por pagar', 'CREDIT'),
+            ('1528', 'Equipo de computo','DEBIT'),
+            ('2205', 'Proveedores', 'DEBIT')
+        ) AS v (puc_code, custom_name, nature)
+        JOIN cfg_chart_of_accounts p ON p.account_code = v.puc_code AND p.deleted_at IS NULL
+        JOIN cfg_currency_types ct ON ct.iso_code = 'COP' AND ct.deleted_at IS NULL
+        WHERE NOT EXISTS (
+              SELECT 1 FROM accounting_accounts a
+              WHERE a.custom_name = v.custom_name AND a.deleted_at IS NULL
+          );
+    END IF;
+END $$;

@@ -5,7 +5,6 @@ import com.sigcon.backend.banks.reconciliation.domain.model.enums.Reconciliation
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface BankReconciliationSessionRepository extends JpaRepository<BankReconciliationSession, Long> {
 
@@ -13,5 +12,4 @@ public interface BankReconciliationSessionRepository extends JpaRepository<BankR
 
     boolean existsByBankAccount_IdAndStatus(Long bankAccountId, ReconciliationSessionStatus status);
 
-    Optional<BankReconciliationSession> findByIdAndCompany_Id(Long id, Long companyId);
 }

@@ -65,10 +65,9 @@ public class CreateBankAccountRequest {
     @Schema(description = "Nombre del ejecutivo de cuenta")
     private String accountExecutive;
 
-    // @Size(max = 20)
-    // @Pattern(regexp = "^[0-9]{7,20}$", message = "El teléfono debe tener entre 7 y 20 dígitos")
-    // @Schema(description = "Teléfono de contacto del banco")
-    // private String bankPhone;
+    @Size(max = 20)
+    @Schema(description = "Teléfono de contacto del banco")
+    private String bankPhone;
 
     @Size(max = 500)
     @Schema(description = "Descripción adicional o notas")

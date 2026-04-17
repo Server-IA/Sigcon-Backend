@@ -50,6 +50,8 @@ public class Menu {
     private Boolean visible;
 
     private String component;
+    private String method;
+    private String menuType;
     private List<PermissionDTO> permissions;
     private List<Menu> childrens;
     private LocalDateTime deletedAt;

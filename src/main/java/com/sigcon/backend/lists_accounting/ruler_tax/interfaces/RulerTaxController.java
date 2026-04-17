@@ -36,11 +36,11 @@ public class RulerTaxController {
     private final RuleTaxService ruleTaxService;
 
     @PostMapping("/create")
-    @Operation(summary = "Crear regla de impuesto", description = "Crear una nueva regla de impuesto, requiere permisos de creación (PERM_CREATE_RULER_TAX) o rol superadmin (ROLE_SUPERADMIN)")
+    @Operation(summary = "Crear regla de impuesto", description = "Crear una nueva regla de impuesto, requiere permisos de creación (PERM_CREATE_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Regla de impuesto creada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateRuleTaxDTO.class)))
     @ApiResponse(responseCode = "400", description = "Error al crear la regla de impuesto")
 
-    @PreAuthorize("hasAuthority('PERM_CREATE_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> createRulerTax(@Valid @RequestBody(required = false) CreateRuleTaxDTO createRuleTaxDTO,
             BindingResult bindingResult) {
         return ruleTaxService.create(createRuleTaxDTO, bindingResult);
@@ -52,36 +52,36 @@ public class RulerTaxController {
     @ApiResponse(responseCode = "401", description = "No autenticado")
     @ApiResponse(responseCode = "403", description = "Sin permiso PERM_VIEW_RULER_TAX")
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> findAllPagedRulerTax(@RequestBody(required = false) DataTableRequest request) {
         System.out.println("request ruler tax: " + request);
         return ruleTaxService.findAllPaged(request);
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Actualizar regla de impuesto", description = "Actualizar una regla de impuesto, requiere permisos de actualización (PERM_UPDATE_RULER_TAX) o rol superadmin (ROLE_SUPERADMIN)")
+    @Operation(summary = "Actualizar regla de impuesto", description = "Actualizar una regla de impuesto, requiere permisos de actualización (PERM_UPDATE_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Regla de impuesto actualizada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UpdateRuleTaxDTO.class)))
     @ApiResponse(responseCode = "400", description = "Error al actualizar la regla de impuesto")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> updateRulerTax(@PathVariable Long id,
             @Valid @RequestBody(required = false) UpdateRuleTaxDTO updateRuleTaxDTO, BindingResult bindingResult) {
         return ruleTaxService.updateRuleTax(id, updateRuleTaxDTO, bindingResult);
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Eliminar regla de impuesto", description = "Eliminar una regla de impuesto, requiere permisos de eliminación (PERM_DELETE_RULER_TAX) o rol superadmin (ROLE_SUPERADMIN)")
+    @Operation(summary = "Eliminar regla de impuesto", description = "Eliminar una regla de impuesto, requiere permisos de eliminación (PERM_DELETE_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Regla de impuesto eliminada correctamente")
     @ApiResponse(responseCode = "400", description = "Error al eliminar la regla de impuesto")
-    @PreAuthorize("hasAuthority('PERM_DELETE_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> deleteRulerTax(@PathVariable Long id) {
         return ruleTaxService.deleteRuleTax(id);
     }
 
     @PostMapping("/accounting-accounts")
-    @Operation(summary = "Asignar cuenta contable a regla de impuesto", description = "Asignar una cuenta contable a una regla de impuesto, requiere permisos de asignación (PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX) o rol superadmin (ROLE_SUPERADMIN)")
+    @Operation(summary = "Asignar cuenta contable a regla de impuesto", description = "Asignar una cuenta contable a una regla de impuesto, requiere permisos de asignación (PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Cuenta contable asignada correctamente")
     @ApiResponse(responseCode = "400", description = "Error al asignar la cuenta contable")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> assignAccountingAccountToRulerTax(
             @Valid @RequestBody(required = false) AssignAccountingAccountToRulerTaxDTO assignAccountingAccountToRulerTaxDTO,
             BindingResult bindingResult) {

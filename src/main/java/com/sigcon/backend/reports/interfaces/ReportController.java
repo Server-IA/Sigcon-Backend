@@ -27,7 +27,7 @@ import java.util.Optional;
 /**
  * Controlador para el módulo de Informes.
  *
- * <p>Todos los puntos de enlace (endpoints) en este controlador están restringidos al rol {@code ROLE_SUPERADMIN}.</p>
+ * <p>Todos los puntos de enlace (endpoints) en este controlador están restringidos al rol {@code ROLE_ADMIN}.</p>
  *
  * <h2>Guía de Extensión</h2>
  * <p>Para agregar un nuevo endpoint de informe (ej. reporte de activos):</p>
@@ -50,7 +50,7 @@ public class ReportController {
     // ─── Endpoints ───────────────────────────────────────────────────────────
 
     @GetMapping("/template")
-    @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @Operation(
             summary = "Generar plantilla base PDF",
             description = "Genera y retorna la plantilla institucional base en formato PDF. " +
@@ -70,7 +70,7 @@ public class ReportController {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "Acceso denegado — se requiere ROLE_SUPERADMIN",
+                    description = "Acceso denegado — se requiere ROLE_ADMIN",
                     content = @Content
             ),
             @ApiResponse(

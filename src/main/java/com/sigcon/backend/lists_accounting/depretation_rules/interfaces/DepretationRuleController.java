@@ -41,7 +41,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "400", description = "Error en los parametros de busqueda")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> getDepretationRules(
             @RequestBody(required = false) DataTableRequest dtRequest) {
         // try {
@@ -66,7 +66,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "500", description = "Error interno al guardar la regla")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> createDepretationRule(
             @Valid @RequestBody CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
@@ -91,7 +91,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "500", description = "Error interno al guardar los cambios")
     })
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> updateDepretationRule(
             @Valid @RequestBody UpdateDepretationRuleRequest request,
             BindingResult bindingResult) {
@@ -116,7 +116,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "500", description = "Error interno al eliminar la regla")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> deleteDepretationRule(
             @PathVariable Long id,
             @RequestParam(name = "reason", required = true) String reason) {

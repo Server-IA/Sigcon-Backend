@@ -1,0 +1,62 @@
+[
+  {
+    "code": "INT_001",
+    "message": "JSON malformado o no parseable"
+  },
+  {
+    "code": "INT_002",
+    "message": "Campo obligatorio faltante en metadata del lote AAEF"
+  },
+  {
+    "code": "INT_003",
+    "message": "StandardVersion no soportada por SIGCON"
+  },
+  {
+    "code": "INT_004",
+    "message": "TotalDocuments del summary no coincide con la suma real de documentos"
+  },
+  {
+    "code": "INT_005",
+    "message": "exchangeId ya procesado (lote duplicado)"
+  },
+  {
+    "code": "INT_006",
+    "message": "ExchangeId no cumple formato AF-YYYY-MM-NNNNN"
+  },
+  {
+    "code": "INT_007",
+    "message": "Lote supera el tamano maximo permitido (20 MB)"
+  },
+  {
+    "code": "INT_008",
+    "message": "Content-Type debe ser application/json"
+  },
+  {
+    "code": "INT_009",
+    "message": "Header X-API-Key ausente"
+  },
+  {
+    "code": "INT_010",
+    "message": "API Key invalida o revocada"
+  },
+  {
+    "code": "INT_011",
+    "message": "Transferencia no encontrada"
+  },
+  {
+    "code": "INT_012",
+    "message": "Campo UpdatedAt ausente (advertencia, no bloquea)"
+  },
+  {
+    "code": "INT_013",
+    "message": "Error al serializar payload AAEF"
+  },
+  {
+    "code": "INT_014",
+    "message": "AGROFUSION_API_KEY no esta configurado en parametros"
+  },
+  {
+    "code": "INT_015",
+    "message": "Documento no cumple validaciones de tipo (se reportara en failedDocuments del ACK)"
+  }
+]

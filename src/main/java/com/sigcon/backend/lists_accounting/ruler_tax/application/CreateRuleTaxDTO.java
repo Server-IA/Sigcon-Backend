@@ -40,4 +40,10 @@ public class CreateRuleTaxDTO {
     @NotNull(message = "La cuenta contable es requerida")
     private Long accountingAccountId;
 
+    /** Tope minimo en UVT para aplicar la retencion (nullable, solo aplica a WITHHOLDING) */
+    private Double minAmountUvt;
+
+    /** Valor de la UVT del anio fiscal vigente (nullable) */
+    private Double uvtValueYear;
+
 }

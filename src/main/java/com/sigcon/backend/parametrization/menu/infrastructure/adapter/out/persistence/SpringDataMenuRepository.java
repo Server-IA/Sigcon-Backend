@@ -17,15 +17,38 @@ import java.util.Optional;
 public interface SpringDataMenuRepository extends JpaRepository<MenuEntity, Long>, JpaSpecificationExecutor<MenuEntity> {
     Page<MenuEntity> findByOrderByMenuOrderAsc(Pageable pageable);
 
+    /**
+     * Devuelve los menus activos de un modulo visibles para un set de roles.
+     * <p>Semantica de visibilidad:
+     * <ul>
+     *   <li>Si {@code isAdmin=true}: devuelve todos los menus activos.</li>
+     *   <li>Si un menu NO tiene filas en {@code menu_permissions}: es publico
+     *       para cualquier usuario autenticado (compat hacia atras, ya que hoy
+     *       la tabla esta vacia).</li>
+     *   <li>Si un menu tiene filas en {@code menu_permissions}: solo los roles
+     *       presentes en esa tabla lo ven.</li>
+     * </ul>
+     */
     @Query(value = """
       SELECT m.*
-      FROM menus m
-      LEFT JOIN menu_permissions mp on mp.menu_id = m.id
-      LEFT JOIN roles r on mp.role_id = r.id 
-      WHERE m.module_id = :moduleId AND m.status = :status AND m.deleted_at IS NULL
-      AND (r.id = :roles OR :isAdmin = true)
-      AND mp.deleted_at IS NULL
-      ORDER BY m.menu_order ASC
+        FROM menus m
+       WHERE m.module_id = :moduleId
+         AND m.status = :status
+         AND m.deleted_at IS NULL
+         AND (
+              :isAdmin = true
+              OR NOT EXISTS (
+                  SELECT 1 FROM menu_permissions mp
+                   WHERE mp.menu_id = m.id AND mp.deleted_at IS NULL
+              )
+              OR EXISTS (
+                  SELECT 1 FROM menu_permissions mp
+                   WHERE mp.menu_id = m.id
+                     AND mp.deleted_at IS NULL
+                     AND mp.role_id IN (:roles)
+              )
+         )
+       ORDER BY m.menu_order ASC
       """, nativeQuery = true)
     List<MenuEntity> findMenusByModuleIdAndRoles(Long moduleId, List<Long> roles, String status, boolean isAdmin);
 
@@ -61,6 +84,12 @@ public interface SpringDataMenuRepository extends JpaRepository<MenuEntity, Long
     @Override
     Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable);
 
-    // Page<MenuEntity> findAll(Specification<MenuEntity> spec, Pageable pageable);
+    boolean existsByParent_IdAndDeletedAtIsNull(Long parentId);
+
+    /**
+     * PA-RF-17: verifica si un modulo tiene menus activos asociados.
+     * Usado para evitar eliminar un modulo que todavia tiene menus vivos.
+     */
+    boolean existsByModule_IdAndDeletedAtIsNull(Long moduleId);
 }
     

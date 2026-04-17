@@ -2,7 +2,7 @@ package com.sigcon.backend.banks.reconciliation.domain.model;
 
 import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.reconciliation.domain.model.enums.ReconciliationSessionStatus;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -25,10 +25,6 @@ public class BankReconciliationSession {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "bank_account_id", nullable = false)
     private BankAccount bankAccount;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
 
     @Column(name = "period_start", nullable = false)
     private LocalDate periodStart;

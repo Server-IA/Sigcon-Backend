@@ -7,13 +7,14 @@ import org.hibernate.annotations.ManyToAny;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
+import com.sigcon.backend.integration.domain.model.IntegrationSource;
 import com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
-import com.sigcon.backend.parametrization.companies.domain.model.CompanyLocation;
+
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -69,18 +70,6 @@ public class Invoices {
     private ThirdParty thirdParty;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "location_origin_id", nullable = true)
-    private CompanyLocation locationOrigin;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "location_destination_id", nullable = true)
-    private CompanyLocation locationDestination;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "invoice_reference_id", nullable = true)
     private Invoices invoiceReference;
 
@@ -114,6 +103,29 @@ public class Invoices {
     @Enumerated(EnumType.STRING)
     private StatusesInvoices status;
 
+    @Column(name = "supplier_invoice_number", length = 50)
+    private String supplierInvoiceNumber;
+
+    @Column(name = "balance_due", nullable = false)
+    @Builder.Default
+    private Double balanceDue = 0.0;
+
+    /**
+     * HU-AP-07: Porcentaje de descuento por pronto pago (ej. 2.0 = 2%).
+     * Se aplica automaticamente en el pago si la fecha de pago es <= factura + earlyPaymentDiscountDays.
+     */
+    @Column(name = "early_payment_discount_pct", precision = 5)
+    private Double earlyPaymentDiscountPct;
+
+    /**
+     * HU-AP-07: Dias de gracia para aplicar el descuento (desde la fecha de factura).
+     */
+    @Column(name = "early_payment_discount_days")
+    private Integer earlyPaymentDiscountDays;
+
+    @Column(name = "journal_entry_id")
+    private Long journalEntryId;
+
     @Column(name = "notes", nullable = true)
     private String notes;
 
@@ -126,6 +138,14 @@ public class Invoices {
     @Column(name = "deleted_at", nullable = true)
     private LocalDateTime deletedAt;
 
+    /**
+     * Trazabilidad del origen del documento (MANUAL vs AAEF).
+     * Campos: source, external_id, exchange_id (creados en V32).
+     */
+    @Embedded
+    @Builder.Default
+    private IntegrationSource integrationSource = IntegrationSource.builder().build();
+
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
@@ -135,6 +155,9 @@ public class Invoices {
         this.totalAmount = 0.0;
         this.totalDiscount = 0.0;
         this.totalTax = 0.0;
+        if (this.balanceDue == null) {
+            this.balanceDue = 0.0;
+        }
     }
 
     @PreUpdate

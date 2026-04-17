@@ -1,0 +1,22 @@
+[
+  {
+    "code": "RPT_001",
+    "message": "El nombre del tipo de reporte ya existe."
+  },
+  {
+    "code": "RPT_002",
+    "message": "Tipo de reporte no encontrado."
+  },
+  {
+    "code": "RPT_003",
+    "message": "No se puede eliminar: tiene plantillas activas asociadas."
+  },
+  {
+    "code": "RPT_004",
+    "message": "Plantilla de reporte no encontrada."
+  },
+  {
+    "code": "RPT_005",
+    "message": "El tipo de reporte asociado no existe."
+  }
+]

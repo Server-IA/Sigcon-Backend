@@ -16,10 +16,10 @@ import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
 public interface VoucherRepository extends JpaRepository<VouchersEntity, Long>, JpaSpecificationExecutor<VouchersEntity> {
 
     @Query(value = """
-        SELECT MAX(v.number) FROM vouchers v 
-        WHERE v.voucher_type_id = :voucherTypeId AND v.company_id = :companyId AND v.deleted_at IS NULL
+        SELECT MAX(v.number) FROM vouchers v
+        WHERE v.voucher_type_id = :voucherTypeId AND v.deleted_at IS NULL
     """, nativeQuery = true)
-    BigInteger findTopByVoucherTypeIdAndCompanyIdOrderByNumberDesc(Long voucherTypeId, Long companyId);
+    BigInteger findTopByVoucherTypeIdAndDeletedAtIsNullOrderByNumberDesc(@Param("voucherTypeId") Long voucherTypeId);
 
     @Query(value = """
         SELECT v.* FROM vouchers v 
@@ -42,21 +42,19 @@ public interface VoucherRepository extends JpaRepository<VouchersEntity, Long>, 
     BigDecimal sumVouchersByCheckbookId(Long checkId);
 
     @Query("SELECT v FROM VouchersEntity v WHERE v.deletedAt IS NULL AND v.bankAccount.id = :bankAccountId "
-            + "AND v.company.id = :companyId AND v.date >= :from AND v.date <= :to ORDER BY v.date DESC, v.id DESC")
+            + "AND v.date >= :from AND v.date <= :to ORDER BY v.date DESC, v.id DESC")
     List<VouchersEntity> findReconciliationCandidates(
             @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
 
     @Query(value = """
             SELECT COALESCE(SUM(v.amount), 0) FROM vouchers v
-            WHERE v.bank_account_id = :bankAccountId AND v.company_id = :companyId
+            WHERE v.bank_account_id = :bankAccountId
             AND v.deleted_at IS NULL AND v.date <= :asOfDate
             """, nativeQuery = true)
     BigDecimal sumVoucherAmountsByBankAccountUpToDate(
             @Param("bankAccountId") Long bankAccountId,
-            @Param("companyId") Long companyId,
             @Param("asOfDate") LocalDate asOfDate);
 
 }

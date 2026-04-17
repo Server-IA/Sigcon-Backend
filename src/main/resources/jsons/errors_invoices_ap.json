@@ -1,0 +1,12 @@
+[
+  {"code": "AP_001", "message": "La factura no fue encontrada."},
+  {"code": "AP_002", "message": "Factura ya registrada para este proveedor en el a\u00f1o actual."},
+  {"code": "AP_003", "message": "Proveedor no v\u00e1lido o inactivo."},
+  {"code": "AP_004", "message": "El per\u00edodo contable est\u00e1 cerrado."},
+  {"code": "AP_005", "message": "El n\u00famero de factura del proveedor es obligatorio."},
+  {"code": "AP_006", "message": "No se puede modificar una factura anulada o liquidada."},
+  {"code": "AP_007", "message": "Solo se pueden eliminar facturas en estado pendiente."},
+  {"code": "AP_008", "message": "El monto del pago supera el saldo pendiente."},
+  {"code": "AP_009", "message": "No hay fondos suficientes en la cuenta seleccionada."},
+  {"code": "AP_010", "message": "Ya existe un pago con esta referencia."}
+]

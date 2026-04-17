@@ -1,0 +1,10 @@
+[
+  { "code": "AR_NOTE_001", "message": "La factura no fue encontrada" },
+  { "code": "AR_NOTE_002", "message": "No se puede crear una nota para una factura anulada" },
+  { "code": "AR_NOTE_003", "message": "No se puede crear una nota para una factura en borrador" },
+  { "code": "AR_NOTE_004", "message": "Tipo de nota invalido. Debe ser CREDIT o DEBIT" },
+  { "code": "AR_NOTE_005", "message": "El monto de la nota debe ser mayor a cero" },
+  { "code": "AR_NOTE_006", "message": "El valor de la nota credito excede el saldo pendiente" },
+  { "code": "AR_NOTE_007", "message": "La nota no fue encontrada" },
+  { "code": "AR_NOTE_008", "message": "El periodo contable se encuentra cerrado o bloqueado" }
+]

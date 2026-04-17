@@ -43,45 +43,38 @@ public class CurrencyTypeService {
 
     @Transactional
     public ResponseEntity<?> createCurrencyType(CurrencyTypeRequestDTO request, BindingResult bindingResult) {
-
-        // try {
+        try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
-    
+
             // Validar duplicado de código ISO
-            // if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
-            //     throw new IllegalArgumentException("El código ISO ingresado ya está registrado en el sistema");
-            // }
-    
-            // // Validar duplicado de nombre
-            // if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
-            //     throw new IllegalArgumentException("El nombre de la moneda ya existe en el sistema");
-            // }
-    
-            // Mapear DTO → Entity
+            if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El código ISO ingresado ya está registrado en el sistema")));
+            }
+
+            // Validar duplicado de nombre
+            if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre de la moneda ya existe en el sistema")));
+            }
+
             CurrencyType currencyType = CurrencyType.builder()
                     .isoCode(request.getIsoCode())
                     .name(request.getName())
+                    .status(request.getStatus())
                     .build();
-    
+
             currencyTypeRepository.save(currencyType);
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda creada exitosamente"), Optional.empty()));
-    
-            // Mapear Entity → ResponseDTO
-            // return CurrencyTypeResponseDTO.builder()
-            //         .id(saved.getId())
-            //         .isoCode(saved.getIsoCode())
-            //         .name(saved.getName())
-            //         .createdAt(saved.getCreatedAt())
-            //         .build();
 
-        // } catch (Exception e) {
-        //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // }
-        // } catch (Exception e) {
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
         //     return ResponseEntity.internalServerError().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
     }
@@ -154,7 +147,9 @@ public class CurrencyTypeService {
             throw new IllegalStateException(errorMessage);
         }
 
-        currencyTypeRepository.deleteById(id);
+        // Soft delete en vez de eliminación física para mantener trazabilidad
+        existing.setDeletedAt(java.time.LocalDateTime.now());
+        currencyTypeRepository.save(existing);
 
         return CurrencyTypeDeleteResponseDTO.builder()
                 .id(existing.getId())
