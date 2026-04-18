@@ -67,7 +67,13 @@ public class ApiKeyFilter extends OncePerRequestFilter {
                                      FilterChain chain)
             throws ServletException, IOException {
 
-        String path = request.getRequestURI();
+        // Normalizar el path: si Dokploy/nginx antepone un prefix tipo /sigcon/dev,
+        // getRequestURI() devuelve "/sigcon/dev/api/contabilidad/aaef" y el filtro fallaria
+        // con startsWith. Cortamos desde /api/contabilidad/ para que la logica funcione
+        // tanto detras de proxy como en local sin prefix.
+        String fullUri = request.getRequestURI();
+        int idx = fullUri.indexOf(AAEF_PATH_PREFIX);
+        String path = idx >= 0 ? fullUri.substring(idx) : fullUri;
 
         // Solo aplicar a rutas /api/contabilidad/* (excepto /health publico, admin/*
         // que usa JWT del SSO interno + @PreAuthorize ROLE_ADMIN, y /lotes /transferencias

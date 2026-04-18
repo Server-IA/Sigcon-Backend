@@ -169,11 +169,17 @@ public class InvoiceService {
         }
         invoice.setThirdParty(thirdParty);
 
-        Invoices invoiceResolution = invoiceRepository.findFirstByTypeInvoiceIdAndDeletedAtIsNullOrderByIdDesc(1l);
+        // El consecutivo interno `resolution` se calcula por tipo de factura (no hardcodear typeInvoiceId=1,
+        // que apuntaba a NC y colisionaba con el UNIQUE (type_invoice_id, resolution) al crear FC).
+        Invoices invoiceResolution = invoiceRepository.findFirstByTypeInvoiceIdAndDeletedAtIsNullOrderByIdDesc(typeInvoiceId);
 
         String resolution = "1";
-        if(invoiceResolution != null) {
-            resolution = String.valueOf(Integer.parseInt(invoiceResolution.getResolution()) + 1);
+        if (invoiceResolution != null && invoiceResolution.getResolution() != null) {
+            try {
+                resolution = String.valueOf(Integer.parseInt(invoiceResolution.getResolution()) + 1);
+            } catch (NumberFormatException ignored) {
+                resolution = "1";
+            }
         }
 
         invoice.setResolution(resolution);

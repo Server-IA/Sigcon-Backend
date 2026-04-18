@@ -156,11 +156,8 @@ public class VoucherService {
 
         Page<VouchersEntity> vouchers = voucherRepository.findAll(spec, pageable);
 
-        if (vouchers.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "VOU_001: No se encontraron vouchers con los criterios de busqueda especificados.");
-        }
-
+        // Un listado paginado vacio NO es un error: devolver DataTableResponse con
+        // totalElements=0 para que el frontend muestre "sin resultados".
         return ResponseEntity.ok(DataTableResponse.from(vouchers.map(this::toDto), request.getDraw()));
     }
 

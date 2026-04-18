@@ -17,6 +17,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
 @EnableMethodSecurity
@@ -70,8 +71,18 @@ public class SecurityConfig {
                     // Auth endpoints públicos
                     authorize.requestMatchers("/auth/**", "/users/avatar/**", "/api/v1/companies/logo/**").permitAll();
 
+                    // NOTA: los matchers se duplican con una variante prefijada con glob **
+                    // (via AntPathRequestMatcher explicito porque Spring 6 PathPattern no
+                    // acepta multiples **) para que funcionen tanto en local (URI comienza
+                    // con /api/...) como detras de Dokploy/nginx con prefix de path
+                    // (ej. /sigcon/dev/api/...). Asi no dependemos de configurar
+                    // context-path en la infraestructura.
+
                     // HU-INT-RF-08: Endpoint de salud publico para que AgroFusion verifique disponibilidad
-                    authorize.requestMatchers("/api/contabilidad/health").permitAll();
+                    authorize.requestMatchers(
+                        new AntPathRequestMatcher("/api/contabilidad/health"),
+                        new AntPathRequestMatcher("/**/api/contabilidad/health")
+                    ).permitAll();
 
                     // HU-INT-RF-11 (operacion): endpoints administrativos protegidos por JWT del
                     // SSO interno + @PreAuthorize("hasAuthority('ROLE_ADMIN')"). Estos NO
@@ -79,28 +90,44 @@ public class SecurityConfig {
                     // contable autenticado en SIGCON puede invocarlos.
                     // IMPORTANTE: este matcher debe ir ANTES de /api/contabilidad/** para ganar
                     // por orden de evaluacion.
-                    authorize.requestMatchers("/api/contabilidad/admin/**").authenticated();
+                    authorize.requestMatchers(
+                        new AntPathRequestMatcher("/api/contabilidad/admin/**"),
+                        new AntPathRequestMatcher("/**/api/contabilidad/admin/**")
+                    ).authenticated();
 
                     // HU-INT-RF-14/15: Endpoints del frontend admin (BatchManagementController).
                     // Los consume el contador autenticado con JWT del SSO interno (HS256).
                     // El AgroFusionJwtFilter y ApiKeyFilter los excluyen; aqui pedimos authenticated()
                     // para que oauth2ResourceServer los valide con el JWT interno estandar.
-                    authorize.requestMatchers("/api/contabilidad/lotes/**",
-                                              "/api/contabilidad/transferencias/**").authenticated();
+                    authorize.requestMatchers(
+                        new AntPathRequestMatcher("/api/contabilidad/lotes/**"),
+                        new AntPathRequestMatcher("/api/contabilidad/transferencias/**"),
+                        new AntPathRequestMatcher("/**/api/contabilidad/lotes/**"),
+                        new AntPathRequestMatcher("/**/api/contabilidad/transferencias/**")
+                    ).authenticated();
 
                     // HU-INT-RF-01/09/10/11/12: Endpoints de integracion AAEF.
                     // La autenticacion la hacen AgroFusionJwtFilter (Bearer JWT RS256,
                     // HU-INT-RF-11) y ApiKeyFilter (X-API-Key como fallback, HU-INT-RF-12).
                     // Spring Security permite el request; los filtros devuelven 401/403 si falla.
-                    authorize.requestMatchers("/api/contabilidad/**").permitAll();
+                    authorize.requestMatchers(
+                        new AntPathRequestMatcher("/api/contabilidad/**"),
+                        new AntPathRequestMatcher("/**/api/contabilidad/**")
+                    ).permitAll();
 
                     // HU-INT-RF-11: Mock IdP para desarrollo/smoke test (JWKS + token generator).
                     // En produccion apunta al IdP real y este endpoint debe deshabilitarse.
-                    authorize.requestMatchers("/mock-idp/**").permitAll();
+                    authorize.requestMatchers(
+                        new AntPathRequestMatcher("/mock-idp/**"),
+                        new AntPathRequestMatcher("/**/mock-idp/**")
+                    ).permitAll();
 
                     // Fase 7 + HU-INT-RF-13: Mock callback de AgroFusion para validar ACK + retry
                     // mientras AgroFusion no implemente su endpoint real.
-                    authorize.requestMatchers("/mock-agrofusion/**").permitAll();
+                    authorize.requestMatchers(
+                        new AntPathRequestMatcher("/mock-agrofusion/**"),
+                        new AntPathRequestMatcher("/**/mock-agrofusion/**")
+                    ).permitAll();
 
                     // Swagger/OpenAPI publico (documentacion de la API - util en todos los
                     // perfiles para QA, integracion con AgroFusion y evaluacion academica).

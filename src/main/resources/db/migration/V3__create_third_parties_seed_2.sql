@@ -195,3 +195,13 @@ WHERE tp.nit = '9019876543'
       SELECT 1 FROM third_party_role_assignments a
       WHERE a.third_party_id = tp.id AND a.role_id = rc.id
   );
+
+-- HU-AP-06 E3: asignar régimen tributario por defecto a los terceros demo.
+-- Sin type_regimen_id el InvoiceService rechaza con "Proveedor no tiene
+-- clasificación tributaria válida". Idempotente: solo afecta los demo que
+-- todavía lo tienen NULL.
+UPDATE third_parties
+   SET type_regimen_id = (SELECT id FROM type_regimen ORDER BY id LIMIT 1)
+ WHERE type_regimen_id IS NULL
+   AND deleted_at IS NULL
+   AND nit IN ('9001234567', '9019876543');

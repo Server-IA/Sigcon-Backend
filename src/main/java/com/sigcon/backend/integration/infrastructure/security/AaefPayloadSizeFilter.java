@@ -32,7 +32,10 @@ public class AaefPayloadSizeFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !AAEF_PATH.equals(request.getRequestURI());
+        // Detras de Dokploy/nginx el URI puede venir con prefix (ej. /sigcon/dev/api/...).
+        // Usamos endsWith para que funcione tanto local (sin prefix) como produccion.
+        String uri = request.getRequestURI();
+        return !uri.endsWith(AAEF_PATH);
     }
 
     @Override

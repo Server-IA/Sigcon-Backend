@@ -71,7 +71,11 @@ public class AgroFusionJwtFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
+        // Normalizar el path: detras de Dokploy/nginx el URI llega con prefix (/sigcon/dev/...).
+        // Cortamos desde /api/contabilidad/ para que la logica funcione independientemente.
+        String fullUri = request.getRequestURI();
+        int idx = fullUri.indexOf(PATH_PREFIX);
+        String path = idx >= 0 ? fullUri.substring(idx) : fullUri;
         // Solo aplica a /api/contabilidad/** (excepto health publico y admin/* protegido por SSO interno).
         if (!path.startsWith(PATH_PREFIX)) return true;
         if (path.equals(PATH_PREFIX + "health")) return true;

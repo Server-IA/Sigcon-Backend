@@ -35,3 +35,7 @@ build/
 
 .env
 uploads/
+
+# Compose local (solo para validacion local, no se sube al repo
+# para no interferir con Dokploy).
+docker-compose.local.yml
