@@ -111,6 +111,7 @@ public class ThirdPartyService {
      * @param bindingResult resultado de validacion de campos obligatorios
      * @return ResponseEntity con el tercero creado o errores de validacion
      */
+    @Transactional
     public ResponseEntity<?> create(ThirdPartyDTO request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -396,6 +397,7 @@ public class ThirdPartyService {
      * @param bindingResult resultado de validacion de campos obligatorios
      * @return ResponseEntity con el tercero actualizado o errores de validacion
      */
+    @Transactional
     public ResponseEntity<?> update(Long id, ThirdPartyDTO request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
@@ -533,6 +535,7 @@ public class ThirdPartyService {
      * @param request request con justificacion de la eliminacion
      * @return respuesta de exito o error si tiene dependencias activas
      */
+    @Transactional
     public ResponseEntity<?> delete(Long id, DeleteThirdPartyRequest request) {
         ThirdParty thirdParty = getThirdPartyOrThrow(id);
 
