@@ -123,10 +123,33 @@ public class AaefInvoiceMapper {
                 .thirdPartyId(resolved.getId())
                 .invoiceDate(header.getIssueDate())
                 .dueDate(header.getDueDate() != null ? header.getDueDate() : header.getIssueDate())
-                .resolutionNumber(header.getPrefix() + "-" + header.getSerial())
+                .resolutionNumber(resolveDocumentReference(header))
                 .notes("Importado desde AAEF - DocumentId: " + header.getDocumentId())
                 .lines(lines)
                 .build();
+    }
+
+    /**
+     * Arma el identificador externo de la factura para persistir en los campos
+     * {@code supplier_invoice_number}/{@code resolution_invoice}. AgroFusion puede
+     * enviar los datos de tres formas:
+     * <ul>
+     *   <li>{@code Prefix + Serial} completos (ej. {@code FCE + 1234} -> "FCE-1234")</li>
+     *   <li>Solo uno de los dos (se usa el disponible)</li>
+     *   <li>Ninguno (common - usar {@code DocumentId} como identificador principal)</li>
+     * </ul>
+     * Asi evitamos persistir literal {@code "null-null"} cuando el Header no trae
+     * Prefix/Serial, como ocurria antes.
+     */
+    private String resolveDocumentReference(AaefInvoiceDTO.Header header) {
+        String prefix = header.getPrefix();
+        String serial = header.getSerial();
+        boolean hasPrefix = prefix != null && !prefix.trim().isEmpty();
+        boolean hasSerial = serial != null && !serial.trim().isEmpty();
+        if (hasPrefix && hasSerial) return prefix + "-" + serial;
+        if (hasPrefix)              return prefix;
+        if (hasSerial)              return serial;
+        return header.getDocumentId();
     }
 
     /**
@@ -218,13 +241,14 @@ public class AaefInvoiceMapper {
         LocalDate due = header.getDueDate() != null ? header.getDueDate() : issue;
         int dueDays = (int) Math.max(0, ChronoUnit.DAYS.between(issue, due));
 
+        String docRef = resolveDocumentReference(header);
         return InvoiceFCRequestDTO.builder()
                 .thirdPartyId(resolved.getId())
                 .paymentFormId(paymentFormId)
                 .invoiceDate(issue)
                 .invoiceDueDay(dueDays)
-                .resolutionInvoice(header.getPrefix() + "-" + header.getSerial())
-                .supplierInvoiceNumber(header.getPrefix() + "-" + header.getSerial())
+                .resolutionInvoice(docRef)
+                .supplierInvoiceNumber(docRef)
                 .notes("Importado desde AAEF - DocumentId: " + header.getDocumentId())
                 .lineInvoices(lines)
                 .build();
