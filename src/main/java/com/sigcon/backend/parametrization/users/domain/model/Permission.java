@@ -38,11 +38,14 @@ public class Permission {
     @JoinColumn(name = "module_id", nullable = false)
     private ModuleEntity module;
 
-    @Column(unique = true)
+    // NOTA: unicidad de name y code la garantiza un UNIQUE parcial que respeta
+    // soft-delete (ver V9-O__permissions_unique_partial.sql). Si aqui se pusiera
+    // unique=true, Hibernate crearia un UNIQUE GLOBAL que incluye registros con
+    // deleted_at != NULL y choca con re-seeds/renames en Dokploy.
     @NotNull(message = "El nombre del permiso es obligatorio")
     private String name;
 
-    @Column(unique = true, nullable = false)
+    @Column(nullable = false)
     @NotNull(message = "El código del permiso es obligatorio")
     private String code;
 
