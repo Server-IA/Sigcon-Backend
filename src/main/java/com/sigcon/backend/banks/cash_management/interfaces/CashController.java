@@ -66,7 +66,7 @@ public class CashController {
         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_CREATE_CASH")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_CASH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_CASH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody CreateCashRequest request,
             BindingResult bindingResult) {
@@ -100,7 +100,7 @@ public class CashController {
         @ApiResponse(responseCode = "404", description = "Caja no encontrada")
     })
     @PutMapping("/update/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_CASH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_CASH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateCashRequest request,
@@ -128,7 +128,7 @@ public class CashController {
         @ApiResponse(responseCode = "404", description = "Caja no encontrada")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_CASH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_CASH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> delete(
             @PathVariable Long id,
             @RequestParam String confirmation,
@@ -165,7 +165,7 @@ public class CashController {
         @ApiResponse(responseCode = "404", description = "Caja no encontrada")
     })
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('PERM_CHANGE_CASH_STATUS') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CHANGE_CASH_STATUS') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> changeStatus(
             @PathVariable Long id,
             @Valid @RequestBody ChangeCashStatusRequest request,
@@ -199,7 +199,7 @@ public class CashController {
         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_VIEW_CASH")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_CASH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_CASH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> search(
             @RequestBody(required = false) DataTableRequest request) {
         return cashService.getCashes(request);
@@ -223,7 +223,7 @@ public class CashController {
         @ApiResponse(responseCode = "404", description = "Caja no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_VIEW_CASH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_CASH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> detail(
             @PathVariable Long id) {
         return cashService.getCashById(id);

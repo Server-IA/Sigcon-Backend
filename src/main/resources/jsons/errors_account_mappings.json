@@ -1,0 +1,22 @@
+[
+  {
+    "code": "AM_001",
+    "message": "Concepto contable no configurado. Verifique la tabla account_mappings."
+  },
+  {
+    "code": "AM_002",
+    "message": "Conceptos contables obligatorios faltantes. La aplicacion no puede arrancar."
+  },
+  {
+    "code": "AM_003",
+    "message": "Cuenta contable referenciada por el mapeo no existe en accounting_accounts."
+  },
+  {
+    "code": "AM_004",
+    "message": "Codigo PUC no existe en el catalogo cfg_chart_of_accounts."
+  },
+  {
+    "code": "AM_005",
+    "message": "Solo rol ADMIN puede consultar los mapeos contables."
+  }
+]

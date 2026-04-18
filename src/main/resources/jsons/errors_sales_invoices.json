@@ -1,0 +1,12 @@
+[
+  { "code": "AR-SI-001", "message": "El cliente (tercero) no existe" },
+  { "code": "AR-SI-002", "message": "La factura de venta no fue encontrada" },
+  { "code": "AR-SI-003", "message": "El periodo contable esta cerrado o bloqueado" },
+  { "code": "AR-SI-004", "message": "La moneda no existe" },
+  { "code": "AR-SI-005", "message": "La tasa de cambio es obligatoria para moneda extranjera." },
+  { "code": "AR-SI-006", "message": "La forma de pago no existe" },
+  { "code": "AR-SI-007", "message": "La factura debe tener al menos una linea" },
+  { "code": "AR-SI-008", "message": "No se puede modificar una factura anulada, pagada o liquidada." },
+  { "code": "AR-SI-009", "message": "No se puede eliminar una factura con pagos o liquidada." },
+  { "code": "AR-SI-010", "message": "El consecutivo de la factura ya se encuentra registrado" }
+]

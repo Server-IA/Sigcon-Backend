@@ -32,7 +32,7 @@ public class CashDTO {
     @Schema(description = "Codigo unico interno de la Caja de la empresa", example = "CJ-001")
     private String cashCode;
     @Schema(description = "Nombre De la caja de la empresa", example = "Caja Principal de la Empresa")
-    private String cahsName;
+    private String cashName;
     @Schema(description = "Tipo de Caja", example = "GENERAL")
     private CashType cashType;
     @Schema(description = "Estado de la Caja", example = "ACTIVE")

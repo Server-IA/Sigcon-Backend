@@ -8,7 +8,7 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.model.Accou
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.ChartOfAccount;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -62,10 +62,6 @@ public class BankAccount {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "accounting_account_id", nullable = false)
     private AccountingAccount accountingAccount;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bank_branch_id")

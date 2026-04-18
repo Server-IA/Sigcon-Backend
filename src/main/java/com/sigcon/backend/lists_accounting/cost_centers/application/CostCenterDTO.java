@@ -41,10 +41,6 @@ public class CostCenterDTO {
     @NotNull(message = "El estado es obligatorio")
     private CostCenterStatus status;
 
-    @NotNull(message = "El ID de empresa es obligatorio")
-    @Schema(description = "ID de empresa", example = "1")
-    private Long companyId;
-
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String deletionReason;

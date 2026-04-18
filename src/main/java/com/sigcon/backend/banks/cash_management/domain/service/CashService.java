@@ -2,6 +2,7 @@ package com.sigcon.backend.banks.cash_management.domain.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -12,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 
+import com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus;
+import com.sigcon.backend.banks.cash_audits.domain.repository.CashAuditRepository;
 import com.sigcon.backend.banks.cash_management.application.AuditStub;
 import com.sigcon.backend.banks.cash_management.application.CashResponse;
 import com.sigcon.backend.banks.cash_management.application.ChangeCashStatusRequest;
@@ -42,11 +45,23 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
-import com.sigcon.backend.utils.UserUtil;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Servicio de gestion de cajas de efectivo (modulo BNK).
+ * <p>
+ * Implementa las historias de usuario BNK-RF-10 a BNK-RF-13:
+ * creacion, edicion, eliminacion/desactivacion, cambio de estado y consulta de cajas.
+ * Aplica validaciones de negocio como unicidad de codigo, limites monetarios,
+ * reglas de autorizacion y transiciones de estado controladas.
+ * El cierre de caja es irreversible y requiere saldo cero y sin arqueos abiertos.
+ * </p>
+ *
+ * @see com.sigcon.backend.banks.cash_management.domain.model.Cash
+ * @see com.sigcon.backend.banks.cash_management.domain.model.enums.CashStatus
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -59,11 +74,22 @@ public class CashService {
     private final ThirdPartyRepository thirdPartyRepository;
     private final FinancialMovementRepository financialMovementRepository;
     private final AuditStub auditStub;
+    private final CashAuditRepository cashAuditRepository;
     private final UserRepository userRepository;
 
-    private final UserUtil userUtil;
-    /*
-     * BNK-RF-10 — Flujo crear: Registrar una nueva caja de efectivo.
+    /**
+     * Registra una nueva caja de efectivo (BNK-RF-10).
+     * <p>
+     * Valida unicidad del codigo, existencia de moneda y cuenta contable,
+     * existencia del responsable principal, limites monetarios coherentes
+     * y reglas de autorizacion. La caja se crea en estado ACTIVE con saldo
+     * inicial igual al saldo corriente.
+     * </p>
+     *
+     * @param request       datos de la caja a crear
+     * @param bindingResult resultado de validacion de campos (@NotNull, @NotBlank, etc.)
+     * @return ResponseEntity con la caja creada (CashResponse) o error de validacion
+     * @throws IllegalArgumentException si el codigo esta duplicado o las entidades relacionadas no existen
      */
     public ResponseEntity<?> createCash(CreateCashRequest request, BindingResult bindingResult) {
 
@@ -147,8 +173,20 @@ public class CashService {
                         Optional.of(mapToResponse(cash))));
     }
 
-    /*
-     * BNK-RF-10 — Flujo editar: Actualizar una caja de efectivo existente.
+    /**
+     * Actualiza una caja de efectivo existente (BNK-RF-10).
+     * <p>
+     * Si la caja ya tiene movimientos registrados, se requiere un motivo de cambio
+     * de al menos 10 caracteres para trazabilidad. Valida unicidad del codigo excluyendo
+     * el registro actual y todas las reglas de negocio de limites y autorizacion.
+     * </p>
+     *
+     * @param id            identificador de la caja a actualizar
+     * @param request       datos actualizados
+     * @param bindingResult resultado de validacion de campos
+     * @return ResponseEntity con la caja actualizada o error de validacion
+     * @throws IllegalArgumentException si la caja no existe, el codigo esta duplicado
+     *         o falta motivo de cambio cuando hay movimientos
      */
     public ResponseEntity<?> updateCash(Long id, UpdateCashRequest request, BindingResult bindingResult) {
 
@@ -241,8 +279,22 @@ public class CashService {
                         Optional.of(mapToResponse(cash))));
     }
 
-    /*
-     * BNK-RF-11 — Eliminar físicamente o desactivar una caja de efectivo.
+    /**
+     * Elimina fisicamente o desactiva una caja de efectivo (BNK-RF-11).
+     * <p>
+     * Flujo de decision:
+     * <ul>
+     *   <li>Si la caja tiene movimientos o arqueos abiertos: se desactiva (INACTIVE) en lugar de eliminar</li>
+     *   <li>Si no tiene dependencias: requiere confirmacion reforzada ("ELIMINAR") y se elimina fisicamente</li>
+     * </ul>
+     * En ambos casos se requiere motivo de al menos 40 caracteres.
+     * </p>
+     *
+     * @param id           identificador de la caja
+     * @param confirmation palabra clave de confirmacion (debe ser "ELIMINAR" para eliminacion fisica)
+     * @param reason       motivo de eliminacion/desactivacion (minimo 40 caracteres)
+     * @return ResponseEntity con confirmacion o la caja desactivada
+     * @throws IllegalArgumentException si la caja no existe, el motivo es corto o la confirmacion falla
      */
     public ResponseEntity<?> deleteCash(Long id, String confirmation, String reason) {
 
@@ -255,11 +307,13 @@ public class CashService {
                     "BNK-ERR-075: Motivo de eliminación/desactivación requerido (mínimo 40 caracteres).");
         }
 
-        // 3. Verificar dependencias con stubs
+        // 3. Verificar dependencias
         boolean hasMovements = financialMovementRepository.existsByCash_Id(id);
-        boolean hasOpenAudits = auditStub.hasOpenAudits(id);
+        boolean hasOpenAudits = cashAuditRepository.existsByCashIdAndStatusInAndDeletedAtIsNull(
+                id, List.of(CashAuditStatus.ABIERTO, CashAuditStatus.EN_REVISION));
         long movementsCount = financialMovementRepository.countByCash_Id(id);
-        long auditsCount = auditStub.countAudits(id);
+        long auditsCount = cashAuditRepository.findByCashIdAndStatusAndDeletedAtIsNull(id, CashAuditStatus.ABIERTO).size()
+                + cashAuditRepository.findByCashIdAndStatusAndDeletedAtIsNull(id, CashAuditStatus.EN_REVISION).size();
 
         // 4. Flujo alternativo: si hay dependencias, desactivar en lugar de eliminar
         if (hasMovements || hasOpenAudits) {
@@ -291,8 +345,23 @@ public class CashService {
                         Optional.empty()));
     }
 
-    /*
-     * BNK-RF-12 — Cambiar estado de una caja de efectivo.
+    /**
+     * Cambia el estado de una caja de efectivo (BNK-RF-12).
+     * <p>
+     * Transiciones permitidas:
+     * <ul>
+     *   <li>ACTIVE ↔ INACTIVE (reversible)</li>
+     *   <li>ACTIVE/INACTIVE → CLOSED (irreversible)</li>
+     * </ul>
+     * Para cerrar se requiere: saldo corriente = 0, sin arqueos abiertos/en revision,
+     * fecha de cierre valida (no futura) y motivo de al menos 10 caracteres.
+     * </p>
+     *
+     * @param id            identificador de la caja
+     * @param request       nuevo estado, motivo y fecha de cierre (si aplica)
+     * @param bindingResult resultado de validacion de campos
+     * @return ResponseEntity con la caja actualizada o error de validacion
+     * @throws IllegalArgumentException si la transicion no esta permitida o faltan requisitos
      */
     public ResponseEntity<?> changeCashStatus(Long id, ChangeCashStatusRequest request, BindingResult bindingResult) {
 
@@ -329,7 +398,8 @@ public class CashService {
             }
 
             // 5b. Sin arqueos abiertos
-            if (auditStub.hasOpenAudits(id)) {
+            if (cashAuditRepository.existsByCashIdAndStatusInAndDeletedAtIsNull(
+                    id, List.of(CashAuditStatus.ABIERTO, CashAuditStatus.EN_REVISION))) {
                 throw new IllegalArgumentException(
                         "BNK-ERR-082: No se puede cerrar caja con arqueos abiertos.");
             }
@@ -357,8 +427,15 @@ public class CashService {
                         Optional.of(mapToResponse(cash))));
     }
 
-    /*
-     * BNK-RF-13 — Consultar cajas con filtros y paginación.
+    /**
+     * Consulta paginada de cajas de efectivo con filtros dinamicos (BNK-RF-13).
+     * <p>
+     * Excluye automaticamente registros con soft delete. Soporta busqueda global
+     * y ordenamiento via DataTable.
+     * </p>
+     *
+     * @param request parametros de paginacion, busqueda y ordenamiento del DataTable
+     * @return ResponseEntity con DataTableResponse paginado de CashResponse
      */
     public ResponseEntity<?> getCashes(DataTableRequest request) {
 
@@ -380,10 +457,7 @@ public class CashService {
                 .build(request)
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
         
-        User user = userUtil.getUser();
-        spec = spec.and(
-                (root, query, cb) -> cb.equal(root.get("accountingAccount").get("companyId"), user.getCompany())
-        );
+        // company filter removed
 
 
 
@@ -396,8 +470,12 @@ public class CashService {
                         request.getDraw()));
     }
 
-    /*
-     * BNK-RF-13 — Consultar detalle de una caja por ID.
+    /**
+     * Obtiene el detalle completo de una caja de efectivo por su ID (BNK-RF-13).
+     *
+     * @param id identificador de la caja
+     * @return ResponseEntity con CashResponse detallado
+     * @throws IllegalArgumentException si la caja no existe o fue eliminada
      */
     public ResponseEntity<?> getCashById(Long id) {
 

@@ -10,14 +10,13 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.parametrization.menuPermissions.domain.repository.MenuPermissionsRepository;
 
 @Configuration
-
-
 public class BeanConfig {
     @Bean
-    public MenuRepositoryPort menuRepositoryPort(SpringDataMenuRepository repo) {
-        return new MenuRepositoryAdapter(repo);
+    public MenuRepositoryPort menuRepositoryPort(SpringDataMenuRepository repo, MenuPermissionsRepository menuPermissionsRepository) {
+        return new MenuRepositoryAdapter(repo, menuPermissionsRepository);
     }
 
     @Bean

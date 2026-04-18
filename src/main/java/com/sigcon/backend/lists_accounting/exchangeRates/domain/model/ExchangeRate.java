@@ -40,9 +40,6 @@ public class ExchangeRate {
     @Column(name = "exchange_type", nullable = false)
     private ExchangeType exchangeType;
 
-    @Column(name = "company_id", nullable = false)
-    private Long companyId;
-
     @Column(name = "value", nullable = false)
     private Double value;
 

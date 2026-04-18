@@ -1,0 +1,16 @@
+[
+  { "code": "AR-DIAN-001", "message": "La resolucion DIAN no fue encontrada" },
+  { "code": "AR-DIAN-002", "message": "La resolucion DIAN agoto su rango autorizado" },
+  { "code": "AR-DIAN-003", "message": "La resolucion DIAN esta vencida" },
+  { "code": "AR-DIAN-004", "message": "La resolucion DIAN no esta activa" },
+  { "code": "AR-DIAN-005", "message": "El numero de resolucion ya esta registrado" },
+  { "code": "AR-DIAN-006", "message": "El numero final debe ser mayor al numero inicial" },
+  { "code": "AR-DIAN-007", "message": "La fecha final debe ser posterior a la fecha inicial" },
+  { "code": "AR-DIAN-008", "message": "La factura ya fue enviada a la DIAN" },
+  { "code": "AR-DIAN-009", "message": "Debe generar el XML de la factura antes de enviarla a la DIAN" },
+  { "code": "AR-DIAN-010", "message": "No se ha generado envio DIAN para esta factura" },
+  { "code": "AR-DIAN-011", "message": "Error generando el XML UBL 2.1 de la factura" },
+  { "code": "AR-DIAN-012", "message": "Error generando la representacion grafica PDF" },
+  { "code": "AR-DIAN-013", "message": "No se pudo calcular el CUFE: algoritmo SHA-384 no disponible" },
+  { "code": "AR-DIAN-014", "message": "La factura de venta no fue encontrada" }
+]

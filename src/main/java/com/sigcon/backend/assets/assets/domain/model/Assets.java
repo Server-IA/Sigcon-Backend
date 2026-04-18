@@ -6,7 +6,7 @@ import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 // import com.sigcon.backend.assets.assets.domain.model.enums.DepreciationMethod;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.DepretationRule;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
 import jakarta.persistence.Column;
@@ -47,10 +47,6 @@ public class Assets {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
 
     @Column(name = "asset_code", nullable = false, length = 30)
     private String assetCode;
@@ -94,6 +90,14 @@ public class Assets {
 
     @Column(name = "bank_cash_reference_id")
     private Long bankCashReferenceId;
+
+    /** Forma de pago utilizada en la adquisicion (contado/credito) */
+    @Column(name = "payment_form_id")
+    private Long paymentFormId;
+
+    /** Metodo de pago especifico (banco, caja, cheque) */
+    @Column(name = "payment_method_id")
+    private Long paymentMethodId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "accounting_account_id", nullable = false)

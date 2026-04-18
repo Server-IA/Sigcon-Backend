@@ -15,6 +15,11 @@ public interface AssetsRepository extends JpaRepository<Assets, Long>, JpaSpecif
         boolean existsByAssetCode(String assetCode);
 
         /**
+         * TER-10: Verifica si un tercero esta referenciado como proveedor en algun activo.
+         */
+        boolean existsBySupplierId(Long supplierId);
+
+        /**
          * ACT-RF-02: Retorna activos elegibles para el cálculo de depreciación.
          * Criterios:
          * - status en ACTIVE o IN_REPAIR

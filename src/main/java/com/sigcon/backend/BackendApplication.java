@@ -5,10 +5,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EntityScan(basePackages = "com.sigcon.backend")
 @EnableJpaRepositories(basePackages = "com.sigcon.backend")
+@EnableScheduling
+@EnableAsync
 public class BackendApplication {
 
 	public static void main(String[] args) {

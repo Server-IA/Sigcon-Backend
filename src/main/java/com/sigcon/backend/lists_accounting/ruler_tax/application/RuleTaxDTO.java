@@ -32,4 +32,7 @@ public class RuleTaxDTO {
 
     private AccountingAccountDTO accountingAccount;
 
+    private Double minAmountUvt;
+    private Double uvtValueYear;
+
 }

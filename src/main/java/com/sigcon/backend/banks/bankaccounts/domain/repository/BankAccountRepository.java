@@ -8,14 +8,19 @@ import java.util.Optional;
 
 public interface BankAccountRepository extends JpaRepository<BankAccount, Long>, JpaSpecificationExecutor<BankAccount> {
 
-    boolean existsByCompanyIdAndCodeAndDeletedAtIsNull(Long companyId, String code);
+    boolean existsByCodeAndDeletedAtIsNull(String code);
 
-    boolean existsByCompanyIdAndCodeAndIdNotAndDeletedAtIsNull(Long companyId, String code, Long excludeId);
+    boolean existsByCodeAndIdNotAndDeletedAtIsNull(String code, Long excludeId);
 
     boolean existsByBankIdAndAccountNumberAndDeletedAtIsNull(Long bankId, String accountNumber);
 
     boolean existsByBankIdAndAccountNumberAndIdNotAndDeletedAtIsNull(Long bankId, String accountNumber, Long excludeId);
 
     Optional<BankAccount> findByIdAndDeletedAtIsNull(Long id);
+
+    /**
+     * Verifica si existen cuentas bancarias activas asociadas a un banco.
+     */
+    boolean existsByBankIdAndDeletedAtIsNull(Long bankId);
 
 }

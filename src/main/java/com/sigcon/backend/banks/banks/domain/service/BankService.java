@@ -1,9 +1,11 @@
 package com.sigcon.backend.banks.banks.domain.service;
 
+import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
 import com.sigcon.backend.banks.banks.application.BankBranchDTO;
 import com.sigcon.backend.banks.banks.application.BankDTO;
 import com.sigcon.backend.banks.banks.domain.model.Bank;
 import com.sigcon.backend.banks.banks.domain.model.BankBranch;
+import com.sigcon.backend.banks.banks.domain.model.enums.BankStatus;
 import com.sigcon.backend.banks.banks.domain.repository.BankRepository;
 import com.sigcon.backend.parametrization.resources.application.CountryDTO;
 import com.sigcon.backend.parametrization.resources.application.MunicipalityDTO;
@@ -38,6 +40,7 @@ public class BankService {
 
         private final BankRepository bankRepository;
         private final CountryRepository countryRepository;
+        private final BankAccountRepository bankAccountRepository;
 
         private final DataTableSpecificationBuilder<Bank> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -49,6 +52,13 @@ public class BankService {
                 if (bindingResult.hasErrors()) {
                         return ResponseEntity.badRequest()
                                         .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+                }
+
+                // Validar NIT unico
+                if (bankRepository.existsByNitAndDeletedAtIsNull(request.getNit().trim())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("BNK-ERR-001: Ya existe un banco con el NIT proporcionado.")));
                 }
 
                 Country country = resolveCountry(request.getCountryId());
@@ -150,8 +160,16 @@ public class BankService {
                         bank.setConciliationDays(request.getConciliationDays());
                 if (request.getPhone() != null)
                         bank.setPhone(request.getPhone());
-                if (request.getStatus() != null)
+                if (request.getStatus() != null) {
+                        // Validar que no tenga cuentas activas al cambiar a INACTIVE
+                        if (request.getStatus() == BankStatus.INACTIVE
+                                        && bankAccountRepository.existsByBankIdAndDeletedAtIsNull(id)) {
+                                return ResponseEntity.badRequest()
+                                                .body(ErrorRespondJson.getErrorRespondMessage(
+                                                                Optional.of("BNK-ERR-003: No se puede desactivar el banco porque tiene cuentas bancarias activas asociadas.")));
+                        }
                         bank.setStatus(request.getStatus());
+                }
                 if (request.getFormatExtract() != null)
                         bank.setFormatExtract(request.getFormatExtract());
 
@@ -169,6 +187,13 @@ public class BankService {
         public ResponseEntity<?> delete(Long id) {
 
                 Bank bank = getBankOrThrow(id);
+
+                // Validar que no tenga cuentas bancarias activas asociadas
+                if (bankAccountRepository.existsByBankIdAndDeletedAtIsNull(id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("BNK-ERR-002: No se puede eliminar el banco porque tiene cuentas bancarias activas asociadas.")));
+                }
 
                 bank.setDeletedAt(LocalDateTime.now());
 

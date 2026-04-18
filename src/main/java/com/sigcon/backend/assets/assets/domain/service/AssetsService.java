@@ -143,12 +143,23 @@ public class AssetsService {
 
     // private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+    private final com.sigcon.backend.general.accounting.AccountingPeriodService accountingPeriodService;
     private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     @Transactional
     public ViewAssetsDTO create(CreateAssetsDTO request) {
 
         User user = userUtil.getUser();
+
+        // ERR-MNT-ACT-01: Validar período contable abierto con mensaje descriptivo
+        if (request.getAcquisitionDate() != null) {
+            accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
+        }
+
+        // ACT-01 E8: Validar que se haya seleccionado una forma de pago valida
+        if (request.getPaymentFormId() == null) {
+            throw new IllegalArgumentException("Debe seleccionar una forma de pago válida (contado o crédito).");
+        }
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
@@ -163,54 +174,54 @@ public class AssetsService {
         String currentUser = resolveCurrentUsername();
 
         BigDecimal taxValue = BigDecimal.ZERO;
-        if(user.getCompany().getTypeRegimen().getId() == 2){
-            TaxRulerEntity ruleTax = taxRuleRepository.findById(request.getRulerTax() != null ? request.getRulerTax() : 0L)
-                    .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
-            BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
-            taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
-
-            BigDecimal totalAssetValue = request.getAcquisitionValue().add(taxValue);
-
-            if(request.getBankAccountId() != null || request.getCashAccountId() != null){
-                if(request.getBankAccountId() != null){
-                    BankAccount bankAccount = bankAccountRepository.findById(request.getBankAccountId())
-                            .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
-
-                    BigDecimal bankAccountBalance = bankAccount.getInitialBalance().add(bankAccount.getCreditLimit());
-
-                    if(bankAccountBalance.compareTo(totalAssetValue) < 0){
-                        throw new IllegalArgumentException("El saldo de la cuenta bancaria no es suficiente para cubrir el valor del activo");
-                    }
-                }else if(request.getCheckId() != null){
-                    Check check = checkRepository.findById(request.getCheckId())
-                            .orElseThrow(() -> new IllegalArgumentException("Chequera no encontrada"));
-                    BigDecimal checkbookBalance = check.getCheckbook().getBankAccount().getInitialBalance().add(check.getCheckbook().getBankAccount().getCreditLimit());
-                    if(checkbookBalance.compareTo(totalAssetValue) < 0){
-                        throw new IllegalArgumentException("El saldo de la chequera no es suficiente para cubrir el valor del activo");
-                    }else if(check.getValue().compareTo(totalAssetValue) != 0){
-                        throw new IllegalArgumentException("El valor del cheque no coincide con el valor del activo");
-                    }
-                }
-            }
-
-            if(request.getCashAccountId() != null){
-                Cash cash = cashRepository.findById(request.getCashAccountId())
-                        .orElseThrow(() -> new IllegalArgumentException("Caja no encontrada"));
-                if(cash.getMaxLimit().compareTo(totalAssetValue) < 0){
-                    throw new IllegalArgumentException("El limite maximo de la caja no es suficiente para cubrir el valor del activo");
-                }else if(cash.getMinLimit().compareTo(totalAssetValue) > 0){
-                    throw new IllegalArgumentException("El limite minimo de la caja no es suficiente para cubrir el valor del activo");
-                }
-                BigDecimal cashBalance = cash.getInitialBalance();
-                if(cashBalance.compareTo(totalAssetValue) < 0){
-                    throw new IllegalArgumentException("El saldo de la caja no es suficiente para cubrir el valor del activo");
-                }
-            }
-
-        }
+        // TODO: Leer de SystemInfoService cuando se integre
+        // if(user.getCompany().getTypeRegimen().getId() == 2){
+        //     TaxRulerEntity ruleTax = taxRuleRepository.findById(request.getRulerTax() != null ? request.getRulerTax() : 0L)
+        //             .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
+        //     BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
+        //     taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+        //
+        //     BigDecimal totalAssetValue = request.getAcquisitionValue().add(taxValue);
+        //
+        //     if(request.getBankAccountId() != null || request.getCashAccountId() != null){
+        //         if(request.getBankAccountId() != null){
+        //             BankAccount bankAccount = bankAccountRepository.findById(request.getBankAccountId())
+        //                     .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
+        //
+        //             BigDecimal bankAccountBalance = bankAccount.getInitialBalance().add(bankAccount.getCreditLimit());
+        //
+        //             if(bankAccountBalance.compareTo(totalAssetValue) < 0){
+        //                 throw new IllegalArgumentException("El saldo de la cuenta bancaria no es suficiente para cubrir el valor del activo");
+        //             }
+        //         }else if(request.getCheckId() != null){
+        //             Check check = checkRepository.findById(request.getCheckId())
+        //                     .orElseThrow(() -> new IllegalArgumentException("Chequera no encontrada"));
+        //             BigDecimal checkbookBalance = check.getCheckbook().getBankAccount().getInitialBalance().add(check.getCheckbook().getBankAccount().getCreditLimit());
+        //             if(checkbookBalance.compareTo(totalAssetValue) < 0){
+        //                 throw new IllegalArgumentException("El saldo de la chequera no es suficiente para cubrir el valor del activo");
+        //             }else if(check.getValue().compareTo(totalAssetValue) != 0){
+        //                 throw new IllegalArgumentException("El valor del cheque no coincide con el valor del activo");
+        //             }
+        //         }
+        //     }
+        //
+        //     if(request.getCashAccountId() != null){
+        //         Cash cash = cashRepository.findById(request.getCashAccountId())
+        //                 .orElseThrow(() -> new IllegalArgumentException("Caja no encontrada"));
+        //         if(cash.getMaxLimit().compareTo(totalAssetValue) < 0){
+        //             throw new IllegalArgumentException("El limite maximo de la caja no es suficiente para cubrir el valor del activo");
+        //         }else if(cash.getMinLimit().compareTo(totalAssetValue) > 0){
+        //             throw new IllegalArgumentException("El limite minimo de la caja no es suficiente para cubrir el valor del activo");
+        //         }
+        //         BigDecimal cashBalance = cash.getInitialBalance();
+        //         if(cashBalance.compareTo(totalAssetValue) < 0){
+        //             throw new IllegalArgumentException("El saldo de la caja no es suficiente para cubrir el valor del activo");
+        //         }
+        //     }
+        //
+        // }
 
         Assets asset = Assets.builder()
-                .company(user.getCompany())
                 .assetCode(generateAssetCode())
                 .assetName(request.getName().trim())
                 .description(normalizeOptionalText(request.getDescription()))
@@ -224,6 +235,8 @@ public class AssetsService {
                 .depretationRule(depreciationRule)
                 .accountsPayableReferenceId(request.getAccountsPayableReferenceId())
                 .bankCashReferenceId(request.getBankCashReferenceId())
+                .paymentFormId(request.getPaymentFormId())
+                .paymentMethodId(request.getPaymentMethodId())
                 .accountingAccount(accountingAccount)
                 // .status(request.getStatus())
                 .observations(normalizeOptionalText(request.getObservations()))
@@ -233,20 +246,21 @@ public class AssetsService {
 
         Assets savedAsset = assetsRepository.save(asset);
 
-        if(user.getCompany().getTypeRegimen().getId() == 2){
-            TaxRulerEntity ruleTax = taxRuleRepository.findById(request.getRulerTax())
-                    .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
-            BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
-            taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
-
-            AssetsTaxesRetention assetTaxesRetention = AssetsTaxesRetention.builder()
-                    .asset(savedAsset)
-                    .taxRule(ruleTax)
-                    .percentage(percentage)
-                    .amount(taxValue)
-                    .build();
-            assetTaxesRetentionRepository.save(assetTaxesRetention);
-        }
+        // TODO: Leer de SystemInfoService cuando se integre
+        // if(user.getCompany().getTypeRegimen().getId() == 2){
+        //     TaxRulerEntity ruleTax = taxRuleRepository.findById(request.getRulerTax())
+        //             .orElseThrow(() -> new IllegalArgumentException("Regla tributaria para el calculo de impuestos no encontrada"));
+        //     BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
+        //     taxValue = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+        //
+        //     AssetsTaxesRetention assetTaxesRetention = AssetsTaxesRetention.builder()
+        //             .asset(savedAsset)
+        //             .taxRule(ruleTax)
+        //             .percentage(percentage)
+        //             .amount(taxValue)
+        //             .build();
+        //     assetTaxesRetentionRepository.save(assetTaxesRetention);
+        // }
 
         for (CreateAssetTaxesRetention taxesRetention : request.getTaxesRetention()) {
 
@@ -255,16 +269,18 @@ public class AssetsService {
             BigDecimal percentage = BigDecimal.valueOf(ruleTax.getPercentage());
             BigDecimal amount = BigDecimal.ZERO;
 
-            if(user.getCompany().getTypeRegimen().getId() == 2){
-                if(ruleTax.getAccountingAccount().getPucAccount().getCode().startsWith("2367")){
-                    percentage = percentage.multiply(taxValue).divide(BigDecimal.valueOf(100));
-                    amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
-                }else{
-                    amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
-                }
-            }else{
-                amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
-            }
+            // TODO: Leer de SystemInfoService cuando se integre
+            // if(user.getCompany().getTypeRegimen().getId() == 2){
+            //     if(ruleTax.getAccountingAccount().getPucAccount().getCode().startsWith("2367")){
+            //         percentage = percentage.multiply(taxValue).divide(BigDecimal.valueOf(100));
+            //         amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+            //     }else{
+            //         amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+            //     }
+            // }else{
+            //     amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
+            // }
+            amount = percentage.multiply(request.getAcquisitionValue()).divide(BigDecimal.valueOf(100));
 
             AssetsTaxesRetention assetTaxesRetention = AssetsTaxesRetention.builder()
                     .asset(savedAsset)
@@ -365,7 +381,6 @@ public class AssetsService {
             User user = userUtil.getUser();
 
             Assets asset = Assets.builder()
-                    .company(user.getCompany())
                     .assetCode(assetCode)
                     .assetName(row.name().trim())
                     .description(normalizeOptionalText(row.description()))
@@ -409,23 +424,41 @@ public class AssetsService {
             request = new DataTableRequest();
         }
 
-        User user = userUtil.getUser();
-
         int draw = Math.max(0, request.getDraw());
         int start = Math.max(0, request.getStart());
         int length = request.getLength();
-        int safeLength = length <= 0 ? 20 : length;
+        // F-ACT-10-05: Limitar máximo 100 registros por página
+        int safeLength = length <= 0 ? 20 : Math.min(length, 100);
         int page = start / safeLength;
 
-        Pageable pageable = length == -1
-                ? Pageable.unpaged()
-                : PageRequest.of(page, safeLength);
+        // F-ACT-10-02: Soporte de ordenamiento por columnas
+        org.springframework.data.domain.Sort sort = org.springframework.data.domain.Sort.by("id").descending();
+        String orderCol = request.getOrderColumnName();
+        if (orderCol != null && !orderCol.isEmpty() && !orderCol.contains(".")) {
+            try {
+                sort = "desc".equalsIgnoreCase(request.getOrderDir())
+                    ? org.springframework.data.domain.Sort.by(orderCol).descending()
+                    : org.springframework.data.domain.Sort.by(orderCol).ascending();
+            } catch (Exception ignored) {}
+        }
 
-        Specification<Assets> specification = dataTableSpecificationBuilder.build(request)
-        .and((root, query, cb) -> cb.equal(root.get("company").get("id"), user.getCompany().getId()));
+        Pageable pageable = length == -1
+                ? Pageable.unpaged(sort)
+                : PageRequest.of(page, safeLength, sort);
+
+        Specification<Assets> specification = dataTableSpecificationBuilder.build(request);
 
         Page<Assets> assetsPage = assetsRepository.findAll(specification, pageable);
         return DataTableResponse.from(assetsPage.map(this::toViewDTO), draw);
+    }
+
+    /** F-ACT-03-01: Eliminación lógica de activo */
+    @Transactional
+    public void deleteAsset(Long id) {
+        Assets asset = assetsRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Activo no encontrado"));
+        asset.setDeletedAt(java.time.LocalDateTime.now());
+        assetsRepository.save(asset);
     }
 
     @Transactional
@@ -446,7 +479,13 @@ public class AssetsService {
 
         if (existingAsset.getStatus() == AssetStatus.DECOMMISSIONED
                 || existingAsset.getStatus() == AssetStatus.TRANSFERRED) {
-            throw new IllegalStateException("Los datos ingresados no cumplen las politicas contables.");
+            throw new IllegalStateException("No es posible editar el activo. El activo se encuentra en estado '"
+                + existingAsset.getStatus() + "' y no permite modificaciones.");
+        }
+
+        // Validar período contable abierto
+        if (request.getAcquisitionDate() != null) {
+            accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
         }
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
@@ -475,6 +514,8 @@ public class AssetsService {
         existingAsset.setDepretationRule(depretationRule);
         existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
         existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
+        existingAsset.setPaymentFormId(request.getPaymentFormId());
+        existingAsset.setPaymentMethodId(request.getPaymentMethodId());
         existingAsset.setAccountingAccount(accountingAccount);
         existingAsset.setStatus(request.getStatus());
         existingAsset.setObservations(normalizedObservations);
@@ -636,7 +677,7 @@ public class AssetsService {
         }
         return CashDTO.builder()
                 .id(cashAccount.getId())
-                .cahsName(cashAccount.getCashName())
+                .cashName(cashAccount.getCashName())
                 .build();
     }
 
@@ -738,7 +779,6 @@ public class AssetsService {
                                 .name(accountingAccount.getCostCenter().getName())
                                 .description(accountingAccount.getCostCenter().getDescription())
                                 .status(accountingAccount.getCostCenter().getStatus())
-                                .companyId(accountingAccount.getCostCenter().getCompanyId())
                                 .createdAt(accountingAccount.getCostCenter().getCreatedAt())
                                 .updatedAt(accountingAccount.getCostCenter().getUpdatedAt())
                                 .deletionReason(accountingAccount.getCostCenter().getDeletionReason())

@@ -1,0 +1,11 @@
+[
+  { "code": "AR-RP-001", "message": "Debe especificar el rango de fechas." },
+  { "code": "AR-RP-002", "message": "La fecha final no puede ser anterior a la inicial." },
+  { "code": "AR-RP-003", "message": "Debe especificar un estado." },
+  { "code": "AR-RP-004", "message": "Estado de factura no valido" },
+  { "code": "AR-RP-005", "message": "El cliente no fue encontrado" },
+  { "code": "AR-RP-006", "message": "Tipo de reporte no valido" },
+  { "code": "AR-RP-007", "message": "Error generando PDF" },
+  { "code": "AR-RP-008", "message": "La factura ya se encuentra anulada." },
+  { "code": "AR-RP-009", "message": "No se puede anular una factura con pagos registrados." }
+]

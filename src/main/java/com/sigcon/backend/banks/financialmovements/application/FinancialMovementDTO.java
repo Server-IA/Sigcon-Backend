@@ -21,6 +21,7 @@ public class FinancialMovementDTO {
     private String description;
     private String externalReference;
     private FinancialMovementSourceType sourceType;
+    private String flowActivity;
     private Long matchedCheckId;
     private Long matchedVoucherId;
     private Long reconciliationSessionId;

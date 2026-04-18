@@ -24,25 +24,23 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
     """)
     Optional<ExchangeRate> findByCurrencyExchangeOrCurrencyExchanged(Long currencyId);
 
-    // VALIDACIÓN PARA CREAR
-    // @Query("""
-    //     SELECT COUNT(e) > 0
-    //     FROM ExchangeRate e
-    //     WHERE e.companyId = :companyId
-    //     WHERE e.currencyExchange.id = :currencyId
-    //     AND e.currencyExchanged.id = :currencyExchangedId
-    //     AND e.exchangeType = :type
-    //     AND e.deletedAt IS NULL
-    //     AND (:startDate <= e.endDate AND :endDate >= e.startDate)
-    // """)
-    // boolean existsOverlap(
-    //         Long companyId,
-    //         Long currencyId,
-    //         Long currencyExchangedId,
-    //         ExchangeType type,
-    //         LocalDate startDate,
-    //         LocalDate endDate
-    // );
+    /** Validacion de solapamiento para crear (sin companyId, mono-empresa) */
+    @Query("""
+        SELECT COUNT(e) > 0
+        FROM ExchangeRate e
+        WHERE e.currencyExchange.id = :currencyId
+        AND e.currencyExchanged.id = :currencyExchangedId
+        AND e.exchangeType = :type
+        AND e.deletedAt IS NULL
+        AND (:startDate <= e.endDate AND :endDate >= e.startDate)
+    """)
+    boolean existsOverlap(
+            Long currencyId,
+            Long currencyExchangedId,
+            ExchangeType type,
+            LocalDate startDate,
+            LocalDate endDate
+    );
 
     // VALIDACIÓN PARA EDITAR (IGNORA EL MISMO REGISTRO)
     @Query("""

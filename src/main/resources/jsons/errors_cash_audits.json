@@ -1,0 +1,7 @@
+[
+  {"code": "AUD_001", "message": "La caja no fue encontrada."},
+  {"code": "AUD_002", "message": "La caja no esta activa."},
+  {"code": "AUD_003", "message": "El arqueo no fue encontrado."},
+  {"code": "AUD_004", "message": "El arqueo debe estar en estado ABIERTO para ser aprobado."},
+  {"code": "AUD_005", "message": "El arqueo debe estar APROBADO para ser cerrado."}
+]

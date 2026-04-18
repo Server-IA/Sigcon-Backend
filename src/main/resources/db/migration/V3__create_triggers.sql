@@ -9,17 +9,39 @@ BEGIN
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'no_overlapping_exchange_rates'
+          AND conname != 'no_overlapping_exchange_rates_v2'
     ) THEN
-        ALTER TABLE exchange_rates
-        ADD CONSTRAINT no_overlapping_exchange_rates
-        EXCLUDE USING gist (
-            currency_id WITH =,
-            currency_iso WITH =,
-            company_id WITH =,
-            exchange_type WITH =,
-            daterange(start_date, end_date, '[]') WITH &&
-        )
-        WHERE (deleted_at IS NULL);
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'exchange_rates' AND column_name = 'company_id') THEN
+            ALTER TABLE exchange_rates
+            ADD CONSTRAINT no_overlapping_exchange_rates
+            EXCLUDE USING gist (
+                currency_id WITH =,
+                currency_iso WITH =,
+                company_id WITH =,
+                exchange_type WITH =,
+                daterange(start_date, end_date, '[]') WITH &&
+            )
+            WHERE (deleted_at IS NULL);
+        END IF;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'no_overlapping_exchange_rates_v2'
+    ) THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'exchange_rates' AND column_name = 'company_id') THEN
+            DROP INDEX IF EXISTS no_overlapping_exchange_rates;
+            ALTER TABLE exchange_rates DROP CONSTRAINT IF EXISTS no_overlapping_exchange_rates;
+            ALTER TABLE exchange_rates
+            ADD CONSTRAINT no_overlapping_exchange_rates_v2
+            EXCLUDE USING gist (
+                currency_id WITH =,
+                currency_iso WITH =,
+                exchange_type WITH =,
+                daterange(start_date, end_date, '[]') WITH &&
+            )
+            WHERE (deleted_at IS NULL);
+        END IF;
     END IF;
 END;
 $$;

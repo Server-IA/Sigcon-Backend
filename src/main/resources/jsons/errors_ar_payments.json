@@ -1,0 +1,12 @@
+[
+  { "code": "AR_PAY_001", "message": "La factura no fue encontrada" },
+  { "code": "AR_PAY_002", "message": "No se puede registrar un cobro a una factura anulada" },
+  { "code": "AR_PAY_003", "message": "No se puede registrar un cobro a una factura liquidada" },
+  { "code": "AR_PAY_004", "message": "La factura ya se encuentra totalmente pagada" },
+  { "code": "AR_PAY_005", "message": "No se puede registrar un cobro a una factura en borrador" },
+  { "code": "AR_PAY_006", "message": "El monto del cobro debe ser mayor a cero" },
+  { "code": "AR_PAY_007", "message": "El monto del cobro supera el saldo pendiente" },
+  { "code": "AR_PAY_008", "message": "Ya existe un cobro con esta referencia" },
+  { "code": "AR_PAY_009", "message": "El cobro no fue encontrado" },
+  { "code": "AR_PAY_010", "message": "El periodo contable se encuentra cerrado o bloqueado" }
+]

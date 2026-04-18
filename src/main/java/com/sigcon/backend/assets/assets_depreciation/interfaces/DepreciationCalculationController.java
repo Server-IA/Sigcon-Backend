@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 /**
  * ACT-RF-02 — Cálculo Automático de Depreciación.
  * <p>
- * Endpoint restringido a {@code ROLE_SUPERADMIN}.
+ * Endpoint restringido a {@code ROLE_ADMIN}.
  */
 @RestController
 @RequestMapping("/api/v1/assets/depreciation")
@@ -45,7 +45,7 @@ public class DepreciationCalculationController {
          * en el período contable indicado.
          */
         @PostMapping("/calculate")
-        @PreAuthorize("hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('ROLE_ADMIN')")
         @Operation(summary = "Calcular depreciación automática", description = "Ejecuta el cálculo automático de depreciación de activos (ACT-RF-02).\n\n"
                         +
                         "**El proceso realiza lo siguiente:**\n" +
@@ -61,7 +61,7 @@ public class DepreciationCalculationController {
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Depreciación calculada exitosamente", content = @Content(schema = @Schema(implementation = DepreciationCalculationResponseDTO.class))),
                         @ApiResponse(responseCode = "400", description = "Vida útil no definida | Método no reconocido o no permitido", content = @Content(schema = @Schema(implementation = Object.class))),
-                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ROLE_SUPERADMIN)", content = @Content(schema = @Schema(implementation = Object.class))),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ROLE_ADMIN)", content = @Content(schema = @Schema(implementation = Object.class))),
                         @ApiResponse(responseCode = "404", description = "Cuenta de depreciación faltante o inactiva", content = @Content(schema = @Schema(implementation = Object.class))),
                         @ApiResponse(responseCode = "422", description = "Operación no permitida. Período contable cerrado", content = @Content(schema = @Schema(implementation = Object.class))),
                         @ApiResponse(responseCode = "500", description = "Error interno del servidor", content = @Content(schema = @Schema(implementation = Object.class)))

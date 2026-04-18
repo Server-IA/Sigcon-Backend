@@ -97,11 +97,18 @@ public class ThirdParty {
     @Builder.Default
     private List<ThirdPartyWithholdingAssignment> withholdingAssignments = new ArrayList<>();
 
+    /** TER-04: Asignaciones de roles con vigencia temporal */
+    @OneToMany(mappedBy = "thirdParty", fetch = FetchType.LAZY)
+    private List<ThirdPartyRoleAssignment> roleAssignments;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @Column(name = "deleted_reason", length = 500)
+    private String deletedReason;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;

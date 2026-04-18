@@ -49,7 +49,7 @@ public class AssetsController {
         }
 
         @PostMapping("/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_ADMIN')")
         @Operation(summary = "Registrar activo", description = "ACT-RF-01: crea un activo con validaciones contables y de terceros.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "201", description = "Activo registrado correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -71,7 +71,7 @@ public class AssetsController {
         }
 
         @PostMapping("/bulk/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_ADMIN')")
         @Operation(summary = "Carga masiva de activos", description = "Importa activos desde archivo CSV/XLSX enviado en base64. "
                         +
                         "Valida columnas, integridad y reglas contables antes de guardar.")
@@ -87,7 +87,7 @@ public class AssetsController {
         }
 
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_ADMIN')")
         @Operation(summary = "Consultar activos", description = "Consulta activos en formato DataTable.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -95,11 +95,17 @@ public class AssetsController {
                         @ApiResponse(responseCode = "500", description = "Error interno del servidor", content = @Content(schema = @Schema(implementation = Object.class)))
         })
         public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
-                return ResponseEntity.ok(assetsService.findAllPaged(request));
+                try {
+                        return ResponseEntity.ok(assetsService.findAllPaged(request));
+                } catch (Exception e) {
+                        // F-ACT-10-06: No exponer errores técnicos de JPA al usuario
+                        return ResponseEntity.ok(com.sigcon.backend.utils.DataTableResponse.empty(
+                                request != null ? request.getDraw() : 0));
+                }
         }
 
         @GetMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_ADMIN')")
         @Operation(summary = "Detalle de activo", description = "Obtiene la informacion de un activo especifico.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Detalle obtenido correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -114,7 +120,7 @@ public class AssetsController {
         }
 
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_ASSET') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_ASSET') or hasAuthority('ROLE_ADMIN')")
         @Operation(summary = "Editar activo", description = "ACT-RF-09: actualiza un activo existente.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Activo actualizado correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -134,5 +140,20 @@ public class AssetsController {
                                 SuccessRespondJson.getSuccessRespondMessage(
                                                 Optional.of("Activo actualizado correctamente."),
                                                 Optional.of(updated)));
+        }
+
+        @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+        @PreAuthorize("hasAuthority('PERM_DELETE_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @Operation(summary = "Eliminar activo", description = "Elimina lógicamente un activo.")
+        public ResponseEntity<?> delete(@PathVariable Long id) {
+                try {
+                        assetsService.deleteAsset(id);
+                        return ResponseEntity.ok(
+                                SuccessRespondJson.getSuccessRespondMessage(
+                                        Optional.of("Activo eliminado correctamente."), Optional.empty()));
+                } catch (Exception e) {
+                        return ResponseEntity.badRequest().body(
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+                }
         }
 }

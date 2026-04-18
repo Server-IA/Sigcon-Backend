@@ -49,9 +49,16 @@ DROP INDEX IF EXISTS uk_puc_name_active;
 
 -- Centros de costo
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_cost_center_code_company_active
-ON cost_centers (code, company_id)
-WHERE deleted_at IS NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cost_centers' AND column_name = 'company_id') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_cost_center_code_company_active
+            ON cost_centers (code, company_id) WHERE deleted_at IS NULL;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_cost_center_code_active
+            ON cost_centers (code) WHERE deleted_at IS NULL;
+    END IF;
+END $$;
 
 -- Reglas de depreciación
 
@@ -65,9 +72,16 @@ ON cfg_currency_types (iso_code)
 WHERE deleted_at IS NULL;
 
 -- Cuentas contables
-CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_custom_name_company_active
-ON accounting_accounts (custom_name, company_id)
-WHERE deleted_at IS NULL;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'accounting_accounts' AND column_name = 'company_id') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_custom_name_company_active
+            ON accounting_accounts (custom_name, company_id) WHERE deleted_at IS NULL;
+    ELSE
+        CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_account_custom_name_active
+            ON accounting_accounts (custom_name) WHERE deleted_at IS NULL;
+    END IF;
+END $$;
 
 
 DROP INDEX IF EXISTS uk_ruler_tax_type_ruler_tax_name_company_active;

@@ -15,8 +15,14 @@ import lombok.NoArgsConstructor;
 
 public class LineInvoiceRequestDTO {
 
-    @Schema (description = "ID del item", example = "1")
+    @Schema (description = "ID del activo fijo (opcional si se envia accountingAccountId)", example = "1")
     private Long itemId;
+
+    @Schema (description = "ID de la cuenta contable generica (opcional si se envia itemId)", example = "2")
+    private Long accountingAccountId;
+
+    @Schema (description = "Descripcion libre del item facturado (servicio, insumo, etc.)", example = "Servicio de consultoria")
+    private String description;
 
     @Schema (description = "Cantidad", example = "1")
     private Double quantity;

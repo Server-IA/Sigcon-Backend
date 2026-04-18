@@ -1,0 +1,501 @@
+package com.sigcon.backend.general.accounting.tax_reports.domain.service;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoice;
+import com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository;
+import com.sigcon.backend.general.accounting.tax_reports.application.EclProvisionReportDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.EclProvisionReportDTO.EclBucketDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.EclProvisionReportDTO.EclCustomerDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.ExchangeDifferenceReportDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.ExchangeDifferenceReportDTO.DifferenceItemDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.IvaReportDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.TaxesSummaryDTO;
+import com.sigcon.backend.general.accounting.tax_reports.application.TaxesSummaryDTO.MonthlyTaxSummaryDTO;
+import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.model.ExchangeRate;
+import com.sigcon.backend.lists_accounting.exchangeRates.domain.repository.ExchangeRateRepository;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
+import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
+import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Servicio de reportes contables-tributarios (HU-CG-31 a HU-CG-34).
+ * <p>Genera:
+ * <ul>
+ *   <li>HU-CG-31: Provision ECL de cartera (NIIF 9)</li>
+ *   <li>HU-CG-32: Cuadre IVA bimestral (Formulario 300 DIAN)</li>
+ *   <li>HU-CG-33: Diferencias en cambio al cierre (NIC 21)</li>
+ *   <li>HU-CG-34: Resumen consolidado anual de impuestos y retenciones</li>
+ * </ul>
+ * </p>
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+@Transactional(readOnly = true)
+public class TaxReportService {
+
+    private final SalesInvoiceRepository salesInvoiceRepository;
+    private final InvoiceRepository invoiceRepository;
+    private final CurrencyTypeRepository currencyTypeRepository;
+    private final ExchangeRateRepository exchangeRateRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    private static final String[] MONTH_LABELS = {
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    };
+
+    // ================================================================
+    // HU-CG-31: Provision ECL de cartera
+    // ================================================================
+
+    /**
+     * Calcula la Provision por Perdida Crediticia Esperada (ECL) al 31-dic
+     * del anio indicado aplicando tasas NIIF 9 por tramos de mora.
+     *
+     * @param year anio de cierre
+     * @return reporte ECL con buckets y detalle por cliente
+     */
+    public EclProvisionReportDTO generateEclProvision(Integer year) {
+        validateYear(year);
+        LocalDate cutoff = LocalDate.of(year, 12, 31);
+
+        // Facturas con saldo pendiente al cierre. Se usa findAll() y se filtra
+        // en memoria porque ya se excluyen VOIDED/PAID/SETTLED por balance_due.
+        List<SalesInvoice> invoices = salesInvoiceRepository.findAll().stream()
+            .filter(s -> s.getBalanceDue() != null && s.getBalanceDue().compareTo(BigDecimal.ZERO) > 0)
+            .filter(s -> s.getStatus() == null || !s.getStatus().name().equals("VOIDED"))
+            .filter(s -> s.getInvoiceDate() != null && !s.getInvoiceDate().isAfter(cutoff))
+            .toList();
+
+        // Buckets: 0-30, 31-60, 61-90, 91-180, >180
+        BigDecimal[] rates = {
+            new BigDecimal("0.01"), new BigDecimal("0.05"), new BigDecimal("0.20"),
+            new BigDecimal("0.50"), new BigDecimal("1.00")
+        };
+        String[] labels = {"0-30 dias", "31-60 dias", "61-90 dias", "91-180 dias", "Mas de 180 dias"};
+        BigDecimal[] bucketBalances = {
+            BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
+        };
+        BigDecimal[] bucketEcl = {
+            BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
+        };
+
+        Map<Long, EclCustomerDTO> byCustomer = new LinkedHashMap<>();
+        BigDecimal totalCartera = BigDecimal.ZERO;
+        BigDecimal totalProvision = BigDecimal.ZERO;
+
+        for (SalesInvoice inv : invoices) {
+            LocalDate due = inv.getDueDate() != null ? inv.getDueDate() : inv.getInvoiceDate();
+            long daysOverdue = Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(due, cutoff));
+            int bucket = resolveBucket(daysOverdue);
+            BigDecimal balance = inv.getBalanceDue();
+            BigDecimal ecl = balance.multiply(rates[bucket]).setScale(2, RoundingMode.HALF_UP);
+
+            bucketBalances[bucket] = bucketBalances[bucket].add(balance);
+            bucketEcl[bucket] = bucketEcl[bucket].add(ecl);
+            totalCartera = totalCartera.add(balance);
+            totalProvision = totalProvision.add(ecl);
+
+            ThirdParty tp = inv.getThirdParty();
+            if (tp != null) {
+                EclCustomerDTO acc = byCustomer.get(tp.getId());
+                if (acc == null) {
+                    acc = EclCustomerDTO.builder()
+                        .thirdPartyId(tp.getId())
+                        .nit(tp.getNit())
+                        .name(tp.getBusinessName())
+                        .totalBalance(BigDecimal.ZERO)
+                        .totalEcl(BigDecimal.ZERO)
+                        .build();
+                    byCustomer.put(tp.getId(), acc);
+                }
+                acc.setTotalBalance(acc.getTotalBalance().add(balance));
+                acc.setTotalEcl(acc.getTotalEcl().add(ecl));
+            }
+        }
+
+        List<EclBucketDTO> buckets = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            buckets.add(EclBucketDTO.builder()
+                .label(labels[i])
+                .totalBalance(bucketBalances[i])
+                .eclRate(rates[i])
+                .eclAmount(bucketEcl[i])
+                .build());
+        }
+
+        return EclProvisionReportDTO.builder()
+            .year(year)
+            .totalCartera(totalCartera)
+            .totalProvision(totalProvision)
+            .buckets(buckets)
+            .details(new ArrayList<>(byCustomer.values()))
+            .build();
+    }
+
+    /**
+     * Resuelve el indice de bucket segun dias en mora (0-30, 31-60, 61-90, 91-180, >180).
+     */
+    private int resolveBucket(long days) {
+        if (days <= 30) return 0;
+        if (days <= 60) return 1;
+        if (days <= 90) return 2;
+        if (days <= 180) return 3;
+        return 4;
+    }
+
+    // ================================================================
+    // HU-CG-32: Cuadre IVA bimestral
+    // ================================================================
+
+    /**
+     * Calcula el IVA a cargo y a favor para un bimestre del anio.
+     * Bimestre 1 = ene-feb, 2 = mar-abr, 3 = may-jun, 4 = jul-ago,
+     * 5 = sep-oct, 6 = nov-dic.
+     *
+     * @param year anio gravable
+     * @param bimester numero de bimestre (1-6)
+     * @return reporte de IVA con saldo y conteo de facturas
+     */
+    public IvaReportDTO generateIvaBimestral(Integer year, Integer bimester) {
+        validateYear(year);
+        if (bimester == null || bimester < 1 || bimester > 6) {
+            throw new IllegalArgumentException("El bimestre debe estar entre 1 y 6");
+        }
+        int startMonth = (bimester - 1) * 2 + 1;
+        int endMonth = startMonth + 1;
+        LocalDate start = LocalDate.of(year, startMonth, 1);
+        LocalDate end = LocalDate.of(year, endMonth, 1)
+            .withDayOfMonth(LocalDate.of(year, endMonth, 1).lengthOfMonth());
+
+        // IVA generado (ventas): suma total_tax + conteo facturas FV del bimestre
+        Object[] arRow = (Object[]) entityManager.createNativeQuery(
+            "SELECT COALESCE(SUM(total_tax),0), COUNT(*) FROM sales_invoices "
+          + "WHERE invoice_date BETWEEN :start AND :end "
+          + "AND status <> 'VOIDED' AND deleted_at IS NULL")
+            .setParameter("start", start)
+            .setParameter("end", end)
+            .getSingleResult();
+        BigDecimal ivaGenerado = toBigDecimal(arRow[0]);
+        Integer countFV = ((Number) arRow[1]).intValue();
+
+        // IVA descontable (compras AP): suma total_tax + conteo facturas FC
+        Object[] apRow = (Object[]) entityManager.createNativeQuery(
+            "SELECT COALESCE(SUM(total_tax),0), COUNT(*) FROM invoices "
+          + "WHERE invoice_date BETWEEN :start AND :end "
+          + "AND invoice_status <> 'VOIDED' AND deleted_at IS NULL")
+            .setParameter("start", start)
+            .setParameter("end", end)
+            .getSingleResult();
+        BigDecimal ivaDescontable = toBigDecimal(apRow[0]);
+        Integer countFC = ((Number) apRow[1]).intValue();
+
+        BigDecimal saldo = ivaGenerado.subtract(ivaDescontable);
+        String tipo = saldo.compareTo(BigDecimal.ZERO) >= 0 ? "A pagar" : "A favor";
+
+        String label = MONTH_LABELS[startMonth - 1] + "-" + MONTH_LABELS[endMonth - 1];
+
+        return IvaReportDTO.builder()
+            .year(year)
+            .bimester(bimester)
+            .bimesterLabel(label)
+            .ivaGenerado(ivaGenerado)
+            .ivaDescontable(ivaDescontable)
+            .saldoIva(saldo)
+            .saldoTipo(tipo)
+            .countFacturasVenta(countFV)
+            .countFacturasCompra(countFC)
+            .build();
+    }
+
+    // ================================================================
+    // HU-CG-33: Diferencias en cambio
+    // ================================================================
+
+    /**
+     * Calcula las diferencias en cambio por revaluacion de partidas monetarias
+     * en moneda extranjera al cierre del mes indicado.
+     *
+     * @param year anio del cierre
+     * @param month mes del cierre (1-12)
+     * @return reporte de diferencias por factura
+     */
+    public ExchangeDifferenceReportDTO generateExchangeDifferences(Integer year, Integer month) {
+        validateYear(year);
+        if (month == null || month < 1 || month > 12) {
+            throw new IllegalArgumentException("El mes debe estar entre 1 y 12");
+        }
+        LocalDate cutoff = LocalDate.of(year, month, 1)
+            .withDayOfMonth(LocalDate.of(year, month, 1).lengthOfMonth());
+
+        // Localizar el id de la moneda COP (si no existe, no hay filtrado por COP)
+        Long copId = currencyTypeRepository.findAll().stream()
+            .filter(c -> "COP".equalsIgnoreCase(c.getIsoCode()))
+            .map(CurrencyType::getId)
+            .findFirst()
+            .orElse(null);
+
+        List<DifferenceItemDTO> items = new ArrayList<>();
+        BigDecimal totalGanancia = BigDecimal.ZERO;
+        BigDecimal totalPerdida = BigDecimal.ZERO;
+
+        // Facturas de venta con moneda distinta a COP y saldo > 0
+        List<SalesInvoice> fvInvoices = salesInvoiceRepository.findAll().stream()
+            .filter(s -> s.getCurrency() != null)
+            .filter(s -> copId == null || !copId.equals(s.getCurrency().getId()))
+            .filter(s -> s.getBalanceDue() != null && s.getBalanceDue().compareTo(BigDecimal.ZERO) > 0)
+            .filter(s -> s.getInvoiceDate() != null && !s.getInvoiceDate().isAfter(cutoff))
+            .toList();
+
+        for (SalesInvoice inv : fvInvoices) {
+            BigDecimal originalRate = inv.getExchangeRate() != null ? inv.getExchangeRate() : BigDecimal.ONE;
+            BigDecimal currentRate = findCurrentRate(inv.getCurrency().getId(), cutoff, originalRate);
+            // balance_due esta en moneda extranjera (subtotal esta en extranjera segun el modelo AR)
+            BigDecimal amountForeign = inv.getBalanceDue();
+            BigDecimal diff = amountForeign.multiply(currentRate.subtract(originalRate))
+                .setScale(2, RoundingMode.HALF_UP);
+            // En AR (cuenta por cobrar), tasa sube = ganancia (recibiremos mas COP)
+            String type = diff.compareTo(BigDecimal.ZERO) >= 0 ? "GANANCIA" : "PERDIDA";
+            if (diff.compareTo(BigDecimal.ZERO) >= 0) totalGanancia = totalGanancia.add(diff);
+            else totalPerdida = totalPerdida.add(diff.abs());
+
+            items.add(DifferenceItemDTO.builder()
+                .invoiceId(inv.getId())
+                .invoiceNumber(inv.getInvoiceNumber())
+                .documentType("FV")
+                .currency(inv.getCurrency().getIsoCode())
+                .amountForeign(amountForeign)
+                .originalRate(originalRate)
+                .currentRate(currentRate)
+                .differenceAmount(diff)
+                .type(type)
+                .build());
+        }
+
+        // Facturas de compra (AP) con moneda extranjera.
+        // Nota: la entidad Invoices (AP) no tiene currency_id ni exchangeRate
+        // en el modelo actual. Antes de ejecutar la query verificamos si las
+        // columnas existen en la BD (information_schema) para evitar que un
+        // error SQL marque la transaccion como rollback-only.
+        boolean apHasCurrencyColumns = false;
+        try {
+            Number cnt = (Number) entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM information_schema.columns "
+              + "WHERE table_name = 'invoices' AND column_name IN ('currency_id','exchange_rate')")
+                .getSingleResult();
+            apHasCurrencyColumns = cnt != null && cnt.intValue() >= 2;
+        } catch (Exception ignored) { /* noop */ }
+
+        if (apHasCurrencyColumns) try {
+            @SuppressWarnings("unchecked")
+            List<Object[]> apRows = entityManager.createNativeQuery(
+                "SELECT i.id, i.resolution_invoice, c.id AS currency_id, c.iso_code, "
+              + "       i.balance_due, COALESCE(i.exchange_rate, 1) AS ex_rate "
+              + "FROM invoices i "
+              + "JOIN cfg_currency_types c ON c.id = i.currency_id "
+              + "WHERE i.balance_due > 0 AND i.deleted_at IS NULL "
+              + "AND i.invoice_status <> 'VOIDED' "
+              + "AND i.invoice_date <= :cutoff "
+              + (copId != null ? "AND c.id <> :copId " : ""))
+                .setParameter("cutoff", cutoff)
+                .setParameter("copId", copId)
+                .getResultList();
+
+            for (Object[] r : apRows) {
+                Long invoiceId = ((Number) r[0]).longValue();
+                String invoiceNumber = r[1] != null ? r[1].toString() : "";
+                Long curId = ((Number) r[2]).longValue();
+                String iso = r[3] != null ? r[3].toString() : "";
+                BigDecimal amountForeign = toBigDecimal(r[4]);
+                BigDecimal originalRate = toBigDecimal(r[5]);
+                if (originalRate.compareTo(BigDecimal.ZERO) == 0) originalRate = BigDecimal.ONE;
+
+                BigDecimal currentRate = findCurrentRate(curId, cutoff, originalRate);
+                BigDecimal diff = amountForeign.multiply(currentRate.subtract(originalRate))
+                    .setScale(2, RoundingMode.HALF_UP);
+                // En AP (cuenta por pagar), tasa sube = perdida (pagaremos mas COP)
+                String type = diff.compareTo(BigDecimal.ZERO) <= 0 ? "GANANCIA" : "PERDIDA";
+                BigDecimal signedDiff = diff.negate();
+                if (signedDiff.compareTo(BigDecimal.ZERO) >= 0) totalGanancia = totalGanancia.add(signedDiff);
+                else totalPerdida = totalPerdida.add(signedDiff.abs());
+
+                items.add(DifferenceItemDTO.builder()
+                    .invoiceId(invoiceId)
+                    .invoiceNumber(invoiceNumber)
+                    .documentType("FC")
+                    .currency(iso)
+                    .amountForeign(amountForeign)
+                    .originalRate(originalRate)
+                    .currentRate(currentRate)
+                    .differenceAmount(signedDiff)
+                    .type(type)
+                    .build());
+            }
+        } catch (Exception e) {
+            // Si invoices no tiene columnas currency_id/exchange_rate, se omite AP
+            log.debug("Saltando AP en diferencias en cambio: {}", e.getMessage());
+        }
+
+        return ExchangeDifferenceReportDTO.builder()
+            .year(year)
+            .month(month)
+            .totalGanancia(totalGanancia)
+            .totalPerdida(totalPerdida)
+            .diferenciaNeta(totalGanancia.subtract(totalPerdida))
+            .items(items)
+            .build();
+    }
+
+    /**
+     * Busca la tasa de cambio vigente al corte; si no existe, devuelve la tasa original.
+     */
+    private BigDecimal findCurrentRate(Long currencyId, LocalDate cutoff, BigDecimal fallback) {
+        if (currencyId == null) return fallback;
+        List<ExchangeRate> rates = exchangeRateRepository.findByDeletedAtIsNull();
+        return rates.stream()
+            .filter(r -> r.getCurrencyExchange() != null
+                && currencyId.equals(r.getCurrencyExchange().getId()))
+            .filter(r -> r.getStartDate() != null && !r.getStartDate().isAfter(cutoff))
+            .filter(r -> r.getEndDate() == null || !r.getEndDate().isBefore(cutoff))
+            .map(r -> r.getValue() != null
+                ? BigDecimal.valueOf(r.getValue())
+                : fallback)
+            .findFirst()
+            .orElse(fallback);
+    }
+
+    // ================================================================
+    // HU-CG-34: Resumen consolidado de impuestos y retenciones
+    // ================================================================
+
+    /**
+     * Genera el resumen anual de impuestos causados y retenciones practicadas
+     * con desglose mensual.
+     *
+     * @param year anio gravable
+     * @return DTO con totales anuales + 12 filas mensuales
+     */
+    public TaxesSummaryDTO generateTaxesSummary(Integer year) {
+        validateYear(year);
+
+        // Ventas por mes: iva generado + retenciones practicadas
+        @SuppressWarnings("unchecked")
+        List<Object[]> salesRows = entityManager.createNativeQuery(
+            "SELECT EXTRACT(MONTH FROM invoice_date) AS m, "
+          + "       COALESCE(SUM(total_tax),0) AS iva, "
+          + "       COALESCE(SUM(total_withholding),0) AS ret "
+          + "FROM sales_invoices "
+          + "WHERE EXTRACT(YEAR FROM invoice_date) = :year "
+          + "AND status <> 'VOIDED' AND deleted_at IS NULL "
+          + "GROUP BY EXTRACT(MONTH FROM invoice_date)")
+            .setParameter("year", year)
+            .getResultList();
+
+        Map<Integer, BigDecimal[]> salesByMonth = new LinkedHashMap<>();
+        for (Object[] r : salesRows) {
+            int m = ((Number) r[0]).intValue();
+            salesByMonth.put(m, new BigDecimal[]{ toBigDecimal(r[1]), toBigDecimal(r[2]) });
+        }
+
+        // Compras por mes: iva descontable + retenciones practicadas (total_discount como proxy)
+        @SuppressWarnings("unchecked")
+        List<Object[]> buyRows = entityManager.createNativeQuery(
+            "SELECT EXTRACT(MONTH FROM invoice_date) AS m, "
+          + "       COALESCE(SUM(total_tax),0) AS iva, "
+          + "       COALESCE(SUM(total_discount),0) AS ret "
+          + "FROM invoices "
+          + "WHERE EXTRACT(YEAR FROM invoice_date) = :year "
+          + "AND invoice_status <> 'VOIDED' AND deleted_at IS NULL "
+          + "GROUP BY EXTRACT(MONTH FROM invoice_date)")
+            .setParameter("year", year)
+            .getResultList();
+
+        Map<Integer, BigDecimal[]> buysByMonth = new LinkedHashMap<>();
+        for (Object[] r : buyRows) {
+            int m = ((Number) r[0]).intValue();
+            buysByMonth.put(m, new BigDecimal[]{ toBigDecimal(r[1]), toBigDecimal(r[2]) });
+        }
+
+        BigDecimal totalIvaGen = BigDecimal.ZERO;
+        BigDecimal totalIvaDesc = BigDecimal.ZERO;
+        BigDecimal totalRetPrac = BigDecimal.ZERO;
+        BigDecimal totalRetSop = BigDecimal.ZERO;
+
+        List<MonthlyTaxSummaryDTO> monthly = new ArrayList<>();
+        for (int m = 1; m <= 12; m++) {
+            BigDecimal[] s = salesByMonth.getOrDefault(m, new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            BigDecimal[] b = buysByMonth.getOrDefault(m, new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+
+            BigDecimal ivaGen = s[0];
+            BigDecimal ivaDesc = b[0];
+            // Retenciones practicadas por la empresa = las que retuvimos a proveedores (AP)
+            //   + las que retuvimos a clientes en ventas (total_withholding de FV)
+            BigDecimal retPrac = s[1].add(b[1]);
+            // Retenciones soportadas (placeholder): por ahora 0
+            BigDecimal retSop = BigDecimal.ZERO;
+
+            totalIvaGen = totalIvaGen.add(ivaGen);
+            totalIvaDesc = totalIvaDesc.add(ivaDesc);
+            totalRetPrac = totalRetPrac.add(retPrac);
+            totalRetSop = totalRetSop.add(retSop);
+
+            monthly.add(MonthlyTaxSummaryDTO.builder()
+                .month(m)
+                .monthLabel(MONTH_LABELS[m - 1])
+                .ivaGenerado(ivaGen)
+                .ivaDescontable(ivaDesc)
+                .saldoIva(ivaGen.subtract(ivaDesc))
+                .retencionesPracticadas(retPrac)
+                .retencionesSoportadas(retSop)
+                .build());
+        }
+
+        return TaxesSummaryDTO.builder()
+            .year(year)
+            .totalIvaGenerado(totalIvaGen)
+            .totalIvaDescontable(totalIvaDesc)
+            .saldoIvaAnual(totalIvaGen.subtract(totalIvaDesc))
+            .totalRetencionesPracticadas(totalRetPrac)
+            .totalRetencionesSoportadas(totalRetSop)
+            .monthlySummary(monthly)
+            .build();
+    }
+
+    // ================================================================
+    // Helpers
+    // ================================================================
+
+    private void validateYear(Integer year) {
+        if (year == null || year < 1900 || year > 3000) {
+            throw new IllegalArgumentException("Anio invalido");
+        }
+    }
+
+    /** Convierte Object numerico (Double, BigDecimal, Number) a BigDecimal. */
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal bd) return bd;
+        if (value instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
+        return new BigDecimal(value.toString());
+    }
+}

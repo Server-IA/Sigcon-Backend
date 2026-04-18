@@ -37,6 +37,15 @@ public class DataTableResponse<T> {
         );
     }
 
+    /** Respuesta vacía sin errores técnicos expuestos */
+    public static <T> DataTableResponse<T> empty(int draw) {
+        return new DataTableResponse<>(
+            draw, 0, 0, List.of(), true, 200,
+            "No se encontraron resultados.",
+            LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        );
+    }
+
     public static <T> DataTableResponse<T> from(List<T> data, int draw) {
         return new DataTableResponse<>(
             draw,

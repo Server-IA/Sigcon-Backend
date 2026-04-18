@@ -8,8 +8,10 @@ import com.sigcon.backend.parametrization.modules.domain.model.ModuleEntity;
 import com.sigcon.backend.parametrization.modules.domain.model.enums.ModelStatus;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -66,5 +68,21 @@ public interface ModuleRepository extends JpaRepository<ModuleEntity, Long>, Jpa
 
     boolean existsByNameAndDeletedAtIsNull(String name);
     boolean existsByUrlAndDeletedAtIsNull(String url);
+
+    /**
+     * Devuelve los IDs de modulos cuyos permisos (activos) estan dentro del set de
+     * codigos entregado. Se usa para filtrar el menu del dashboard por los permisos
+     * que el usuario autenticado realmente tiene.
+     *
+     * @param permissionCodes codigos de permiso (sin el prefijo PERM_) del usuario
+     * @return set de module_ids accesibles; vacio si permissionCodes esta vacio
+     */
+    @Query(value = """
+        SELECT DISTINCT p.module_id
+          FROM permissions p
+         WHERE p.deleted_at IS NULL
+           AND p.code IN (:permissionCodes)
+    """, nativeQuery = true)
+    Set<Long> findModuleIdsByPermissionCodes(@org.springframework.data.repository.query.Param("permissionCodes") Collection<String> permissionCodes);
 
 }

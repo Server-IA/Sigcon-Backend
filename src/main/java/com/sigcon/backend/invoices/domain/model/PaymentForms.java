@@ -42,6 +42,10 @@ public class PaymentForms {
     @Column(name = "description", nullable = false)
     private String description;
 
+    @Column(name = "is_contado")
+    @Builder.Default
+    private Boolean isContado = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

@@ -4,7 +4,7 @@ import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.cash_management.domain.model.Cash;
 import com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType;
 import com.sigcon.backend.banks.reconciliation.domain.model.BankReconciliationSession;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -32,10 +32,6 @@ public class FinancialMovement {
     @JoinColumn(name = "cash_id")
     private Cash cash;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
-
     @Column(name = "movement_date", nullable = false)
     private LocalDate movementDate;
 
@@ -55,6 +51,12 @@ public class FinancialMovement {
     @Column(name = "source_type", nullable = false, length = 32)
     @Builder.Default
     private FinancialMovementSourceType sourceType = FinancialMovementSourceType.MANUAL;
+
+    /**
+     * Clasificacion del movimiento segun NIC 7: OPERATIVA, INVERSION, FINANCIACION.
+     */
+    @Column(name = "flow_activity", length = 20)
+    private String flowActivity;
 
     @Column(name = "matched_check_id")
     private Long matchedCheckId;

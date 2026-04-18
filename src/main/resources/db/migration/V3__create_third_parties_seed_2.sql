@@ -150,12 +150,21 @@ SELECT * FROM (
 WHERE NOT EXISTS (
     SELECT 1
     FROM third_parties tp
-    WHERE 
+    WHERE
     v.third_party_code = tp.third_party_code
     AND v.nit = tp.nit
     AND v.dv = tp.dv
     AND tp.deleted_at IS NULL
 );
+
+-- HU-AP-06 E3: los terceros deben tener type_regimen_id asignado para poder
+-- ser facturados (valida clasificacion tributaria del proveedor/cliente).
+-- Backfill idempotente para los terceros demo precargados que quedan sin regimen.
+UPDATE third_parties
+   SET type_regimen_id = (SELECT id FROM type_regimen ORDER BY id LIMIT 1)
+ WHERE type_regimen_id IS NULL
+   AND deleted_at IS NULL
+   AND nit IN ('9001234567', '9019876543');
 
 INSERT INTO third_party_role_assignments (third_party_id, role_id)
 SELECT tp.id, rc.id

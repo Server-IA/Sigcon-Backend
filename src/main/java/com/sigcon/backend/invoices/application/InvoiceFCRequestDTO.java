@@ -40,7 +40,10 @@ public class InvoiceFCRequestDTO {
     @NotNull(message = "El día de vencimiento es requerido")
     private Integer invoiceDueDay;
 
-    @Schema (description = "Notas", example = "Notas de la factura")
+    @Schema(description = "Numero de factura del proveedor", example = "FAC-001234")
+    private String supplierInvoiceNumber;
+
+    @Schema(description = "Notas", example = "Notas de la factura")
     private String notes;
 
     @Schema (description = "Lista de items de la factura", example = "[]")

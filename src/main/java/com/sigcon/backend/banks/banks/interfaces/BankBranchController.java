@@ -47,7 +47,7 @@ public class BankBranchController {
             @ApiResponse(responseCode = "400", description = "Error de validación"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_CREATE_BANK_BRANCH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_BANK_BRANCH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody(required = false) BankBranchDTO request,
             BindingResult bindingResult) {
@@ -72,7 +72,7 @@ public class BankBranchController {
             @ApiResponse(responseCode = "403", description = "Sin permisos"),
             @ApiResponse(responseCode = "404", description = "Sin resultados")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_BRANCH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_BRANCH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
 
         return bankBranchService.findAllPaged(request);
@@ -85,7 +85,7 @@ public class BankBranchController {
             @ApiResponse(responseCode = "404", description = "Sucursal no encontrada"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_BRANCH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_BRANCH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> detail(@PathVariable Long id) {
 
         return bankBranchService.getDetail(id);
@@ -98,7 +98,7 @@ public class BankBranchController {
             @ApiResponse(responseCode = "404", description = "Banco no encontrado o sin sucursales"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_BRANCH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_BRANCH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> findByBank(@PathVariable Long bankId) {
 
         return bankBranchService.findByBank(bankId);
@@ -118,7 +118,7 @@ public class BankBranchController {
             @ApiResponse(responseCode = "404", description = "Sucursal no encontrada"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_BRANCH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_BRANCH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @Valid @RequestBody BankBranchDTO request,
@@ -134,7 +134,7 @@ public class BankBranchController {
             @ApiResponse(responseCode = "404", description = "Sucursal no encontrada"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_DELETE_BANK_BRANCH') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_BANK_BRANCH') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
 
         return bankBranchService.delete(id);

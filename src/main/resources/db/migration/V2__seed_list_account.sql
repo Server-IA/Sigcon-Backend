@@ -53,15 +53,18 @@ WHERE NOT EXISTS (
 
 -- COST CENTER
 
-INSERT INTO cost_centers
-(code, name, description, status, company_id, created_at, updated_at)
-SELECT '1', 'Centro de costo 1', 'Descripción del centro de costo 1', 'ACTIVE', 1, NOW(), NOW()
-WHERE NOT EXISTS (
-    SELECT 1 FROM cost_centers 
-    WHERE code = '1' 
-    AND company_id = 1
-    AND deleted_at IS NULL
-);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cost_centers' AND column_name = 'company_id') THEN
+        INSERT INTO cost_centers (code, name, description, status, company_id, created_at, updated_at)
+        SELECT '1', 'Centro de costo 1', 'Descripcion del centro de costo 1', 'ACTIVE', 1, NOW(), NOW()
+        WHERE NOT EXISTS (SELECT 1 FROM cost_centers WHERE code = '1' AND company_id = 1 AND deleted_at IS NULL);
+    ELSE
+        INSERT INTO cost_centers (code, name, description, status, created_at, updated_at)
+        SELECT '1', 'Centro de costo 1', 'Descripcion del centro de costo 1', 'ACTIVE', NOW(), NOW()
+        WHERE NOT EXISTS (SELECT 1 FROM cost_centers WHERE code = '1' AND deleted_at IS NULL);
+    END IF;
+END $$;
 
 -- Accounting Account
 

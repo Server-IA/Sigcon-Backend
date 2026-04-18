@@ -15,6 +15,9 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.Map;
@@ -39,56 +42,115 @@ public class RoleController {
     private final RoleService roleService;
 
     @PostMapping("/getRoles")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ROLES') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ROLES') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Listar roles con filtros y paginacion", description = "Obtiene la lista paginada de roles del sistema <br> Permiso requerido: VIEW_ROLES")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Lista de roles obtenida exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Parametros de consulta invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para ver roles")
+    })
     public ResponseEntity<?> getRoles(@RequestBody(required = false) DataTableRequest request) {
         return roleService.getRoles(request);
     }
 
     @PostMapping("/createRole")
-    @PreAuthorize("hasAuthority('PERM_CREATE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Crear un nuevo rol", description = "Crea un rol en el sistema con nombre y descripcion <br> Permiso requerido: CREATE_ROLE")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Rol creado exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos del rol invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para crear roles"),
+        @ApiResponse(responseCode = "409", description = "Ya existe un rol con ese nombre")
+    })
     public ResponseEntity<?> createRole(@RequestBody RoleRequest request) {
         return roleService.createRole(request);
     }
 
     @PutMapping("/updateRole/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Actualizar un rol existente", description = "Actualiza nombre y/o descripcion de un rol <br> Permiso requerido: UPDATE_ROLE")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Rol actualizado exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos del rol invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para actualizar roles"),
+        @ApiResponse(responseCode = "404", description = "Rol no encontrado")
+    })
     public ResponseEntity<?> updateRole(@PathVariable Long id, @RequestBody RoleRequest request) {
         return roleService.updateRole(id, request);
     }
 
     @PostMapping("/deleteRole/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Eliminar rol (soft delete)", description = "Elimina logicamente un rol del sistema <br> Permiso requerido: DELETE_ROLE")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Rol eliminado exitosamente"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para eliminar roles"),
+        @ApiResponse(responseCode = "404", description = "Rol no encontrado")
+    })
     public ResponseEntity<?> deleteRole(@PathVariable Long id) {
         return roleService.deleteRole(id);
     }
 
     @PostMapping("/assignRole")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_ROLE') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Asignar rol a usuario", description = "Asigna un rol existente a un usuario del sistema <br> Permiso requerido: ASSIGN_ROLE")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Rol asignado exitosamente al usuario"),
+        @ApiResponse(responseCode = "400", description = "Datos de asignacion invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para asignar roles"),
+        @ApiResponse(responseCode = "404", description = "Rol o usuario no encontrado")
+    })
     public ResponseEntity<?> assignRoleToUser(@RequestBody UpdateUserRole request) {
         return roleService.assignRoleToUser(request);
     }
 
     @PostMapping("/createPermission")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Crear un nuevo permiso", description = "Crea un permiso en el sistema con codigo, nombre y descripcion <br> Permiso requerido: CREATE_PERMISSION")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Permiso creado exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos del permiso invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para crear permisos"),
+        @ApiResponse(responseCode = "409", description = "Ya existe un permiso con ese codigo")
+    })
     public ResponseEntity<?> createPermission(@Valid @RequestBody PermissionDTO request, BindingResult bindingResult) {
         return roleService.createPermission(request, bindingResult);
     }
 
     @PutMapping("/updatePermission/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Actualizar permiso existente", description = "Actualiza codigo, nombre y/o descripcion de un permiso <br> Permiso requerido: UPDATE_PERMISSION")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Permiso actualizado exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos del permiso invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para actualizar permisos"),
+        @ApiResponse(responseCode = "404", description = "Permiso no encontrado")
+    })
     public ResponseEntity<?> updatePermission(@PathVariable Long id, @Valid @RequestBody PermissionDTO request,
             BindingResult bindingResult) {
         return roleService.updatePermission(id, request, bindingResult);
     }
 
     @PostMapping("/permissions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Listar permisos con filtros", description = "Obtiene la lista paginada de permisos del sistema <br> Permiso requerido: VIEW_PERMISSIONS")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Lista de permisos obtenida exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Parametros de consulta invalidos"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para ver permisos")
+    })
     public ResponseEntity<?> getPermissions(@RequestBody DataTableRequest dtRequest) {
         return roleService.getPermissions(dtRequest);
     }
 
     @PostMapping("/assign-permissions")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Asignar permisos a un rol", description = "Asigna una lista de permisos a un rol existente <br> Permiso requerido: ASSIGN_PERMISSION")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Permisos asignados exitosamente al rol"),
+        @ApiResponse(responseCode = "400", description = "Datos de asignacion invalidos o rol/permisos no encontrados"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para asignar permisos")
+    })
     public ResponseEntity<?> assignPermissions(@RequestBody RoleRequest request) {
 
         try {
@@ -107,9 +169,27 @@ public class RoleController {
     }
 
     @PostMapping("/remove-permissions")
-    @PreAuthorize("hasAuthority('PERM_REMOVE_PERMISSION') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_REMOVE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Remover permisos de un rol", description = "Remueve una lista de permisos de un rol existente <br> Permiso requerido: REMOVE_PERMISSION")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Permisos removidos exitosamente del rol"),
+        @ApiResponse(responseCode = "400", description = "Datos invalidos o rol/permisos no encontrados"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para remover permisos")
+    })
     public ResponseEntity<?> removePermissions(@RequestBody RoleRequest request) {
         return roleService.removePermissions(request);
+    }
+
+    @DeleteMapping("/deletePermission/{id}")
+    @PreAuthorize("hasAuthority('PERM_DELETE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Eliminar permiso (soft delete)", description = "Elimina logicamente un permiso del sistema <br> Permiso requerido: DELETE_PERMISSION")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Permiso eliminado exitosamente"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos para eliminar permisos"),
+        @ApiResponse(responseCode = "404", description = "Permiso no encontrado")
+    })
+    public ResponseEntity<?> deletePermission(@PathVariable Long id) {
+        return roleService.deletePermission(id);
     }
 
 }

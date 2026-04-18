@@ -48,7 +48,7 @@ public class AccountingAccountController {
                         @ApiResponse(responseCode = "403", description = "No autorizado - Permiso PERM_VIEW_ACCOUNTING_ACCOUNT requerido")
         })
         @PostMapping
-        @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> getAccountingAccounts(
                         @RequestBody(required = false) DataTableRequest dtRequest) {
                 // try {
@@ -85,7 +85,7 @@ public class AccountingAccountController {
                         @ApiResponse(responseCode = "500", description = "Error interno al guardar la cuenta en la base de datos")
         })
         @PostMapping("/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> createAccountingAccount(
                         @Valid @RequestBody CreateAccountingAccountRequest request,
                         BindingResult bindingResult) {
@@ -119,7 +119,7 @@ public class AccountingAccountController {
                         @ApiResponse(responseCode = "500", description = "Error interno al guardar los cambios")
         })
         @PutMapping("/update")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> updateAccountingAccount(
                         @Valid @RequestBody UpdateAccountingAccountRequest request,
                         BindingResult bindingResult) {
@@ -150,7 +150,7 @@ public class AccountingAccountController {
                         @ApiResponse(responseCode = "500", description = "Error interno al procesar la inactivación")
         })
         @DeleteMapping("/delete/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> deleteAccountingAccount(
                         @PathVariable Long id,
                         @RequestParam(name = "reason", required = true) String reason) {

@@ -57,7 +57,6 @@ public class CheckService {
     private final PasswordEncoder passwordEncoder;
     private final FinancialMovementService financialMovementService;
 
-    private final UserUtil userUtil;
 
     private final DataTableSpecificationBuilder<Check> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -118,17 +117,10 @@ public class CheckService {
         int safeLength = length <= 0 ? 20 : Math.min(length, MAX_PAGE_SIZE);
         int page = start / safeLength;
 
-        User user = userUtil.getUser();
-
         Pageable pageable = length == -1 ? Pageable.unpaged() : PageRequest.of(page, safeLength);
 
         Specification<Check> specification = dataTableSpecificationBuilder.build(safeRequest)
-                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")))
-                .and((root, query, cb) -> cb.equal(
-                    root.get("checkbook").get("bankAccount")
-                    .get("company"),
-                    user.getCompany())
-                );
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
         Page<Check> checks = checkRepository.findAll(specification, pageable);
         return ResponseEntity.ok(DataTableResponse.from(checks.map(this::toDto), safeRequest.getDraw()));
@@ -228,9 +220,8 @@ public class CheckService {
         FinancialMovement movementToMatch = null;
         if (request.getConciliationMethod() == ConciliationMethod.AUTOMATICA) {
             Long bankAccountId = check.getCheckbook().getBankAccount().getId();
-            Long companyId = userUtil.getUser().getCompany().getId();
             movementToMatch = financialMovementService
-                    .findForAutomaticCheckReconcile(request.getFinancialMovementId(), bankAccountId, companyId)
+                    .findForAutomaticCheckReconcile(request.getFinancialMovementId(), bankAccountId)
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Movimiento financiero no encontrado o no corresponde a la cuenta bancaria del cheque."));
             if (movementToMatch.getMatchedCheckId() != null) {

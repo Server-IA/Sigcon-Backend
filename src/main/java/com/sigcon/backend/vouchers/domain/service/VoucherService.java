@@ -24,7 +24,6 @@ import com.sigcon.backend.banks.checks.domain.model.Check;
 import com.sigcon.backend.banks.checks.domain.model.enums.CheckStatus;
 import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
 import com.sigcon.backend.invoices.domain.model.PaymentForms;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
 import com.sigcon.backend.parametrization.resources.domain.repository.PaymentFormRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -61,7 +60,6 @@ public class VoucherService {
     public VouchersEntity createVoucher(CreateVoucherDTO voucherDTO) {
 
         User user = userUtil.getUser();
-        Company company = user.getCompany();
 
         VoucherTypesEntity voucherTypeEntity = voucherTypeRepository.findById(voucherDTO.getVoucherTypeId())
         .orElseThrow(() -> new RuntimeException("El tipo de comprobante no existe"));
@@ -79,12 +77,11 @@ public class VoucherService {
 
         VouchersEntity voucherEntity = VouchersEntity.builder().build();
         voucherEntity.setVoucherType(voucherTypeEntity);
-        voucherEntity.setNumber(generateVoucherNumber(voucherTypeEntity.getId(), company.getId()));
+        voucherEntity.setNumber(generateVoucherNumber(voucherTypeEntity.getId()));
         voucherEntity.setDate(voucherDTO.getDate());
         voucherEntity.setAmount(voucherDTO.getAmount());
         voucherEntity.setDescription(voucherDTO.getDescription());
         voucherEntity.setPaymentForm(paymentFormEntity);
-        voucherEntity.setCompany(company);
         voucherEntity.setUser(user);
 
         if(voucherDTO.getAssetId() != null) {
@@ -155,8 +152,7 @@ public class VoucherService {
                 : PageRequest.of(page, safeLength);
 
         Specification<VouchersEntity> spec = dataTableSpecificationBuilder.build(request)
-                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")))
-                .and((root, query, cb) -> cb.equal(root.get("company"), user.getCompany()));
+                .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
         Page<VouchersEntity> vouchers = voucherRepository.findAll(spec, pageable);
 
@@ -169,9 +165,9 @@ public class VoucherService {
     }
 
     // Funciones
-    public BigInteger generateVoucherNumber(Long voucherTypeId, Long companyId) {
+    public BigInteger generateVoucherNumber(Long voucherTypeId) {
 
-        BigInteger number = voucherRepository.findTopByVoucherTypeIdAndCompanyIdOrderByNumberDesc(voucherTypeId, companyId);
+        BigInteger number = voucherRepository.findTopByVoucherTypeIdAndDeletedAtIsNullOrderByNumberDesc(voucherTypeId);
 
         if (number == null || number.equals(BigInteger.ZERO)) {
             return BigInteger.ONE;

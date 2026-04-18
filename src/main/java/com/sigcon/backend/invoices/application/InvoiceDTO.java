@@ -9,8 +9,6 @@ import com.sigcon.backend.invoices.domain.model.Invoices;
 import com.sigcon.backend.invoices.domain.model.PaymentForms;
 import com.sigcon.backend.invoices.domain.model.TypesInvoices;
 import com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices;
-import com.sigcon.backend.parametrization.companies.domain.model.Company;
-import com.sigcon.backend.parametrization.companies.domain.model.CompanyLocation;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 
@@ -47,15 +45,6 @@ public class InvoiceDTO {
     @Schema(description = "Tercero")
     private ThirdParty thirdParty;
 
-    @Schema(description = "Empresa origen")
-    private Company companyOrigin;
-
-    @Schema(description = "Ubicacion de origen")
-    private CompanyLocation companyLocationOrigin;
-
-    @Schema(description = "Ubicacion de destino")
-    private CompanyLocation companyLocationDestination;
-
     @Schema(description = "Factura de referencia")
     private Invoices invoiceReference;
 
@@ -82,6 +71,15 @@ public class InvoiceDTO {
 
     @Schema(description = "Estado de la factura")
     private StatusesInvoices status;
+
+    @Schema(description = "Numero de factura del proveedor")
+    private String supplierInvoiceNumber;
+
+    @Schema(description = "Saldo pendiente de la factura")
+    private Double balanceDue;
+
+    @Schema(description = "ID del asiento contable asociado")
+    private Long journalEntryId;
 
     @Schema(description = "Notas")
     private String notes;

@@ -31,26 +31,26 @@ public class MenuController {
     }
 
     @PostMapping("/datatable")
-    @PreAuthorize("hasAuthority('PERM_VIEW_MENUS') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_MENUS') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> getMenusDataTable(
             @RequestBody(required = false) DataTableRequest request) {
         return menuUseCase.getMenusDataTable(request);
     }
 
     @PostMapping("store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_MENUS') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_MENUS') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> storeMenu(@Valid @RequestBody Menu menu, BindingResult bindingResult) {
         return menuUseCase.saveMenu(menu, bindingResult);
     }
 
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_MENUS') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_MENUS') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> updateMenu(@Valid @RequestBody Menu menu, BindingResult bindingResult) {
         return menuUseCase.updateMenu(menu, bindingResult);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_MENUS') or hasAuthority('ROLE_SUPERADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_MENUS') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> deleteMenu(@PathVariable Long id) {
         return menuUseCase.deleteMenu(id);
     }

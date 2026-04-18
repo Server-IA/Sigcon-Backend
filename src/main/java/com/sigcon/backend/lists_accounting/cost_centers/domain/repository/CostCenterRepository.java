@@ -11,13 +11,13 @@ import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 @Repository
 public interface CostCenterRepository extends JpaRepository<CostCenter, Long>, JpaSpecificationExecutor<CostCenter> {
 
-    boolean existsByCodeAndCompanyIdAndDeletedAtIsNull(String code, Long companyId);
+    boolean existsByCodeAndDeletedAtIsNull(String code);
 
-    boolean existsByNameAndCompanyIdAndDeletedAtIsNull(String name, Long companyId);
+    boolean existsByNameAndDeletedAtIsNull(String name);
 
-    boolean existsByCodeAndCompanyIdAndIdNotAndDeletedAtIsNull(String code, Long companyId, Long id);
+    boolean existsByCodeAndIdNotAndDeletedAtIsNull(String code, Long id);
 
-    boolean existsByNameAndCompanyIdAndIdNotAndDeletedAtIsNull(String name, Long companyId, Long id);
+    boolean existsByNameAndIdNotAndDeletedAtIsNull(String name, Long id);
 
     Optional<CostCenter> findByIdAndDeletedAtIsNull(Long id);
 }

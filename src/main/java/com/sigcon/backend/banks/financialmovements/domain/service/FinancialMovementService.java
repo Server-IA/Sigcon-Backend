@@ -12,6 +12,10 @@ import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMo
 import com.sigcon.backend.banks.reconciliation.domain.model.BankReconciliationSession;
 import com.sigcon.backend.banks.reconciliation.domain.model.enums.ReconciliationSessionStatus;
 import com.sigcon.backend.banks.reconciliation.domain.repository.BankReconciliationSessionRepository;
+import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
+import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
+import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
+import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
@@ -22,6 +26,8 @@ import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
 import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
 import com.sigcon.backend.vouchers.domain.repository.VoucherTypeRepository;
 import com.sigcon.backend.vouchers.domain.service.VoucherService;
+
+import lombok.extern.slf4j.Slf4j;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +49,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Servicio de gestion de movimientos financieros bancarios.
+ * <p>
+ * Gestiona el ciclo de vida de los movimientos financieros: creacion manual,
+ * importacion masiva desde CSV (extracto bancario), emparejamiento con comprobantes
+ * contables y conciliacion con cheques. Cada movimiento manual genera automaticamente
+ * un asiento contable via {@link JournalEntryService}.
+ * </p>
+ *
+ * @see com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement
+ * @see com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FinancialMovementService {
@@ -53,9 +72,18 @@ public class FinancialMovementService {
     private final VoucherRepository voucherRepository;
     private final VoucherTypeRepository voucherTypeRepository;
     private final VoucherService voucherService;
+    private final JournalEntryService journalEntryService;
 
     private final UserUtil userUtil;
 
+    /**
+     * Lista los movimientos financieros de una cuenta bancaria.
+     *
+     * @param bankAccountId identificador de la cuenta bancaria
+     * @param unmatchedOnly si es true, retorna solo movimientos sin emparejar (sin comprobante ni cheque)
+     * @return ResponseEntity con lista de FinancialMovementDTO
+     * @throws IllegalArgumentException si la cuenta no existe o fue eliminada
+     */
     public ResponseEntity<?> listForBankAccount(Long bankAccountId, boolean unmatchedOnly) {
         User user = userUtil.getUser();
         assertBankAccount(bankAccountId, user);
@@ -71,6 +99,22 @@ public class FinancialMovementService {
                         Optional.of(dtos)));
     }
 
+    /**
+     * Crea un movimiento financiero manual para una cuenta bancaria.
+     * <p>
+     * El movimiento se registra con tipo de origen MANUAL y opcionalmente se vincula
+     * a una sesion de conciliacion en estado DRAFT. Tras guardar, se intenta crear
+     * un asiento contable automatico (partida doble) usando la cuenta contable
+     * asociada a la cuenta bancaria. Si la creacion del asiento falla, el movimiento
+     * se guarda igualmente (el asiento es complementario, no bloqueante).
+     * </p>
+     *
+     * @param bankAccountId identificador de la cuenta bancaria
+     * @param request       datos del movimiento (fecha, importe, descripcion, referencia)
+     * @param bindingResult resultado de validacion de campos
+     * @return ResponseEntity con el movimiento creado o error de validacion
+     * @throws IllegalArgumentException si el importe es cero o la cuenta no existe
+     */
     @Transactional
     public ResponseEntity<?> createForBankAccount(Long bankAccountId, CreateBankFinancialMovementRequest request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -83,20 +127,25 @@ public class FinancialMovementService {
             throw new IllegalArgumentException("El importe del movimiento debe ser distinto de cero.");
         }
 
+        // Vincular opcionalmente a una sesion de conciliacion (solo si esta en borrador)
         BankReconciliationSession session = resolveSessionForCreate(bankAccountId, user, request.getReconciliationSessionId());
 
         FinancialMovement entity = FinancialMovement.builder()
                 .bankAccount(account)
-                .company(user.getCompany())
                 .movementDate(request.getMovementDate())
                 .amount(request.getAmount())
                 .description(StringUtils.hasText(request.getDescription()) ? request.getDescription().trim() : null)
                 .externalReference(StringUtils.hasText(request.getExternalReference()) ? request.getExternalReference().trim() : null)
+                .flowActivity(StringUtils.hasText(request.getFlowActivity()) ? request.getFlowActivity().trim() : null)
                 .sourceType(FinancialMovementSourceType.MANUAL)
                 .reconciliationSession(session)
                 .build();
 
         financialMovementRepository.save(entity);
+
+        // Intentar crear asiento contable automatico via JournalEntryService.
+        // Si falla (ej: cuenta sin cuenta contable, periodo cerrado), solo se logea warning.
+        tryCreateJournalEntry(entity, account, user);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -104,6 +153,21 @@ public class FinancialMovementService {
                         Optional.of(toDto(entity))));
     }
 
+    /**
+     * Importa movimientos financieros desde un archivo CSV (extracto bancario).
+     * <p>
+     * Formato esperado del CSV: {@code fecha;importe;descripcion;referencia} (separador ; o ,).
+     * La primera linea se omite si parece ser encabezado. Cada linea se procesa de forma
+     * independiente: si una falla, se registra el error y se continua con las siguientes.
+     * Los movimientos importados se marcan con tipo de origen BANK_IMPORT.
+     * </p>
+     *
+     * @param bankAccountId          identificador de la cuenta bancaria destino
+     * @param reconciliationSessionId identificador de sesion de conciliacion (opcional)
+     * @param file                   archivo CSV con los movimientos a importar
+     * @return ResponseEntity con cantidad importada y lista de errores por linea
+     * @throws IllegalArgumentException si el archivo es nulo, vacio o no se puede leer
+     */
     @Transactional
     public ResponseEntity<?> importCsv(Long bankAccountId, Long reconciliationSessionId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -125,10 +189,12 @@ public class FinancialMovementService {
                 if (trimmed.isEmpty()) {
                     continue;
                 }
+                // Omitir encabezado si la primera linea contiene palabras clave como "fecha", "importe", etc.
                 if (lineNo == 1 && isCsvHeader(trimmed)) {
                     continue;
                 }
                 try {
+                    // Intentar separar por punto y coma primero (formato comun en Colombia), luego por coma
                     String[] p = trimmed.split(";", -1);
                     if (p.length < 2) {
                         p = trimmed.split(",", -1);
@@ -138,11 +204,13 @@ public class FinancialMovementService {
                         continue;
                     }
                     LocalDate d = LocalDate.parse(p[0].trim());
+                    // Limpiar el importe: quitar espacios, comas de miles y comillas
                     String amtRaw = p[1].trim()
                         .replace(" ", "")
                         .replace(",", "")
                         .replace("\"", "");
 
+                    // Corregir importes que inician con punto decimal (ej: ".50" → "0.50")
                     if (amtRaw.startsWith(".")) {
                         amtRaw = "0" + amtRaw;
                     }
@@ -150,6 +218,7 @@ public class FinancialMovementService {
                     System.out.println("amtRaw: " + amtRaw);
 
                     BigDecimal amt = new BigDecimal(amtRaw);
+                    // Movimientos con importe cero no tienen sentido contable, se omiten
                     if (amt.compareTo(BigDecimal.ZERO) == 0) {
                         errors.add("Linea " + lineNo + ": importe cero omitido.");
                         continue;
@@ -159,7 +228,6 @@ public class FinancialMovementService {
 
                     FinancialMovement mov = FinancialMovement.builder()
                             .bankAccount(account)
-                            .company(user.getCompany())
                             .movementDate(d)
                             .amount(amt)
                             .description(desc)
@@ -185,20 +253,35 @@ public class FinancialMovementService {
                 Optional.of(payload)));
     }
 
+    /**
+     * Sugiere comprobantes contables candidatos para emparejar con un movimiento bancario.
+     * <p>
+     * Busca comprobantes de la misma cuenta bancaria cuya fecha este dentro de una ventana
+     * de +/- 7 dias respecto a la fecha del movimiento, con el mismo importe en valor absoluto
+     * y que no esten ya emparejados con otro movimiento.
+     * </p>
+     *
+     * @param bankAccountId identificador de la cuenta bancaria
+     * @param movementId    identificador del movimiento a emparejar
+     * @return ResponseEntity con lista de hasta 25 sugerencias de comprobantes
+     * @throws IllegalArgumentException si el movimiento o la cuenta no existen
+     */
     public ResponseEntity<?> suggestVouchers(Long bankAccountId, Long movementId) {
         User user = userUtil.getUser();
         assertBankAccount(bankAccountId, user);
 
-        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_IdAndCompany_Id(movementId, bankAccountId, user.getCompany().getId())
+        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
 
+        // Ventana de busqueda: 7 dias antes y despues de la fecha del movimiento
         LocalDate from = mov.getMovementDate().minusDays(7);
         LocalDate to = mov.getMovementDate().plusDays(7);
         BigDecimal targetAbs = mov.getAmount().abs();
 
         List<VouchersEntity> candidates = voucherRepository.findReconciliationCandidates(
-                bankAccountId, user.getCompany().getId(), from, to);
+                bankAccountId, from, to);
 
+        // Filtrar: mismo importe absoluto y que no esten ya emparejados con otro movimiento
         List<VoucherMatchSuggestionDTO> suggestions = candidates.stream()
                 .filter(v -> v.getAmount() != null && v.getAmount().abs().compareTo(targetAbs) == 0)
                 .filter(v -> financialMovementRepository.findByMatchedVoucherId(v.getId()).isEmpty())
@@ -217,6 +300,23 @@ public class FinancialMovementService {
                 Optional.of(suggestions)));
     }
 
+    /**
+     * Empareja un movimiento financiero con un comprobante contable existente o crea uno nuevo.
+     * <p>
+     * Si {@code request.getVoucherId()} es null, se crea automaticamente un comprobante
+     * de egreso (tipo ID=2) con los datos del movimiento. Si se proporciona un ID, se
+     * valida que el comprobante pertenezca a la misma cuenta bancaria y que sus importes
+     * coincidan en valor absoluto. Un movimiento solo puede emparejarse con un comprobante
+     * a la vez (relacion 1:1), y no puede emparejarse si ya esta conciliado con un cheque.
+     * </p>
+     *
+     * @param bankAccountId identificador de la cuenta bancaria
+     * @param movementId    identificador del movimiento a emparejar
+     * @param request       contiene el ID del comprobante o null para crear uno nuevo
+     * @param bindingResult resultado de validacion de campos
+     * @return ResponseEntity con el movimiento actualizado o error de validacion
+     * @throws IllegalArgumentException si el movimiento ya esta emparejado o los importes no coinciden
+     */
     @Transactional
     public ResponseEntity<?> matchVoucher(Long bankAccountId, Long movementId, MatchVoucherRequest request, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -225,8 +325,9 @@ public class FinancialMovementService {
         User user = userUtil.getUser();
         assertBankAccount(bankAccountId, user);
 
-        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_IdAndCompany_Id(movementId, bankAccountId, user.getCompany().getId())
+        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
+        // Un movimiento conciliado con cheque no puede tener comprobante adicional (exclusion mutua)
         if (mov.getMatchedCheckId() != null) {
             throw new IllegalArgumentException("El movimiento ya esta conciliado con un cheque; no puede emparejarse con comprobante.");
         }
@@ -237,7 +338,7 @@ public class FinancialMovementService {
         VouchersEntity voucher = null;
 
         if (request.getVoucherId() == null) {
-
+            // Si no se proporciona comprobante, crear uno automaticamente (tipo egreso, forma pago contado)
             VoucherTypesEntity voucherType = voucherTypeRepository.findById(2l).orElseThrow(() -> new IllegalArgumentException("Tipo de comprobante no encontrado."));
 
             CreateVoucherDTO createVoucherDTO = CreateVoucherDTO.builder()
@@ -258,16 +359,16 @@ public class FinancialMovementService {
         if (voucher.getDeletedAt() != null) {
             throw new IllegalArgumentException("Comprobante no disponible.");
         }
-        if (voucher.getCompany() == null || !voucher.getCompany().getId().equals(user.getCompany().getId())) {
-            throw new IllegalArgumentException("El comprobante no pertenece a su empresa.");
-        }
+        // El comprobante debe pertenecer a la misma cuenta bancaria que el movimiento
         if (voucher.getBankAccount() == null || !voucher.getBankAccount().getId().equals(bankAccountId)) {
             throw new IllegalArgumentException("El comprobante no corresponde a esta cuenta bancaria.");
         }
+        // Los importes deben coincidir en valor absoluto (el signo puede diferir)
         if (voucher.getAmount() == null || mov.getAmount().abs().compareTo(voucher.getAmount().abs()) != 0) {
             throw new IllegalArgumentException("El importe del comprobante debe coincidir en valor absoluto con el movimiento.");
         }
 
+        // Verificar que el comprobante no este ya emparejado con otro movimiento (relacion 1:1)
         Optional<FinancialMovement> otherMov = financialMovementRepository.findByMatchedVoucherId(voucher.getId());
         if (otherMov.isPresent() && !otherMov.get().getId().equals(mov.getId())) {
             throw new IllegalArgumentException("Este comprobante ya esta emparejado con otro movimiento.");
@@ -281,12 +382,24 @@ public class FinancialMovementService {
                 Optional.of(toDto(mov))));
     }
 
+    /**
+     * Elimina el emparejamiento entre un movimiento financiero y su comprobante contable.
+     * <p>
+     * Solo aplica para emparejamientos con comprobantes. Si el movimiento esta conciliado
+     * con un cheque, se debe desemparejar desde el modulo de cheques.
+     * </p>
+     *
+     * @param bankAccountId identificador de la cuenta bancaria
+     * @param movementId    identificador del movimiento a desemparejar
+     * @return ResponseEntity con el movimiento actualizado o error si no tiene comprobante
+     * @throws IllegalArgumentException si el movimiento esta conciliado con cheque o no tiene comprobante
+     */
     @Transactional
     public ResponseEntity<?> unmatch(Long bankAccountId, Long movementId) {
         User user = userUtil.getUser();
         assertBankAccount(bankAccountId, user);
 
-        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_IdAndCompany_Id(movementId, bankAccountId, user.getCompany().getId())
+        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
         if (mov.getMatchedCheckId() != null) {
             throw new IllegalArgumentException("Movimiento conciliado con cheque: no se puede desemparejar desde aqui.");
@@ -302,33 +415,54 @@ public class FinancialMovementService {
                 Optional.of(toDto(mov))));
     }
 
-    public Optional<FinancialMovement> findForAutomaticCheckReconcile(Long movementId, Long bankAccountId, Long companyId) {
-        return financialMovementRepository.findForCheckReconcile(movementId, bankAccountId, companyId);
+    /**
+     * Busca un movimiento financiero candidato para conciliacion automatica con cheque.
+     * Retorna el movimiento solo si no tiene cheque ni comprobante ya asignado.
+     *
+     * @param movementId    identificador del movimiento
+     * @param bankAccountId identificador de la cuenta bancaria
+     * @return Optional con el movimiento si cumple condiciones, vacio si no
+     */
+    public Optional<FinancialMovement> findForAutomaticCheckReconcile(Long movementId, Long bankAccountId) {
+        return financialMovementRepository.findForCheckReconcile(movementId, bankAccountId);
     }
 
+    /**
+     * Marca un movimiento financiero como conciliado con un cheque especifico.
+     * Usado internamente por el servicio de cheques durante la conciliacion automatica.
+     *
+     * @param movement movimiento a marcar
+     * @param checkId  identificador del cheque conciliado
+     */
     @Transactional
     public void markMatchedToCheck(FinancialMovement movement, Long checkId) {
         movement.setMatchedCheckId(checkId);
         financialMovementRepository.save(movement);
     }
 
+    /**
+     * Verifica que la cuenta bancaria existe y no esta eliminada.
+     * Lanza excepcion si no cumple.
+     */
     private BankAccount assertBankAccount(Long bankAccountId, User user) {
         BankAccount account = bankAccountRepository.findById(bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("BNK-ERR-029: Cuenta no encontrada."));
         if (account.getDeletedAt() != null) {
             throw new IllegalArgumentException("BNK-ERR-029: Cuenta no encontrada.");
         }
-        if (!account.getCompany().getId().equals(user.getCompany().getId())) {
-            throw new IllegalArgumentException("No tiene acceso a esta cuenta bancaria.");
-        }
         return account;
     }
 
+    /**
+     * Resuelve la sesion de conciliacion para vincular el movimiento.
+     * Si sessionId es null, retorna null (movimiento sin sesion).
+     * Solo permite vincular a sesiones en estado DRAFT de la misma cuenta.
+     */
     private BankReconciliationSession resolveSessionForCreate(Long bankAccountId, User user, Long sessionId) {
         if (sessionId == null) {
             return null;
         }
-        BankReconciliationSession session = reconciliationSessionRepository.findByIdAndCompany_Id(sessionId, user.getCompany().getId())
+        BankReconciliationSession session = reconciliationSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Sesion de conciliacion no encontrada."));
         if (!session.getBankAccount().getId().equals(bankAccountId)) {
             throw new IllegalArgumentException("La sesion no corresponde a esta cuenta.");
@@ -352,6 +486,54 @@ public class FinancialMovementService {
         return s.trim();
     }
 
+    /**
+     * Intenta crear un asiento contable asociado al movimiento financiero manual.
+     * En caso de error, solo se registra en log y no se interrumpe la operacion principal.
+     */
+    private void tryCreateJournalEntry(FinancialMovement movement, BankAccount account, User user) {
+        try {
+            if (account.getAccountingAccount() == null) {
+                log.warn("Movimiento {} sin cuenta contable asociada, no se genera asiento.", movement.getId());
+                return;
+            }
+
+            Long accountingAccountId = account.getAccountingAccount().getId();
+            BigDecimal amount = movement.getAmount().abs();
+
+            // Partida doble: positivo = ingreso (debito banco), negativo = egreso (credito banco).
+            // La contrapartida usa la misma cuenta contable (simplificacion; idealmente deberia
+            // usar una cuenta puente configurable por la empresa).
+            CreateJournalEntryLineRequest debitLine = CreateJournalEntryLineRequest.builder()
+                    .accountingAccountId(accountingAccountId)
+                    .debitAmount(movement.getAmount().compareTo(BigDecimal.ZERO) > 0 ? amount : BigDecimal.ZERO)
+                    .creditAmount(movement.getAmount().compareTo(BigDecimal.ZERO) < 0 ? amount : BigDecimal.ZERO)
+                    .description(movement.getDescription())
+                    .build();
+
+            CreateJournalEntryLineRequest contraLine = CreateJournalEntryLineRequest.builder()
+                    .accountingAccountId(accountingAccountId)
+                    .debitAmount(movement.getAmount().compareTo(BigDecimal.ZERO) < 0 ? amount : BigDecimal.ZERO)
+                    .creditAmount(movement.getAmount().compareTo(BigDecimal.ZERO) > 0 ? amount : BigDecimal.ZERO)
+                    .description("Contrapartida: " + (movement.getDescription() != null ? movement.getDescription() : "Movimiento financiero manual"))
+                    .build();
+
+            CreateJournalEntryRequest entryRequest = CreateJournalEntryRequest.builder()
+                    .entryDate(movement.getMovementDate())
+                    .description("Movimiento financiero manual - " + (movement.getDescription() != null ? movement.getDescription() : ""))
+                    .sourceModule(JournalSourceModule.BNK)
+                    .sourceId(movement.getId())
+                    .lines(java.util.List.of(debitLine, contraLine))
+                    .build();
+
+            String createdBy = user != null ? user.getName() : "SISTEMA";
+            journalEntryService.createEntry(entryRequest, createdBy);
+            log.info("Asiento contable creado para movimiento financiero ID={}", movement.getId());
+
+        } catch (Exception e) {
+            log.warn("No se pudo crear asiento contable para movimiento ID={}: {}", movement.getId(), e.getMessage());
+        }
+    }
+
     private FinancialMovementDTO toDto(FinancialMovement m) {
         return FinancialMovementDTO.builder()
                 .id(m.getId())
@@ -361,6 +543,7 @@ public class FinancialMovementService {
                 .description(m.getDescription())
                 .externalReference(m.getExternalReference())
                 .sourceType(m.getSourceType())
+                .flowActivity(m.getFlowActivity())
                 .matchedCheckId(m.getMatchedCheckId())
                 .matchedVoucherId(m.getMatchedVoucherId())
                 .reconciliationSessionId(m.getReconciliationSession() != null ? m.getReconciliationSession().getId() : null)

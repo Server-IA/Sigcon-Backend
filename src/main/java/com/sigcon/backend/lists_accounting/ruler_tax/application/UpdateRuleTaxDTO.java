@@ -40,4 +40,7 @@ public class UpdateRuleTaxDTO {
     private StatusRulerTax statusRulerTax;
     @NotNull(message = "La cuenta contable es requerida")
     private Long accountingAccountId;
+
+    private Double minAmountUvt;
+    private Double uvtValueYear;
 }

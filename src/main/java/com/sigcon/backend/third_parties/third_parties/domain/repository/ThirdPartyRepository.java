@@ -15,4 +15,5 @@ public interface ThirdPartyRepository extends JpaRepository<ThirdParty, Long>, J
     boolean existsByNitAndDeletedAtIsNull(String nit);
 
     List<ThirdParty> findByNitAndDeletedAtIsNull(String nit);
+    boolean existsByNitAndIdNotAndDeletedAtIsNull(String nit, Long id);
 }

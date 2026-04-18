@@ -32,13 +32,11 @@ import com.sigcon.backend.lists_accounting.ruler_tax.domain.repository.RuleTaxRe
 import com.sigcon.backend.lists_accounting.types_of_currency.application.CurrencyTypeResponseDTO;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
-import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
-import com.sigcon.backend.utils.UserUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -53,8 +51,8 @@ public class AccountingAccountService {
     private final CostCenterRepository costCenterRepository;
     private final DepretationRuleRepository depretationRuleRepository;
     private final RuleTaxRepository ruleTaxRepository;
-
-    private final UserUtil userUtil;
+    /** CFG-08: validacion saldo != 0 al inactivar cuenta contable. */
+    private final com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryLineRepository journalEntryLineRepository;
 
     private final DataTableSpecificationBuilder<AccountingAccount> accountingAccountSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -75,10 +73,6 @@ public class AccountingAccountService {
 
             Specification<AccountingAccount> spec = accountingAccountSpecificationBuilder.build(request)
                     .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
-
-            User user = userUtil.getUser();
-            
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("companyId"), user.getCompany()));
 
             Page<AccountingAccount> accountingAccounts = accountingAccountRepository.findAll(spec, pageable);
 
@@ -121,22 +115,20 @@ public class AccountingAccountService {
      */
     public ResponseEntity<?> createAccountingAccount(CreateAccountingAccountRequest request,
             BindingResult bindingResult, Long userId, Long companyId) {
-        // try {
 
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
 
-            // Validación: PUC existe
+            // Validacion: PUC existe
             if (!chartOfAccountRepository.findById(request.getPuc_id()).isPresent()) {
-                throw new IllegalArgumentException("El identificador PUC asociado no está disponible o no existe");
+                throw new IllegalArgumentException("El identificador PUC asociado no esta disponible o no existe");
             }
 
-        //     // Validación: Nombre único por empresa
-        //     if (accountingAccountRepository.existsByCustomNameAndCompanyIdAndDeletedAtIsNull(request.getCustom_name(),
-        //             companyId)) {
-        //         throw new IllegalArgumentException("Nombre ya registrado");
-        //     }
+            // Validacion: Nombre unico (sin company, mono-empresa)
+            if (accountingAccountRepository.existsByCustomNameAndDeletedAtIsNull(request.getCustom_name())) {
+                throw new IllegalArgumentException("Nombre ya registrado");
+            }
 
             // Validación: Moneda existe
             CurrencyType currencyType = currencyTypeRepository.findById(request.getCurrency_type_id())
@@ -151,8 +143,6 @@ public class AccountingAccountService {
                                 "El centro de costos seleccionado no está disponible o no existe"));
             }
 
-            User user = userUtil.getUser();
-
             AccountingAccount accountingAccount = AccountingAccount.builder()
                     .pucAccount(ChartOfAccount.builder().id(request.getPuc_id()).build())
                     .customName(request.getCustom_name())
@@ -161,7 +151,6 @@ public class AccountingAccountService {
                     .taxRuleId(request.getTax_rule_id())
                     .nature(request.getNature())
                     .status(AccountStatus.ACTIVE)
-                    .companyId(user.getCompany())
                     .createdBy(userId)
                     .build();
 
@@ -196,11 +185,11 @@ public class AccountingAccountService {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "La cuenta contable seleccionada no está disponible para edición"));
 
-            // Validación: Nombre único (excluyendo el actual)
-        //     if (accountingAccountRepository.existsByCustomNameAndCompanyIdAndIdNotAndDeletedAtIsNull(
-        //             request.getCustom_name(), accountingAccount.getCompanyId(), request.getId())) {
-        //         throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
-        //     }
+            // Validacion: Nombre unico excluyendo el actual (sin company, mono-empresa)
+            if (accountingAccountRepository.existsByCustomNameAndIdNotAndDeletedAtIsNull(
+                    request.getCustom_name(), request.getId())) {
+                throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
+            }
 
             // Validación: PUC existe
             if (!chartOfAccountRepository.findById(request.getPuc_id()).isPresent()) {
@@ -211,6 +200,23 @@ public class AccountingAccountService {
             CurrencyType currencyType = currencyTypeRepository.findById(request.getCurrency_type_id())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "El tipo de moneda seleccionado no está disponible o no existe"));
+
+            // CFG-08: si se esta INACTIVANDO la cuenta (ACTIVE -> INACTIVE) y el saldo
+            // neto de la cuenta en asientos POSTED es distinto de cero, rechazar.
+            // No se pueden inactivar cuentas con saldo porque perderiamos trazabilidad
+            // contable (Decreto 2649/1993 + NIIF).
+            if (accountingAccount.getStatus() == AccountStatus.ACTIVE
+                    && request.getStatus() == AccountStatus.INACTIVE) {
+                java.math.BigDecimal saldo = journalEntryLineRepository
+                        .netBalanceByAccountingAccountId(accountingAccount.getId());
+                if (saldo == null) saldo = java.math.BigDecimal.ZERO;
+                if (saldo.compareTo(java.math.BigDecimal.ZERO) != 0) {
+                    throw new IllegalArgumentException(String.format(
+                            "No se puede inactivar la cuenta contable porque tiene saldo $%s. "
+                            + "Registre los asientos de cierre o reclasifique el saldo antes de inactivarla.",
+                            saldo.toPlainString()));
+                }
+            }
 
             // Actualizar campos
             accountingAccount.setPucAccount(ChartOfAccount.builder().id(request.getPuc_id()).build());

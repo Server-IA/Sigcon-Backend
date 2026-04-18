@@ -1,9 +1,14 @@
 package com.sigcon.backend.third_parties.third_parties.interfaces;
 
+import com.sigcon.backend.third_parties.change_history.domain.service.ThirdPartyChangeHistoryService;
 import com.sigcon.backend.third_parties.third_parties.application.BulkThirdPartyUploadRequest;
+import com.sigcon.backend.third_parties.third_parties.application.DeleteThirdPartyRequest;
+import com.sigcon.backend.third_parties.third_parties.application.RoleAssignmentDTO;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.third_parties.third_parties.application.UpdateThirdPartyRolesStatusRequest;
+import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRoleAssignmentRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.service.ThirdPartyService;
+import com.sigcon.backend.third_parties.third_parties.domain.service.ThirdPartyExportService;
 import com.sigcon.backend.utils.DataTableRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -27,6 +32,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/v1/third-parties")
 @RequiredArgsConstructor
@@ -35,6 +44,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class ThirdPartyController {
 
         private final ThirdPartyService thirdPartyService;
+        private final ThirdPartyChangeHistoryService changeHistoryService;
+        private final ThirdPartyRoleAssignmentRepository roleAssignmentRepository;
+        private final ThirdPartyExportService exportService;
 
         @PostMapping("/store")
         @Operation(summary = "Registrar tercero", description = "RF02 - Crea un tercero con datos generales, fiscales y comerciales.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Payload de creacion del tercero", content = @Content(mediaType = "application/json", schema = @Schema(implementation = ThirdPartyDTO.class), examples = @ExampleObject(value = "{\n  \"nit\": \"9001234567\",\n  \"dv\": \"1\",\n  \"businessName\": \"EMPRESA ABC SAS\",\n  \"roleIds\": [1,2],\n  \"statusId\": 1,\n  \"municipalityId\": 1,\n  \"typeOrganizationId\": 1,\n  \"typeRegimenId\": 2,\n  \"withholdingIds\": [1,3],\n  \"creditLimit\": 10000000,\n  \"paymentTerms\": \"30 dias\",\n  \"marketSegment\": \"CORPORATIVO\",\n  \"contacts\": [\n    {\n      \"position\": \"Contador\",\n      \"phone\": \"3001234567\",\n      \"email\": \"contabilidad@empresa.com\",\n      \"contactPerson\": \"Pedro Perez\"\n    }\n  ]\n}"))))
@@ -43,7 +55,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "400", description = "Error de validacion"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> store(@Valid @RequestBody ThirdPartyDTO request, BindingResult bindingResult) {
                 return thirdPartyService.create(request, bindingResult);
         }
@@ -57,7 +69,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "400", description = "Archivo invalido o error en alguna fila"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_BULK_STORE_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_BULK_STORE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> bulkStore(@Valid @RequestBody BulkThirdPartyUploadRequest request,
                         BindingResult bindingResult) {
                 return thirdPartyService.bulkStore(request, bindingResult);
@@ -71,7 +83,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "403", description = "Sin permisos"),
                         @ApiResponse(responseCode = "404", description = "Sin resultados")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
                 return thirdPartyService.findAllPaged(request);
         }
@@ -83,7 +95,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> detail(@PathVariable Long id) {
                 return thirdPartyService.getDetail(id);
         }
@@ -94,7 +106,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "200", description = "Catalogo obtenido correctamente"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> rolesCatalog() {
                 return thirdPartyService.getRolesCatalog();
         }
@@ -105,7 +117,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "200", description = "Catalogo obtenido correctamente"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> statusesCatalog() {
                 return thirdPartyService.getStatusesCatalog();
         }
@@ -118,7 +130,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_UPDATE_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> update(
                         @PathVariable Long id,
                         @Valid @RequestBody ThirdPartyDTO request,
@@ -136,7 +148,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_MANAGE_THIRD_PARTY_ROLES_STATUS') or hasAuthority('ROLE_SUPERADMIN')")
+        @PreAuthorize("hasAuthority('PERM_MANAGE_THIRD_PARTY_ROLES_STATUS') or hasAuthority('ROLE_ADMIN')")
         public ResponseEntity<?> updateRolesStatus(
                         @PathVariable Long id,
                         @Valid @RequestBody UpdateThirdPartyRolesStatusRequest request,
@@ -145,14 +157,86 @@ public class ThirdPartyController {
         }
 
         @DeleteMapping("/{id}")
-        @Operation(summary = "Eliminar tercero", description = "Eliminacion logica del tercero.")
+        @Operation(summary = "Eliminar tercero", description = "TER-10: Eliminacion logica con justificacion obligatoria (min 50 caracteres) y validacion de dependencias.")
         @ApiResponses({
                         @ApiResponse(responseCode = "200", description = "Tercero eliminado correctamente"),
+                        @ApiResponse(responseCode = "400", description = "Dependencias activas o justificacion invalida"),
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_DELETE_THIRD_PARTY') or hasAuthority('ROLE_SUPERADMIN')")
-        public ResponseEntity<?> delete(@PathVariable Long id) {
-                return thirdPartyService.delete(id);
+        @PreAuthorize("hasAuthority('PERM_DELETE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        public ResponseEntity<?> delete(
+                        @PathVariable Long id,
+                        @Valid @RequestBody DeleteThirdPartyRequest request,
+                        BindingResult bindingResult) {
+                if (bindingResult.hasErrors()) {
+                        return ResponseEntity.badRequest().body(
+                                        com.sigcon.backend.utils.ErrorRespondJson.getErrorRespondJson(bindingResult));
+                }
+                return thirdPartyService.delete(id, request);
+        }
+
+        @GetMapping("/{id}/history")
+        @Operation(summary = "Historial de cambios", description = "TER-03: Consulta el historial de modificaciones realizadas sobre un tercero.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Historial obtenido correctamente"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        public ResponseEntity<?> getHistory(@PathVariable Long id) {
+                return changeHistoryService.getHistory(id);
+        }
+
+        @GetMapping("/{id}/role-assignments")
+        @Operation(summary = "Asignaciones de roles con vigencia", description = "TER-04: Retorna las asignaciones de roles del tercero con fechas de vigencia.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Asignaciones obtenidas correctamente"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        public ResponseEntity<?> getRoleAssignments(@PathVariable Long id) {
+                List<RoleAssignmentDTO> assignments = roleAssignmentRepository
+                                .findByThirdPartyIdAndDeletedAtIsNull(id)
+                                .stream()
+                                .map(ra -> RoleAssignmentDTO.builder()
+                                                .id(ra.getId())
+                                                .thirdPartyId(ra.getThirdParty().getId())
+                                                .roleId(ra.getRole().getId())
+                                                .roleName(ra.getRole().getName())
+                                                .validFrom(ra.getValidFrom())
+                                                .validTo(ra.getValidTo())
+                                                .build())
+                                .collect(Collectors.toList());
+                return ResponseEntity.ok(
+                                com.sigcon.backend.utils.SuccessRespondJson.getSuccessRespondMessage(
+                                                Optional.of("Asignaciones de roles obtenidas correctamente."),
+                                                Optional.of(assignments)));
+        }
+
+        /** TER-09: Exportar maestro de terceros en CSV o XLSX */
+        @GetMapping("/export/{format}")
+        @PreAuthorize("hasAuthority('PERM_EXPORT_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        public ResponseEntity<byte[]> export(@PathVariable String format) {
+                String fmt = format.toUpperCase();
+                byte[] data;
+                String contentType;
+                String filename;
+
+                if ("CSV".equals(fmt)) {
+                        data = exportService.exportCsv();
+                        contentType = "text/csv";
+                        filename = "terceros_export.csv";
+                } else if ("XLSX".equals(fmt)) {
+                        data = exportService.exportExcel();
+                        contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                        filename = "terceros_export.xlsx";
+                } else {
+                        return ResponseEntity.badRequest().build();
+                }
+
+                return ResponseEntity.ok()
+                                .header("Content-Disposition", "attachment; filename=" + filename)
+                                .header("Content-Type", contentType)
+                                .body(data);
         }
 }
