@@ -125,14 +125,16 @@ public class IntegrationBatch {
     @Column(name = "payload_json", nullable = false, columnDefinition = "TEXT")
     private String payloadJson;
 
-    @Column(name = "received_at", nullable = false)
+    // V9-P: columnas TIMESTAMPTZ (guardan instante absoluto, cliente elige TZ al mostrar).
+    // Hibernate respeta columnDefinition y NO intenta revertirlo en ddl-auto=update.
+    @Column(name = "received_at", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")
     @CreationTimestamp
     private LocalDateTime receivedAt;
 
-    @Column(name = "processed_at")
+    @Column(name = "processed_at", columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private LocalDateTime processedAt;
 
-    @Column(name = "ack_sent_at")
+    @Column(name = "ack_sent_at", columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private LocalDateTime ackSentAt;
 
     @Builder.Default
@@ -145,7 +147,7 @@ public class IntegrationBatch {
      * (1 min, 2 min, 4 min) desde el ultimo fallo. Null si no hay reintento
      * pendiente o el ACK ya fue exitoso.
      */
-    @Column(name = "ack_next_retry_at")
+    @Column(name = "ack_next_retry_at", columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private LocalDateTime ackNextRetryAt;
 
     /** Mensaje de error de alto nivel (si el lote fallo completo). */
@@ -154,14 +156,14 @@ public class IntegrationBatch {
 
     // ---------- Auditoria ----------
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
+    @Column(name = "updated_at", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    @Column(name = "deleted_at")
+    @Column(name = "deleted_at", columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private LocalDateTime deletedAt;
 }
