@@ -45,6 +45,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "sales_invoices")
 @SQLDelete(sql = "UPDATE sales_invoices SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @NoArgsConstructor
@@ -55,8 +56,12 @@ public class SalesInvoice {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     /** Numero consecutivo de la factura en formato FV-{año}{6 digitos} */
-    @Column(name = "invoice_number", nullable = false, length = 30, unique = true)
+    @Column(name = "invoice_number", nullable = false, length = 30)
     private String invoiceNumber;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -163,6 +168,7 @@ public class SalesInvoice {
 
     @PrePersist
     public void prePersist() {
+        if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         if (this.exchangeRate == null) this.exchangeRate = BigDecimal.ONE;
@@ -172,5 +178,16 @@ public class SalesInvoice {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 }

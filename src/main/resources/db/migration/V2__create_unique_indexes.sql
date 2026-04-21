@@ -16,9 +16,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_permissions_active
 ON permissions (code)
 WHERE deleted_at IS NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_parameters_active
-ON parameters (name)
-WHERE deleted_at IS NULL;
+-- V9-Z (multi-tenant) reemplaza este UNIQUE global por uk_parameters_company_name_active
+-- compuesto (company_id, name). Se deja comentado para evitar conflicto con datos
+-- clonados a cada empresa en el auto-provision.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_parameters_active
+--  ON parameters (name)
+--  WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_user_parameters_active
 ON user_parameters (user_id, parameter_id)

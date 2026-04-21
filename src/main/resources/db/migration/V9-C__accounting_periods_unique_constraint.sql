@@ -21,12 +21,7 @@ WHERE a.id > b.id
 -- ==========================================================================
 -- 2. Crear UNIQUE INDEX (equivale a UNIQUE CONSTRAINT pero idempotente)
 -- ==========================================================================
-CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_periods_year_month
-    ON accounting_periods (year, month);
-
--- ==========================================================================
--- 3. Comentario para documentacion en BD
--- ==========================================================================
-COMMENT ON INDEX uk_accounting_periods_year_month IS
-    'V9-C: garantiza unicidad de (year, month) en accounting_periods. '
-    'Resuelve NonUniqueResultException en AccountingPeriodService.findByYearAndMonth.';
+-- V10-B/V10-D reemplazan este UNIQUE por (company_id, year, month). Legacy neutralizado.
+-- Si alguna BD legacy aun tiene el viejo index, V10-D lo dropea.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_accounting_periods_year_month
+--     ON accounting_periods (year, month);

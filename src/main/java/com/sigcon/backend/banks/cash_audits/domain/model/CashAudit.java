@@ -38,6 +38,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "cash_audits")
 @SQLDelete(sql = "UPDATE cash_audits SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @NoArgsConstructor
@@ -48,6 +49,10 @@ public class CashAudit {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cash_id", nullable = false)
     private Cash cash;
@@ -98,6 +103,7 @@ public class CashAudit {
 
     @PrePersist
     protected void onCreate() {
+        if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
@@ -108,5 +114,16 @@ public class CashAudit {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 }

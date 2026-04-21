@@ -46,6 +46,8 @@ public class HealthController {
         try {
             Integer result = jdbcTemplate.queryForObject("SELECT 1", Integer.class);
             dbUp = result != null && result == 1;
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             dbUp = false;
         }

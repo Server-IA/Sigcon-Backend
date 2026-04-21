@@ -150,6 +150,21 @@ public class GlobalExceptionHandler {
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
     }
 
+    /**
+     * HU-TENANT-01: al intentar acceder a un recurso de otra empresa por PK,
+     * devolvemos 404 (no 403) para no revelar la existencia del recurso en
+     * otra empresa. Disparado por @PostLoad listener de entidades
+     * tenant-scoped.
+     */
+    @ExceptionHandler(com.sigcon.backend.platform.tenant.TenantIsolationException.class)
+    public ResponseEntity<?> handleTenantIsolation(
+            com.sigcon.backend.platform.tenant.TenantIsolationException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Recurso no encontrado")));
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<?> handleIllegalStateException(IllegalStateException ex) {
 

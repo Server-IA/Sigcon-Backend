@@ -3,6 +3,7 @@ package com.sigcon.backend.lists_accounting.cost_centers.domain.model;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.Where;
@@ -22,6 +23,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "cost_centers")
 @SQLDelete(sql = "UPDATE cost_centers SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
@@ -31,6 +33,10 @@ public class CostCenter {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Multi-tenant (V10-B). Auto-inyectado en @PrePersist. */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @NotBlank(message = "El código del centro de costo es obligatorio")
     @Column(nullable = false)
@@ -70,6 +76,20 @@ public class CostCenter {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        if (this.companyId == null) {
+            this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        }
+    }
+
+    @PostLoad
+    protected void onLoad() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 
     @PreUpdate

@@ -39,8 +39,10 @@ CREATE TABLE IF NOT EXISTS account_mappings (
         FOREIGN KEY (accounting_account_id) REFERENCES accounting_accounts(id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_account_mappings_concept
-    ON account_mappings(concept_code) WHERE deleted_at IS NULL;
+-- V10-D reemplaza este UNIQUE simple por (company_id, concept_code) — ver V10-D.
+-- Legacy sin tenant, neutralizado aqui para evitar colisiones al re-ejecutarse.
+-- CREATE UNIQUE INDEX IF NOT EXISTS ux_account_mappings_concept
+--     ON account_mappings(concept_code) WHERE deleted_at IS NULL;
 
 -- ==========================================================================
 -- 2. Funcion auxiliar: asegurar que existe un accounting_account para un PUC

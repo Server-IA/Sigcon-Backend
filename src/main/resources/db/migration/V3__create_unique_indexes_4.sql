@@ -1,6 +1,7 @@
-CREATE UNIQUE INDEX IF NOT EXISTS uk_assets_code_active
-ON assets (asset_code)
-WHERE deleted_at IS NULL;
+-- V10-D/F multi-tenant: reemplazado por UNIQUE(company_id, asset_code). Neutralizado.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_assets_code_active
+-- ON assets (asset_code)
+-- WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_assets_taxes_retention_asset_id_tax_rule_id
 ON assets_taxes_retention (asset_id, tax_rule_id)

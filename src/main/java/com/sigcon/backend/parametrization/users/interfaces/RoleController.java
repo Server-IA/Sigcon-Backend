@@ -54,7 +54,7 @@ public class RoleController {
     }
 
     @PostMapping("/createRole")
-    @PreAuthorize("hasAuthority('PERM_CREATE_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Crear un nuevo rol", description = "Crea un rol en el sistema con nombre y descripcion <br> Permiso requerido: CREATE_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol creado exitosamente"),
@@ -67,7 +67,7 @@ public class RoleController {
     }
 
     @PutMapping("/updateRole/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar un rol existente", description = "Actualiza nombre y/o descripcion de un rol <br> Permiso requerido: UPDATE_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol actualizado exitosamente"),
@@ -80,7 +80,7 @@ public class RoleController {
     }
 
     @PostMapping("/deleteRole/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar rol (soft delete)", description = "Elimina logicamente un rol del sistema <br> Permiso requerido: DELETE_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol eliminado exitosamente"),
@@ -105,7 +105,7 @@ public class RoleController {
     }
 
     @PostMapping("/createPermission")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Crear un nuevo permiso", description = "Crea un permiso en el sistema con codigo, nombre y descripcion <br> Permiso requerido: CREATE_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permiso creado exitosamente"),
@@ -118,7 +118,7 @@ public class RoleController {
     }
 
     @PutMapping("/updatePermission/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar permiso existente", description = "Actualiza codigo, nombre y/o descripcion de un permiso <br> Permiso requerido: UPDATE_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permiso actualizado exitosamente"),
@@ -144,7 +144,7 @@ public class RoleController {
     }
 
     @PostMapping("/assign-permissions")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Asignar permisos a un rol", description = "Asigna una lista de permisos a un rol existente <br> Permiso requerido: ASSIGN_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permisos asignados exitosamente al rol"),
@@ -162,6 +162,8 @@ public class RoleController {
             return ResponseEntity.badRequest().body(
                     Map.of("success", false, "message", e.getMessage()));
 
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                     Map.of("success", false, "message", "Error al asignar permisos al rol"));
@@ -169,7 +171,7 @@ public class RoleController {
     }
 
     @PostMapping("/remove-permissions")
-    @PreAuthorize("hasAuthority('PERM_REMOVE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Remover permisos de un rol", description = "Remueve una lista de permisos de un rol existente <br> Permiso requerido: REMOVE_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permisos removidos exitosamente del rol"),
@@ -181,7 +183,7 @@ public class RoleController {
     }
 
     @DeleteMapping("/deletePermission/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_PERMISSION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar permiso (soft delete)", description = "Elimina logicamente un permiso del sistema <br> Permiso requerido: DELETE_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permiso eliminado exitosamente"),

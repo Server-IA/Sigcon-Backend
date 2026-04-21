@@ -86,6 +86,8 @@ public class AssetDepreciationHistoryController {
         try {
             List<ViewAssetDepreciationDTO> history = assetDepreciationHistoryService.findByAssetId(assetId);
             return ResponseEntity.ok(history);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error al consultar el histórico del activo {}: ", assetId, e);
             return ResponseEntity.internalServerError().body(
@@ -129,6 +131,8 @@ public class AssetDepreciationHistoryController {
         try {
             List<ViewAssetDepreciationDTO> history = assetDepreciationHistoryService.findByPeriod(period.trim());
             return ResponseEntity.ok(history);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error al consultar el histórico del período {}: ", period, e);
             return ResponseEntity.internalServerError().body(

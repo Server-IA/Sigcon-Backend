@@ -38,6 +38,7 @@ import lombok.NoArgsConstructor;
 @SQLDelete(sql = "UPDATE commercial_data SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @Builder
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -46,6 +47,10 @@ public class CommercialData {
     @Id 
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     private ThirdParty thirdParty; // Relación con ThirdParty
@@ -81,6 +86,7 @@ public class CommercialData {
 
     @PrePersist
     protected void onCreate() {
+        if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -96,4 +102,15 @@ public class CommercialData {
     }
 
 
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
+    }
 }

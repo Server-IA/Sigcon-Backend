@@ -28,6 +28,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "sales_invoice_attachments")
 @SQLDelete(sql = "UPDATE sales_invoice_attachments SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
@@ -38,6 +39,10 @@ public class SalesInvoiceAttachment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     /** Identificador de la factura de venta propietaria del adjunto. */
     @Column(name = "sales_invoice_id", nullable = false)
     private Long salesInvoiceId;
@@ -70,4 +75,20 @@ public class SalesInvoiceAttachment {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @jakarta.persistence.PrePersist
+    protected void __onCreateTenant() {
+        if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
+    }
 }

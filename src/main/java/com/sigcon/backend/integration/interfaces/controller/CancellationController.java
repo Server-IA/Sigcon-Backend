@@ -67,6 +67,8 @@ public class CancellationController {
             body.put("message", e.getMessage());
             int status = AaefMappingException.ORIGINAL_NOT_FOUND.equals(e.getErrorCode()) ? 404 : 400;
             return ResponseEntity.status(status).body(body);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error procesando Pull+Diff", e);
             Map<String, Object> body = new HashMap<>();

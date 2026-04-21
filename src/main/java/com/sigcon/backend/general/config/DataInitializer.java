@@ -136,6 +136,7 @@ public class DataInitializer implements CommandLineRunner {
         private void createOrUpdateUser(String name, String lastname, String email, String password, String role,
                         Set<Permission> permissions, String username) {
 
+                boolean isSuperadmin = "superadmin".equals(username);
                 User user = userRepository.findByEmail(email)
                                 .orElseGet(() -> User.builder()
                                                 .name(name)
@@ -147,6 +148,10 @@ public class DataInitializer implements CommandLineRunner {
                                                                                 "Role not found"))))
                                                 .status(Status.ACTIVE)
                                                 .username(username)
+                                                // Multi-tenant: el superadmin es PLATFORM_ADMIN sin empresa.
+                                                // Cumple ck_users_tenant_or_platform (V10-A).
+                                                .platformRole(isSuperadmin ? "PLATFORM_ADMIN" : null)
+                                                .companyId(isSuperadmin ? null : 1L)
                                                 .build());
                 userRepository.save(user);
         }

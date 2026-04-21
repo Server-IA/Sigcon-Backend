@@ -164,7 +164,8 @@ public class VoucherService {
     // Funciones
     public BigInteger generateVoucherNumber(Long voucherTypeId) {
 
-        BigInteger number = voucherRepository.findTopByVoucherTypeIdAndDeletedAtIsNullOrderByNumberDesc(voucherTypeId);
+        Long companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        BigInteger number = voucherRepository.findTopByVoucherTypeIdAndDeletedAtIsNullOrderByNumberDesc(voucherTypeId, companyId);
 
         if (number == null || number.equals(BigInteger.ZERO)) {
             return BigInteger.ONE;

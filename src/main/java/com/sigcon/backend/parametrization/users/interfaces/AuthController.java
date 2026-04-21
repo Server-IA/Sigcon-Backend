@@ -41,6 +41,8 @@ public class AuthController {
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(
                             Optional.of("Se ha enviado un enlace para restablecer la contraseña."), Optional.empty()));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.status(500).body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
@@ -54,6 +56,8 @@ public class AuthController {
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(
                             Optional.of("La contraseña se ha restablecido correctamente."), Optional.empty()));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.status(500).body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

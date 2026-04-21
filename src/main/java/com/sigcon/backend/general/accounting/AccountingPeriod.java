@@ -16,14 +16,19 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "accounting_periods",
        uniqueConstraints = @UniqueConstraint(
-           name = "uk_accounting_periods_year_month",
-           columnNames = {"year", "month"}
+           name = "uk_accounting_periods_company_year_month",
+           columnNames = {"company_id", "year", "month"}
        ))
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data @Builder @AllArgsConstructor @NoArgsConstructor
 public class AccountingPeriod {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Multi-tenant (V10-B). Auto-inyectado en @PrePersist. */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @Column(nullable = false)
     private Integer year;
@@ -56,6 +61,29 @@ public class AccountingPeriod {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        if (this.companyId == null) {
+            this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        }
+    }
+
+    @PostLoad
+    protected void onLoad() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() { this.updatedAt = LocalDateTime.now(); }
 
     /** Indica si el periodo permite registrar operaciones. */
     public boolean isOpen() { return status == AccountingPeriodStatus.OPEN; }

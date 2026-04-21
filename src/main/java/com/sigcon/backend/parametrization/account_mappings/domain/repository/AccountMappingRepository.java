@@ -36,4 +36,33 @@ public interface AccountMappingRepository extends JpaRepository<AccountMapping, 
      * Lista todos los mapeos ordenados por codigo de concepto (para vista admin).
      */
     List<AccountMapping> findAllByOrderByConceptCodeAsc();
+
+    // ======== Multi-tenant variants (Bloque G fix) ========
+    // Los metodos de arriba solo deben usarse con TenantContext activo que habilita
+    // @Filter. Si el flujo corre sin tenant (startup, async, scheduler) usar los
+    // metodos with-company explicitos abajo para evitar leaks cross-tenant.
+
+    /**
+     * Lookup explicito por (companyId, conceptCode). Usa nativeQuery para bypass
+     * del {@code @Filter} de Hibernate — necesario porque el caller puede estar
+     * en un tenant distinto (p.ej. un usuario de empresa A debe poder resolver
+     * sus mapeos aunque el filter global apunte a otra empresa si algo falla).
+     * Sigue respetando soft delete con WHERE deleted_at IS NULL.
+     */
+    @org.springframework.data.jpa.repository.Query(value =
+        "SELECT * FROM account_mappings WHERE company_id = :companyId "
+      + "AND concept_code = :conceptCode AND deleted_at IS NULL",
+      nativeQuery = true)
+    Optional<AccountMapping> findByCompanyIdAndConceptCodeAndDeletedAtIsNull(
+            @org.springframework.data.repository.query.Param("companyId") Long companyId,
+            @org.springframework.data.repository.query.Param("conceptCode") String conceptCode);
+
+    /** Variante para fail-fast: existe el mapeo en la empresa dada? */
+    @org.springframework.data.jpa.repository.Query(value =
+        "SELECT EXISTS(SELECT 1 FROM account_mappings WHERE company_id = :companyId "
+      + "AND concept_code = :conceptCode AND deleted_at IS NULL)",
+      nativeQuery = true)
+    boolean existsByCompanyIdAndConceptCodeAndDeletedAtIsNull(
+            @org.springframework.data.repository.query.Param("companyId") Long companyId,
+            @org.springframework.data.repository.query.Param("conceptCode") String conceptCode);
 }

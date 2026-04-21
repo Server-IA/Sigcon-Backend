@@ -46,7 +46,6 @@ public class DepretationRuleController {
             @RequestBody(required = false) DataTableRequest dtRequest) {
         // try {
         return depretationRuleService.getDepretationRulesPaged(dtRequest);
-        // } catch (Exception e) {
         // return ResponseEntity.badRequest()
         // .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
@@ -72,7 +71,6 @@ public class DepretationRuleController {
             BindingResult bindingResult) {
         // try{
         return depretationRuleService.createDepretationRule(request, bindingResult);
-        // } catch (Exception e) {
         // return ResponseEntity.badRequest()
         // .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }
@@ -97,7 +95,6 @@ public class DepretationRuleController {
             BindingResult bindingResult) {
         // try{
         return depretationRuleService.updateDepretationRule(request, bindingResult);
-        // } catch (Exception e) {
         // return ResponseEntity.badRequest()
         // .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         // }

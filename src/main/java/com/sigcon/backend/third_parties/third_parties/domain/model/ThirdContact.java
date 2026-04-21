@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 @Table(name = "third_contact")
 @SQLDelete(sql = "UPDATE third_contact SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @NoArgsConstructor
@@ -34,6 +35,10 @@ public class ThirdContact {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "third_party_id", nullable = false)
     private ThirdParty thirdParty;
@@ -61,6 +66,13 @@ public class ThirdContact {
 
     @PrePersist
     protected void onCreate() {
+        if (this.companyId == null) {
+            if (this.thirdParty != null && this.thirdParty.getCompanyId() != null) {
+                this.companyId = this.thirdParty.getCompanyId();
+            } else {
+                this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+            }
+        }
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -68,5 +80,16 @@ public class ThirdContact {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 }

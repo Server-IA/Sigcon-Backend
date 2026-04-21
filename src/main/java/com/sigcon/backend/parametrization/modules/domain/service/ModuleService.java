@@ -120,9 +120,20 @@ public class ModuleService {
             boolean isAdmin = auth != null && auth.getAuthorities().stream().anyMatch(a ->
                     "ROLE_ADMIN".equals(a.getAuthority()) ||
                     "ROLE_SUPERADMIN".equals(a.getAuthority()));
+            boolean isPlatformAdmin = auth != null && auth.getAuthorities().stream()
+                    .anyMatch(a -> "PLATFORM_ADMIN".equals(a.getAuthority()));
+
+            // Bloque F: el modulo "Plataforma" solo se muestra a PLATFORM_ADMIN.
+            // Los admins de empresa (con ROLE_ADMIN pero sin PLATFORM_ADMIN) NO lo ven.
+            java.util.function.Predicate<ModuleEntity> platformVisibility = m -> {
+                boolean isPlatformModule = "Plataforma".equalsIgnoreCase(m.getName())
+                        || "platform".equalsIgnoreCase(m.getUrl());
+                return isPlatformAdmin ? isPlatformModule : !isPlatformModule;
+            };
+            modules = modules.stream().filter(platformVisibility).toList();
 
             final List<ModuleEntity> visibleModules;
-            if (isAdmin) {
+            if (isAdmin || isPlatformAdmin) {
                 visibleModules = modules;
             } else {
                 // Construir set de module_ids alcanzables por los permisos del usuario.

@@ -33,6 +33,8 @@ import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalS
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.lists_accounting.accounting_lists.domain.model.enums.AccountClass;
+import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountMappingService;
+import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 
@@ -57,6 +59,7 @@ public class ClosingService {
     private final JournalEntryService journalEntryService;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountingPeriodRepository accountingPeriodRepository;
+    private final AccountMappingService accountMappingService;
 
     // ───────────────────────────────────────────────────────────────
     // Cierre mensual
@@ -526,16 +529,33 @@ public class ClosingService {
         // Resultado neto: ingresos - gastos/costos
         BigDecimal netResult = totalIngresos.subtract(totalGastosCostos);
 
-        // La linea de resultado neto no se agrega aqui porque requiere
-        // la cuenta de utilidad del ejercicio (clase 3). Se agrega
-        // como diferencia para cuadrar partida doble.
-        // Si netResult > 0: credito a utilidad (ganancia)
-        // Si netResult < 0: debito a utilidad (perdida)
-        // NOTA: El asiento ya cuadra por partida doble sin linea adicional,
-        // ya que los debitos a ingresos igualan creditos a gastos + diferencia.
-        // Solo si hay diferencia neta se necesita la linea de compensacion.
-        // Como no tenemos una cuenta de utilidad especifica configurada,
-        // verificamos si el asiento cuadra. Si no, necesitaremos una cuenta de utilidad.
+        // Bug fix post-Bloque G: el asiento SIEMPRE queda desbalanceado
+        // a menos que ingresos == gastos/costos (caso raro). Agregamos la
+        // linea de utilidad/perdida contra la cuenta 3605 (auto-provisionada
+        // per-tenant en V10-G). La direccion depende del signo del neto:
+        //   netResult > 0  -> ganancia -> CREDITO a 3605 (saldo natural)
+        //   netResult < 0  -> perdida  -> DEBITO  a 3605 (contra saldo)
+        // Si netResult == 0 no se agrega la linea (no hay utilidad ni perdida).
+        if (netResult.compareTo(BigDecimal.ZERO) != 0) {
+            Long utilidadAcctId = accountMappingService.resolveOrThrow(
+                    AccountingConcept.UTILIDAD_EJERCICIO);
+            BigDecimal amount = netResult.abs();
+            if (netResult.compareTo(BigDecimal.ZERO) > 0) {
+                lines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(utilidadAcctId)
+                        .debitAmount(BigDecimal.ZERO)
+                        .creditAmount(amount)
+                        .description("Utilidad del ejercicio (cierre)")
+                        .build());
+            } else {
+                lines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(utilidadAcctId)
+                        .debitAmount(amount)
+                        .creditAmount(BigDecimal.ZERO)
+                        .description("Perdida del ejercicio (cierre)")
+                        .build());
+            }
+        }
 
         ClosingCalculation calc = new ClosingCalculation();
         calc.lines = lines;

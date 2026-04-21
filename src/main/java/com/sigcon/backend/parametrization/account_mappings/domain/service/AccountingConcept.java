@@ -77,4 +77,14 @@ public final class AccountingConcept {
     public static final String NOMINA_RETENCIONES = "NOMINA_RETENCIONES";
     /** Cesantias consolidadas por pagar (PUC 2510). */
     public static final String NOMINA_CESANTIAS = "NOMINA_CESANTIAS";
+
+    // ===== CG cierre mensual/anual =====
+    /**
+     * Cuenta de patrimonio para registrar utilidad/perdida del ejercicio (PUC 3605).
+     * Usada por {@code ClosingService.buildClosingLines} para cuadrar el asiento de
+     * cierre: si netResult &gt; 0 -> C 3605 (ganancia), si netResult &lt; 0 -> D 3605 (perdida).
+     * Sin este mapeo el asiento de cierre queda desbalanceado y
+     * {@code JournalEntryService.createEntry} lo rechaza.
+     */
+    public static final String UTILIDAD_EJERCICIO = "UTILIDAD_EJERCICIO";
 }

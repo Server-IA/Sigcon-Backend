@@ -116,6 +116,8 @@ public class InvoicesController {
     public ResponseEntity<?> getInvoiceById(@PathVariable Long id) {
         try {
             return invoicesService.getInvoiceById(id);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
                 .body(ErrorRespondJson.getErrorRespondMessage(java.util.Optional.of(e.getMessage())));

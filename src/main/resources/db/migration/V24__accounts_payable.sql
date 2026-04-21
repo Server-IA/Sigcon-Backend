@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS ap_payments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ap_payments_invoice ON ap_payments (invoice_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uk_ap_payment_ref ON ap_payments (payment_reference) WHERE deleted_at IS NULL AND payment_reference IS NOT NULL;
+-- V10-D replaced by composite (company_id, payment_reference)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_ap_payment_ref ON ap_payments (payment_reference) WHERE deleted_at IS NULL AND payment_reference IS NOT NULL;
 
 -- 3. Tabla de anticipos (AP-05)
 -- ============================================================================
@@ -96,7 +97,8 @@ CREATE TABLE IF NOT EXISTS ap_credit_debit_notes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ap_notes_invoice ON ap_credit_debit_notes (invoice_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uk_ap_note_number ON ap_credit_debit_notes (note_number) WHERE deleted_at IS NULL;
+-- V10-D replaced by uk_ap_notes_company_number
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_ap_note_number ON ap_credit_debit_notes (note_number) WHERE deleted_at IS NULL;
 
 -- 5. Ordenes de compra (AP-16 a AP-22)
 -- ============================================================================
@@ -118,7 +120,8 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     deleted_at TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_po_number ON purchase_orders (order_number) WHERE deleted_at IS NULL;
+-- V10-D replaced by composite (company_id, order_number)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_po_number ON purchase_orders (order_number) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS purchase_order_lines (
     id BIGSERIAL PRIMARY KEY,
@@ -147,7 +150,8 @@ CREATE TABLE IF NOT EXISTS goods_receipts (
     deleted_at TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_gr_number ON goods_receipts (receipt_number) WHERE deleted_at IS NULL;
+-- V10-D replaced by composite (company_id, receipt_number)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_gr_number ON goods_receipts (receipt_number) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS goods_receipt_lines (
     id BIGSERIAL PRIMARY KEY,

@@ -41,8 +41,9 @@ CREATE TABLE IF NOT EXISTS employees (
     deleted_at          TIMESTAMP NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_employees_document
-    ON employees (document_type, document_number) WHERE deleted_at IS NULL;
+-- V10-F multi-tenant: reemplazado por uk_employees_company_document. Neutralizado.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_employees_document
+--     ON employees (document_type, document_number) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_employees_third_party
     ON employees (third_party_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_employees_status
@@ -87,8 +88,9 @@ CREATE TABLE IF NOT EXISTS payroll_concepts (
     deleted_at                      TIMESTAMP NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_payroll_concepts_code
-    ON payroll_concepts (code) WHERE deleted_at IS NULL;
+-- V10-F multi-tenant: reemplazado por uk_payroll_concepts_company_code. Neutralizado.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_payroll_concepts_code
+--     ON payroll_concepts (code) WHERE deleted_at IS NULL;
 
 -- ==========================================================================
 -- 4. Recibos de nomina (HU-NOM-03, HU-NOM-04)

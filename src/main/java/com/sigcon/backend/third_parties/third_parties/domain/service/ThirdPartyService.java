@@ -1274,6 +1274,13 @@ public class ThirdPartyService {
         }
     }
 
+    /**
+     * Genera el code TER-YYYY###### para el tercero nuevo.
+     * Multi-tenant (Bloque G fix): {@code thirdPartyRepository.count()} respeta
+     * el @Filter de Hibernate y solo cuenta los terceros de la empresa actual.
+     * El UNIQUE en BD es compuesto (company_id, third_party_code) desde V10-D,
+     * asi que dos empresas pueden tener TER2026000001 sin colision.
+     */
     private String generateThirdPartyCode() {
         long sequence = thirdPartyRepository.count() + 1;
         int year = LocalDate.now().getYear();

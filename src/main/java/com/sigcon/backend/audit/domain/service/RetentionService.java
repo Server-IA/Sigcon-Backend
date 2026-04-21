@@ -131,10 +131,17 @@ public class RetentionService {
     @Scheduled(cron = "${sigcon.audit.purge-cron:0 30 2 * * *}")
     public void runPurgeScheduled() {
         log.info("HU-AU-10: iniciando purga programada de logs vencidos");
+        // Multi-tenant (Bloque G fix): modo plataforma para procesar logs de todas
+        // las empresas. Cada AuditPurgeRecord creado hereda company_id=1 (default)
+        // al no haber tenant especifico — aceptable porque purge records son
+        // evidencia forense cross-tenant, no operacionales.
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
         try {
             executePurge("scheduler-cron");
         } catch (Exception e) {
             log.error("HU-AU-10 E4: error en purga programada", e);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
         }
     }
 

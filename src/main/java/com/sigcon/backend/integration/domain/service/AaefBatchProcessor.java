@@ -94,11 +94,24 @@ public class AaefBatchProcessor {
     @Async
     public void processAsync(Long batchId) {
         log.info("Iniciando procesamiento async del lote {}", batchId);
+        // Multi-tenant (Bloque G fix): el thread pool @Async no hereda el
+        // TenantContext del request HTTP original (es un ThreadLocal). Leemos
+        // el company_id del propio batch (columna no-nullable desde V10-A) y lo
+        // establecemos manualmente para que los @Filter, @PrePersist y
+        // AccountMappingService resuelvan la empresa correcta al crear
+        // SalesInvoice / Invoices / JournalEntry derivados.
+        Long companyId = batchRepository.findById(batchId)
+                .map(b -> b.getCompanyId())
+                .orElse(null);
+        com.sigcon.backend.platform.tenant.TenantContext.setCompanyId(companyId);
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(false);
         try {
             processInternal(batchId);
         } catch (Exception e) {
             log.error("Error no controlado procesando lote {}", batchId, e);
             markBatchFailed(batchId, "Error no controlado: " + e.getMessage());
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
         }
     }
 

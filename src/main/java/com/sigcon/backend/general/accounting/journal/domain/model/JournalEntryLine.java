@@ -27,6 +27,7 @@ import lombok.NoArgsConstructor;
  */
 @Entity
 @Table(name = "journal_entry_lines")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
@@ -36,6 +37,11 @@ public class JournalEntryLine {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Multi-tenant (V10-B). Denormalizado para queries de saldo directos
+     *  (p.ej. {@code netBalanceByAccountingAccountId}) sin join a journal_entries. */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "journal_entry_id", nullable = false)
@@ -72,5 +78,23 @@ public class JournalEntryLine {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
+        if (this.companyId == null) {
+            if (this.journalEntry != null && this.journalEntry.getCompanyId() != null) {
+                this.companyId = this.journalEntry.getCompanyId();
+            } else {
+                this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+            }
+        }
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void onLoad() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 }

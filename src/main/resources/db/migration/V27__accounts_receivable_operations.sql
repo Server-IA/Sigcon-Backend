@@ -27,9 +27,10 @@ CREATE TABLE IF NOT EXISTS ar_payments (
     deleted_at TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_ar_payment_reference
-    ON ar_payments (payment_reference)
-    WHERE deleted_at IS NULL AND payment_reference IS NOT NULL;
+-- V10-D replaced by uk_ar_payment_ref_company (company_id, payment_reference)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_ar_payment_reference
+--     ON ar_payments (payment_reference)
+--     WHERE deleted_at IS NULL AND payment_reference IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_ar_payment_invoice
     ON ar_payments (invoice_id);
@@ -84,8 +85,9 @@ CREATE TABLE IF NOT EXISTS ar_credit_debit_notes (
     deleted_at TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_ar_note_number
-    ON ar_credit_debit_notes (note_number) WHERE deleted_at IS NULL;
+-- V10-D replaced by uk_ar_notes_company_number (company_id, note_number)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_ar_note_number
+--     ON ar_credit_debit_notes (note_number) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_ar_note_invoice
     ON ar_credit_debit_notes (invoice_id);

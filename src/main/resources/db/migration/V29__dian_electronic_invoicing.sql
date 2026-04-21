@@ -22,8 +22,9 @@ CREATE TABLE IF NOT EXISTS dian_resolutions (
     deleted_at TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_dian_resolution_number
-    ON dian_resolutions (resolution_number) WHERE deleted_at IS NULL;
+-- V10-D replaced by uk_dian_res_company_number (company_id, resolution_number)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_dian_resolution_number
+--     ON dian_resolutions (resolution_number) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_dian_resolution_prefix_dates
     ON dian_resolutions (prefix, start_date, end_date);

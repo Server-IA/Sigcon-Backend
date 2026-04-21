@@ -608,7 +608,8 @@ public class AssetsService {
 
     private ViewAssetsDTO toViewDTO(Assets asset) {
 
-        List<VouchersEntity> vouchers = voucherRepository.findAllByAssetIdAndDeletedAtIsNull(asset.getId());
+        List<VouchersEntity> vouchers = voucherRepository.findAllByAssetIdAndDeletedAtIsNull(
+                asset.getId(), com.sigcon.backend.platform.tenant.TenantContext.getCompanyId());
         List<AssetsTaxesRetention> taxesRetention = assetTaxesRetentionRepository.findAllByAssetIdAndDeletedAtIsNull(asset.getId());
 
         return ViewAssetsDTO.builder()

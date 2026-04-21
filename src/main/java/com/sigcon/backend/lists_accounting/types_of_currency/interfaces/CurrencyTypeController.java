@@ -103,6 +103,8 @@ public class CurrencyTypeController {
                 } catch (IllegalStateException e) {
                         return ResponseEntity.status(HttpStatus.CONFLICT).body(
                                         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+                } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+                    throw __tie;
                 } catch (Exception e) {
                         log.error("Error técnico al eliminar la moneda: ", e);
                         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

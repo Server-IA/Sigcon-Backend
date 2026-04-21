@@ -97,6 +97,8 @@ public class AssetsController {
         public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
                 try {
                         return ResponseEntity.ok(assetsService.findAllPaged(request));
+                } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+                    throw __tie;
                 } catch (Exception e) {
                         // F-ACT-10-06: No exponer errores técnicos de JPA al usuario
                         return ResponseEntity.ok(com.sigcon.backend.utils.DataTableResponse.empty(
@@ -151,6 +153,8 @@ public class AssetsController {
                         return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
                                         Optional.of("Activo eliminado correctamente."), Optional.empty()));
+                } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+                    throw __tie;
                 } catch (Exception e) {
                         return ResponseEntity.badRequest().body(
                                 ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

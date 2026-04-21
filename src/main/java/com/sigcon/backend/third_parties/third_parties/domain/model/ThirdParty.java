@@ -22,6 +22,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
@@ -35,6 +36,7 @@ import java.util.Set;
 @Table(name = "third_parties")
 @SQLDelete(sql = "UPDATE third_parties SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
@@ -44,6 +46,14 @@ public class ThirdParty {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Multi-tenant (V10-A, 2026-04-19): company_id NOT NULL en BD.
+     * Se auto-inyecta en @PrePersist desde TenantContext. El listado filtra
+     * automaticamente por tenant via @Filter.
+     */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @Column(name = "third_party_code", nullable = false, length = 32)
     private String thirdPartyCode;
@@ -117,6 +127,31 @@ public class ThirdParty {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        // Multi-tenant (V10-A): si no viene el companyId del caller, leerlo del
+        // TenantContext. Evita que el frontend deba setearlo explicitamente.
+        // PLATFORM_ADMIN no puede crear terceros (no tiene tenant) — la UI
+        // no lo deja y este listener tampoco inyecta.
+        if (this.companyId == null) {
+            this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        }
+    }
+
+    /**
+     * Guarda contra acceso cross-tenant por PK (findById, getReference, etc.)
+     * que NO son filtrados por {@code @Filter} de Hibernate. Si el tenant
+     * actual es distinto al de la entidad Y no es PLATFORM_ADMIN, se lanza
+     * {@link com.sigcon.backend.platform.tenant.TenantIsolationException}
+     * que el GlobalExceptionHandler traduce a HTTP 404.
+     */
+    @jakarta.persistence.PostLoad
+    protected void onLoad() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 
     @PreUpdate

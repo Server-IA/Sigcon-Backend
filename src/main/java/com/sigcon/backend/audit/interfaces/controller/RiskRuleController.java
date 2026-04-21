@@ -56,7 +56,9 @@ public class RiskRuleController {
     @PostMapping
     public ResponseEntity<?> create(@RequestBody AuditRiskRule rule) {
         String createdBy = "admin";
-        try { createdBy = userUtil.getUser().getEmail(); } catch (Exception ignored) {}
+        try { createdBy = userUtil.getUser().getEmail(); } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+     throw __tie;
+ } catch (Exception ignored) {}
         return service.create(rule, createdBy);
     }
 

@@ -85,6 +85,10 @@ public class ApAlertsService {
      */
     @Scheduled(cron = "0 30 1 * * *")
     public void logDailyOverdueSummary() {
+        // Multi-tenant (Bloque G fix): scheduler corre sin TenantContext. En modo
+        // PLATFORM_ADMIN el @Filter se deshabilita y vemos facturas de todas las
+        // empresas (un log agregado a nivel plataforma).
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
         try {
             List<ApAlertDTO> overdue = getOverdueInvoices();
             if (overdue.isEmpty()) {
@@ -98,6 +102,8 @@ public class ApAlertsService {
                     overdue.size(), total);
         } catch (Exception e) {
             log.error("AP-11 scheduler: fallo al calcular resumen de facturas vencidas", e);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
         }
     }
 

@@ -1,31 +1,20 @@
--- V9-4: Fase 3 - Eliminacion final del modelo multi-empresa deprecado.
+-- V9-4: Script neutralizado (2026-04-19).
 --
--- Contexto:
---   En Fase 0 (2026-04-12) se elimino el multi-tenant a nivel de codigo, removiendo
---   company_id de 10 entidades. Sin embargo, las tablas 'companies' y
---   'company_withholding_assignments' y las entidades Java Company.java,
---   CompanyRepository.java, CompanyWithholdingAssignment.java y
---   CompanyWithholdingAssignmentRepository.java quedaron DEPRECADAS pero
---   no se eliminaron, a la espera de Fase 3.
+-- Historia: V9-4 ejecuto la Fase 3 del proyecto (2026-04-14), eliminando
+-- las tablas deprecadas `companies` y `company_withholding_assignments`
+-- tras haber sido reemplazadas por el modelo single-tenant.
 --
--- Fase 3 (2026-04-14):
---   - Entidades Java y repositorios deprecados ELIMINADOS del codigo.
---   - Campo inyectado 'CompanyRepository' (no usado) removido de BankAccountService.
---   - Comentario muerto '// entity.setCompany(user.getCompany());' removido de CheckbookService.
---   - Reemplazo oficial de CompanyWithholdingAssignment: SystemWithholdingAssignment
---     (tabla system_withholding_assignments, sin dependencia de Company, con
---     vigencia temporal effectiveFrom/effectiveTo y status).
+-- El 2026-04-19 el lider exigio VOLVER a multi-tenant (decision documentada
+-- en CLAUDE.md seccion "Decision estrategica 2026-04-19"). V10-A reintroduce
+-- la tabla `companies` con un schema nuevo (business_name, dv, etc).
 --
--- Este script ejecuta el DROP de las tablas residuales. Es idempotente
--- (IF EXISTS) y ha sido verificado en BD limpia: 0 registros en ambas tablas,
--- ninguna otra tabla tiene FK hacia 'companies' fuera de 'company_withholding_assignments'.
-
--- ==========================================================================
--- 1. Eliminar company_withholding_assignments (depende de companies)
--- ==========================================================================
-DROP TABLE IF EXISTS company_withholding_assignments CASCADE;
-
--- ==========================================================================
--- 2. Eliminar companies
--- ==========================================================================
-DROP TABLE IF EXISTS companies CASCADE;
+-- DataInitializer re-ejecuta todos los scripts en CADA arranque. El orden
+-- lexicografico hace que V9-4 corra DESPUES de V10-A (porque '1' < '9'),
+-- asi que si V9-4 siguiera vivo, dropearia la tabla que V10-A acaba de
+-- crear. Por eso V9-4 queda como no-op.
+--
+-- La tabla `company_withholding_assignments` no se vuelve a crear; su
+-- reemplazo actual `system_withholding_assignments` sigue siendo el que
+-- se usa. Si en el futuro se requiere retenciones por empresa, esa tabla
+-- se ajustara en la etapa de datos maestros (Bloque D).
+SELECT 1;

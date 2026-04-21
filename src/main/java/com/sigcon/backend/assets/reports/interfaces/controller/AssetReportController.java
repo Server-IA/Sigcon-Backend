@@ -84,6 +84,8 @@ public class AssetReportController {
                             Optional.of("Reporte de activos generado exitosamente."),
                             Optional.of(reportData)));
 
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error al generar reporte de activos: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -133,6 +135,8 @@ public class AssetReportController {
 
             return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
 
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error al generar PDF de reporte de activos: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

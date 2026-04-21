@@ -3,6 +3,7 @@ package com.sigcon.backend.general.security;
 import com.sigcon.backend.integration.infrastructure.security.AaefPayloadSizeFilter;
 import com.sigcon.backend.integration.infrastructure.security.AgroFusionJwtFilter;
 import com.sigcon.backend.integration.infrastructure.security.ApiKeyFilter;
+import com.sigcon.backend.platform.tenant.TenantContextFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,6 +16,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -30,6 +32,7 @@ public class SecurityConfig {
     private final ApiKeyFilter apiKeyFilter;
     private final AgroFusionJwtFilter agroFusionJwtFilter;
     private final AaefPayloadSizeFilter aaefPayloadSizeFilter;
+    private final TenantContextFilter tenantContextFilter;
     private final Environment environment;
 
 
@@ -168,7 +171,13 @@ public class SecurityConfig {
         http.addFilterBefore(agroFusionJwtFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class);
 
-
+        // Multi-tenant (V10-A, 2026-04-19): TenantContextFilter corre DESPUES
+        // de BearerTokenAuthenticationFilter (que oauth2ResourceServer.jwt()
+        // agrega al chain automaticamente). En ese punto ya hay un Jwt en
+        // SecurityContextHolder y el filter puede leer sus claims tenant
+        // (companyId, platformRole) y setear el TenantContext para el resto
+        // del request.
+        http.addFilterAfter(tenantContextFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();
 

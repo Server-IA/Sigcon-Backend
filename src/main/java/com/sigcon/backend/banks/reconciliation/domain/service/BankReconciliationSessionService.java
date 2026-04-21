@@ -221,7 +221,8 @@ public class BankReconciliationSessionService {
         BigDecimal unmatchedSum = financialMovementRepository.sumUnmatchedAmountByBankAccountAndPeriod(bankAccountId, from, to);
 
         // Calcular saldo en libros: saldo inicial + suma de comprobantes hasta fin del periodo
-        BigDecimal voucherSum = voucherRepository.sumVoucherAmountsByBankAccountUpToDate(bankAccountId, to);
+        BigDecimal voucherSum = voucherRepository.sumVoucherAmountsByBankAccountUpToDate(
+                bankAccountId, to, com.sigcon.backend.platform.tenant.TenantContext.getCompanyId());
         if (voucherSum == null) {
             voucherSum = BigDecimal.ZERO;
         }

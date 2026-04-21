@@ -68,6 +68,8 @@ public class AccountMappingController {
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                     Optional.of("Mapeos contables listados correctamente"),
                     Optional.of(mappings)));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error al listar mapeos contables", e);
             return ResponseEntity.internalServerError().body(

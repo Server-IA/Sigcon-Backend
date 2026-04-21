@@ -38,6 +38,8 @@ public class MenuPermissionsController {
             @RequestBody(required = false) DataTableRequest dtRequest) {
         try {
             return menuPermissionsService.getMenuPermissions(dtRequest);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
@@ -50,6 +52,8 @@ public class MenuPermissionsController {
             BindingResult bindingResult) {
         try {
             return menuPermissionsService.storeMenuPermission(request, bindingResult);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
@@ -62,6 +66,8 @@ public class MenuPermissionsController {
             BindingResult bindingResult) {
         try {
             return menuPermissionsService.updateMenuPermission(request, bindingResult);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
@@ -73,6 +79,8 @@ public class MenuPermissionsController {
     public ResponseEntity<?> deleteMenuPermission(@PathVariable Long id) {
         try {
             return menuPermissionsService.deleteMenuPermission(id);
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

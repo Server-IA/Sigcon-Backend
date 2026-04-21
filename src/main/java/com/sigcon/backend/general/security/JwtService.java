@@ -1,5 +1,6 @@
 package com.sigcon.backend.general.security;
 
+import com.sigcon.backend.parametrization.users.domain.model.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -36,6 +37,30 @@ public class JwtService {
                 .stream()
                 .map(auth -> auth.getAuthority())
                 .collect(Collectors.toList());
+
+        // Claims multi-tenant (V10-A, 2026-04-19): si el UserDetails es nuestra
+        // entidad User, agregamos al JWT el companyId y el platformRole para que
+        // TenantContextFilter los pueda leer en cada request.
+        // Invariante garantizado por ck_users_tenant_or_platform: o platformRole
+        // es PLATFORM_ADMIN y companyId es null, o platformRole es null y
+        // companyId no es null. Nunca ambos, nunca ninguno.
+        if (userDetails instanceof User u) {
+            extraClaims.put("userId", u.getId());
+            if (u.getPlatformRole() != null) {
+                extraClaims.put("platformRole", u.getPlatformRole());
+                // Inyectar authority PLATFORM_ADMIN para que @PreAuthorize lo
+                // reconozca en los endpoints /api/platform/**. Se distingue de
+                // ROLE_ADMIN (admin de empresa) — un admin de empresa tiene
+                // ROLE_ADMIN pero NO PLATFORM_ADMIN.
+                if (!authorities.contains(u.getPlatformRole())) {
+                    authorities = new java.util.ArrayList<>(authorities);
+                    authorities.add(u.getPlatformRole());
+                }
+            }
+            if (u.getCompanyId() != null) {
+                extraClaims.put("companyId", u.getCompanyId());
+            }
+        }
 
         extraClaims.put("authorities", authorities);
 

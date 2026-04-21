@@ -27,11 +27,17 @@ public class SalesInvoiceStatusScheduler {
     @Scheduled(cron = "0 0 1 * * *")
     public void updateOverdueInvoicesJob() {
         log.info("Iniciando tarea programada de actualizacion de facturas vencidas");
+        // Multi-tenant (Bloque G fix): scheduler sin TenantContext. Activamos
+        // modo PLATFORM_ADMIN para que el @Filter de Hibernate NO restrinja la
+        // query y se procesen todas las facturas de todas las empresas.
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
         try {
             int count = salesInvoiceService.updateOverdueInvoices();
             log.info("Tarea programada completada: {} facturas marcadas como OVERDUE", count);
         } catch (Exception e) {
             log.error("Error ejecutando tarea programada de vencimientos: {}", e.getMessage(), e);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
         }
     }
 }

@@ -60,7 +60,9 @@ public class RetentionController {
     @PostMapping("/policies")
     public ResponseEntity<?> createPolicy(@RequestBody AuditRetentionPolicy policy) {
         String createdBy = "admin";
-        try { createdBy = userUtil.getUser().getEmail(); } catch (Exception ignored) {}
+        try { createdBy = userUtil.getUser().getEmail(); } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+     throw __tie;
+ } catch (Exception ignored) {}
         return service.createPolicy(policy, createdBy);
     }
 
@@ -143,7 +145,9 @@ public class RetentionController {
     @PostMapping("/purge/run")
     public ResponseEntity<?> runPurgeManual() {
         String executedBy = "admin";
-        try { executedBy = userUtil.getUser().getEmail(); } catch (Exception ignored) {}
+        try { executedBy = userUtil.getUser().getEmail(); } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+     throw __tie;
+ } catch (Exception ignored) {}
         return service.executePurgeManual(executedBy);
     }
 

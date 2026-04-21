@@ -61,6 +61,8 @@ public class ApAlertsController {
             List<ApAlertDTO> result = apAlertsService.getUpcomingInvoices(daysAhead);
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                     Optional.of("Facturas proximas a vencer"), Optional.of(result)));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error obteniendo facturas proximas a vencer", e);
             return ResponseEntity.internalServerError().body(
@@ -88,6 +90,8 @@ public class ApAlertsController {
             List<ApAlertDTO> result = apAlertsService.getOverdueInvoices();
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                     Optional.of("Facturas vencidas"), Optional.of(result)));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error obteniendo facturas vencidas", e);
             return ResponseEntity.internalServerError().body(

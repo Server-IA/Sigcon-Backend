@@ -5,6 +5,8 @@ import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.
 import com.sigcon.backend.parametrization.account_mappings.application.AccountMappingDTO;
 import com.sigcon.backend.parametrization.account_mappings.domain.model.AccountMapping;
 import com.sigcon.backend.parametrization.account_mappings.domain.repository.AccountMappingRepository;
+import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
+import com.sigcon.backend.platform.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -12,6 +14,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,6 +47,7 @@ public class AccountMappingService {
 
     private final AccountMappingRepository mappingRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+    private final CompanyRepository companyRepository;
 
     /**
      * Conceptos obligatorios en el sistema. Si alguno falta al iniciar, la app no arranca.
@@ -69,11 +73,25 @@ public class AccountMappingService {
             AccountingConcept.NOMINA_SALARIOS,
             AccountingConcept.NOMINA_CXP_EMPLEADOS,
             AccountingConcept.NOMINA_RETENCIONES,
-            AccountingConcept.NOMINA_CESANTIAS
+            AccountingConcept.NOMINA_CESANTIAS,
+            // CG cierre (bug fix post-Bloque G): el asiento de cierre requiere
+            // una cuenta de patrimonio para registrar la utilidad/perdida del
+            // ejercicio y mantener la partida doble. Sin este mapeo el cierre
+            // falla con IllegalStateException.
+            AccountingConcept.UTILIDAD_EJERCICIO
     );
 
-    /** Cache thread-safe concept_code -> accounting_account_id. */
+    /**
+     * Cache thread-safe multi-tenant: (companyId, conceptCode) -> accounting_account_id.
+     * Clave es "companyId:conceptCode" para evitar leak cross-tenant (Bloque G fix):
+     * antes el cache era {@code Map<String, Long>} y empresa A contaminaba los lookups
+     * de empresa B porque las llaves eran solo concept_code.
+     */
     private final Map<String, Long> cache = new ConcurrentHashMap<>();
+
+    private static String cacheKey(Long companyId, String conceptCode) {
+        return (companyId == null ? "*" : companyId) + ":" + conceptCode;
+    }
 
     /**
      * Hook que se ejecuta cuando la aplicacion ya completo el arranque de Spring,
@@ -87,24 +105,52 @@ public class AccountMappingService {
      * que corre DESPUES de las fases de inicializacion de beans. Un {@code @PostConstruct}
      * dispararia antes y fallaria siempre en el primer arranque.
      */
+    /**
+     * Fail-fast multi-tenant (Bloque G fix): valida que CADA empresa activa tenga
+     * los 18 conceptos contables obligatorios. Antes validaba globalmente y pasaba
+     * con que UNA empresa tuviera los mapeos, dejando a las demas sin cuentas —
+     * los JE fallarian en runtime con IllegalStateException.
+     *
+     * <p>Usa el bypass de tenant del PLATFORM_ADMIN (TenantContext.runAs) para
+     * consultar cross-empresa sin que {@code @Filter} restrinja el lookup.
+     */
     @EventListener(ApplicationReadyEvent.class)
     @Order(Ordered.LOWEST_PRECEDENCE)
+    @Transactional(readOnly = true)
     public void validateMandatoryConcepts() {
-        List<String> missing = new ArrayList<>();
-        for (String concept : REQUIRED_CONCEPTS) {
-            if (!mappingRepository.existsByConceptCode(concept)) {
-                missing.add(concept);
-            }
+        var companies = companyRepository.findAll();
+        if (companies.isEmpty()) {
+            log.warn("No hay empresas registradas - saltando validacion de conceptos contables.");
+            return;
         }
-        if (!missing.isEmpty()) {
-            String msg = "Conceptos contables obligatorios NO configurados en account_mappings: "
-                    + String.join(", ", missing)
-                    + ". Verifique que la migracion V31 se haya ejecutado correctamente.";
+
+        int checked = 0;
+        List<String> errors = new ArrayList<>();
+        for (var company : companies) {
+            if (company.getDeletedAt() != null) continue;
+            List<String> missing = new ArrayList<>();
+            for (String concept : REQUIRED_CONCEPTS) {
+                if (!mappingRepository.existsByCompanyIdAndConceptCodeAndDeletedAtIsNull(
+                        company.getId(), concept)) {
+                    missing.add(concept);
+                }
+            }
+            if (!missing.isEmpty()) {
+                errors.add(String.format("Empresa '%s' (id=%d) falta: %s",
+                        company.getBusinessName(), company.getId(), String.join(", ", missing)));
+            }
+            checked++;
+        }
+
+        if (!errors.isEmpty()) {
+            String msg = "Conceptos contables obligatorios faltantes por empresa:\n  - "
+                    + String.join("\n  - ", errors)
+                    + "\nVerifique que _tenant_auto_provision (V10-D) haya corrido para cada empresa.";
             log.error(msg);
             throw new IllegalStateException(msg);
         }
-        log.info("AccountMappingService: {} conceptos contables obligatorios verificados OK",
-                REQUIRED_CONCEPTS.size());
+        log.info("AccountMappingService: {} conceptos x {} empresas verificados OK",
+                REQUIRED_CONCEPTS.size(), checked);
     }
 
     /**
@@ -115,15 +161,26 @@ public class AccountMappingService {
      * @throws IllegalStateException si el concepto no esta mapeado
      */
     public Long resolveOrThrow(String conceptCode) {
-        Long cached = cache.get(conceptCode);
+        // Multi-tenant (Bloque G fix): resuelve el concepto SOLO para la empresa activa.
+        // El cache es por (companyId, conceptCode) — nunca hay leak cross-tenant.
+        Long companyId = TenantContext.getCompanyId();
+        if (companyId == null) {
+            throw new IllegalStateException(
+                    "resolveOrThrow requiere TenantContext activo. "
+                  + "PLATFORM_ADMIN no puede generar asientos contables (no tiene empresa).");
+        }
+        String key = cacheKey(companyId, conceptCode);
+        Long cached = cache.get(key);
         if (cached != null) {
             return cached;
         }
-        AccountMapping mapping = mappingRepository.findByConceptCode(conceptCode)
+        AccountMapping mapping = mappingRepository
+                .findByCompanyIdAndConceptCodeAndDeletedAtIsNull(companyId, conceptCode)
                 .orElseThrow(() -> new IllegalStateException(
                         "No existe mapeo contable para concepto: " + conceptCode
-                        + ". Configure en tabla account_mappings."));
-        cache.put(conceptCode, mapping.getAccountingAccountId());
+                        + " en la empresa " + companyId
+                        + ". Configure en tabla account_mappings o ejecute _tenant_auto_provision."));
+        cache.put(key, mapping.getAccountingAccountId());
         return mapping.getAccountingAccountId();
     }
 
@@ -135,12 +192,19 @@ public class AccountMappingService {
      * @return Optional con el ID, o vacio si no hay mapeo
      */
     public Optional<Long> resolve(String conceptCode) {
-        Long cached = cache.get(conceptCode);
+        // Multi-tenant (Bloque G fix): lookup por (companyId, conceptCode).
+        Long companyId = TenantContext.getCompanyId();
+        if (companyId == null) {
+            return Optional.empty();
+        }
+        String key = cacheKey(companyId, conceptCode);
+        Long cached = cache.get(key);
         if (cached != null) {
             return Optional.of(cached);
         }
-        Optional<AccountMapping> mapping = mappingRepository.findByConceptCode(conceptCode);
-        mapping.ifPresent(m -> cache.put(conceptCode, m.getAccountingAccountId()));
+        Optional<AccountMapping> mapping = mappingRepository
+                .findByCompanyIdAndConceptCodeAndDeletedAtIsNull(companyId, conceptCode);
+        mapping.ifPresent(m -> cache.put(key, m.getAccountingAccountId()));
         return mapping.map(AccountMapping::getAccountingAccountId);
     }
 

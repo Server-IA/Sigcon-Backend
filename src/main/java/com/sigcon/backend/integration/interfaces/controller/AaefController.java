@@ -97,6 +97,8 @@ public class AaefController {
             body.put("existingBatchId", e.getExistingBatchId());
             return ResponseEntity.status(409).body(body);
 
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error inesperado recibiendo lote AAEF", e);
             Map<String, Object> body = new LinkedHashMap<>();

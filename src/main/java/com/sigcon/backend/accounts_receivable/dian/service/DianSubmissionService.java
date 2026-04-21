@@ -77,6 +77,28 @@ public class DianSubmissionService {
     @Async
     @Transactional
     public void processSubmissionAsync(Long submissionId) {
+        // Multi-tenant (Bloque G fix): thread async no hereda TenantContext. El
+        // submission tiene company_id en BD desde V10-C; lo recuperamos con
+        // modo platform admin (bypass del @Filter) y luego lo fijamos para el
+        // resto de la ejecucion. De otro modo findById fallaria con 404 o el
+        // update sobreescribiria una empresa incorrecta.
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
+        Long companyId;
+        try {
+            companyId = submissionRepository.findById(submissionId)
+                    .map(DianInvoiceSubmission::getCompanyId).orElse(null);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
+        }
+        com.sigcon.backend.platform.tenant.TenantContext.setCompanyId(companyId);
+        try {
+            processSubmissionAsyncInternal(submissionId);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
+        }
+    }
+
+    private void processSubmissionAsyncInternal(Long submissionId) {
         try {
             Thread.sleep(MOCK_PSE_DELAY_MS);
         } catch (InterruptedException ie) {

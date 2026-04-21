@@ -33,8 +33,9 @@ CREATE TABLE IF NOT EXISTS sales_invoices (
     deleted_at TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_sales_invoice_number
-    ON sales_invoices (invoice_number) WHERE deleted_at IS NULL;
+-- V10-D: reemplazado por UNIQUE(company_id, invoice_number). Legacy neutralizado.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_sales_invoice_number
+--     ON sales_invoices (invoice_number) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_sales_invoice_third_party
     ON sales_invoices (third_party_id);

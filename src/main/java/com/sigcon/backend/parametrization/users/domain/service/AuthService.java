@@ -14,6 +14,7 @@ import com.sigcon.backend.parametrization.users.domain.repository.BlackListedTok
 import com.sigcon.backend.parametrization.users.domain.repository.PasswordResetTokenRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 
@@ -49,6 +50,7 @@ public class AuthService implements UserDetailsService {
     private final BlackListedTokenRepository blackListedTokenRepository;
     private final RoleRepository roleRepository;
     private final AvatarStorageService avatarStorageService;
+    private final CompanyRepository companyRepository;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
@@ -136,6 +138,19 @@ public class AuthService implements UserDetailsService {
 
             User user = (User) auth.getPrincipal();
 
+            // HU-PLAT-05 E3: si la empresa del usuario esta INACTIVE, bloquear login.
+            // PLATFORM_ADMIN (sin company_id) no aplica.
+            if (user.getCompanyId() != null) {
+                var company = companyRepository.findById(user.getCompanyId()).orElse(null);
+                if (company == null
+                        || company.getStatus() != com.sigcon.backend.platform.companies.domain.model.Company.CompanyStatus.ACTIVE) {
+                    return ResponseEntity.badRequest().body(
+                            ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                    "La empresa a la que pertenece esta cuenta esta desactivada. "
+                                  + "Contacte al administrador de plataforma.")));
+                }
+            }
+
             // Resetear contador de intentos fallidos
             user.setFailedLoginAttempts(0);
             user.setLockedUntil(null);
@@ -145,6 +160,17 @@ public class AuthService implements UserDetailsService {
 
             Map<String, Object> response = new HashMap<String, Object>();
             response.put("token", token);
+            // Bloque F: expone tenant info para que el frontend mantenga Redux actualizado
+            // sin necesidad de decodificar el JWT.
+            response.put("userId", user.getId());
+            response.put("username", user.getUsername());
+            response.put("email", user.getEmail());
+            response.put("platformRole", user.getPlatformRole()); // "PLATFORM_ADMIN" o null
+            response.put("companyId", user.getCompanyId());       // null si PLATFORM_ADMIN
+            response.put("companyName",
+                    user.getCompanyId() == null ? null :
+                    companyRepository.findById(user.getCompanyId())
+                            .map(c -> c.getBusinessName()).orElse(null));
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Inicio de sesion exitoso."), Optional.of(response))

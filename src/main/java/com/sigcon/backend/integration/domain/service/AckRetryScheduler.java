@@ -49,17 +49,34 @@ public class AckRetryScheduler {
      */
     @Scheduled(fixedDelayString = "${sigcon.integration.ack-retry-poll-millis:30000}")
     public void retryPendingAcks() {
-        List<Long> pendingIds = batchRepository.findPendingAckRetryIds(LocalDateTime.now());
+        // Multi-tenant (Bloque G fix): el scheduler corre sin TenantContext.
+        // Activamos modo PLATFORM_ADMIN para que @Filter NO restrinja la query
+        // y veamos los pendientes de TODAS las empresas.
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
+        List<Long> pendingIds;
+        try {
+            pendingIds = batchRepository.findPendingAckRetryIds(LocalDateTime.now());
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
+        }
         if (pendingIds.isEmpty()) return;
 
         log.info("AckRetryScheduler: encontrados {} lotes en ACK_PENDING listos para retry", pendingIds.size());
         for (Long id : pendingIds) {
             try {
-                log.debug("Reintentando ACK para batch {}", id);
+                // Para cada batch, fijar el tenant del propio batch para que los
+                // eventos derivados (audit logs, transfer history) queden con el
+                // company_id correcto, no el default.
+                Long companyId = batchRepository.findById(id).map(b -> b.getCompanyId()).orElse(null);
+                com.sigcon.backend.platform.tenant.TenantContext.setCompanyId(companyId);
+                com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(false);
+                log.debug("Reintentando ACK para batch {} (empresa {})", id, companyId);
                 // sendAck es @Transactional internamente y carga el payload dentro de la sesion
                 ackClient.sendAck(id);
             } catch (Exception e) {
                 log.error("Error en reintento de ACK para batch {}", id, e);
+            } finally {
+                com.sigcon.backend.platform.tenant.TenantContext.clear();
             }
         }
     }

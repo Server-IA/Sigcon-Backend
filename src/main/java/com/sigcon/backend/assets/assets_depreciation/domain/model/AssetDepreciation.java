@@ -36,6 +36,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "assets_depreciation")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @NoArgsConstructor
@@ -46,6 +47,10 @@ public class AssetDepreciation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     /**
      * Activo al que pertenece este registro histórico.
      * La relación es LAZY para evitar cargas innecesarias al paginar el historial.
@@ -99,6 +104,24 @@ public class AssetDepreciation {
 
     @PrePersist
     protected void onCreate() {
+        if (this.companyId == null) {
+            if (this.asset != null && this.asset.getCompanyId() != null) {
+                this.companyId = this.asset.getCompanyId();
+            } else {
+                this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+            }
+        }
         this.createdAt = LocalDateTime.now();
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 }

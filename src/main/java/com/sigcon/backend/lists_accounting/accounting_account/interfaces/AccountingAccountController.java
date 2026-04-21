@@ -61,7 +61,6 @@ public class AccountingAccountController {
                 }
 
                 return accountingAccountService.getAccountingAccounts(dtRequest);
-                // } catch (Exception e) {
                 // return ResponseEntity.badRequest().body(ErrorRespondJson
                 // .getErrorRespondMessage(Optional.of("Error al consultar datos, intente
                 // nuevamente.")));
@@ -95,7 +94,6 @@ public class AccountingAccountController {
                 Long companyId = 1L; // Temporal - reemplazar con usuario actual
 
                 return accountingAccountService.createAccountingAccount(request, bindingResult, userId, companyId);
-                // } catch (Exception e) {
                 // return ResponseEntity.badRequest()
                 // .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 // }
@@ -128,7 +126,6 @@ public class AccountingAccountController {
                 Long userId = 1L; // Temporal - reemplazar con jwtService.getUserIdFromToken()
 
                 return accountingAccountService.updateAccountingAccount(request, bindingResult, userId);
-                // } catch (Exception e) {
                 // return ResponseEntity.badRequest()
                 // .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 // }
@@ -159,7 +156,6 @@ public class AccountingAccountController {
                 Long userId = 1L; // Temporal - reemplazar con jwtService.getUserIdFromToken()
 
                 return accountingAccountService.deleteAccountingAccount(id, reason, userId);
-                // } catch (Exception e) {
                 // return ResponseEntity.badRequest()
                 // .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 // }

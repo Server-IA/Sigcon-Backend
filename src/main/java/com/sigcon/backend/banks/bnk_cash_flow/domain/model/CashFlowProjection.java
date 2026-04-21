@@ -35,6 +35,7 @@ import java.time.LocalDateTime;
 @Table(name = "bnk_cash_flow_projections")
 @SQLDelete(sql = "UPDATE bnk_cash_flow_projections SET deleted_at = NOW(), status = 'INACTIVA' WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
+@org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
@@ -45,10 +46,14 @@ public class CashFlowProjection {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+
+    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
+    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    private Long companyId;
     /**
      * Nombre único de la proyección. BNK-RF-29: validado como único en el sistema.
      */
-    @Column(name = "name", nullable = false, length = 255, unique = true)
+    @Column(name = "name", nullable = false, length = 255)
     @NotBlank(message = "El nombre de la proyección no puede estar vacío")
     private String name;
 
@@ -144,6 +149,7 @@ public class CashFlowProjection {
 
     @PrePersist
     protected void onCreate() {
+        if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         this.status = ProjectionStatus.BORRADOR;
@@ -152,5 +158,16 @@ public class CashFlowProjection {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @jakarta.persistence.PostLoad
+    protected void __onLoadTenant() {
+        if (com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin()) return;
+        Long current = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (current == null || this.companyId == null) return;
+        if (!current.equals(this.companyId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                    "Recurso fuera del tenant actual");
+        }
     }
 }

@@ -80,6 +80,27 @@ public class User implements UserDetails {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
+    // ---------- Multi-tenant (V10-A, 2026-04-19) ----------
+    //
+    // Invariante a nivel BD (ck_users_tenant_or_platform):
+    //   - company_id NOT NULL y platform_role NULL  -> usuario de una empresa
+    //   - company_id NULL     y platform_role PLATFORM_ADMIN -> admin de plataforma
+    // Nunca ambos campos llenos ni ambos NULL.
+    //
+    // El platform_role actua como un "meta-rol" fuera de la jerarquia normal
+    // de roles/permisos: NO se usa para @PreAuthorize (ese sigue leyendo de
+    // la tabla roles). Se usa para:
+    //   - identificar al PLATFORM_ADMIN en el JWT (claim platformRole)
+    //   - bypass del Hibernate @Filter de multi-tenancy
+    //   - habilitar endpoints /platform/** de gestion de empresas
+    /** FK a companies(id). NULL solo para PLATFORM_ADMIN. */
+    @Column(name = "company_id")
+    private Long companyId;
+
+    /** 'PLATFORM_ADMIN' si es admin de plataforma, NULL si es usuario de una empresa. */
+    @Column(name = "platform_role", length = 50)
+    private String platformRole;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

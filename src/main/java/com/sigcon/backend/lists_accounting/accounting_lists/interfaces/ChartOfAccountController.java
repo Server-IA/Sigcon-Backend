@@ -88,6 +88,8 @@ public class ChartOfAccountController {
                 } catch (IllegalArgumentException | IllegalStateException e) {
                         return ResponseEntity.badRequest().body(
                                         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+                } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+                    throw __tie;
                 } catch (Exception e) {
                         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                                         .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
@@ -122,7 +124,9 @@ public class ChartOfAccountController {
                  * return ResponseEntity.badRequest().body(
                  * ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
                  * );
-                 * } catch (Exception e) {
+                 * } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+     throw __tie;
+ } catch (Exception e) {
                  * return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                  * .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
                  * "Error al guardar la informacion, intente nuevamente"
@@ -158,7 +162,9 @@ public class ChartOfAccountController {
                  * return ResponseEntity.badRequest().body(
                  * ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
                  * );
-                 * } catch (Exception e) {
+                 * } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+     throw __tie;
+ } catch (Exception e) {
                  * return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                  * .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
                  * "Error al registrar la inactivacion. Intente nuevamente mas tarde"

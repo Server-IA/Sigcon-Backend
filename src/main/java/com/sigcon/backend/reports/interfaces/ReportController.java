@@ -86,6 +86,8 @@ public class ReportController {
             byte[] pdfBytes = reportPdfService.generateTemplateReport();
             return buildPdfResponse(pdfBytes, "sigcon_plantilla_base.pdf");
 
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
+            throw __tie;
         } catch (Exception e) {
             log.error("Error al generar la plantilla PDF: ", e);
             return ResponseEntity
