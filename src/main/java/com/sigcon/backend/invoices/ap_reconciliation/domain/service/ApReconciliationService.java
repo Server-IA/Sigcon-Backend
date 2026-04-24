@@ -1,5 +1,7 @@
 package com.sigcon.backend.invoices.ap_reconciliation.domain.service;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
 import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.invoices.ap_payments.domain.model.ApPayment;
@@ -55,6 +57,7 @@ public class ApReconciliationService {
 
     private final ApPaymentRepository paymentRepository;
     private final FinancialMovementRepository movementRepository;
+    private final AuditPublisher auditPublisher;
 
     /**
      * Lista los pagos AP pendientes de conciliar con BNK.
@@ -134,6 +137,8 @@ public class ApReconciliationService {
         payment.setReconciledAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
+        auditPublisher.publishUpdate(AuditModule.AP, "ApPaymentReconciliation", paymentId,
+                "Pago AP #" + paymentId + " conciliado con movimiento BNK #" + movementId);
         log.info("AP-09: Pago {} conciliado con movimiento BNK {}", paymentId, movementId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Pago conciliado correctamente con movimiento bancario"),
@@ -159,6 +164,8 @@ public class ApReconciliationService {
         payment.setReconciledAt(null);
         paymentRepository.save(payment);
 
+        auditPublisher.publishDelete(AuditModule.AP, "ApPaymentReconciliation", paymentId,
+                "Conciliacion del pago AP #" + paymentId + " revertida");
         log.info("AP-09: Conciliacion de pago {} revertida", paymentId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Conciliacion revertida"), Optional.of(payment)));

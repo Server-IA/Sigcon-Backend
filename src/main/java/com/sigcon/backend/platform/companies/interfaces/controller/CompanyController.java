@@ -216,4 +216,41 @@ public class CompanyController {
             @PathVariable Long id) {
         return ResponseEntity.ok(companyService.activate(id));
     }
+
+    /**
+     * Reprovisiona los recursos base de una empresa (periodos contables,
+     * mapeos PUC, centro de costo default, conceptos de nomina, parametros).
+     *
+     * <p><b>Uso:</b> recuperacion tras un estado inconsistente. Casos:
+     * <ul>
+     *   <li>Empresa creada via SQL directo saltando {@code _tenant_auto_provision}.</li>
+     *   <li>Borrado accidental de una fila de {@code account_mappings}.</li>
+     *   <li>El fail-fast del {@code AccountMappingService} impide arrancar
+     *       porque una empresa no tiene los 19 conceptos obligatorios.</li>
+     * </ul>
+     *
+     * <p>La funcion PL/pgSQL subyacente es idempotente (todos los inserts
+     * van con {@code WHERE NOT EXISTS}); se puede reejecutar sin duplicar
+     * datos. Solo crea lo que falta.
+     */
+    @PostMapping("/{id}/re-provision")
+    @Operation(summary = "Reparar provision de recursos base",
+               description = "Vuelve a ejecutar _tenant_auto_provision para reparar "
+                           + "una empresa con recursos incompletos (periodos, mapeos PUC, "
+                           + "conceptos NOM, parametros). Idempotente: solo agrega lo que falta.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Reprovision completada"),
+        @ApiResponse(responseCode = "400", description = "Empresa no existe"),
+        @ApiResponse(responseCode = "403", description = "Usuario no es PLATFORM_ADMIN")
+    })
+    public ResponseEntity<java.util.Map<String, Object>> reprovision(
+            @Parameter(description = "ID de la empresa a reparar", example = "2")
+            @PathVariable Long id) {
+        companyService.findById(id); // valida existencia
+        companyService.provisionTenantDefaults(id, java.time.LocalDate.now().getYear());
+        return ResponseEntity.ok(java.util.Map.of(
+                "success", true,
+                "message", "Reprovision completada para la empresa " + id,
+                "companyId", id));
+    }
 }

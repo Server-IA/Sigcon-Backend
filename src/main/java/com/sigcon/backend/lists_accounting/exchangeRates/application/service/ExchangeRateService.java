@@ -25,6 +25,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -47,6 +49,7 @@ public class ExchangeRateService {
 
     private final ExchangeRateRepository repository;
     private final CurrencyTypeRepository currencyRepository;
+    private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<ExchangeRate> exchangeRateSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     /**
@@ -105,6 +108,10 @@ public class ExchangeRateService {
                     .build();
 
             repository.save(rate);
+            auditPublisher.publishCreate(AuditModule.CFG, "ExchangeRate", rate.getId(),
+                    "Tasa de cambio creada: " + currencyExchange.getIsoCode() + "/"
+                            + currencyExchanged.getIsoCode() + " = " + rate.getValue()
+                            + " (" + request.getStartDate() + " a " + request.getEndDate() + ")");
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio creado con exito"), Optional.empty())
             );
@@ -231,7 +238,10 @@ public class ExchangeRateService {
             rate.setUpdatedAt(LocalDateTime.now());
     
             repository.save(rate);
-    
+            auditPublisher.publishUpdate(AuditModule.CFG, "ExchangeRate", rate.getId(),
+                    "Tasa de cambio actualizada: " + currencyExchange.getIsoCode() + "/"
+                            + currencyExchanged.getIsoCode() + " = " + rate.getValue());
+
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio actualizada con exito"), Optional.empty())
             );
@@ -262,7 +272,9 @@ public class ExchangeRateService {
             rate.setUpdatedAt(LocalDateTime.now());
     
             repository.save(rate);
-    
+            auditPublisher.publishDelete(AuditModule.CFG, "ExchangeRate", rate.getId(),
+                    "Tasa de cambio eliminada id=" + rate.getId());
+
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio eliminada con exito"), Optional.empty())
             );

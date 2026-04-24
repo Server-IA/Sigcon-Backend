@@ -2,6 +2,7 @@ package com.sigcon.backend.banks.financialmovements.interfaces.controller;
 
 import com.sigcon.backend.banks.financialmovements.application.CreateBankFinancialMovementRequest;
 import com.sigcon.backend.banks.financialmovements.domain.service.FinancialMovementService;
+import com.sigcon.backend.utils.DataTableRequest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -38,6 +39,22 @@ public class FinancialMovementController {
      * @param unmatchedOnly si es true, solo devuelve movimientos no conciliados
      * @return lista de movimientos financieros
      */
+    /**
+     * Buscar todos los movimientos del tenant paginados (DataTable).
+     * Sin requerir bankAccountId — devuelve todos los movimientos de la empresa actual.
+     */
+    @PostMapping("")
+    @Operation(summary = "Buscar movimientos financieros (DataTable)",
+               description = "Devuelve movimientos financieros de TODAS las cuentas del tenant, paginados")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Lista paginada"),
+        @ApiResponse(responseCode = "401", description = "No autenticado")
+    })
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> search(@RequestBody DataTableRequest request) {
+        return financialMovementService.search(request);
+    }
+
     @GetMapping("")
     @Operation(summary = "Listar movimientos financieros", description = "Obtiene los movimientos financieros de una cuenta bancaria, con opcion de filtrar solo no conciliados")
     @ApiResponses({

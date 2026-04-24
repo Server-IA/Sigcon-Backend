@@ -1,5 +1,7 @@
 package com.sigcon.backend.nomina.domain.service;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO;
@@ -60,6 +62,7 @@ public class BenefitLiquidationService {
     private final JournalEntryService journalEntryService;
     private final AccountMappingService accountMappingService;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     /** HU-NOM-05 E1: cesantias + intereses del año. */
     @Transactional
@@ -99,6 +102,10 @@ public class BenefitLiquidationService {
         resp.put("totalPayable", severance.add(interest));
         resp.put("journalEntryId", journalEntryId);
         resp.put("legalRef", "CST Art. 249, Ley 52/1975. Consignacion antes del 15 de febrero");
+
+        auditPublisher.publishCreate(AuditModule.NOM, "SeveranceLiquidation", emp.getId(),
+                "Cesantias liquidadas empleado=" + emp.getFullName()
+                        + " año=" + year + " total=$" + severance.add(interest));
         return resp;
     }
 
@@ -139,6 +146,10 @@ public class BenefitLiquidationService {
         resp.put("bonus", bonus);
         resp.put("journalEntryId", journalEntryId);
         resp.put("legalRef", "CST Art. 306 - 30 junio / 20 diciembre");
+
+        auditPublisher.publishCreate(AuditModule.NOM, "ServiceBonusLiquidation", emp.getId(),
+                "Prima de servicios liquidada empleado=" + emp.getFullName()
+                        + " " + year + "-S" + semester + " monto=$" + bonus);
         return resp;
     }
 
@@ -219,6 +230,15 @@ public class BenefitLiquidationService {
         resp.put("totalPayable", total);
         resp.put("journalEntryId", journalEntryId);
         resp.put("legalRef", "CST Art. 64 (indemnización), 249, 306, 186");
+
+        auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.CREATE,
+                AuditModule.NOM,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.HIGH,
+                "TerminationLiquidation", emp.getId(),
+                "Liquidacion definitiva contrato empleado=" + emp.getFullName()
+                        + " tipo=" + terminationType + " total=$" + total,
+                null, null, journalEntryId);
         return resp;
     }
 

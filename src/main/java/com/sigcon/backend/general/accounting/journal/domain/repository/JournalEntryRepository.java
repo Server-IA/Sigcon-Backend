@@ -1,5 +1,6 @@
 package com.sigcon.backend.general.accounting.journal.domain.repository;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,6 +33,25 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
             Integer year, Integer month, JournalEntryStatus status);
 
     /**
+     * Asientos por fecha y estado. Usado para detectar duplicados de comprobantes
+     * (HU-CG-01A E9) — un asiento es duplicado si comparte fecha + totales + descripcion
+     * con otro POSTED.
+     */
+    List<JournalEntry> findByEntryDateAndStatus(LocalDate entryDate, JournalEntryStatus status);
+
+    /**
+     * HU-CG-08C E2: dado un comprobante original que fue reversado, encuentra el
+     * comprobante REV-XXXX que lo neutralizo. Devuelve el primero (deberia ser unico).
+     */
+    java.util.Optional<JournalEntry> findFirstByReversalOf_IdAndDeletedAtIsNull(Long originalId);
+
+    /**
+     * HU-CG-07B / HU-CG-08C: dado un comprobante CONTABILIZADO que fue corregido,
+     * encuentra el comprobante COR-XXXX vinculado.
+     */
+    java.util.Optional<JournalEntry> findFirstByCorrectionOf_IdAndDeletedAtIsNull(Long originalId);
+
+    /**
      * Busca asientos por modulo origen e id de origen (excluyendo eliminados logicamente).
      */
     List<JournalEntry> findBySourceModuleAndSourceIdAndDeletedAtIsNull(
@@ -40,9 +60,17 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
     /**
      * Obtiene asientos contabilizados de un periodo, ordenados por fecha y numero.
      * Usado por el Libro Diario.
+     *
+     * <p>HU-CG-08A E1: incluye tambien asientos en estado REVERSED. La inmutabilidad
+     * contable exige que un asiento contabilizado NO desaparezca de los libros
+     * oficiales; cuando se reversa, el original sigue visible junto con su contra-
+     * asiento (REV-XXXX) y la suma neta queda en $0. Esta es la lectura correcta
+     * segun la NIC 1 y el Decreto 2649/93. Si se quisiera limitar a estrictamente
+     * POSTED, usar findByPeriodAndExactStatus.</p>
      */
     @Query("SELECT je FROM JournalEntry je WHERE je.periodYear = :year AND je.periodMonth = :month "
-         + "AND je.status = :status AND je.deletedAt IS NULL ORDER BY je.entryDate, je.entryNumber")
+         + "AND je.status IN (:status, com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.REVERSED) "
+         + "AND je.deletedAt IS NULL ORDER BY je.entryDate, je.entryNumber")
     List<JournalEntry> findByPeriodAndStatus(
             @Param("year") Integer year,
             @Param("month") Integer month,
@@ -51,8 +79,10 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
     /**
      * Obtiene todos los asientos contabilizados hasta un periodo dado (inclusive).
      * Usado para calcular saldos acumulados en estados financieros.
+     * Incluye REVERSED — ver nota en findByPeriodAndStatus (HU-CG-08A E1).
      */
-    @Query("SELECT je FROM JournalEntry je WHERE je.status = :status AND je.deletedAt IS NULL "
+    @Query("SELECT je FROM JournalEntry je WHERE je.deletedAt IS NULL "
+         + "AND je.status IN (:status, com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.REVERSED) "
          + "AND (je.periodYear < :year OR (je.periodYear = :year AND je.periodMonth <= :month))")
     List<JournalEntry> findPostedUpToPeriod(
             @Param("year") Integer year,
@@ -62,8 +92,10 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
     /**
      * Obtiene asientos contabilizados estrictamente antes de un periodo.
      * Usado para calcular saldos anteriores en el Balance de Comprobacion.
+     * Incluye REVERSED — ver nota en findByPeriodAndStatus (HU-CG-08A E1).
      */
-    @Query("SELECT je FROM JournalEntry je WHERE je.status = :status AND je.deletedAt IS NULL "
+    @Query("SELECT je FROM JournalEntry je WHERE je.deletedAt IS NULL "
+         + "AND je.status IN (:status, com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.REVERSED) "
          + "AND (je.periodYear < :year OR (je.periodYear = :year AND je.periodMonth < :month))")
     List<JournalEntry> findPostedBeforePeriod(
             @Param("year") Integer year,

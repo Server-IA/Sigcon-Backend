@@ -7,6 +7,8 @@ import com.sigcon.backend.nomina.application.CreatePayrollConceptRequest;
 import com.sigcon.backend.nomina.application.PayrollConceptDTO;
 import com.sigcon.backend.nomina.domain.model.PayrollConcept;
 import com.sigcon.backend.nomina.domain.repository.PayrollConceptRepository;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +35,7 @@ public class PayrollConceptService {
 
     private final PayrollConceptRepository conceptRepository;
     private final AccountingAccountRepository accountRepository;
+    private final AuditPublisher auditPublisher;
 
     @Transactional(readOnly = true)
     public ResponseEntity<?> list(String status, String type) {
@@ -77,7 +80,11 @@ public class PayrollConceptService {
                 .legalReference(req.getLegalReference())
                 .status(req.getStatus() != null ? req.getStatus() : "ACTIVE")
                 .build();
-        return ResponseEntity.ok(PayrollConceptDTO.from(conceptRepository.save(c)));
+        PayrollConcept saved = conceptRepository.save(c);
+        auditPublisher.publishCreate(AuditModule.NOM, "PayrollConcept", saved.getId(),
+                "Concepto de nomina creado: " + saved.getCode() + " - " + saved.getName()
+                        + " (" + saved.getConceptType() + ")");
+        return ResponseEntity.ok(PayrollConceptDTO.from(saved));
     }
 
     @Transactional
@@ -95,7 +102,10 @@ public class PayrollConceptService {
         c.setAccountingAccountCreditId(req.getAccountingAccountCreditId());
         c.setLegalReference(req.getLegalReference());
         if (req.getStatus() != null) c.setStatus(req.getStatus());
-        return ResponseEntity.ok(PayrollConceptDTO.from(conceptRepository.save(c)));
+        PayrollConcept saved = conceptRepository.save(c);
+        auditPublisher.publishUpdate(AuditModule.NOM, "PayrollConcept", saved.getId(),
+                "Concepto de nomina actualizado: " + saved.getCode() + " - " + saved.getName());
+        return ResponseEntity.ok(PayrollConceptDTO.from(saved));
     }
 
     @Transactional
@@ -103,6 +113,8 @@ public class PayrollConceptService {
         PayrollConcept c = conceptRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Concepto no encontrado"));
         conceptRepository.delete(c);
+        auditPublisher.publishDelete(AuditModule.NOM, "PayrollConcept", c.getId(),
+                "Concepto de nomina eliminado: " + c.getCode() + " - " + c.getName());
         return ResponseEntity.ok("Concepto eliminado");
     }
 

@@ -31,6 +31,8 @@ import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyRole
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyStatusCatalogDTO;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty; // Import para validación de rol cliente activo
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository; // Import para validación de rol cliente activo
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,7 @@ public class EclSegmentationService {
     private final EclSegmentationRepository eclSegmentationRepository;
     private final EclSegmentationHistoryRepository eclSegmentationHistoryRepository; 
     private final ThirdPartyRepository thirdPartyRepository;
+    private final AuditPublisher auditPublisher;
     //si al final si se requiere datos del modulo Accounts Receivable aui se inyectara su repositorio
     //private final ArRepository arRepository;
 
@@ -116,6 +119,10 @@ public class EclSegmentationService {
         current.setJustification(request.getJustification());
         current.setCalculationDate(LocalDateTime.now());
         eclSegmentationRepository.save(current);
+
+        auditPublisher.publishUpdate(AuditModule.TER, "EclSegmentation", current.getId(),
+                "Segmentacion ECL ajustada manualmente: cliente id=" + clientId
+                        + " nuevo segmento=" + request.getNewSegmentation());
 
         // 6. Mapear y retornar respuesta
         return ResponseEntity.ok(
@@ -289,6 +296,10 @@ public class EclSegmentationService {
             current.setCalculationDate(LocalDateTime.now());
             segmentation = eclSegmentationRepository.save(current);
 
+            auditPublisher.publishUpdate(AuditModule.TER, "EclSegmentation", segmentation.getId(),
+                    "Segmentacion ECL recalculada: cliente id=" + clientId
+                            + " segmento=" + finalSegment);
+
         } else {
             // Crear nuevo registro — primer cálculo del cliente
             segmentation = eclSegmentationRepository.save(
@@ -301,6 +312,9 @@ public class EclSegmentationService {
                             .calculationDate(LocalDateTime.now())
                             .build()
             );
+            auditPublisher.publishCreate(AuditModule.TER, "EclSegmentation", segmentation.getId(),
+                    "Segmentacion ECL creada: cliente id=" + clientId
+                            + " segmento=" + finalSegment);
         }
 
         return ResponseEntity.status(HttpStatus.CREATED)

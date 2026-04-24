@@ -55,7 +55,9 @@ public class JwtConfigService {
     }
 
     private Optional<String> readParam(String name) {
-        return parameterRepository.findByNameAndDeletedAtIsNull(name)
-                .map(p -> p.getValue());
+        // Multi-tenant: usar query nativa que bypasea @Filter("tenantFilter").
+        // findByNameAndDeletedAtIsNull devolveria multiples filas (una por empresa)
+        // y el Optional fallaria con NonUniqueResultException en contexto sin tenant.
+        return parameterRepository.findGlobalValueByName(name);
     }
 }

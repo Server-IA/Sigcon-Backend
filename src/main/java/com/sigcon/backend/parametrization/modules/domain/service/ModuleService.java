@@ -33,6 +33,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +46,7 @@ public class ModuleService {
     private final ModuleRepository moduleRepository;
     private final MenuService menuService;
     private final SpringDataMenuRepository menuRepository;
+    private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<ModuleEntity> moduleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
@@ -236,6 +239,7 @@ public class ModuleService {
             module.setStatus(request.getStatus());
             module.setUpdatedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
+            auditPublisher.publishUpdate(AuditModule.PA, "Module", module.getId(), "Module actualizado id=" + module.getId());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo actualizado correctamente"), Optional.empty()));
         } catch (Exception e) {
@@ -270,6 +274,7 @@ public class ModuleService {
 
             module.setDeletedAt(LocalDateTime.now());
             module = moduleRepository.save(module);
+            auditPublisher.publishDelete(AuditModule.PA, "Module", module.getId(), "Module eliminado id=" + module.getId());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Módulo eliminado correctamente"), Optional.empty()));
         } catch (Exception e) {

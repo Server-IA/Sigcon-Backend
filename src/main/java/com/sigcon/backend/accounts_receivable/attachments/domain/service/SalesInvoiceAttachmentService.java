@@ -12,6 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.accounts_receivable.attachments.application.SalesInvoiceAttachmentDTO;
 import com.sigcon.backend.accounts_receivable.attachments.domain.model.SalesInvoiceAttachment;
 import com.sigcon.backend.accounts_receivable.attachments.domain.repository.SalesInvoiceAttachmentRepository;
@@ -43,6 +45,7 @@ public class SalesInvoiceAttachmentService {
 
     private final SalesInvoiceAttachmentRepository attachmentRepository;
     private final SalesInvoiceRepository salesInvoiceRepository;
+    private final AuditPublisher auditPublisher;
 
     /**
      * AR-03: Adjunta un archivo a una factura de venta.
@@ -86,6 +89,10 @@ public class SalesInvoiceAttachmentService {
                 .build();
 
         attachment = attachmentRepository.save(attachment);
+
+        auditPublisher.publishCreate(AuditModule.AR, "SalesInvoiceAttachment", attachment.getId(),
+                "Adjunto agregado a factura de venta #" + invoiceId
+                        + " archivo=" + attachment.getFileName());
         log.info("Adjunto {} cargado para FV {}", attachment.getId(), invoiceId);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -132,6 +139,8 @@ public class SalesInvoiceAttachmentService {
             throw new IllegalArgumentException("El adjunto no fue encontrado");
         }
         attachmentRepository.deleteById(attachmentId);
+        auditPublisher.publishDelete(AuditModule.AR, "SalesInvoiceAttachment", attachmentId,
+                "Adjunto de factura de venta eliminado id=" + attachmentId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Adjunto eliminado correctamente"), Optional.empty()));
     }

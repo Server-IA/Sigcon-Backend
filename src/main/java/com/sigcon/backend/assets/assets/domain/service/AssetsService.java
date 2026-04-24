@@ -76,6 +76,8 @@ import com.sigcon.backend.vouchers.domain.models.VoucherTypesEntity;
 import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
 import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
 import com.sigcon.backend.vouchers.domain.service.VoucherService;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -126,6 +128,7 @@ public class AssetsService {
     private static final LocalDate EXCEL_EPOCH = LocalDate.of(1899, 12, 30);
 
     private final VoucherService voucherService;
+    private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
 
@@ -245,6 +248,8 @@ public class AssetsService {
                 .build(); 
 
         Assets savedAsset = assetsRepository.save(asset);
+        auditPublisher.publishCreate(AuditModule.ACT, "Asset", savedAsset.getId(),
+                "Activo registrado: " + savedAsset.getAssetCode() + " - " + savedAsset.getAssetName());
 
         // TODO: Leer de SystemInfoService cuando se integre
         // if(user.getCompany().getTypeRegimen().getId() == 2){
@@ -459,6 +464,7 @@ public class AssetsService {
                 .orElseThrow(() -> new RuntimeException("Activo no encontrado"));
         asset.setDeletedAt(java.time.LocalDateTime.now());
         assetsRepository.save(asset);
+        auditPublisher.publishDelete(AuditModule.ACT, "Asset", asset.getId(), "Asset eliminado id=" + asset.getId());
     }
 
     @Transactional
@@ -522,6 +528,7 @@ public class AssetsService {
         existingAsset.setUpdatedBy(currentUser);
 
         Assets savedAsset = assetsRepository.save(existingAsset);
+        auditPublisher.publishUpdate(AuditModule.ACT, "Asset", existingAsset.getId(), "Asset actualizado id=" + existingAsset.getId());
         return toViewDTO(savedAsset);
     }
 

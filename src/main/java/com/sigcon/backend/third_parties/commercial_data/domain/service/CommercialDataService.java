@@ -28,6 +28,8 @@ import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPar
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +51,7 @@ public class CommercialDataService {
     private final PaymentTermsRepository paymentTermsRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
    /*
      * Crear datos comerciales de un tercero.
@@ -91,6 +94,7 @@ public class CommercialDataService {
         entity.setValidityFrom(request.getValidityFrom());
         entity.setValidityTo(request.getValidityTo());
         CommercialData saved = commercialDataRepository.save(entity);
+        auditPublisher.publishCreate(AuditModule.TER, "CommercialData", entity.getId(), "CommercialData creado id=" + entity.getId());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(SuccessRespondJson.getSuccessRespondMessage(
@@ -144,6 +148,7 @@ public class CommercialDataService {
         current.setValidityFrom(request.getValidityFrom());
         current.setValidityTo(request.getValidityTo());
         CommercialData updated = commercialDataRepository.save(current);
+        auditPublisher.publishUpdate(AuditModule.TER, "CommercialData", current.getId(), "CommercialData actualizado id=" + current.getId());
 
         // 9. Persistir historial de cambios
         if (!changes.isEmpty()) {

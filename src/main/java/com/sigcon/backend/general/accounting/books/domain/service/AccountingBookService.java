@@ -20,6 +20,8 @@ import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntry;
 import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntryLine;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus;
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
+import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
 import com.sigcon.backend.utils.SuccessRespondJson;
 
 import lombok.RequiredArgsConstructor;
@@ -102,6 +104,7 @@ public class AccountingBookService {
             return LibroDiarioDTO.builder()
                     .entryId(entry.getId())
                     .entryNumber(entry.getEntryNumber())
+                    .voucherCode(JournalEntryService.buildVoucherCode(entry))
                     .date(entry.getEntryDate())
                     .description(entry.getDescription())
                     .status(entry.getStatus().name())
@@ -167,7 +170,8 @@ public class AccountingBookService {
                             ? line.getAccountingAccount().getPucAccount().getCode() : "";
                     String name = line.getAccountingAccount().getPucAccount() != null
                             ? line.getAccountingAccount().getPucAccount().getName() : "";
-                    return new LibroMayorAccumulator(accId, code, name);
+                    return new LibroMayorAccumulator(accId, code, name,
+                            line.getAccountingAccount().getNature());
                 });
 
                 LibroMayorAccumulator acc = accountMap.get(accId);
@@ -186,7 +190,12 @@ public class AccountingBookService {
                         .accountName(acc.accountName)
                         .totalDebit(acc.totalDebit)
                         .totalCredit(acc.totalCredit)
-                        .balance(acc.totalDebit.subtract(acc.totalCredit))
+                        // HU-CG-01B E3 / HU-CG-06B E3: saldo respeta la naturaleza de la cuenta.
+                        // Naturaleza CREDIT (Pasivo/Patrimonio/Ingresos): saldo = credito - debito
+                        // Naturaleza DEBIT  (Activo/Gasto/Costo):         saldo = debito - credito
+                        .balance(acc.nature == AccountNature.CREDIT
+                                ? acc.totalCredit.subtract(acc.totalDebit)
+                                : acc.totalDebit.subtract(acc.totalCredit))
                         .build())
                 .collect(Collectors.toList());
     }
@@ -410,13 +419,15 @@ public class AccountingBookService {
         Long accountId;
         String pucCode;
         String accountName;
+        AccountNature nature;
         BigDecimal totalDebit = BigDecimal.ZERO;
         BigDecimal totalCredit = BigDecimal.ZERO;
 
-        LibroMayorAccumulator(Long accountId, String pucCode, String accountName) {
+        LibroMayorAccumulator(Long accountId, String pucCode, String accountName, AccountNature nature) {
             this.accountId = accountId;
             this.pucCode = pucCode;
             this.accountName = accountName;
+            this.nature = nature;
         }
     }
 

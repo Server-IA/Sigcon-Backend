@@ -35,7 +35,7 @@ FROM (
     ('CHEQUERAS', now(),NULL::timestamp,'ri-folder-check-fill','Chequeras',2,'chequeras','ACTIVE',now(),5,NULL::bigint, TRUE),
     ('CHEQUES', now(),NULL::timestamp,'ri-folder-check-fill','Cheques',2,'cheqques','ACTIVE',now(),5,NULL::bigint, TRUE),
     ('CATALOGO_BANCOS', now(),NULL::timestamp,'ri-shield-check-fill','Bancos',3,'banks','ACTIVE',now(),5,NULL::bigint, TRUE),
-    ('SUCURSALES_BANCARIAS', now(),NULL::timestamp,'ri-home-office-fill','Sucursales Bancos',4,'branches/:id','ACTIVE',now(),5,27, FALSE),
+    ('SUCURSALES_BANCARIAS', now(),NULL::timestamp,'ri-home-office-fill','Sucursales Bancos',4,'banks/branches/:id','ACTIVE',now(),5,27, FALSE),
     ('BANK_ACCOUNTS', now(),NULL::timestamp,'ri-bank-card-line','Cuentas Bancarias',5,'bank-accounts','ACTIVE',now(),5,NULL::bigint, TRUE)
 
 ) AS v(component, created_at, deleted_at, icon, "label", menu_order, "path", status, updated_at, module_id, parent_id, visible)

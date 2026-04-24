@@ -37,6 +37,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -51,6 +53,7 @@ public class AccountingAccountService {
     private final CostCenterRepository costCenterRepository;
     private final DepretationRuleRepository depretationRuleRepository;
     private final RuleTaxRepository ruleTaxRepository;
+    private final AuditPublisher auditPublisher;
     /** CFG-08: validacion saldo != 0 al inactivar cuenta contable. */
     private final com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryLineRepository journalEntryLineRepository;
 
@@ -155,6 +158,7 @@ public class AccountingAccountService {
                     .build();
 
             accountingAccountRepository.save(accountingAccount);
+            auditPublisher.publishCreate(AuditModule.CFG, "AccountingAccount", accountingAccount.getId(), "AccountingAccount creado id=" + accountingAccount.getId());
 
             // AUDITORÍA COMENTADA - NO IMPLEMENTAR AÚN
             // auditLogService.logCreation(accountingAccount, userId, "Cuentas Contables");
@@ -238,6 +242,7 @@ public class AccountingAccountService {
             accountingAccount.setTaxRuleId(request.getTax_rule_id());
 
             accountingAccountRepository.save(accountingAccount);
+            auditPublisher.publishUpdate(AuditModule.CFG, "AccountingAccount", accountingAccount.getId(), "AccountingAccount actualizado id=" + accountingAccount.getId());
 
             // AUDITORÍA COMENTADA - NO IMPLEMENTAR AÚN
             // auditLogService.logChanges(accountingAccount, request, userId, "Cuentas
@@ -284,6 +289,7 @@ public class AccountingAccountService {
             accountingAccount.setDeletedAt(LocalDateTime.now());
             accountingAccount.setStatus(AccountStatus.INACTIVE);
             accountingAccountRepository.save(accountingAccount);
+            auditPublisher.publishDelete(AuditModule.CFG, "AccountingAccount", accountingAccount.getId(), "AccountingAccount eliminado id=" + accountingAccount.getId());
 
             // AUDITORÍA COMENTADA - NO IMPLEMENTAR AÚN
             // CFG-RF-08 Paso 8: Registro en auditoría

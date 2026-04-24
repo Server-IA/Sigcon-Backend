@@ -49,12 +49,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * de AgroFusion (https://api.agrofusion.co/integrations/aaef/ack).
  */
 @Slf4j
-@Profile("dev")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "sigcon.integration.mocks-enabled", havingValue = "true", matchIfMissing = false)
 @RestController
 @RequestMapping("/mock-agrofusion")
 @Tag(name = "Mock AgroFusion (solo desarrollo)",
      description = "Callback simulado de AgroFusion para validar HU-INT-RF-07/13. NO usar en produccion. "
-                 + "Solo activo con SPRING_PROFILES_ACTIVE=dev.")
+                 + "Solo activo con sigcon.integration.mocks-enabled=true.")
 public class MockAgroFusionController {
 
     public enum Mode { ALWAYS_OK, FAIL_FIRST_N, ALWAYS_FAIL, TIMEOUT }

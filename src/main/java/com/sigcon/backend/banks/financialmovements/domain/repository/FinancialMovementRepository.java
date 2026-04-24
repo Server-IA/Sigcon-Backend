@@ -2,6 +2,7 @@ package com.sigcon.backend.banks.financialmovements.domain.repository;
 
 import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,7 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-public interface FinancialMovementRepository extends JpaRepository<FinancialMovement, Long> {
+public interface FinancialMovementRepository extends JpaRepository<FinancialMovement, Long>, JpaSpecificationExecutor<FinancialMovement> {
 
     @Query("SELECT fm FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
             + "AND fm.matchedCheckId IS NULL AND fm.matchedVoucherId IS NULL "

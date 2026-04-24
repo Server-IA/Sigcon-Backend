@@ -22,6 +22,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -31,6 +33,7 @@ public class CostCenterService {
 
         private final CostCenterRepository costCenterRepository;
         private final AccountingAccountRepository accountingAccountRepository;
+        private final AuditPublisher auditPublisher;
 
         private final DataTableSpecificationBuilder<CostCenter> costCenterSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -89,6 +92,7 @@ public class CostCenterService {
                         .build();
 
                 costCenterRepository.save(costCenter);
+                auditPublisher.publishCreate(AuditModule.CFG, "CostCenter", costCenter.getId(), "CostCenter creado id=" + costCenter.getId());
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
                                                 Optional.of("Centro de costo creado exitosamente"),
@@ -127,6 +131,7 @@ public class CostCenterService {
                 costCenter.setStatus(request.getStatus());
 
                 costCenterRepository.save(costCenter);
+                auditPublisher.publishUpdate(AuditModule.CFG, "CostCenter", costCenter.getId(), "CostCenter actualizado id=" + costCenter.getId());
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
                                                 Optional.of("Centro de costo actualizado exitosamente"),
@@ -154,6 +159,7 @@ public class CostCenterService {
                         costCenter.setDeletedAt(LocalDateTime.now());
                         costCenter.setDeletionReason(reason);
                         costCenterRepository.save(costCenter);
+                        auditPublisher.publishDelete(AuditModule.CFG, "CostCenter", costCenter.getId(), "CostCenter eliminado id=" + costCenter.getId());
 
                         return ResponseEntity.ok(
                                         SuccessRespondJson.getSuccessRespondMessage(

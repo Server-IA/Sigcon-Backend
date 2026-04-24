@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
  * V9-G. El admin puede agregar conceptos adicionales o cambiar porcentajes
  * de los existentes.
  */
+@PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/api/nomina/conceptos")
 @RequiredArgsConstructor

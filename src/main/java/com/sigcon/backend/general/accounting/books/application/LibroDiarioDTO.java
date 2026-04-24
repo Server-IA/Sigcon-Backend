@@ -25,6 +25,12 @@ public class LibroDiarioDTO {
     /** Numero consecutivo del asiento dentro del anio fiscal. */
     private Long entryNumber;
 
+    /**
+     * Codigo legible del comprobante (HU-CG-08B E3):
+     *   JE-aaaa-N | REV-aaaa-N | COR-aaaa-N
+     */
+    private String voucherCode;
+
     /** Fecha del asiento. */
     private LocalDate date;
 

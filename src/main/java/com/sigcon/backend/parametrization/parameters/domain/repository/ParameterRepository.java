@@ -24,4 +24,16 @@ public interface ParameterRepository extends JpaRepository<Parameter, Long>, Jpa
 
     List<Parameter> findByCategoryAndDeletedAtIsNull(CategoryParameter category);
     Optional<Parameter> findByNameAndDeletedAtIsNull(String name);
+
+    /**
+     * Busca un parametro SIN aplicar el tenant filter. Usado para configuracion
+     * global de plataforma (ej. AGROFUSION_API_KEY unica cross-empresa).
+     *
+     * <p>Devuelve el primero encontrado en la empresa con id mas bajo (convencion:
+     * SIGCON DEMO company_id=1 es la fuente autoritativa de config global).
+     */
+    @Query(value = "SELECT value FROM parameters WHERE name = :name "
+                 + "AND deleted_at IS NULL ORDER BY company_id ASC LIMIT 1",
+           nativeQuery = true)
+    Optional<String> findGlobalValueByName(@org.springframework.data.repository.query.Param("name") String name);
 }

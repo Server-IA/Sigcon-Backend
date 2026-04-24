@@ -17,6 +17,8 @@ import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class ThirdPartyBankAccountService {
     private final ThirdPartyBankAccountRepository thirdPartyBankAccountRepository;
     private final ThirdPartyRepository thirdPartyRepository;
     private final BankAccountRepository bankAccountRepository;
+    private final AuditPublisher auditPublisher;
 
     /**
      * Lista todas las cuentas bancarias vinculadas a un tercero.
@@ -93,6 +96,7 @@ public class ThirdPartyBankAccountService {
                 .build();
 
         ThirdPartyBankAccount saved = thirdPartyBankAccountRepository.save(link);
+        auditPublisher.publishCreate(AuditModule.TER, "ThirdPartyBankAccount", link.getId(), "ThirdPartyBankAccount creado id=" + link.getId());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(SuccessRespondJson.getSuccessRespondMessage(

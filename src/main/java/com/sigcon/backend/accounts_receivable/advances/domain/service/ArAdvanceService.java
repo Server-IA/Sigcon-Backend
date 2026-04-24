@@ -34,6 +34,8 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +60,7 @@ public class ArAdvanceService {
     private final JournalEntryService journalEntryService;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<ArAdvance> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -100,6 +103,7 @@ public class ArAdvanceService {
                 .build();
 
         advance = advanceRepository.save(advance);
+        auditPublisher.publishCreate(AuditModule.AR, "ArAdvance", advance.getId(), "ArAdvance creado id=" + advance.getId());
 
         // 5. Generar asiento contable (Debito Bancos / Credito Anticipos clientes)
         try {
@@ -133,6 +137,7 @@ public class ArAdvanceService {
             JournalEntryDTO je = journalEntryService.createEntry(jeRequest, "sistema");
             advance.setJournalEntryId(je.getId());
             advanceRepository.save(advance);
+            auditPublisher.publishCreate(AuditModule.AR, "ArAdvance", advance.getId(), "ArAdvance creado id=" + advance.getId());
             log.info("Asiento contable {} generado para anticipo AR {}", je.getId(), advance.getId());
         } catch (Exception e) {
             log.warn("No se pudo generar asiento contable para anticipo AR {}: {}",

@@ -305,9 +305,12 @@ public class ThirdPartyService {
 
         Page<ThirdParty> thirdParties = thirdPartyRepository.findAll(spec, pageable);
 
+        // Un listado paginado vacio NO es un error: devolver DataTableResponse vacio.
         if (thirdParties.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "TERC_001: No se encontraron terceros con los criterios de busqueda especificados.");
+            return ResponseEntity.ok(
+                    DataTableResponse.from(
+                            thirdParties.map(this::toDto),
+                            safeRequest.getDraw()));
         }
 
         return ResponseEntity.ok(DataTableResponse.from(thirdParties.map(this::toDto), safeRequest.getDraw()));

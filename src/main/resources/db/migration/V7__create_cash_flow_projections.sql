@@ -49,9 +49,12 @@ CREATE TABLE IF NOT EXISTS bnk_cash_flow_projections (
 -- ─── Índices ────────────────────────────────────────────────
 
 -- Unicidad del nombre (solo entre registros activos)
-CREATE UNIQUE INDEX IF NOT EXISTS uidx_bnk_cfp_name_active
-    ON bnk_cash_flow_projections (name)
-    WHERE deleted_at IS NULL;
+-- NEUTRALIZADO 2026-04: era UNIQUE global (name) que choca en multi-tenant
+-- (2 empresas con misma proyeccion). Reemplazado por compuesto (company_id, name)
+-- en V9-Z y V9-ZZD. Se deja el bloque para no romper migraciones referenciadas.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uidx_bnk_cfp_name_active
+--     ON bnk_cash_flow_projections (name)
+--     WHERE deleted_at IS NULL;
 
 -- Consultas frecuentes por estado
 CREATE INDEX IF NOT EXISTS idx_bnk_cfp_status

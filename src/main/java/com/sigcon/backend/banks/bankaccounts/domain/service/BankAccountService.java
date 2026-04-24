@@ -32,6 +32,8 @@ import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -83,6 +85,7 @@ public class BankAccountService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final CostCenterRepository costCenterRepository;
     private final CheckbookRepository checkbookRepository;
+    private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
 
@@ -172,6 +175,7 @@ public class BankAccountService {
                 .build();
 
         bankAccountRepository.save(entity);
+        auditPublisher.publishCreate(AuditModule.BNK, "BankAccount", entity.getId(), "BankAccount creado id=" + entity.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -280,6 +284,7 @@ public class BankAccountService {
         }
 
         bankAccountRepository.save(account);
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount actualizado id=" + account.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -323,6 +328,7 @@ public class BankAccountService {
 
         account.setDeletedAt(LocalDateTime.now());
         bankAccountRepository.save(account);
+        auditPublisher.publishDelete(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount eliminado id=" + account.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -419,6 +425,7 @@ public class BankAccountService {
         account.setStatus(newStatus);
         account.setUpdatedBy(getCurrentUserId());
         bankAccountRepository.save(account);
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount actualizado id=" + account.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -458,6 +465,7 @@ public class BankAccountService {
         account.setLastReconciliationDate(request.getLastReconciliationDate());
         account.setUpdatedBy(getCurrentUserId());
         bankAccountRepository.save(account);
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount actualizado id=" + account.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

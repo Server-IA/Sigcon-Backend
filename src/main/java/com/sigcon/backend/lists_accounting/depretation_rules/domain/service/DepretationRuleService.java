@@ -29,6 +29,8 @@ import com.sigcon.backend.parametrization.users.domain.model.User;
 
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +51,7 @@ public class DepretationRuleService {
 
     private final DepretationRuleRepository depretationRuleRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+    private final AuditPublisher auditPublisher;
 
     private final UserRepository userRepository;
 
@@ -99,6 +102,7 @@ public class DepretationRuleService {
 
             // 7. Guardar en BD
             DepretationRule savedRule = depretationRuleRepository.save(rule);
+            auditPublisher.publishCreate(AuditModule.CFG, "DepretationRule", rule.getId(), "DepretationRule creado id=" + rule.getId());
 
             // 8. Registrar en auditoría (cuando se haga auditoria)
             /*
@@ -366,6 +370,7 @@ public class DepretationRuleService {
 
             // 6. Guardar cambios
             DepretationRule updatedRule = depretationRuleRepository.save(rule);
+            auditPublisher.publishUpdate(AuditModule.CFG, "DepretationRule", rule.getId(), "DepretationRule actualizado id=" + rule.getId());
 
             // 7. Registrar en auditoría (comentado)
             /*
@@ -433,6 +438,7 @@ public class DepretationRuleService {
             rule.setDeletedAt(LocalDateTime.now());
             rule.setStatus(DepretationStatus.INACTIVE); // Opcional: marcar como inactiva también
             depretationRuleRepository.save(rule);
+            auditPublisher.publishDelete(AuditModule.CFG, "DepretationRule", rule.getId(), "DepretationRule eliminado id=" + rule.getId());
 
             // 5. Registrar en auditoría (comentado por el momento)
             /*

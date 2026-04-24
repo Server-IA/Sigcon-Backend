@@ -34,6 +34,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +57,7 @@ public class GoodsReceiptService {
     private final PurchaseOrderLineRepository orderLineRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<GoodsReceipt> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -123,6 +126,7 @@ public class GoodsReceiptService {
         }
 
         receipt = receiptRepository.save(receipt);
+        auditPublisher.publishCreate(AuditModule.AP, "GoodsReceipt", receipt.getId(), "GoodsReceipt creado id=" + receipt.getId());
         log.info("Recepcion {} creada para OC {}", receiptNumber, order.getOrderNumber());
 
         return ResponseEntity.ok(
@@ -203,6 +207,7 @@ public class GoodsReceiptService {
 
         receipt.setInvoiceId(invoice.getId());
         receipt = receiptRepository.save(receipt);
+        auditPublisher.publishCreate(AuditModule.AP, "GoodsReceipt", receipt.getId(), "GoodsReceipt creado id=" + receipt.getId());
         log.info("Recepcion {} vinculada a factura {}", receipt.getReceiptNumber(), invoice.getId());
 
         return ResponseEntity.ok(

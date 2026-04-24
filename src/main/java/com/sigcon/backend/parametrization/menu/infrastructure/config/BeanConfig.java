@@ -11,6 +11,7 @@ import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persis
 import com.sigcon.backend.parametrization.modules.domain.repository.ModuleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.parametrization.menuPermissions.domain.repository.MenuPermissionsRepository;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 @Configuration
 public class BeanConfig {
@@ -20,7 +21,7 @@ public class BeanConfig {
     }
 
     @Bean
-    public MenuService menuService(MenuRepositoryPort port, ModuleRepository moduleRepository, UserRepository userRepository) {
-        return new MenuService(port, moduleRepository, userRepository);
+    public MenuService menuService(MenuRepositoryPort port, ModuleRepository moduleRepository, UserRepository userRepository, AuditPublisher auditPublisher) {
+        return new MenuService(port, moduleRepository, userRepository, auditPublisher);
     }
 }

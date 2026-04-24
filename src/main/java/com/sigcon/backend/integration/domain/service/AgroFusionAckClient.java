@@ -90,10 +90,10 @@ public class AgroFusionAckClient {
             return;
         }
 
-        // Resolver URL de callback
+        // Resolver URL de callback global (query bypasea tenant filter).
+        // En multi-tenant AgroFusion expone UN solo callback; no hay uno por empresa.
         String callbackUrl = parameterRepository
-                .findByNameAndDeletedAtIsNull(CALLBACK_URL_PARAM)
-                .map(p -> p.getValue())
+                .findGlobalValueByName(CALLBACK_URL_PARAM)
                 .orElse(null);
         if (callbackUrl == null || callbackUrl.isBlank()) {
             log.error("AGROFUSION_ACK_CALLBACK_URL no configurado. No se puede enviar ACK del batch {}", batchId);
@@ -146,20 +146,20 @@ public class AgroFusionAckClient {
         }
     }
 
-    /** Lee el numero maximo de intentos desde parameters (default 3). */
+    /** Lee el numero maximo de intentos desde parameters (default 3). Query global (bypass tenant filter). */
     private int readMaxAttempts() {
-        return parameterRepository.findByNameAndDeletedAtIsNull(MAX_ATTEMPTS_PARAM)
-                .map(p -> {
-                    try { return Integer.parseInt(p.getValue()); }
+        return parameterRepository.findGlobalValueByName(MAX_ATTEMPTS_PARAM)
+                .map(v -> {
+                    try { return Integer.parseInt(v); }
                     catch (Exception e) { return DEFAULT_MAX_ATTEMPTS; }
                 }).orElse(DEFAULT_MAX_ATTEMPTS);
     }
 
-    /** Lee el delay inicial del backoff desde parameters (default 60s). */
+    /** Lee el delay inicial del backoff desde parameters (default 60s). Query global. */
     private int readInitialDelaySeconds() {
-        return parameterRepository.findByNameAndDeletedAtIsNull(INITIAL_DELAY_PARAM)
-                .map(p -> {
-                    try { return Integer.parseInt(p.getValue()); }
+        return parameterRepository.findGlobalValueByName(INITIAL_DELAY_PARAM)
+                .map(v -> {
+                    try { return Integer.parseInt(v); }
                     catch (Exception e) { return DEFAULT_INITIAL_DELAY_SECONDS; }
                 }).orElse(DEFAULT_INITIAL_DELAY_SECONDS);
     }

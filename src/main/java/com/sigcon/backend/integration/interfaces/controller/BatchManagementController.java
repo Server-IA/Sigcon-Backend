@@ -16,6 +16,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
@@ -29,6 +30,7 @@ import java.util.Map;
  * auditar y reintentar documentos fallidos.
  */
 @Slf4j
+@PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
 @RestController
 @RequestMapping("/api/contabilidad")
 @RequiredArgsConstructor

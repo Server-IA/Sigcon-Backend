@@ -31,6 +31,8 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +54,7 @@ public class ArPaymentService {
     private final JournalEntryService journalEntryService;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<ArPayment> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -122,6 +125,7 @@ public class ArPaymentService {
                 .build();
 
         payment = paymentRepository.save(payment);
+        auditPublisher.publishCreate(AuditModule.AR, "ArPayment", payment.getId(), "ArPayment creado id=" + payment.getId());
 
         // 7. Actualizar saldo de la factura
         BigDecimal newBalance = balanceDue.subtract(request.getAmount());
@@ -133,6 +137,7 @@ public class ArPaymentService {
             invoice.setStatus(SalesInvoiceStatus.PARTIALLY_PAID);
         }
         invoiceRepository.save(invoice);
+        auditPublisher.publishCreate(AuditModule.AR, "ArPayment", invoice.getId(), "ArPayment creado id=" + invoice.getId());
 
         // 8. Generar asiento contable (Debito Bancos / Credito CxC cliente)
         try {
@@ -173,6 +178,7 @@ public class ArPaymentService {
             JournalEntryDTO je = journalEntryService.createEntry(jeRequest, "sistema");
             payment.setJournalEntryId(je.getId());
             paymentRepository.save(payment);
+            auditPublisher.publishCreate(AuditModule.AR, "ArPayment", payment.getId(), "ArPayment creado id=" + payment.getId());
             log.info("Asiento contable {} generado para cobro {} de factura {}",
                     je.getId(), payment.getId(), invoice.getId());
         } catch (Exception e) {

@@ -19,6 +19,8 @@ import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +62,7 @@ public class BankReconciliationSessionService {
     private final VoucherRepository voucherRepository;
     private final JournalEntryService journalEntryService;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     /**
      * Lista todas las sesiones de conciliacion de una cuenta bancaria, ordenadas por fecha de fin descendente.
@@ -125,6 +128,7 @@ public class BankReconciliationSessionService {
                 .build();
 
         sessionRepository.save(entity);
+        auditPublisher.publishCreate(AuditModule.BNK, "BankReconciliationSession", entity.getId(), "BankReconciliationSession creado id=" + entity.getId());
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Sesion de conciliacion creada."),
@@ -321,6 +325,7 @@ public class BankReconciliationSessionService {
             session.setStatementClosingBalance(request.getStatementClosingBalance());
         }
         sessionRepository.save(session);
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankReconciliationSession", session.getId(), "BankReconciliationSession actualizado id=" + session.getId());
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Saldos del extracto actualizados."),

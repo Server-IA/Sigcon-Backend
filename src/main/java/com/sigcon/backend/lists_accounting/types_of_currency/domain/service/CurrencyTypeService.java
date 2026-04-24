@@ -15,6 +15,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class CurrencyTypeService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final ExchangeRateRepository exchangeRateRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<CurrencyType> specificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -67,6 +70,7 @@ public class CurrencyTypeService {
                     .build();
 
             currencyTypeRepository.save(currencyType);
+            auditPublisher.publishCreate(AuditModule.CFG, "CurrencyType", currencyType.getId(), "CurrencyType creado id=" + currencyType.getId());
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda creada exitosamente"), Optional.empty()));
@@ -126,6 +130,7 @@ public class CurrencyTypeService {
             }
     
             currencyTypeRepository.save(existing);
+            auditPublisher.publishUpdate(AuditModule.CFG, "CurrencyType", existing.getId(), "CurrencyType actualizado id=" + existing.getId());
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda actualizada exitosamente"), Optional.empty())
@@ -150,6 +155,7 @@ public class CurrencyTypeService {
         // Soft delete en vez de eliminación física para mantener trazabilidad
         existing.setDeletedAt(java.time.LocalDateTime.now());
         currencyTypeRepository.save(existing);
+        auditPublisher.publishDelete(AuditModule.CFG, "CurrencyType", existing.getId(), "CurrencyType eliminado id=" + existing.getId());
 
         return CurrencyTypeDeleteResponseDTO.builder()
                 .id(existing.getId())

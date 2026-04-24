@@ -26,6 +26,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +60,7 @@ public class ReportTemplateService {
 
     private final ReportTemplateRepository reportTemplateRepository;
     private final ReportTypeRepository reportTypeRepository;
+    private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<ReportTemplate> specificationBuilder =
             new DataTableSpecificationBuilder<>();
 
@@ -232,6 +235,7 @@ public class ReportTemplateService {
                     ReportTemplate promoted = others.get(0);
                     promoted.setIsDefault(true);
                     reportTemplateRepository.save(promoted);
+                    auditPublisher.publishDelete(AuditModule.PA, "ReportTemplate", promoted.getId(), "ReportTemplate eliminado id=" + promoted.getId());
                     log.info("Plantilla {} promovida como por-defecto del tipo {}", promoted.getId(), reportTypeId);
                 }
             }

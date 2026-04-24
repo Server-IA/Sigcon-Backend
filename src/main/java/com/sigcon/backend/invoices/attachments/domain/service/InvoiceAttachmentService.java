@@ -12,6 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.invoices.attachments.application.InvoiceAttachmentDTO;
 import com.sigcon.backend.invoices.attachments.domain.model.InvoiceAttachment;
 import com.sigcon.backend.invoices.attachments.domain.repository.InvoiceAttachmentRepository;
@@ -59,6 +61,7 @@ public class InvoiceAttachmentService {
 
     private final InvoiceAttachmentRepository attachmentRepository;
     private final InvoiceRepository invoiceRepository;
+    private final AuditPublisher auditPublisher;
 
     /**
      * AP-13: Adjunta un documento soporte a una factura de compra.
@@ -114,6 +117,10 @@ public class InvoiceAttachmentService {
                 .build();
 
         attachment = attachmentRepository.save(attachment);
+
+        auditPublisher.publishCreate(AuditModule.AP, "InvoiceAttachment", attachment.getId(),
+                "Adjunto agregado a factura AP #" + invoiceId + " tipo=" + docType
+                        + " archivo=" + attachment.getFileName());
         log.info("Documento soporte {} (tipo {}) adjuntado a factura AP {}",
                 attachment.getId(), docType, invoiceId);
 
@@ -151,6 +158,8 @@ public class InvoiceAttachmentService {
             throw new IllegalArgumentException("El adjunto no fue encontrado");
         }
         attachmentRepository.deleteById(attachmentId);
+        auditPublisher.publishDelete(AuditModule.AP, "InvoiceAttachment", attachmentId,
+                "Adjunto eliminado id=" + attachmentId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Adjunto eliminado correctamente"), Optional.empty()));
     }

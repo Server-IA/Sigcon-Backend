@@ -18,6 +18,10 @@ import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.model.enums.DepretationType;
 import com.sigcon.backend.assets.assets_depreciation.domain.model.AssetDepreciation;
 import com.sigcon.backend.assets.assets_depreciation.domain.repository.AssetDepreciationRepository;
+import com.sigcon.backend.audit.domain.model.enums.AuditAction;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.lists_accounting.depretation_rules.domain.repository.DepretationRuleRepository;
 import com.sigcon.backend.third_parties.third_parties.application.ThirdPartyDTO;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
@@ -59,6 +63,7 @@ public class DepreciationCalculationService {
     private final AssetDepreciationRepository assetDepreciationRepository;
     private final JournalEntryService journalEntryService;
     private final AccountingPeriodService accountingPeriodService;
+    private final AuditPublisher auditPublisher;
 
     /**
      * Ejecuta el cálculo de depreciación para todos los activos elegibles en el
@@ -212,6 +217,19 @@ public class DepreciationCalculationService {
         // 14. Generar asiento contable consolidado para las depreciaciones del periodo
         if (!historyToSave.isEmpty()) {
             createDepreciationJournalEntry(period, historyToSave, candidates);
+        }
+
+        // Audit log: registrar la corrida de depreciacion (HU-ACT-02 - operacion masiva
+        // que toca N activos + genera JE consolidado, debe quedar trazada en auditoria).
+        if (!results.isEmpty()) {
+            auditPublisher.publish(
+                    AuditAction.UPDATE, AuditModule.ACT, AuditSeverity.MEDIUM,
+                    "AssetDepreciation", null,
+                    "Depreciacion calculada para periodo " + period
+                            + " | activos procesados: " + results.size()
+                            + " | omitidos: " + skipped.size()
+                            + " | total depreciado: $" + totalDepreciation,
+                    null, null, null);
         }
 
         return DepreciationCalculationResponseDTO.builder()

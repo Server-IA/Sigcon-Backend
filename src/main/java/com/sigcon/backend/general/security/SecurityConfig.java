@@ -1,6 +1,7 @@
 package com.sigcon.backend.general.security;
 
 import com.sigcon.backend.integration.infrastructure.security.AaefPayloadSizeFilter;
+import com.sigcon.backend.integration.infrastructure.security.AaefRateLimitFilter;
 import com.sigcon.backend.integration.infrastructure.security.AgroFusionJwtFilter;
 import com.sigcon.backend.integration.infrastructure.security.ApiKeyFilter;
 import com.sigcon.backend.platform.tenant.TenantContextFilter;
@@ -32,6 +33,7 @@ public class SecurityConfig {
     private final ApiKeyFilter apiKeyFilter;
     private final AgroFusionJwtFilter agroFusionJwtFilter;
     private final AaefPayloadSizeFilter aaefPayloadSizeFilter;
+    private final AaefRateLimitFilter aaefRateLimitFilter;
     private final TenantContextFilter tenantContextFilter;
     private final Environment environment;
 
@@ -167,6 +169,9 @@ public class SecurityConfig {
         // MAS cerca de UPA. Para lograr el orden de ejecucion:
         //   payloadSize -> jwt -> apiKey -> UPA
         // se llama en ese mismo orden (payloadSize primero, apiKey ultimo):
+        // Orden ejecucion:  rateLimit -> payloadSize -> jwt -> apiKey -> UPA
+        // (se llaman en ese mismo orden; el ULTIMO queda mas cerca de UPA)
+        http.addFilterBefore(aaefRateLimitFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(aaefPayloadSizeFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(agroFusionJwtFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class);

@@ -12,6 +12,8 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -50,6 +52,7 @@ public class EmployeeService {
     private final EmployeeSalaryHistoryRepository historyRepository;
     private final ParameterRepository parameterRepository;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     /** Builder reutilizable para busquedas DataTable. */
     private final DataTableSpecificationBuilder<Employee> specBuilder = new DataTableSpecificationBuilder<>();
@@ -127,6 +130,7 @@ public class EmployeeService {
                 .status("ACTIVE")
                 .build();
         e = employeeRepository.save(e);
+        auditPublisher.publishCreate(AuditModule.NOM, "Employee", e.getId(), "Employee creado id=" + e.getId());
         return ResponseEntity.ok(EmployeeDTO.from(e));
     }
 

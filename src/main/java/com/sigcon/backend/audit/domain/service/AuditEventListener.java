@@ -1,5 +1,6 @@
 package com.sigcon.backend.audit.domain.service;
 
+import com.sigcon.backend.audit.domain.events.AuditableActionEvent;
 import com.sigcon.backend.audit.domain.model.enums.AuditAction;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
@@ -91,6 +92,37 @@ public class AuditEventListener {
                 "ApPayment", event.getPaymentId(),
                 "Pago procesado por $" + event.getAmount() + " a factura #" + event.getInvoiceId(),
                 null, null, null);
+    }
+
+    // ─── Generico (cualquier modulo) ─────────────────
+
+    /**
+     * Handler unico para {@link AuditableActionEvent} que cubre operaciones
+     * CRUD de TODOS los modulos sin necesidad de una clase de evento dedicada.
+     *
+     * <p>Los servicios publican este evento via {@link AuditPublisher} y este
+     * handler delega en {@link AuditLogService#register} con los metadatos
+     * recibidos. Si severity viene null, AuditLogService aplica reglas
+     * configurables o el default estatico.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAuditableAction(AuditableActionEvent event) {
+        try {
+            auditLogService.register(
+                    event.getAction(),
+                    event.getModule(),
+                    event.getSeverity(),
+                    event.getEntityType(),
+                    event.getEntityId(),
+                    event.getDescription(),
+                    event.getOldValues(),
+                    event.getNewValues(),
+                    event.getJournalEntryId());
+        } catch (Exception e) {
+            log.error("[AuditEventListener] Error en onAuditableAction {} {} {}#{}",
+                    event.getAction(), event.getModule(),
+                    event.getEntityType(), event.getEntityId(), e);
+        }
     }
 
     // ─── Integracion AAEF (INT) ─────────────────────

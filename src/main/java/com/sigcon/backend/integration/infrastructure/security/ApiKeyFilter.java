@@ -1,6 +1,5 @@
 package com.sigcon.backend.integration.infrastructure.security;
 
-import com.sigcon.backend.parametrization.parameters.domain.model.Parameter;
 import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -107,22 +106,22 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Leer API key valida desde tabla parameters
-        Optional<Parameter> param = parameterRepository
-                .findByNameAndDeletedAtIsNull(API_KEY_PARAMETER_NAME);
+        // Leer API Key GLOBAL de AgroFusion desde tabla parameters.
+        // Multi-tenant: AgroFusion autentica con UNA sola key cross-empresa; el
+        // enrutamiento a la empresa destino se hace despues por el NIT del payload
+        // (ver AaefReceiverService). Por eso usamos query nativa que bypasea el
+        // @Filter("tenantFilter") y devuelve la key de la empresa con id mas bajo
+        // (convencion: SIGCON DEMO id=1 es la fuente autoritativa de config global).
+        Optional<String> expectedKeyOpt = parameterRepository
+                .findGlobalValueByName(API_KEY_PARAMETER_NAME);
 
-        if (param.isEmpty()) {
-            log.error("AGROFUSION_API_KEY no esta configurado en tabla parameters");
+        if (expectedKeyOpt.isEmpty() || expectedKeyOpt.get().trim().isEmpty()) {
+            log.error("AGROFUSION_API_KEY global no esta configurado en tabla parameters");
             reject(response, 500, "API Key del sistema no configurado");
             return;
         }
 
-        String expectedKey = param.get().getValue();
-        if (expectedKey == null || expectedKey.trim().isEmpty()) {
-            log.error("AGROFUSION_API_KEY tiene valor vacio");
-            reject(response, 500, "API Key del sistema no configurado");
-            return;
-        }
+        String expectedKey = expectedKeyOpt.get();
 
         // Comparacion de tiempo constante para evitar timing attacks
         if (!constantTimeEquals(providedKey, expectedKey)) {
@@ -133,15 +132,9 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Verificar que el parametro este ACTIVO
-        if (param.get().getStatus() != null
-                && !"ACTIVE".equalsIgnoreCase(param.get().getStatus().name())) {
-            reject(response, 401, "API Key revocada");
-            return;
-        }
-
         // Autenticacion OK: establecer auth en SecurityContext para que
         // UserUtil.getUser() y otros componentes tengan usuario identificado.
+        // El TenantContext se setea DESPUES en AaefReceiverService por el NIT del payload.
         var auth = new UsernamePasswordAuthenticationToken(
                 "agrofusion-api-key", null,
                 List.of(new SimpleGrantedAuthority("ROLE_AGROFUSION_API_KEY")));

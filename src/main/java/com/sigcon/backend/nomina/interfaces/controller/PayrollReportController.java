@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
  *       y referencia a consecutivos CG</li>
  * </ul>
  */
+@PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/api/nomina/reportes")
 @RequiredArgsConstructor

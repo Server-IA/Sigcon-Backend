@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
  *   <li>Liquidacion definitiva de contrato (CST Art. 64)</li>
  * </ul>
  */
+@PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/api/nomina/prestaciones")
 @RequiredArgsConstructor

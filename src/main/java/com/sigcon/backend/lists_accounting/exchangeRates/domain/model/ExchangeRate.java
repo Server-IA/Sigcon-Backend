@@ -35,10 +35,12 @@ public class ExchangeRate {
     private Long companyId;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "currency_id", nullable = false)
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private CurrencyType currencyExchange;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "currency_iso", nullable = false)
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private CurrencyType currencyExchanged;
 
     @Enumerated(EnumType.STRING)

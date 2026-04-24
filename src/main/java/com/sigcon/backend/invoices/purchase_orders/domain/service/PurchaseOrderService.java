@@ -31,6 +31,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +52,7 @@ public class PurchaseOrderService {
     private final PurchaseOrderLineRepository lineRepository;
     private final ThirdPartyRepository thirdPartyRepository;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<PurchaseOrder> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -98,6 +101,7 @@ public class PurchaseOrderService {
         order.setTotalAmount(totalAmount);
 
         order = orderRepository.save(order);
+        auditPublisher.publishCreate(AuditModule.AP, "PurchaseOrder", order.getId(), "PurchaseOrder creado id=" + order.getId());
         log.info("Orden de compra {} creada para proveedor {}", orderNumber, thirdParty.getId());
 
         return ResponseEntity.ok(
@@ -197,6 +201,7 @@ public class PurchaseOrderService {
         }
 
         order = orderRepository.save(order);
+        auditPublisher.publishUpdate(AuditModule.AP, "PurchaseOrder", order.getId(), "PurchaseOrder actualizado id=" + order.getId());
         log.info("Orden de compra {} actualizada", order.getOrderNumber());
 
         return ResponseEntity.ok(

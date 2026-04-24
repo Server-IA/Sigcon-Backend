@@ -59,6 +59,7 @@ public class BankAccount {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "currency_type_id", nullable = false)
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private CurrencyType currencyType;
 
     @Column(name = "initial_balance", nullable = false, precision = 15, scale = 2)

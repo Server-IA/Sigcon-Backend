@@ -92,6 +92,15 @@ public class IntegrationTransfer {
     @Column(name = "is_update", nullable = false)
     private Boolean isUpdate = false;
 
+    /**
+     * RF-INT-14: cuando este transfer fue generado por un Pull+Diff, apunta al
+     * ExchangeId del lote INICIAL padre (OriginalExchangeId del envelope).
+     * Nulo para transfers del flujo normal (lote inicial).
+     * Útil para trazabilidad y reportes cross-update.
+     */
+    @Column(name = "original_exchange_id", length = 100)
+    private String originalExchangeId;
+
     @Builder.Default
     @Column(name = "retry_count", nullable = false)
     private Integer retryCount = 0;

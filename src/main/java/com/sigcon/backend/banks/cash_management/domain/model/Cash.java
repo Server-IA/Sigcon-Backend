@@ -97,6 +97,7 @@ public class Cash {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "currency_id", nullable = false)
     @NotNull(message = "La moneda es obligatoria")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private CurrencyType currency;
 
     @Column(name = "initial_balance", nullable = false, precision = 15, scale = 2)

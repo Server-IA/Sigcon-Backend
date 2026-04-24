@@ -11,6 +11,9 @@ import com.sigcon.backend.integration.domain.model.IntegrationIdempotencyKey;
 import com.sigcon.backend.integration.domain.model.enums.BatchStatus;
 import com.sigcon.backend.integration.domain.repository.IntegrationBatchRepository;
 import com.sigcon.backend.integration.domain.repository.IntegrationIdempotencyKeyRepository;
+import com.sigcon.backend.platform.companies.domain.model.Company;
+import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
+import com.sigcon.backend.platform.tenant.TenantContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +54,7 @@ public class AaefReceiverService {
     private final IntegrationIdempotencyKeyRepository idempotencyRepository;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final CompanyRepository companyRepository;
 
     /**
      * Recibe, valida, chequea idempotencia y persiste un lote AAEF.
@@ -71,6 +75,29 @@ public class AaefReceiverService {
         AaefMetadataDTO meta = batch.getMetadata();
         String exchangeId = meta.getExchangeId();
         String version = meta.getStandardVersion();
+
+        // 1.5. Multi-tenant: resolver empresa destino por NIT del SourceSystem y
+        // setear TenantContext para que @PrePersist inyecte el company_id correcto.
+        // RF-INT-12: el NIT viene en metadata.SourceSystem.SystemNIT. Si no existe
+        // empresa con ese NIT, rechazar con COMPANY_NOT_FOUND (400).
+        String destinationNit = (meta.getSourceSystem() != null)
+                ? meta.getSourceSystem().getSystemNIT()
+                : null;
+        if (destinationNit == null || destinationNit.isBlank()) {
+            throw new ValidationException(List.of(
+                    "metadata.SourceSystem.SystemNIT es obligatorio para identificar la empresa destino"));
+        }
+        Company company = companyRepository.findByNitAndDeletedAtIsNull(destinationNit)
+                .orElseThrow(() -> new CompanyNotFoundException(destinationNit));
+        if (company.getStatus() != Company.CompanyStatus.ACTIVE) {
+            throw new CompanyNotFoundException(destinationNit + " (empresa en estado "
+                    + company.getStatus() + ")");
+        }
+        // Activar el contexto tenant para toda la transaccion y el procesamiento async.
+        // AaefBatchProcessor ya lee TenantContext al arrancar el @Async (via evento).
+        TenantContext.setCompanyId(company.getId());
+        log.info("AAEF: empresa destino resuelta por NIT={} -> companyId={}, name='{}'",
+                destinationNit, company.getId(), company.getBusinessName());
 
         // 2. Idempotencia
         Optional<IntegrationBatch> existing = batchRepository

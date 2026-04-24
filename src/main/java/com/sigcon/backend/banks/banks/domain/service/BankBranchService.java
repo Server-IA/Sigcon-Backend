@@ -15,6 +15,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -39,6 +41,7 @@ public class BankBranchService {
         private final BankBranchRepository bankBranchRepository;
         private final BankRepository bankRepository;
         private final MunicipalityRepository municipalityRepository;
+        private final AuditPublisher auditPublisher;
 
         private final DataTableSpecificationBuilder<BankBranch> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -66,6 +69,7 @@ public class BankBranchService {
                                 .build();
 
                 bankBranchRepository.save(branch);
+                auditPublisher.publishCreate(AuditModule.BNK, "BankBranch", branch.getId(), "BankBranch creado id=" + branch.getId());
 
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
@@ -90,10 +94,8 @@ public class BankBranchService {
                 Specification<BankBranch> specification = dataTableSpecificationBuilder.build(request);
                 Page<BankBranch> branchPage = bankBranchRepository.findAll(specification, pageable);
 
-                if (branchPage.isEmpty()) {
-                        throw new IllegalArgumentException("No se encontraron sucursales.");
-                }
-
+                // Un listado paginado vacio NO es un error: el frontend renderiza
+                // tabla vacia con DataTableResponse (totalElements=0).
                 return ResponseEntity.ok(
                                 DataTableResponse.from(branchPage.map(this::toDto), request.getDraw()));
         }
@@ -120,10 +122,8 @@ public class BankBranchService {
 
                 List<BankBranch> branches = bankBranchRepository.findByBankIdAndDeletedAtIsNull(bankId);
 
-                if (branches.isEmpty()) {
-                        throw new IllegalArgumentException("El banco no tiene sucursales registradas.");
-                }
-
+                // Un listado vacio NO es un error: el frontend renderiza el combo
+                // / listado vacio sin banner rojo.
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
                                                 Optional.of("Sucursales obtenidas correctamente."),
@@ -180,6 +180,7 @@ public class BankBranchService {
                 }
 
                 bankBranchRepository.save(branch);
+                auditPublisher.publishUpdate(AuditModule.BNK, "BankBranch", branch.getId(), "BankBranch actualizado id=" + branch.getId());
 
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
@@ -201,6 +202,7 @@ public class BankBranchService {
 
                 branch.setDeletedAt(LocalDateTime.now());
                 bankBranchRepository.save(branch);
+                auditPublisher.publishDelete(AuditModule.BNK, "BankBranch", branch.getId(), "BankBranch eliminado id=" + branch.getId());
 
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(

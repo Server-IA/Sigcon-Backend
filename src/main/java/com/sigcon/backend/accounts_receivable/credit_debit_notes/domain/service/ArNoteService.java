@@ -32,6 +32,8 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +57,7 @@ public class ArNoteService {
     private final JournalEntryService journalEntryService;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<ArCreditDebitNote> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -149,6 +152,7 @@ public class ArNoteService {
                 .build();
 
         note = noteRepository.save(note);
+        auditPublisher.publishCreate(AuditModule.AR, "ArNote", note.getId(), "ArNote creado id=" + note.getId());
 
         // 8. Actualizar saldo de la factura
         if ("CREDIT".equals(noteType)) {
@@ -169,6 +173,7 @@ public class ArNoteService {
             }
         }
         invoiceRepository.save(invoice);
+        auditPublisher.publishCreate(AuditModule.AR, "ArNote", invoice.getId(), "ArNote creado id=" + invoice.getId());
 
         // 9. Generar asiento contable (AR-07 - cuentas resueltas por AccountMappingService)
         try {
@@ -239,6 +244,7 @@ public class ArNoteService {
             JournalEntryDTO je = journalEntryService.createEntry(jeRequest, "sistema");
             note.setJournalEntryId(je.getId());
             noteRepository.save(note);
+            auditPublisher.publishCreate(AuditModule.AR, "ArNote", note.getId(), "ArNote creado id=" + note.getId());
             log.info("Asiento contable {} generado para nota AR {} de factura {}",
                     je.getId(), noteNumber, invoice.getId());
         } catch (Exception e) {

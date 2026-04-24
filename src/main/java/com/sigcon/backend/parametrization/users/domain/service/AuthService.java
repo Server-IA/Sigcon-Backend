@@ -85,31 +85,16 @@ public class AuthService implements UserDetailsService {
                             "message", "El correo electrónico ya está registrado. Por favor, utiliza otro correo."));
         }
 
-        Role role = roleRepository.findByName("USER")
-                .orElseThrow(() -> new RuntimeException("El rol USER no existe en la base de datos."));
-        String avatarFilename = null;
-        if (request.getAvatar() != null && !request.getAvatar().isBlank()) {
-            avatarFilename = resolveAvatarFilename(request.getAvatar());
-        }
-
-        User user = User.builder()
-                .name(request.getName())
-                .lastname(request.getLastname())
-                .email(email.toLowerCase())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .avatar(request.getAvatar())
-                .roles(Set.of(role))
-                .status(Status.ACTIVE)
-                .build();
-
-        userRepository.save(user);
-
-        String token = jwtService.generateToken(user);
-
-        return ResponseEntity.ok(
-                Map.of("success", true,
-                        "token", token
-        ));
+        // Multi-tenant: el self-registration publico queda deshabilitado porque no
+        // puede decidir a que empresa pertenece el nuevo usuario. Violaria el constraint
+        // ck_users_tenant_or_platform si se inserta sin company_id ni platform_role.
+        // Los usuarios se crean desde Parametrizacion > Usuarios (tenant admin) o desde
+        // el modulo Plataforma (PLATFORM_ADMIN). Si en el futuro se requiere self-registration,
+        // debe agregarse seleccion de empresa + validacion por invitacion.
+        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
+                Map.of("success", false,
+                        "message", "El registro publico esta deshabilitado. Contacte al administrador "
+                                 + "de su empresa para que le cree una cuenta."));
     }
 
     /**

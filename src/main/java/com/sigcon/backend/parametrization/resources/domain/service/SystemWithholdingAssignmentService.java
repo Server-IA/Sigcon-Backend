@@ -11,6 +11,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -33,6 +35,7 @@ public class SystemWithholdingAssignmentService {
 
     private final SystemWithholdingAssignmentRepository assignmentRepository;
     private final WithholdingRepository withholdingRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<SystemWithholdingAssignment> specificationBuilder =
             new DataTableSpecificationBuilder<>();
@@ -108,6 +111,9 @@ public class SystemWithholdingAssignmentService {
                 .build();
 
         SystemWithholdingAssignment saved = assignmentRepository.save(assignment);
+        auditPublisher.publishCreate(AuditModule.PA, "SystemWithholdingAssignment", saved.getId(),
+                "Retencion asignada: " + saved.getWithholding().getName()
+                        + " (" + saved.getWithholding().getCode() + "), vigencia desde " + saved.getEffectiveFrom());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -133,6 +139,10 @@ public class SystemWithholdingAssignmentService {
         }
 
         assignmentRepository.deleteById(id);
+        SystemWithholdingAssignment entity = assignmentOpt.get();
+        auditPublisher.publishDelete(AuditModule.PA, "SystemWithholdingAssignment", id,
+                "Asignacion de retencion eliminada: "
+                        + (entity.getWithholding() != null ? entity.getWithholding().getName() : "id=" + id));
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

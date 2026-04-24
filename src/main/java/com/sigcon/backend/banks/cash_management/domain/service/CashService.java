@@ -45,6 +45,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +78,7 @@ public class CashService {
     private final AuditStub auditStub;
     private final CashAuditRepository cashAuditRepository;
     private final UserRepository userRepository;
+     private final AuditPublisher auditPublisher;
 
     /**
      * Registra una nueva caja de efectivo (BNK-RF-10).
@@ -166,6 +169,7 @@ public class CashService {
                 .build();
 
         cashRepository.save(cash);
+        auditPublisher.publishCreate(AuditModule.BNK, "Cash", cash.getId(), "Cash creado id=" + cash.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -272,6 +276,7 @@ public class CashService {
         cash.setAccountingBook(request.getAccountingBook());
 
         cashRepository.save(cash);
+        auditPublisher.publishUpdate(AuditModule.BNK, "Cash", cash.getId(), "Cash actualizado id=" + cash.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -319,6 +324,7 @@ public class CashService {
         if (hasMovements || hasOpenAudits) {
             cash.setCashStatus(CashStatus.INACTIVE);
             cashRepository.save(cash);
+            auditPublisher.publishDelete(AuditModule.BNK, "Cash", cash.getId(), "Cash eliminado id=" + cash.getId());
 
             String detail = String.format(
                     "%d movimientos registrados, %d arqueos asociados.",
@@ -420,6 +426,7 @@ public class CashService {
         // 6. Aplicar nuevo estado
         cash.setCashStatus(targetStatus);
         cashRepository.save(cash);
+        auditPublisher.publishUpdate(AuditModule.BNK, "Cash", cash.getId(), "Cash actualizado id=" + cash.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

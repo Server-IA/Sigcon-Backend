@@ -12,6 +12,8 @@ import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository
 import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.*;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,6 +35,7 @@ public class CheckbookService {
     private final CheckbookRepository repository;
     private final BankAccountRepository bankAccountRepository;
     private final CheckRepository checkRepository;
+    private final AuditPublisher auditPublisher;
 
 
     private final DataTableSpecificationBuilder<Checkbook> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -123,6 +126,15 @@ public class CheckbookService {
 
         Checkbook saved = repository.save(entity);
 
+        if (isUpdate) {
+            auditPublisher.publishUpdate(AuditModule.BNK, "Checkbook", saved.getId(),
+                    "Chequera actualizada #" + saved.getCheckbookNumber()
+                            + " (rango " + saved.getCheckStartNumber() + "-" + saved.getCheckEndNumber() + ")");
+        } else {
+            auditPublisher.publishCreate(AuditModule.BNK, "Checkbook", saved.getId(),
+                    "Chequera creada #" + saved.getCheckbookNumber()
+                            + " (rango " + saved.getCheckStartNumber() + "-" + saved.getCheckEndNumber() + ")");
+        }
         return toDto(saved);
     }
 
@@ -149,11 +161,13 @@ public class CheckbookService {
 
         Checkbook saved = repository.save(entity);
 
+        auditPublisher.publishDelete(AuditModule.BNK, "Checkbook", saved.getId(),
+                "Chequera #" + saved.getCheckbookNumber() + " anulada/bloqueada. Motivo: " + request.getReason());
         return toDto(saved);
     }
 
     // =========================
-    // SEARCH 
+    // SEARCH
     // =========================
     public ResponseEntity<?> search(DataTableRequest request) {
 

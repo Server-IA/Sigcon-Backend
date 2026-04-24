@@ -23,6 +23,8 @@ import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -56,6 +58,7 @@ public class CheckService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final FinancialMovementService financialMovementService;
+    private final AuditPublisher auditPublisher;
 
 
     private final DataTableSpecificationBuilder<Check> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -103,6 +106,9 @@ public class CheckService {
                 .build();
 
         checkRepository.save(check);
+        auditPublisher.publishCreate(AuditModule.BNK, "Check", check.getId(),
+                "Cheque emitido #" + check.getNumberCheck() + " por $" + check.getValue()
+                        + " a " + check.getBeneficiary());
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque emitido exitosamente - Numero: " + check.getNumberCheck()),
@@ -154,6 +160,8 @@ public class CheckService {
         check.setVoidedAt(LocalDateTime.now());
 
         checkRepository.save(check);
+        auditPublisher.publishUpdate(AuditModule.BNK, "Check", check.getId(),
+                "Cheque #" + check.getNumberCheck() + " anulado. Motivo: " + check.getVoidReason());
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque anulado exitosamente."),
@@ -189,6 +197,9 @@ public class CheckService {
         check.setBlockPayment(true);
 
         checkRepository.save(check);
+        auditPublisher.publishUpdate(AuditModule.BNK, "Check", check.getId(),
+                "Cheque #" + check.getNumberCheck() + " reportado como extraviado ("
+                        + check.getIncidentType() + ")");
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque reportado como extraviado exitosamente."),
@@ -242,6 +253,8 @@ public class CheckService {
         check.setFinancialMovementId(request.getFinancialMovementId());
 
         checkRepository.save(check);
+        auditPublisher.publishUpdate(AuditModule.BNK, "Check", check.getId(),
+                "Cheque #" + check.getNumberCheck() + " cobrado/conciliado por $" + check.getValue());
 
         if (movementToMatch != null) {
             financialMovementService.markMatchedToCheck(movementToMatch, check.getId());
@@ -256,6 +269,8 @@ public class CheckService {
     public ResponseEntity<?> delete(Long id) {
         Check check = getCheckOrThrow(id);
         checkRepository.delete(check);
+        auditPublisher.publishDelete(AuditModule.BNK, "Check", check.getId(),
+                "Cheque #" + check.getNumberCheck() + " eliminado");
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque eliminado exitosamente."),
                 Optional.empty()));

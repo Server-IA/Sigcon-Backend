@@ -21,6 +21,14 @@ public class JournalEntryDTO {
 
     private Long id;
     private Long entryNumber;
+    /**
+     * Codigo del comprobante con prefijo segun su rol contable.
+     * - JE-{anio}-{numero}  : asiento normal
+     * - REV-{anio}-{numero} : asiento de reversion (HU-CG-08B E3)
+     * - COR-{anio}-{numero} : asiento de correccion (HU-CG-07B)
+     * Se calcula en JournalEntryService.toDTO segun reversalOf/correctionOf.
+     */
+    private String voucherCode;
     private Integer fiscalYear;
     private LocalDate entryDate;
     private Integer periodYear;
@@ -30,6 +38,10 @@ public class JournalEntryDTO {
     private Long sourceId;
     private String status;
     private Long reversalOfId;
+    /** Numero del asiento original que esta siendo reversado (para mostrar en UI). */
+    private Long reversalOfNumber;
+    /** voucherCode del asiento original reversado (e.g. JE-2026-1). */
+    private String reversalOfVoucherCode;
     private Long correctionOfId;
     private BigDecimal totalDebit;
     private BigDecimal totalCredit;

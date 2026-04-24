@@ -57,13 +57,14 @@ import java.util.UUID;
  * generar tokens en un entorno real.
  */
 @Slf4j
-@Profile("dev")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "sigcon.integration.mocks-enabled", havingValue = "true", matchIfMissing = false)
 @RestController
 @RequestMapping("/mock-idp")
 @RequiredArgsConstructor
 @Tag(name = "Mock IdP (solo desarrollo)",
      description = "IdP embebido para smoke test HU-INT-RF-11. NO usar en produccion. "
-                 + "Solo activo con SPRING_PROFILES_ACTIVE=dev.")
+                 + "Solo activo con la property sigcon.integration.mocks-enabled=true.")
 public class MockIdpController {
 
     private final ObjectMapper objectMapper;

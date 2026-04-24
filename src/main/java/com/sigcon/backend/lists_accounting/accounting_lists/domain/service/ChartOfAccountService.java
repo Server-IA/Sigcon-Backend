@@ -17,6 +17,8 @@ import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEn
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -60,6 +62,7 @@ public class ChartOfAccountService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final JournalEntryLineRepository journalEntryLineRepository;
+    private final AuditPublisher auditPublisher;
 
 
     private final DataTableSpecificationBuilder<ChartOfAccount> chartOfAccountSpecificationBuilder =
@@ -109,6 +112,7 @@ public class ChartOfAccountService {
                 .build();
 
         chartOfAccountRepository.save(account);
+        auditPublisher.publishCreate(AuditModule.CFG, "ChartOfAccount", account.getId(), "ChartOfAccount creado id=" + account.getId());
     }
 
     /**
@@ -116,7 +120,7 @@ public class ChartOfAccountService {
      *
      * @param request parametros de paginacion, busqueda y ordenamiento
      * @return DataTableResponse con cuentas PUC que coincidan con los criterios
-     * @throws IllegalArgumentException si no se encuentran resultados
+     *         (posiblemente vacio)
      */
     public DataTableResponse<ChartOfAccountResponseDTO> searchChartOfAccounts(DataTableRequest request) {
         DataTableRequest safeRequest = normalizeDataTableRequest(request == null ? new DataTableRequest() : request);
@@ -134,10 +138,9 @@ public class ChartOfAccountService {
         Specification<ChartOfAccount> spec = chartOfAccountSpecificationBuilder.build(safeRequest);
 
         Page<ChartOfAccount> result = chartOfAccountRepository.findAll(spec, pageable);
-        if (result.isEmpty()) {
-            throw new IllegalArgumentException("No existen cuentas con estos criterios");
-        }
 
+        // Un listado paginado vacio NO es un error: el frontend renderiza
+        // tabla vacia con DataTableResponse (totalElements=0).
         return DataTableResponse.from(result.map(this::toResponseDTO), draw);
     }
 
@@ -203,6 +206,7 @@ public class ChartOfAccountService {
         account.setStatus(request.getStatus());
 
         chartOfAccountRepository.save(account);
+        auditPublisher.publishUpdate(AuditModule.CFG, "ChartOfAccount", account.getId(), "ChartOfAccount actualizado id=" + account.getId());
     }
 
     /**
@@ -247,6 +251,7 @@ public class ChartOfAccountService {
 
         account.setDeletedReason(request.getReason().trim());
         chartOfAccountRepository.save(account);
+        auditPublisher.publishDelete(AuditModule.CFG, "ChartOfAccount", account.getId(), "ChartOfAccount eliminado id=" + account.getId());
     }
 
     /**

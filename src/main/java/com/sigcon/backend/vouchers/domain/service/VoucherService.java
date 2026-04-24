@@ -72,7 +72,8 @@ public class VoucherService {
             (voucherDTO.getCashAccountId() == null || voucherDTO.getCashAccountId() == 0) &&
             (voucherDTO.getCheckId() == null || voucherDTO.getCheckId() == 0)
         ) {
-            throw new IllegalArgumentException("Debe existir al menos un origen de pago");
+            // HU-ACT-01 E9: mensaje alineado a la HU (forma de pago valida).
+            throw new IllegalArgumentException("Debe seleccionar una forma de pago válida (contado o crédito).");
         }
 
         VouchersEntity voucherEntity = VouchersEntity.builder().build();

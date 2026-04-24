@@ -41,10 +41,12 @@ public class CancellationController {
     private final CancellationService cancellationService;
 
     @Operation(
-        summary = "Procesar anulacion o correccion Pull+Diff",
-        description = "Recibe un AgroFusionExchangeUpdate con changeType=CANCELLED/MODIFIED/NEW " +
-                      "y ejecuta reversion, correccion o nueva creacion de asientos contables. " +
-                      "Requiere X-API-Key."
+        summary = "[DEPRECATED] Procesar anulacion o correccion Pull+Diff",
+        description = "DEPRECATED desde 2026-04: AgroFusion ahora envia el envelope " +
+                      "AgroFusionExchangeUpdate al endpoint unificado POST /api/contabilidad/aaef. " +
+                      "Este endpoint legacy queda activo solo para retrocompatibilidad y se " +
+                      "removera en una version futura. Use /api/contabilidad/aaef.",
+        deprecated = true
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Actualizacion procesada exitosamente"),
@@ -55,6 +57,7 @@ public class CancellationController {
     @PostMapping(value = "/anulaciones",
                  consumes = MediaType.APPLICATION_JSON_VALUE,
                  produces = MediaType.APPLICATION_JSON_VALUE)
+    @Deprecated
     public ResponseEntity<?> processUpdate(@Valid @RequestBody AgroFusionExchangeUpdateDTO dto) {
         try {
             Map<String, Object> result = cancellationService.processUpdate(dto);

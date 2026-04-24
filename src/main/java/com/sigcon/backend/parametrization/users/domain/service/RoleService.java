@@ -20,6 +20,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -50,6 +52,7 @@ public class RoleService {
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
     private final ModuleRepository moduleRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<Role> roleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
@@ -147,6 +150,7 @@ public class RoleService {
                     .build();
     
             roleRepository.save(role);
+            auditPublisher.publishCreate(AuditModule.PA, "Role", role.getId(), "Role creado id=" + role.getId());
     
             RoleRequest roleDTO = toRequest(role);
     
@@ -198,6 +202,7 @@ public class RoleService {
         role.setStatus(Status.valueOf(request.getStatus()));
 
         roleRepository.save(role);
+        auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(), "Role actualizado id=" + role.getId());
 
         RoleRequest roleDTO = toRequest(role);
 
@@ -234,6 +239,7 @@ public class RoleService {
 
         role.setDeletedAt(LocalDateTime.now());
         roleRepository.save(role);
+        auditPublisher.publishDelete(AuditModule.PA, "Role", role.getId(), "Role eliminado id=" + role.getId());
 
         RoleRequest roleDTO = toRequest(role);
 
@@ -309,10 +315,12 @@ public class RoleService {
                 for (Role role : roles) {
                     role.getPermissions().add(permission);
                     roleRepository.save(role);
+                    auditPublisher.publishCreate(AuditModule.PA, "Role", role.getId(), "Role creado id=" + role.getId());
                 }
             }
     
             permissionRepository.save(permission);
+            auditPublisher.publishCreate(AuditModule.PA, "Role", permission.getId(), "Role creado id=" + permission.getId());
 
             PermissionDTO permissionDTO = toDTO(permission);
     
@@ -397,6 +405,7 @@ public class RoleService {
             permission.setModule(module);
             permission.setUpdated_at(LocalDateTime.now());
             permissionRepository.save(permission);
+            auditPublisher.publishUpdate(AuditModule.PA, "Role", permission.getId(), "Role actualizado id=" + permission.getId());
             
             PermissionDTO permissionDTO = toDTO(permission);
 
@@ -466,6 +475,7 @@ public class RoleService {
             );
 
             roleRepository.save(role);
+            auditPublisher.publishDelete(AuditModule.PA, "Role", role.getId(), "Role eliminado id=" + role.getId());
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos removidos correctamente del rol"), Optional.of(role))

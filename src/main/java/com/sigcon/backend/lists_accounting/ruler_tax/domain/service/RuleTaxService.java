@@ -31,6 +31,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -41,6 +43,7 @@ public class RuleTaxService {
     private final RuleTaxRepository ruleTaxRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final TaxRulerAccountRepository taxRulerAccountRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<TaxRulerEntity> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
     
@@ -80,6 +83,7 @@ public class RuleTaxService {
             .build();
 
             ruleTaxRepository.save(taxRulerEntity);
+            auditPublisher.publishCreate(AuditModule.CFG, "RuleTax", taxRulerEntity.getId(), "RuleTax creado id=" + taxRulerEntity.getId());
         
         RuleTaxDTO ruleTaxDTO = convertToDTO(taxRulerEntity);
 
@@ -154,6 +158,7 @@ public class RuleTaxService {
         taxRulerEntity.setUvtValueYear(updateRuleTaxDTO.getUvtValueYear());
         
         ruleTaxRepository.save(taxRulerEntity);
+        auditPublisher.publishUpdate(AuditModule.CFG, "RuleTax", taxRulerEntity.getId(), "RuleTax actualizado id=" + taxRulerEntity.getId());
 
         RuleTaxDTO ruleTaxDTO = convertToDTO(taxRulerEntity);
 
@@ -176,6 +181,7 @@ public class RuleTaxService {
             taxRulerEntity.setDeletedAt(java.time.LocalDateTime.now());
             taxRulerEntity.setStatus(com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax.INACTIVE);
             ruleTaxRepository.save(taxRulerEntity);
+            auditPublisher.publishDelete(AuditModule.CFG, "RuleTax", taxRulerEntity.getId(), "RuleTax eliminado id=" + taxRulerEntity.getId());
 
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("La regla tributaria ha sido eliminada exitosamente"),

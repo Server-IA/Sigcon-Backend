@@ -18,6 +18,8 @@ import com.sigcon.backend.nomina.domain.repository.PayrollConceptRepository;
 import com.sigcon.backend.nomina.domain.repository.PayrollLineRepository;
 import com.sigcon.backend.nomina.domain.repository.PayrollReceiptRepository;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -65,6 +67,7 @@ public class PayrollService {
     private final AccountMappingService accountMappingService;
     private final RetentionCalculationService retentionService;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     /**
      * HU-NOM-03: liquida la nomina del periodo para un grupo de empleados.
@@ -116,6 +119,14 @@ public class PayrollService {
                 r.setJournalEntryId(journalEntryId);
             }
             receiptRepository.saveAll(createdReceipts);
+        }
+
+        if (!createdReceipts.isEmpty()) {
+            auditPublisher.publishCreate(AuditModule.NOM, "PayrollReceipt",
+                    createdReceipts.get(0).getId(),
+                    "Liquidacion periodo " + req.getYear() + "-"
+                            + String.format("%02d", req.getMonth())
+                            + ": " + createdReceipts.size() + " recibos creados, JE #" + journalEntryId);
         }
 
         Map<String, Object> resp = new HashMap<>();
@@ -375,7 +386,11 @@ public class PayrollService {
         if (notes != null) {
             r.setNotes(notes);
         }
-        return toDTO(receiptRepository.save(r));
+        PayrollReceipt saved = receiptRepository.save(r);
+        auditPublisher.publishUpdate(AuditModule.NOM, "PayrollReceipt", saved.getId(),
+                "Recibo de nomina actualizado (periodo " + saved.getPeriodYear()
+                        + "-" + saved.getPeriodMonth() + ")");
+        return toDTO(saved);
     }
 
     /** HU-NOM-04 E1: aprobar recibo y postear el JE asociado. */
@@ -403,6 +418,9 @@ public class PayrollService {
             }
         }
         r = receiptRepository.save(r);
+        auditPublisher.publishUpdate(AuditModule.NOM, "PayrollReceipt", r.getId(),
+                "Recibo aprobado (periodo " + r.getPeriodYear() + "-" + r.getPeriodMonth()
+                        + ", neto $" + r.getNetPay() + ")");
         return toDTO(r);
     }
 
@@ -421,6 +439,9 @@ public class PayrollService {
         r.setClosedBy(user);
         r.setClosedAt(LocalDateTime.now());
         r = receiptRepository.save(r);
+        auditPublisher.publishUpdate(AuditModule.NOM, "PayrollReceipt", r.getId(),
+                "Recibo cerrado definitivamente (periodo " + r.getPeriodYear()
+                        + "-" + r.getPeriodMonth() + ")");
         return toDTO(r);
     }
 

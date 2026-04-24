@@ -14,6 +14,8 @@ import com.sigcon.backend.general.accounting.journal.application.CreateJournalEn
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +49,7 @@ public class NiifAlertsService {
     private final AccountingPeriodService accountingPeriodService;
     private final JournalEntryService journalEntryService;
     private final DepretationRuleRepository depretationRuleRepository;
+    private final AuditPublisher auditPublisher;
 
     // ───────────────────────────────────────────────────────────────
     // HU-ACT-05 / HU-ACT-13: Verificacion NIIF mejorada
@@ -332,11 +335,13 @@ public class NiifAlertsService {
                 .build();
 
         AssetAnnualReview saved = annualReviewRepository.save(review);
+        auditPublisher.publishCreate(AuditModule.ACT, "NiifCorrection", review.getId(), "NiifCorrection creado id=" + review.getId());
 
         // 6. Si cambio la vida util, actualizar el activo
         if (usefulLifeChanged) {
             asset.setUsefulLifeMonths(newUsefulLife);
             assetsRepository.save(asset);
+            auditPublisher.publishCreate(AuditModule.ACT, "NiifCorrection", asset.getId(), "NiifCorrection creado id=" + asset.getId());
         }
 
         return Map.of(

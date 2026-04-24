@@ -22,6 +22,8 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 public class DianResolutionService {
 
     private final DianResolutionRepository repository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<DianResolution> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -96,6 +99,9 @@ public class DianResolutionService {
                 .notes(request.getNotes())
                 .build();
         entity = repository.save(entity);
+        auditPublisher.publishCreate(AuditModule.AR, "DianResolution", entity.getId(),
+                "Resolucion DIAN creada: " + entity.getResolutionNumber()
+                        + " (rango " + entity.getStartNumber() + "-" + entity.getEndNumber() + ")");
         log.info("Resolucion DIAN {} creada (rango {}-{})",
                 entity.getResolutionNumber(), entity.getStartNumber(), entity.getEndNumber());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -129,6 +135,8 @@ public class DianResolutionService {
         if (request.getStatus() != null) entity.setStatus(request.getStatus());
         entity.setNotes(request.getNotes());
         entity = repository.save(entity);
+        auditPublisher.publishUpdate(AuditModule.AR, "DianResolution", entity.getId(),
+                "Resolucion DIAN actualizada: " + entity.getResolutionNumber());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Resolucion actualizada correctamente"), Optional.of(toDTO(entity))));
     }
@@ -141,6 +149,8 @@ public class DianResolutionService {
         DianResolution entity = repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new IllegalArgumentException("La resolucion DIAN no fue encontrada"));
         repository.deleteById(entity.getId());
+        auditPublisher.publishDelete(AuditModule.AR, "DianResolution", entity.getId(),
+                "Resolucion DIAN eliminada: " + entity.getResolutionNumber());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Resolucion eliminada correctamente"), Optional.empty()));
     }

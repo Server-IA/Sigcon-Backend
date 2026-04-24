@@ -2,6 +2,8 @@ package com.sigcon.backend.general.accounting;
 
 import com.sigcon.backend.general.accounting.application.AccountingPeriodDTO;
 import com.sigcon.backend.general.accounting.application.CreatePeriodRequest;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ import java.util.List;
 public class AccountingPeriodService {
 
     private final AccountingPeriodRepository repository;
+    private final AuditPublisher auditPublisher;
     /**
      * HU-CG-29 E4: bloqueo de cierre de periodo si hay JE en DRAFT.
      * Incluye JE generados por cualquier modulo (AP, AR, BNK, ACT, NOM, CG).

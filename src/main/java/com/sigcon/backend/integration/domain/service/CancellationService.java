@@ -26,6 +26,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * HU-INT-RF-10: Procesador del flujo Pull+Diff de AgroFusion.
@@ -67,6 +69,13 @@ public class CancellationService {
     private static final String STANDARD_VERSION = "1.0";
 
     /**
+     * Locks por document_id para serializar updates concurrentes al mismo doc.
+     * Evita race condition: 2 updates simultaneos al mismo documento podrian
+     * reversar ambos el mismo JE, dejando el segundo huerfano.
+     */
+    private final java.util.Map<String, ReentrantLock> docLocks = new ConcurrentHashMap<>();
+
+    /**
      * Ejecuta la accion Pull+Diff correspondiente al tipo de cambio.
      *
      * @param dto payload recibido desde AgroFusion
@@ -77,17 +86,31 @@ public class CancellationService {
         log.info("Pull+Diff: changeType={}, originalExchangeId={}, documentId={}",
                 dto.getChangeType(), dto.getOriginalExchangeId(), dto.getDocumentId());
 
-        switch (dto.getChangeType()) {
-            case CANCELLED:
-                return processCancel(dto);
-            case MODIFIED:
-                return processModify(dto);
-            case NEW:
-                return processNew(dto);
-            default:
-                throw new AaefMappingException(
-                        AaefMappingException.UNSUPPORTED_TYPE,
-                        "changeType no soportado: " + dto.getChangeType());
+        // RF-INT-14: serializar por document_id para evitar race condition
+        // entre 2 updates concurrentes al mismo doc. Cada doc tiene su propio
+        // lock; updates a docs distintos siguen procesandose en paralelo.
+        String docKey = dto.getDocumentId() != null ? dto.getDocumentId() : "_NEW_" + System.nanoTime();
+        ReentrantLock lock = docLocks.computeIfAbsent(docKey, k -> new ReentrantLock());
+        lock.lock();
+        try {
+            switch (dto.getChangeType()) {
+                case CANCELLED:
+                    return processCancel(dto);
+                case MODIFIED:
+                    return processModify(dto);
+                case NEW:
+                    return processNew(dto);
+                default:
+                    throw new AaefMappingException(
+                            AaefMappingException.UNSUPPORTED_TYPE,
+                            "changeType no soportado: " + dto.getChangeType());
+            }
+        } finally {
+            lock.unlock();
+            // Cleanup: si nadie mas espera el lock, removerlo del map para evitar leak
+            if (!lock.hasQueuedThreads()) {
+                docLocks.remove(docKey, lock);
+            }
         }
     }
 
@@ -96,32 +119,58 @@ public class CancellationService {
     // ============================================================
 
     private Map<String, Object> processCancel(AgroFusionExchangeUpdateDTO dto) {
-        IntegrationBatch batch = findOriginalBatch(dto.getOriginalExchangeId());
-        List<IntegrationTransfer> transfers = transferRepository.findByBatch_IdAndDeletedAtIsNull(batch.getId());
+        // Spec RF-INT-14: cuando llega un Pull+Diff sobre un document_id, debemos
+        // reversar el ASIENTO MÁS RECIENTE de ese documento (no recorrer todo el
+        // lote padre). Pueden existir múltiples updates al mismo doc — siempre se
+        // reversa el último.
+        //
+        // Antes: se buscaba por exchangeId del lote padre y se reversaban TODOS sus
+        // transfers. Eso era incorrecto cuando un doc había sido actualizado N veces:
+        // se terminaba reversando el JE original (que ya estaba REVERSED por el
+        // update anterior) en vez del más reciente.
+
+        // Validar que el lote padre exista (también valida ORIGINAL_NOT_FOUND)
+        findOriginalBatch(dto.getOriginalExchangeId());
+
+        if (dto.getDocumentId() == null || dto.getDocumentId().isBlank()) {
+            throw new AaefMappingException(
+                    AaefMappingException.MAPPING_ERROR,
+                    "DocumentId es obligatorio para CANCELLED");
+        }
 
         List<Long> reversedEntries = new java.util.ArrayList<>();
-        for (IntegrationTransfer t : transfers) {
-            if (t.getAccountingEntryId() == null) continue;
-            Long jeId = t.getAccountingEntryId();
+
+        // Buscar el ÚLTIMO transfer del documento (con asiento POSTED).
+        IntegrationTransfer latest = transferRepository
+                .findFirstByDocumentIdAndAccountingEntryIdIsNotNullAndDeletedAtIsNullOrderByProcessedAtDesc(
+                        dto.getDocumentId())
+                .orElse(null);
+
+        if (latest == null) {
+            log.warn("Pull+Diff CANCELLED: no se encontro transfer previo para document_id={}",
+                    dto.getDocumentId());
+        } else {
+            Long jeId = latest.getAccountingEntryId();
 
             // Reversar JE (postear si esta en DRAFT)
             Long reversalId = reverseOrDelete(jeId, dto.getReason());
             reversedEntries.add(reversalId != null ? reversalId : jeId);
 
             // Marcar invoice/salesInvoice como VOIDED
-            voidLinkedInvoice(t);
+            voidLinkedInvoice(latest);
 
             // Marcar transfer como reversado
-            t.setTransferStatus(TransferStatus.FAILED);
-            t.setErrorCode("CANCELLED_BY_AGROFUSION");
-            t.setErrorMessage("Cancelado via Pull+Diff: " + (dto.getReason() != null ? dto.getReason() : "sin motivo"));
-            t.setProcessedAt(LocalDateTime.now());
-            transferRepository.save(t);
+            latest.setTransferStatus(TransferStatus.FAILED);
+            latest.setErrorCode("CANCELLED_BY_AGROFUSION");
+            latest.setErrorMessage("Cancelado via Pull+Diff: " + (dto.getReason() != null ? dto.getReason() : "sin motivo"));
+            latest.setProcessedAt(LocalDateTime.now());
+            transferRepository.save(latest);
         }
 
         Map<String, Object> result = new HashMap<>();
         result.put("status", "CANCELLED");
         result.put("originalExchangeId", dto.getOriginalExchangeId());
+        result.put("documentId", dto.getDocumentId());
         result.put("affectedEntries", reversedEntries);
         return result;
     }

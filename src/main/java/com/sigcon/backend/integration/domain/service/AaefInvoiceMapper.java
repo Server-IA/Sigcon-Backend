@@ -83,11 +83,14 @@ public class AaefInvoiceMapper {
         BigDecimal expected = subtotal.add(vat).subtract(withholdings).subtract(discounts);
         BigDecimal actual = safe(totals.getTotalPayment());
 
-        if (expected.compareTo(actual) != 0) {
+        // Spec RF-INT-12: tolerancia ±$0.01 por redondeos (la spec lo permite
+        // explicitamente; antes haciamos compareTo() == 0 strict y rechazabamos
+        // diferencias de centavos legitimas).
+        if (expected.subtract(actual).abs().compareTo(new BigDecimal("0.01")) > 0) {
             throw new AaefMappingException(
                     AaefMappingException.AMOUNT_MISMATCH,
                     "TotalPayment (" + actual + ") no coincide con Subtotal+TotalVAT"
-                            + "-Retenciones-Descuentos (" + expected + ")");
+                            + "-Retenciones-Descuentos (" + expected + "). Tolerancia ±$0.01.");
         }
 
         // Mapear lineas
@@ -191,11 +194,14 @@ public class AaefInvoiceMapper {
         BigDecimal expected = subtotal.add(vat).subtract(withholdings).subtract(discounts);
         BigDecimal actual = safe(totals.getTotalPayment());
 
-        if (expected.compareTo(actual) != 0) {
+        // Spec RF-INT-12: tolerancia ±$0.01 por redondeos (la spec lo permite
+        // explicitamente; antes haciamos compareTo() == 0 strict y rechazabamos
+        // diferencias de centavos legitimas).
+        if (expected.subtract(actual).abs().compareTo(new BigDecimal("0.01")) > 0) {
             throw new AaefMappingException(
                     AaefMappingException.AMOUNT_MISMATCH,
                     "TotalPayment (" + actual + ") no coincide con Subtotal+TotalVAT"
-                            + "-Retenciones-Descuentos (" + expected + ")");
+                            + "-Retenciones-Descuentos (" + expected + "). Tolerancia ±$0.01.");
         }
 
         // Resolver cuenta contable default (AP_COMPRAS_DEFAULT -> PUC 5135 Servicios)

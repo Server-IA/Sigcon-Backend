@@ -35,6 +35,8 @@ import lombok.RequiredArgsConstructor;
 import com.sigcon.backend.parametrization.menu.Menu;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.MenuEntity;
 import com.sigcon.backend.parametrization.menu.infrastructure.adapter.out.persistence.enums.MenuStatus;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 @RequiredArgsConstructor
 
@@ -42,6 +44,7 @@ public class MenuService implements MenuUseCase {
     private final MenuRepositoryPort menuRepositoryPort;
     private final ModuleRepository moduleRepository;
     private final UserRepository userRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<MenuEntity> menuSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -125,7 +128,13 @@ public class MenuService implements MenuUseCase {
                 .map(Role::getId)
                 .collect(Collectors.toList());
 
-        boolean isAdmin = roleIds.contains(1L);
+        // isAdmin se resuelve por NOMBRE del rol, no por ID hardcodeado.
+        // Motivo: tras la reindexacion de roles (V9-J), el id=1 dejo de ser ADMIN
+        // (ahora es CONTADOR). Usar el nombre garantiza que el bypass funcione
+        // independientemente del orden de insercion de roles en la migracion.
+        boolean isAdmin = user.getRoles().stream().anyMatch(r ->
+                "ADMIN".equalsIgnoreCase(r.getName())
+                || "SUPERADMIN".equalsIgnoreCase(r.getName()));
 
         return menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds, isAdmin).values().stream()
                 .flatMap(List::stream)
@@ -211,7 +220,10 @@ public class MenuService implements MenuUseCase {
                     .updatedAt(menu.getUpdatedAt())
                     .build();
 
-            menuRepositoryPort.saveMenu(menuEntity);
+            MenuEntity savedMenu = menuRepositoryPort.saveMenu(menuEntity);
+            auditPublisher.publishCreate(AuditModule.PA, "Menu",
+                    savedMenu != null ? savedMenu.getId() : null,
+                    "Menu creado: " + menu.getLabel() + " (" + menu.getPath() + ")");
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menu creado correctamente"),
                             Optional.empty()));
@@ -287,6 +299,8 @@ public class MenuService implements MenuUseCase {
             menuEntity.setUpdatedAt(LocalDateTime.now());
 
             menuRepositoryPort.updateMenu(menuEntity);
+            auditPublisher.publishUpdate(AuditModule.PA, "Menu", menuEntity.getId(),
+                    "Menu actualizado: " + menuEntity.getLabel() + " (" + menuEntity.getPath() + ")");
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú actualizado correctamente"),
                             Optional.empty()));
@@ -356,6 +370,9 @@ public class MenuService implements MenuUseCase {
 
         try {
             MenuEntity respond = menuRepositoryPort.deleteMenu(id);
+            auditPublisher.publishDelete(AuditModule.PA, "Menu", id,
+                    "Menu eliminado: "
+                            + (respond != null && respond.getLabel() != null ? respond.getLabel() : "id=" + id));
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(Optional.of("Menú eliminado correctamente"),
                             Optional.empty()));

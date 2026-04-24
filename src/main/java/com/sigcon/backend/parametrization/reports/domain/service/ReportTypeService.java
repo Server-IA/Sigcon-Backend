@@ -20,6 +20,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class ReportTypeService {
 
     private final ReportTypeRepository reportTypeRepository;
     private final ReportTemplateRepository reportTemplateRepository;
+    private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<ReportType> specificationBuilder =
             new DataTableSpecificationBuilder<>();
 
@@ -102,6 +105,7 @@ public class ReportTypeService {
                     .build();
 
             reportTypeRepository.save(reportType);
+            auditPublisher.publishCreate(AuditModule.PA, "ReportType", reportType.getId(), "ReportType creado id=" + reportType.getId());
 
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(
@@ -150,6 +154,7 @@ public class ReportTypeService {
             }
 
             reportTypeRepository.save(reportType);
+            auditPublisher.publishUpdate(AuditModule.PA, "ReportType", reportType.getId(), "ReportType actualizado id=" + reportType.getId());
 
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(

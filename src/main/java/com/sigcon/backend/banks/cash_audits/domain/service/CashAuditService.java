@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.banks.cash_audits.application.ApproveCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.CashAuditDTO;
 import com.sigcon.backend.banks.cash_audits.application.CreateCashAuditRequest;
@@ -54,6 +56,7 @@ public class CashAuditService {
     private final CashRepository cashRepository;
     private final JournalEntryService journalEntryService;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<CashAudit> specBuilder = new DataTableSpecificationBuilder<>();
 
     /**
@@ -118,6 +121,10 @@ public class CashAuditService {
 
         CashAudit saved = cashAuditRepository.save(audit);
         log.info("Arqueo de caja creado: id={}, caja={}, diferencia={}", saved.getId(), cash.getCashCode(), difference);
+
+        auditPublisher.publishCreate(AuditModule.BNK, "CashAudit", saved.getId(),
+                "Arqueo de caja registrado: caja=" + cash.getCashCode()
+                        + " diferencia=" + difference);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -216,6 +223,9 @@ public class CashAuditService {
         CashAudit saved = cashAuditRepository.save(audit);
         log.info("Arqueo de caja aprobado: id={}", saved.getId());
 
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashAudit", saved.getId(),
+                "Arqueo de caja aprobado");
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Arqueo de caja aprobado exitosamente."),
@@ -247,6 +257,9 @@ public class CashAuditService {
         audit.setStatus(CashAuditStatus.CERRADO);
         CashAudit saved = cashAuditRepository.save(audit);
         log.info("Arqueo de caja cerrado: id={}", saved.getId());
+
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashAudit", saved.getId(),
+                "Arqueo de caja cerrado");
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

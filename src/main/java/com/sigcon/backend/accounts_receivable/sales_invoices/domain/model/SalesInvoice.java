@@ -76,6 +76,7 @@ public class SalesInvoice {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "currency_id", nullable = true)
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private CurrencyType currency;
 
     @Column(name = "exchange_rate", nullable = false, precision = 19, scale = 6)

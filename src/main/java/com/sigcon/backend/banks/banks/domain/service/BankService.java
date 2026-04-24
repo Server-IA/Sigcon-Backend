@@ -1,5 +1,7 @@
 package com.sigcon.backend.banks.banks.domain.service;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
 import com.sigcon.backend.banks.banks.application.BankBranchDTO;
 import com.sigcon.backend.banks.banks.application.BankDTO;
@@ -41,6 +43,7 @@ public class BankService {
         private final BankRepository bankRepository;
         private final CountryRepository countryRepository;
         private final BankAccountRepository bankAccountRepository;
+        private final AuditPublisher auditPublisher;
 
         private final DataTableSpecificationBuilder<Bank> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -80,6 +83,9 @@ public class BankService {
 
                 bankRepository.save(bank);
 
+                auditPublisher.publishCreate(AuditModule.BNK, "Bank", bank.getId(),
+                                "Banco registrado: " + bank.getName() + " (NIT " + bank.getNit() + ")");
+
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
                                                 Optional.of("Banco registrado correctamente."),
@@ -103,10 +109,8 @@ public class BankService {
                 Specification<Bank> specification = dataTableSpecificationBuilder.build(request);
                 Page<Bank> bankPage = bankRepository.findAll(specification, pageable);
 
-                if (bankPage.isEmpty()) {
-                        throw new IllegalArgumentException("No se encontraron bancos.");
-                }
-
+                // Un listado paginado vacio NO es un error: el frontend renderiza
+                // tabla vacia con DataTableResponse (totalElements=0).
                 return ResponseEntity.ok(
                                 DataTableResponse.from(bankPage.map(this::toDto), request.getDraw()));
         }
@@ -175,6 +179,9 @@ public class BankService {
 
                 bankRepository.save(bank);
 
+                auditPublisher.publishUpdate(AuditModule.BNK, "Bank", bank.getId(),
+                                "Banco actualizado: " + bank.getName());
+
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
                                                 Optional.of("Banco actualizado correctamente."),
@@ -198,6 +205,9 @@ public class BankService {
                 bank.setDeletedAt(LocalDateTime.now());
 
                 bankRepository.save(bank);
+
+                auditPublisher.publishDelete(AuditModule.BNK, "Bank", bank.getId(),
+                                "Banco eliminado: " + bank.getName());
 
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(

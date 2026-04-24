@@ -37,6 +37,8 @@ import com.sigcon.backend.parametrization.account_mappings.domain.service.Accoun
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +62,7 @@ public class ClosingService {
     private final AccountingPeriodService accountingPeriodService;
     private final AccountingPeriodRepository accountingPeriodRepository;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
 
     // ───────────────────────────────────────────────────────────────
     // Cierre mensual
@@ -137,6 +140,7 @@ public class ClosingService {
                 .createdBy(createdBy)
                 .build();
         closingEntryRepository.save(closing);
+        auditPublisher.publishCreate(AuditModule.CG, "ClosingEntry", closing.getId(), "ClosingEntry creado id=" + closing.getId());
 
         // 7. Cerrar el periodo contable
         AccountingPeriod period = accountingPeriodRepository.findByYearAndMonth(year, month).orElse(null);
@@ -288,6 +292,7 @@ public class ClosingService {
                 .createdBy(createdBy)
                 .build();
         closingEntryRepository.save(closing);
+        auditPublisher.publishCreate(AuditModule.CG, "ClosingEntry", closing.getId(), "ClosingEntry creado id=" + closing.getId());
 
         // Cerrar los meses abiertos
         for (AccountingPeriod period : openPeriods) {
@@ -409,6 +414,7 @@ public class ClosingService {
                 .createdBy(createdBy)
                 .build();
         closingEntryRepository.save(closing);
+        auditPublisher.publishCreate(AuditModule.CG, "ClosingEntry", closing.getId(), "ClosingEntry creado id=" + closing.getId());
 
         log.info("Asiento de apertura generado para {}. Asiento #{}", year, journalEntry.getEntryNumber());
 

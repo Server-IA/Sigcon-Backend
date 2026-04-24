@@ -46,16 +46,22 @@ public class DataInitializer implements CommandLineRunner {
         @Override
         public void run(String... args) {
                 executeScripts();
-                seedCompanyParameters();
+                // seedCompanyParameters() eliminado: codigo legacy pre multi-tenant.
+                // V9-Z + _seed_parameters_for_tenant PL/pgSQL seedea COMPANY_* por empresa
+                // dentro de _tenant_auto_provision. Dejarlo aqui crashea con multi-tenant
+                // porque findByNameAndDeletedAtIsNull("COMPANY_NAME") devuelve N filas.
                 createOrUpdateRole("ADMIN", new HashSet<>(Set.of()));
                 createOrUpdateRole("USER", new HashSet<>(Set.of()));
                 createOrUpdateUser("SUPER", "ADMIN", "superadmin@gmail.com", "123456", "ADMIN", Set.of(), "superadmin");
         }
 
         /**
-         * Inserta parametros por defecto de la empresa si no existen.
-         * Estos parametros permiten configurar la empresa desde la pantalla de parametros.
+         * @deprecated reemplazado por {@code _seed_parameters_for_tenant} en V9-Z que
+         *             crea los COMPANY_* por empresa. Este metodo ya no se invoca pero
+         *             se deja en el codigo por compatibilidad con llamadas directas.
+         *             Con multi-tenant causa {@code IncorrectResultSizeDataAccessException}.
          */
+        @Deprecated
         private void seedCompanyParameters() {
                 if (parameterRepository.findByNameAndDeletedAtIsNull("COMPANY_NAME").isEmpty()) {
                         parameterRepository.save(Parameter.builder()

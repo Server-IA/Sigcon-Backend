@@ -16,11 +16,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditAction;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO;
 import com.sigcon.backend.general.accounting.journal.application.ReverseEntryRequest;
+import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryExportService;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.utils.DataTableRequest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,6 +49,8 @@ import lombok.RequiredArgsConstructor;
 public class JournalEntryController {
 
     private final JournalEntryService journalEntryService;
+    private final JournalEntryExportService journalEntryExportService;
+    private final AuditPublisher auditPublisher;
 
     // ─────────────────────────────────────────────────────
     // Busqueda paginada DataTable
@@ -63,7 +72,7 @@ public class JournalEntryController {
         try {
             return journalEntryService.searchEntries(request);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -94,7 +103,7 @@ public class JournalEntryController {
                     "data", result
             ));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -116,9 +125,21 @@ public class JournalEntryController {
     public ResponseEntity<?> detail(@PathVariable Long id) {
         try {
             JournalEntryDTO result = journalEntryService.getEntry(id);
+            // HU-CG-08A E4: registrar evento VIEW cuando se consulta un asiento
+            // REVERSED para trazabilidad de auditores. Severidad MEDIUM porque la
+            // consulta de asientos anulados es un evento sensible para reportes
+            // forenses contables.
+            if (result != null && "REVERSED".equalsIgnoreCase(String.valueOf(result.getStatus()))) {
+                auditPublisher.publish(
+                        AuditAction.VIEW, AuditModule.CG, AuditSeverity.MEDIUM,
+                        "JournalEntry", id,
+                        "Consulta de comprobante REVERSED #" + id +
+                        (result.getReversalOfNumber() != null ? " (reversa de " + result.getReversalOfNumber() + ")" : ""),
+                        null, null, id);
+            }
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -145,7 +166,7 @@ public class JournalEntryController {
                     "data", result
             ));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -168,16 +189,37 @@ public class JournalEntryController {
     public ResponseEntity<?> reverse(
             @PathVariable Long id,
             @Valid @RequestBody ReverseEntryRequest request,
-            Authentication authentication) {
+            Authentication authentication,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
         try {
             String createdBy = authentication != null ? authentication.getName() : "SYSTEM";
             JournalEntryDTO result = journalEntryService.reverseEntry(id, request.getDescription(), createdBy);
+            // HU-CG-08B E6: bitacora enriquecida con usuario+rol+IP+motivo+JE original/reversa
+            String roles = authentication != null && authentication.getAuthorities() != null
+                    ? authentication.getAuthorities().stream()
+                        .map(a -> a.getAuthority())
+                        .filter(s -> s.startsWith("ROLE_") || s.equals("PLATFORM_ADMIN"))
+                        .reduce((a, b) -> a + "," + b).orElse("-")
+                    : "-";
+            String fwd = httpRequest != null ? httpRequest.getHeader("X-Forwarded-For") : null;
+            String ip = (fwd != null && !fwd.isBlank())
+                    ? fwd.split(",")[0].trim()
+                    : (httpRequest != null ? httpRequest.getRemoteAddr() : "-");
+            String ua = httpRequest != null ? httpRequest.getHeader("User-Agent") : "-";
+            String desc = String.format(
+                "Reverse JE original=%s reversa=%s | usuario=%s | roles=%s | IP=%s | UA=%s | motivo=%s",
+                id, result != null ? result.getId() : "?", createdBy, roles, ip,
+                ua != null && ua.length() > 80 ? ua.substring(0, 80) + "..." : ua,
+                request.getDescription());
+            auditPublisher.publish(
+                    AuditAction.UPDATE, AuditModule.CG, AuditSeverity.HIGH,
+                    "JournalEntry", id, desc, null, null, id);
             return ResponseEntity.ok(Map.of(
                     "message", "Asiento reversado correctamente.",
                     "data", result
             ));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -204,7 +246,7 @@ public class JournalEntryController {
             JournalEntryDTO updated = journalEntryService.updateEntry(id, request);
             return ResponseEntity.ok(updated);
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -234,7 +276,7 @@ public class JournalEntryController {
             JournalEntryDTO correction = journalEntryService.createCorrection(id, request, createdBy);
             return ResponseEntity.ok(correction);
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 
@@ -258,7 +300,89 @@ public class JournalEntryController {
             journalEntryService.deleteEntry(id);
             return ResponseEntity.ok(Map.of("message", "Asiento eliminado correctamente."));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────
+    // Documentos relacionados (HU-CG-08C E2)
+    // ─────────────────────────────────────────────────────
+
+    @GetMapping("/{id}/related-docs")
+    @Operation(
+            summary = "Documentos relacionados al comprobante",
+            description = "HU-CG-08C E2/E3: devuelve los vinculos cruzados visibles desde el "
+                        + "comprobante consultado: si es una reversion, el comprobante original; "
+                        + "si fue reversado, el comprobante REV-XXXX que lo neutralizo; "
+                        + "si fue corregido, el comprobante COR-XXXX vinculado; "
+                        + "y el modulo origen (AP/AR/BNK/ACT/NOM) cuando aplique."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de documentos relacionados"),
+            @ApiResponse(responseCode = "404", description = "Comprobante no encontrado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> relatedDocs(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(Map.of(
+                    "data", journalEntryService.getRelatedDocuments(id)
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────
+    // Exportar comprobante (HU-CG-01C)
+    // ─────────────────────────────────────────────────────
+
+    @GetMapping("/{id}/pdf")
+    @Operation(
+            summary = "Exportar comprobante a PDF",
+            description = "HU-CG-01C E1/E3: descarga el comprobante (en cualquier estado) como PDF "
+                        + "con cabecera de empresa, datos del asiento y detalle de lineas."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "PDF generado"),
+            @ApiResponse(responseCode = "400", description = "Comprobante no encontrado o error de generacion"),
+            @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> exportPdf(@PathVariable Long id) {
+        try {
+            byte[] body = journalEntryExportService.generatePdf(id);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"comprobante-" + id + ".pdf\"")
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .body(body);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/xlsx")
+    @Operation(
+            summary = "Exportar comprobante a Excel",
+            description = "HU-CG-01C E2: descarga el comprobante como hoja de calculo Excel (.xlsx)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "XLSX generado"),
+            @ApiResponse(responseCode = "400", description = "Comprobante no encontrado"),
+            @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> exportXlsx(@PathVariable Long id) {
+        try {
+            byte[] body = journalEntryExportService.generateXlsx(id);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"comprobante-" + id + ".xlsx\"")
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(body);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 

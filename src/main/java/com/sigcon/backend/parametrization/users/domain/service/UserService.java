@@ -20,6 +20,8 @@ import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +54,7 @@ public class UserService {
     private final UserParameterRepository userParameterRepository;
     private final RoleRepository roleRepository;
     private final SystemInfoService systemInfoService;
+    private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
 
@@ -119,7 +122,6 @@ public class UserService {
     }
 
     public ResponseEntity<?> store(UserDTO request, BindingResult bindingResult) {
-        // try{
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
@@ -129,6 +131,18 @@ public class UserService {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El correo electrónico ya está registrado")));
 
         }
+
+        // Multi-tenant: el usuario nuevo debe pertenecer a la empresa del admin que lo crea.
+        // El constraint ck_users_tenant_or_platform exige company_id NOT NULL XOR platform_role NOT NULL.
+        // Desde /parametrizacion/users solo se crean usuarios tenant; PLATFORM_ADMIN usa su propio flujo.
+        Long tenantCompanyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (tenantCompanyId == null) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "No se puede crear el usuario: el administrador actual no pertenece a ninguna empresa. "
+                          + "Los usuarios de plataforma se crean desde el modulo Plataforma.")));
+        }
+
         User user = User.builder()
                 .name(request.getName())
                 .lastname(request.getLastname())
@@ -136,18 +150,15 @@ public class UserService {
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .status(Status.ACTIVE)
+                .companyId(tenantCompanyId)
                 .roles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent)
                         .map(Optional::get).collect(Collectors.toSet()))
                 .build();
         userRepository.save(user);
+        auditPublisher.publishCreate(AuditModule.PA, "User", user.getId(), "User creado id=" + user.getId());
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario creado correctamente"),
                         Optional.empty()));
-
-        // }catch(Exception e){
-        // return
-        // ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // }
     }
 
     public ResponseEntity<?> getUserInfo() {
@@ -261,6 +272,7 @@ public class UserService {
 
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
+        auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(), "User actualizado id=" + user.getId());
 
         UserDTO userDTO = new UserDTO();
         userDTO.setId(user.getId());
@@ -324,6 +336,7 @@ public class UserService {
 
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
+        auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(), "User actualizado id=" + user.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -379,6 +392,7 @@ public class UserService {
 
         user.setDeletedAt(LocalDateTime.now());
         userRepository.save(user);
+        auditPublisher.publishDelete(AuditModule.PA, "User", user.getId(), "User eliminado id=" + user.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"),

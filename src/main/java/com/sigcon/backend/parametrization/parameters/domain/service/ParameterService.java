@@ -33,6 +33,8 @@ import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.repository.PermissionRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
 import com.sigcon.backend.parametrization.users.domain.service.UserService;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -57,6 +59,7 @@ public class ParameterService {
     private final UserParameterRepository userParameterRepository;
     private final UserRepository userRepository;
     private final PermissionRepository permissionRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<Parameter> parameterSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
@@ -176,6 +179,7 @@ public class ParameterService {
                     .build();
 
             userParameterRepository.save(userParameter);
+            auditPublisher.publishCreate(AuditModule.PA, "Parameter", userParameter.getId(), "Parameter creado id=" + userParameter.getId());
             
 
             UserDTO userDto = getUserDTO(user);
@@ -232,6 +236,7 @@ public class ParameterService {
             userParameter.setValue(validatedColor);
             userParameter.setUpdated_at(LocalDateTime.now());
             userParameterRepository.save(userParameter);
+            auditPublisher.publishUpdate(AuditModule.PA, "Parameter", userParameter.getId(), "Parameter actualizado id=" + userParameter.getId());
 
             UserDTO userDto = getUserDTO(user);
 
@@ -267,6 +272,7 @@ public class ParameterService {
             // Eliminar la asignación
             userParameter.setDeleted_at(LocalDateTime.now());
             userParameterRepository.save(userParameter);
+            auditPublisher.publishDelete(AuditModule.PA, "Parameter", userParameter.getId(), "Parameter eliminado id=" + userParameter.getId());
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro eliminado correctamente"), Optional.empty()));
@@ -380,6 +386,7 @@ public class ParameterService {
             request.setDeletedAt(null);
 
             Parameter saved = parameterRepository.save(request);
+            auditPublisher.publishCreate(AuditModule.PA, "Parameter", request.getId(), "Parameter creado id=" + request.getId());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro creado correctamente"), Optional.of(saved)));
         } catch (Exception e) {
@@ -417,6 +424,7 @@ public class ParameterService {
             parameter.setStatus(request.getStatus());
 
             Parameter saved = parameterRepository.save(parameter);
+            auditPublisher.publishUpdate(AuditModule.PA, "Parameter", parameter.getId(), "Parameter actualizado id=" + parameter.getId());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro actualizado correctamente"), Optional.of(saved)));
         } catch (Exception e) {
@@ -441,6 +449,7 @@ public class ParameterService {
 
             parameter.setDeletedAt(LocalDateTime.now());
             parameterRepository.save(parameter);
+            auditPublisher.publishDelete(AuditModule.PA, "Parameter", parameter.getId(), "Parameter eliminado id=" + parameter.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("title", "OK");

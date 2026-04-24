@@ -11,6 +11,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -44,6 +46,7 @@ import java.util.Optional;
 public class CashFlowProjectionService {
 
     private final CashFlowProjectionRepository projectionRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<CashFlowProjection> specificationBuilder =
             new DataTableSpecificationBuilder<>();
@@ -103,6 +106,7 @@ public class CashFlowProjectionService {
         // status = BORRADOR se asigna en @PrePersist
 
         projectionRepository.save(projection);
+        auditPublisher.publishCreate(AuditModule.BNK, "CashFlowProjection", projection.getId(), "CashFlowProjection creado id=" + projection.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -194,6 +198,7 @@ public class CashFlowProjectionService {
         }
 
         projectionRepository.save(projection);
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashFlowProjection", projection.getId(), "CashFlowProjection actualizado id=" + projection.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -243,6 +248,7 @@ public class CashFlowProjectionService {
         projection.setDeletedAt(LocalDateTime.now());
         projection.setStatus(ProjectionStatus.INACTIVA);
         projectionRepository.save(projection);
+        auditPublisher.publishDelete(AuditModule.BNK, "CashFlowProjection", projection.getId(), "CashFlowProjection eliminado id=" + projection.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -306,10 +312,8 @@ public class CashFlowProjectionService {
         Specification<CashFlowProjection> specification = specificationBuilder.build(request);
         Page<CashFlowProjection> projectionPage = projectionRepository.findAll(specification, pageable);
 
-        if (projectionPage.isEmpty()) {
-            throw new IllegalArgumentException("No se encontraron proyecciones de flujo de caja.");
-        }
-
+        // Un listado paginado vacio NO es un error: el frontend renderiza
+        // tabla vacia con DataTableResponse (totalElements=0).
         return ResponseEntity.ok(
                 DataTableResponse.from(projectionPage.map(this::toDto), request.getDraw())
         );

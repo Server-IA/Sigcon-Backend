@@ -133,6 +133,18 @@ public class CompanyService {
                 "SELECT _tenant_auto_provision(?, ?)",
                 Object.class,
                 companyId, year);
+        // V9-ZZG: clonar 5 reglas de riesgo + 4 politicas de retencion baseline
+        // desde SIGCON DEMO (id=1). Idempotente: skip si ya tiene.
+        try {
+            jdbcTemplate.queryForObject(
+                    "SELECT _tenant_seed_audit_baseline(?)",
+                    Object.class,
+                    companyId);
+        } catch (Exception e) {
+            // Funcion puede no existir en BDs antiguas (pre V9-ZZG). No bloqueamos creacion.
+            log.warn("_tenant_seed_audit_baseline fallo o no existe para companyId={}: {}",
+                     companyId, e.getMessage());
+        }
         log.info("Tenant auto-provision completado: companyId={}, year={}", companyId, year);
     }
 

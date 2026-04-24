@@ -25,12 +25,16 @@ import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalE
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryLineRepository;
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.model.CostCenter;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
+import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +54,8 @@ public class JournalEntryService {
     private final AccountingPeriodService accountingPeriodService;
     private final AccountingAccountRepository accountingAccountRepository;
     private final CostCenterRepository costCenterRepository;
+    private final ThirdPartyRepository thirdPartyRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<JournalEntry> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -70,6 +76,13 @@ public class JournalEntryService {
         // 1. Validar periodo abierto
         LocalDate entryDate = request.getEntryDate();
         accountingPeriodService.validatePeriodOpen(entryDate);
+
+        // HU-CG-01A E7: la fecha del comprobante NO puede ser futura.
+        // Se compara contra la fecha actual del servidor (hora local).
+        if (entryDate != null && entryDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException(
+                    "La fecha ingresada no es válida. No se permiten comprobantes con fecha futura.");
+        }
 
         // 2. Validar que tenga lineas
         if (request.getLines() == null || request.getLines().isEmpty()) {
@@ -119,10 +132,12 @@ public class JournalEntryService {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Cuenta contable no encontrada: " + lineReq.getAccountingAccountId()));
 
-            // Validar que la cuenta este activa
+            // ERR-MNT-CG-01A / HU-CG-01A E3: mensaje exacto del Excel.
             if (!"ACTIVE".equals(account.getStatus().name())) {
                 throw new IllegalArgumentException(
-                        "La cuenta " + account.getPucAccount().getCode() + " no esta activa.");
+                        "La cuenta proporcionada está inactiva. "
+                        + "Cuenta " + account.getPucAccount().getCode()
+                        + " (" + account.getPucAccount().getName() + ").");
             }
 
             // HU-CG-09C: cada linea debe tener SOLO debito O credito (no ambos > 0)
@@ -140,6 +155,41 @@ public class JournalEntryService {
                 throw new IllegalArgumentException(
                         "Linea con cuenta " + account.getPucAccount().getCode()
                         + " no tiene debito ni credito. Especifique al menos un valor.");
+            }
+
+            // HU-CG-01A E4: naturaleza de la cuenta vs tipo de movimiento.
+            // - Cuenta DEBIT (Activos/Gastos/Costos) NO debe acreditarse en un
+            //   asiento manual normal (clase 5/6/7 acreditada es un cargo invalido).
+            // - Cuenta CREDIT (Pasivos/Patrimonio/Ingresos) NO debe debitarse.
+            // Las clases 1 y 2 admiten ambos movimientos por dinamica de cuenta
+            // (un activo puede acreditarse al venderlo); por eso solo restringimos
+            // las clases 4, 5, 6 y 7 cuyo movimiento contrario es excepcional y
+            // tipicamente indica error de captura.
+            String pucCode = account.getPucAccount().getCode();
+            char clazz = pucCode != null && !pucCode.isEmpty() ? pucCode.charAt(0) : ' ';
+            boolean isExpenseLike = clazz == '5' || clazz == '6' || clazz == '7';
+            boolean isIncomeLike  = clazz == '4';
+            if (isExpenseLike && c.signum() > 0 && account.getNature() == AccountNature.DEBIT) {
+                throw new IllegalArgumentException(
+                        "La naturaleza de la cuenta " + pucCode + " (" + account.getPucAccount().getName()
+                        + ") no corresponde al tipo de movimiento contable. "
+                        + "Las cuentas de gastos/costos (clases 5, 6, 7) deben debitarse, no acreditarse.");
+            }
+            if (isIncomeLike && d.signum() > 0 && account.getNature() == AccountNature.CREDIT) {
+                throw new IllegalArgumentException(
+                        "La naturaleza de la cuenta " + pucCode + " (" + account.getPucAccount().getName()
+                        + ") no corresponde al tipo de movimiento contable. "
+                        + "Las cuentas de ingresos (clase 4) deben acreditarse, no debitarse.");
+            }
+
+            // HU-CG-01A E6: si la linea trae thirdPartyNit, debe existir un tercero
+            // ACTIVO con ese NIT. No aceptamos texto libre.
+            String nit = lineReq.getThirdPartyNit();
+            if (nit != null && !nit.trim().isEmpty()) {
+                if (!thirdPartyRepository.existsByNitAndDeletedAtIsNull(nit.trim())) {
+                    throw new IllegalArgumentException(
+                            "El NIT ingresado (" + nit + ") no es válido en la base de terceros.");
+                }
             }
 
             JournalEntryLine line = JournalEntryLine.builder()
@@ -163,8 +213,36 @@ public class JournalEntryService {
         }
 
         entry.setLines(lines);
+
+        // HU-CG-01A E9: detectar duplicidad antes del commit.
+        // Un asiento se considera duplicado si existe otro POSTED con la misma
+        // combinacion de (fecha + totalDebit + totalCredit + descripcion) — los
+        // datos identitarios capturados a nivel de cabecera. El analisis line-by-line
+        // (cuenta+tercero+valor) seria mas preciso pero tambien mas costoso; este
+        // chequeo a nivel cabecera atrapa el caso recurrente de doble-clic en Guardar
+        // y es suficiente para HU-CG-01A E9.
+        List<JournalEntry> sameDay = journalEntryRepository.findByEntryDateAndStatus(
+                entryDate, JournalEntryStatus.POSTED);
+        for (JournalEntry existing : sameDay) {
+            if (existing.getTotalDebit().compareTo(totalDebit) == 0
+                    && existing.getTotalCredit().compareTo(totalCredit) == 0
+                    && safeEquals(existing.getDescription(), request.getDescription())) {
+                throw new IllegalArgumentException(
+                        "Ya existe un comprobante con estos datos (mismo fecha, monto y descripcion). "
+                        + "Comprobante existente: #" + existing.getEntryNumber() + ".");
+            }
+        }
+
         JournalEntry saved = journalEntryRepository.save(entry);
+        auditPublisher.publishCreate(AuditModule.CG, "JournalEntry", entry.getId(), "JournalEntry creado id=" + entry.getId());
         return toDTO(saved);
+    }
+
+    /** Comparacion null-safe de dos strings. */
+    private static boolean safeEquals(String a, String b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.trim().equalsIgnoreCase(b.trim());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -184,7 +262,10 @@ public class JournalEntryService {
             throw new IllegalStateException("Solo se pueden contabilizar asientos en estado BORRADOR.");
         }
         entry.setStatus(JournalEntryStatus.POSTED);
-        return toDTO(journalEntryRepository.save(entry));
+        JournalEntry saved = journalEntryRepository.save(entry);
+        auditPublisher.publishUpdate(AuditModule.CG, "JournalEntry", saved.getId(),
+                "Asiento contable contabilizado #" + saved.getEntryNumber());
+        return toDTO(saved);
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -259,6 +340,15 @@ public class JournalEntryService {
         journalEntryRepository.save(original);
 
         JournalEntry savedReversal = journalEntryRepository.save(reversal);
+        auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.DELETE,
+                AuditModule.CG,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.HIGH,
+                "JournalEntry", original.getId(),
+                "Asiento contable reversado #" + original.getEntryNumber()
+                        + " -> nuevo asiento #" + savedReversal.getEntryNumber()
+                        + " motivo: " + description,
+                null, null, savedReversal.getId());
         return toDTO(savedReversal);
     }
 
@@ -306,7 +396,10 @@ public class JournalEntryService {
         if (entry.getStatus() != JournalEntryStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden eliminar asientos en estado BORRADOR.");
         }
+        Long entryNumber = entry.getEntryNumber();
         journalEntryRepository.delete(entry);
+        auditPublisher.publishDelete(AuditModule.CG, "JournalEntry", id,
+                "Asiento contable eliminado #" + entryNumber);
     }
 
     /**
@@ -395,6 +488,7 @@ public class JournalEntryService {
         entry.setTotalCredit(totalCredit);
 
         entry = journalEntryRepository.save(entry);
+        auditPublisher.publishUpdate(AuditModule.CG, "JournalEntry", entry.getId(), "JournalEntry actualizado id=" + entry.getId());
         log.info("CG-07A: Asiento {} actualizado en estado BORRADOR", id);
         return toDTO(entry);
     }
@@ -435,6 +529,7 @@ public class JournalEntryService {
                 (request.getDescription() != null ? request.getDescription() : "")
                 + " [Correccion de asiento " + original.getEntryNumber() + "/" + original.getFiscalYear() + "]");
         correction = journalEntryRepository.save(correction);
+        auditPublisher.publishCreate(AuditModule.CG, "JournalEntry", correction.getId(), "JournalEntry creado id=" + correction.getId());
 
         log.info("CG-07B: Correccion {} creada (original: {})", correction.getId(), originalId);
         return toDTO(correction);
@@ -494,6 +589,45 @@ public class JournalEntryService {
     }
 
     /**
+     * HU-CG-08C E2/E3: documentos relacionados con un comprobante.
+     * Retorna una lista de mapas con: relation, voucherCode, entryNumber, id,
+     * status, description. La UI los renderiza en el panel "Documentos
+     * Relacionados" del viewer.
+     */
+    public List<java.util.Map<String, Object>> getRelatedDocuments(Long id) {
+        JournalEntry entry = findByIdOrThrow(id);
+        List<java.util.Map<String, Object>> related = new ArrayList<>();
+
+        // Caso A: este comprobante reversa a otro -> mostrar el original
+        if (entry.getReversalOf() != null) {
+            related.add(toRelatedMap("REVERSA_A", entry.getReversalOf()));
+        }
+        // Caso B: este comprobante corrige a otro -> mostrar el original
+        if (entry.getCorrectionOf() != null) {
+            related.add(toRelatedMap("CORRIGE_A", entry.getCorrectionOf()));
+        }
+        // Caso C: este comprobante fue reversado por otro -> mostrar el REV
+        journalEntryRepository.findFirstByReversalOf_IdAndDeletedAtIsNull(id)
+                .ifPresent(rev -> related.add(toRelatedMap("REVERSADO_POR", rev)));
+        // Caso D: este comprobante fue corregido por otro -> mostrar el COR
+        journalEntryRepository.findFirstByCorrectionOf_IdAndDeletedAtIsNull(id)
+                .ifPresent(cor -> related.add(toRelatedMap("CORREGIDO_POR", cor)));
+        return related;
+    }
+
+    private static java.util.Map<String, Object> toRelatedMap(String relation, JournalEntry e) {
+        java.util.Map<String, Object> m = new java.util.HashMap<>();
+        m.put("relation", relation);
+        m.put("id", e.getId());
+        m.put("entryNumber", e.getEntryNumber());
+        m.put("voucherCode", buildVoucherCode(e));
+        m.put("status", e.getStatus() != null ? e.getStatus().name() : null);
+        m.put("description", e.getDescription());
+        m.put("entryDate", e.getEntryDate() != null ? e.getEntryDate().toString() : null);
+        return m;
+    }
+
+    /**
      * Convierte una entidad JournalEntry a su DTO de lectura, incluyendo lineas.
      */
     private JournalEntryDTO toDTO(JournalEntry entry) {
@@ -501,9 +635,18 @@ public class JournalEntryService {
                 ? entry.getLines().stream().map(this::toLineDTO).collect(Collectors.toList())
                 : List.of();
 
+        // HU-CG-08B E3 / HU-CG-07B: prefijo del codigo del comprobante segun rol contable.
+        // El UI usa este voucherCode como identificador legible (ej. REV-2026-3).
+        String voucherCode = buildVoucherCode(entry);
+
+        Long reversalOfId = entry.getReversalOf() != null ? entry.getReversalOf().getId() : null;
+        Long reversalOfNumber = entry.getReversalOf() != null ? entry.getReversalOf().getEntryNumber() : null;
+        String reversalOfVoucherCode = entry.getReversalOf() != null ? buildVoucherCode(entry.getReversalOf()) : null;
+
         return JournalEntryDTO.builder()
                 .id(entry.getId())
                 .entryNumber(entry.getEntryNumber())
+                .voucherCode(voucherCode)
                 .fiscalYear(entry.getFiscalYear())
                 .entryDate(entry.getEntryDate())
                 .periodYear(entry.getPeriodYear())
@@ -512,7 +655,9 @@ public class JournalEntryService {
                 .sourceModule(entry.getSourceModule() != null ? entry.getSourceModule().name() : null)
                 .sourceId(entry.getSourceId())
                 .status(entry.getStatus() != null ? entry.getStatus().name() : null)
-                .reversalOfId(entry.getReversalOf() != null ? entry.getReversalOf().getId() : null)
+                .reversalOfId(reversalOfId)
+                .reversalOfNumber(reversalOfNumber)
+                .reversalOfVoucherCode(reversalOfVoucherCode)
                 .correctionOfId(entry.getCorrectionOf() != null ? entry.getCorrectionOf().getId() : null)
                 .totalDebit(entry.getTotalDebit())
                 .totalCredit(entry.getTotalCredit())
@@ -520,6 +665,21 @@ public class JournalEntryService {
                 .createdBy(entry.getCreatedBy())
                 .createdAt(entry.getCreatedAt())
                 .build();
+    }
+
+    /**
+     * Calcula el codigo legible del comprobante.
+     * Devuelve REV-aaaa-N para reversiones, COR-aaaa-N para correcciones,
+     * o JE-aaaa-N para asientos normales. Sin tocar entryNumber (sigue numerando
+     * en secuencia continua dentro del anio fiscal).
+     */
+    public static String buildVoucherCode(JournalEntry entry) {
+        String prefix = "JE";
+        if (entry.getReversalOf() != null) prefix = "REV";
+        else if (entry.getCorrectionOf() != null) prefix = "COR";
+        Integer year = entry.getFiscalYear();
+        Long num = entry.getEntryNumber();
+        return prefix + "-" + (year != null ? year : "????") + "-" + (num != null ? num : "?");
     }
 
     /**

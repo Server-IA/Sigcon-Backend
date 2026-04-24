@@ -22,6 +22,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +57,7 @@ public class AssetDisposalService {
     private final JournalEntryService journalEntryService;
     private final JournalEntryRepository journalEntryRepository;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<AssetDisposal> dataTableSpecificationBuilder =
             new DataTableSpecificationBuilder<>();
@@ -213,6 +216,11 @@ public class AssetDisposalService {
             log.warn("No se pudo generar el asiento contable para la disposicion {}: {}",
                     disposal.getId(), e.getMessage());
         }
+
+        auditPublisher.publishCreate(AuditModule.ACT, "AssetDisposal", disposal.getId(),
+                "Disposicion de activo: " + asset.getAssetCode()
+                        + " tipo=" + request.getDisposalType()
+                        + " ganancia/perdida=" + gainLoss);
 
         return SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Disposicion registrada correctamente."),

@@ -17,15 +17,25 @@ import com.sigcon.backend.general.accounting.journal.application.CreateJournalEn
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.parametrization.users.domain.model.User;
+import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.DataTableResponse;
+import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import com.sigcon.backend.vouchers.application.CreateVoucherDTO;
 import com.sigcon.backend.vouchers.domain.models.VoucherTypesEntity;
 import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
 import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
 import com.sigcon.backend.vouchers.domain.repository.VoucherTypeRepository;
 import com.sigcon.backend.vouchers.domain.service.VoucherService;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -73,6 +83,7 @@ public class FinancialMovementService {
     private final VoucherTypeRepository voucherTypeRepository;
     private final VoucherService voucherService;
     private final JournalEntryService journalEntryService;
+    private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
 
@@ -84,6 +95,31 @@ public class FinancialMovementService {
      * @return ResponseEntity con lista de FinancialMovementDTO
      * @throws IllegalArgumentException si la cuenta no existe o fue eliminada
      */
+    /**
+     * Busqueda paginada (DataTable) de TODOS los movimientos del tenant.
+     * No requiere bankAccountId — multi-tenant filter ya restringe por empresa.
+     */
+    public ResponseEntity<?> search(DataTableRequest request) {
+        try {
+            int length = request.getLength() > 0 && request.getLength() <= 100 ? request.getLength() : 20;
+            int start  = Math.max(request.getStart(), 0);
+            int page   = start / length;
+            Pageable pageable = PageRequest.of(page, length, Sort.by(Sort.Direction.DESC, "movementDate", "id"));
+            Specification<FinancialMovement> spec = new DataTableSpecificationBuilder<FinancialMovement>().build(request);
+            Page<FinancialMovement> p = financialMovementRepository.findAll(spec, pageable);
+            DataTableResponse<FinancialMovementDTO> resp = new DataTableResponse<>();
+            resp.setDraw(request.getDraw());
+            resp.setRecordsTotal(p.getTotalElements());
+            resp.setRecordsFiltered(p.getTotalElements());
+            resp.setData(p.getContent().stream().map(this::toDto).toList());
+            return ResponseEntity.ok(resp);
+        } catch (Exception e) {
+            log.error("FinancialMovementService.search: error", e);
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(java.util.Optional.of("Error al buscar movimientos: " + e.getMessage())));
+        }
+    }
+
     public ResponseEntity<?> listForBankAccount(Long bankAccountId, boolean unmatchedOnly) {
         User user = userUtil.getUser();
         assertBankAccount(bankAccountId, user);
@@ -142,6 +178,7 @@ public class FinancialMovementService {
                 .build();
 
         financialMovementRepository.save(entity);
+        auditPublisher.publishCreate(AuditModule.BNK, "FinancialMovement", entity.getId(), "FinancialMovement creado id=" + entity.getId());
 
         // Intentar crear asiento contable automatico via JournalEntryService.
         // Si falla (ej: cuenta sin cuenta contable, periodo cerrado), solo se logea warning.

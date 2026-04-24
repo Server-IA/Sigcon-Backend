@@ -43,6 +43,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +74,7 @@ public class SalesInvoiceService {
     private final SalesTaxEngine salesTaxEngine;
     private final AccountMappingService accountMappingService;
     private final UserUtil userUtil;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<SalesInvoice> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -165,6 +168,9 @@ public class SalesInvoiceService {
 
         // AR-01A: generar asiento contable de venta (partida doble)
         generateJournalEntry(invoice, thirdParty);
+
+        auditPublisher.publishCreate(AuditModule.AR, "SalesInvoice", invoice.getId(),
+                "Factura de venta creada: " + invoiceNumber + " total $" + totalAmount);
 
         log.info("Factura de venta {} creada: total {}", invoiceNumber, totalAmount);
         return invoice;
@@ -379,6 +385,8 @@ public class SalesInvoiceService {
         }
 
         invoice = salesInvoiceRepository.save(invoice);
+        auditPublisher.publishUpdate(AuditModule.AR, "SalesInvoice", invoice.getId(),
+                "Factura de venta actualizada: " + invoice.getInvoiceNumber());
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Factura actualizada correctamente"), Optional.of(toDto(invoice))));
@@ -436,6 +444,8 @@ public class SalesInvoiceService {
         invoice.setStatus(SalesInvoiceStatus.VOIDED);
         invoice.setBalanceDue(BigDecimal.ZERO);
         invoice = salesInvoiceRepository.save(invoice);
+        auditPublisher.publishDelete(AuditModule.AR, "SalesInvoice", invoice.getId(),
+                "Factura de venta anulada: " + invoice.getInvoiceNumber());
 
         log.info("Factura {} anulada.", invoice.getInvoiceNumber());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -457,6 +467,7 @@ public class SalesInvoiceService {
             if (inv.getStatus() != SalesInvoiceStatus.OVERDUE) {
                 inv.setStatus(SalesInvoiceStatus.OVERDUE);
                 salesInvoiceRepository.save(inv);
+                auditPublisher.publishUpdate(AuditModule.AR, "SalesInvoice", inv.getId(), "SalesInvoice actualizado id=" + inv.getId());
                 updated++;
             }
         }

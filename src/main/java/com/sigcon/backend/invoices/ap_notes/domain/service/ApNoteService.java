@@ -32,6 +32,8 @@ import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +54,7 @@ public class ApNoteService {
     private final JournalEntryService journalEntryService;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<ApCreditDebitNote> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -114,6 +117,7 @@ public class ApNoteService {
                 .build();
 
         note = noteRepository.save(note);
+        auditPublisher.publishCreate(AuditModule.AP, "ApNote", note.getId(), "ApNote creado id=" + note.getId());
 
         // 7. Actualizar saldo de la factura
         if ("CREDIT".equals(noteType)) {
@@ -133,6 +137,7 @@ public class ApNoteService {
             }
         }
         invoiceRepository.save(invoice);
+        auditPublisher.publishCreate(AuditModule.AP, "ApNote", invoice.getId(), "ApNote creado id=" + invoice.getId());
 
         // 8. Generar asiento contable (AP-07 - cuentas resueltas por AccountMappingService)
         try {
@@ -206,6 +211,7 @@ public class ApNoteService {
             JournalEntryDTO je = journalEntryService.createEntry(jeRequest, "sistema");
             note.setJournalEntryId(je.getId());
             noteRepository.save(note);
+            auditPublisher.publishCreate(AuditModule.AP, "ApNote", note.getId(), "ApNote creado id=" + note.getId());
             log.info("Asiento contable {} generado para nota {} de factura {}",
                     je.getId(), noteNumber, invoice.getId());
         } catch (Exception e) {

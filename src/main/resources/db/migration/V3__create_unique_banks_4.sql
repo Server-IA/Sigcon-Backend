@@ -1,29 +1,5 @@
--- Reglas Bancos
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_banks_code_active
-ON banks (code)
-WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_banks_name_active
-ON banks (name)
-WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_banks_short_name_active
-ON banks (name_short)
-WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_banks_nit_active
-ON banks (nit)
-WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_banks_swift_active
-ON banks (swift)
-WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_banks_ach_active
-ON banks (code_ach)
-WHERE deleted_at IS NULL;
-
-
-
-
+-- Neutralizado tras multi-tenant (V9-Z crea los UNIQUE compuestos por company_id).
+-- Los UNIQUE globales (code/name/nit/swift/short_name/code_ach) ya no son validos:
+-- dos empresas distintas pueden tener el mismo NIT/codigo/nombre de banco.
+-- Ver V9-Z__multi_tenant_final_fixes.sql
+SELECT 1;

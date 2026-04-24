@@ -1,5 +1,9 @@
 package com.sigcon.backend.nomina.domain.service;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditAction;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.layout.Document;
@@ -51,6 +55,7 @@ public class PayrollReportService {
     private final PayrollLineRepository lineRepository;
     private final EmployeeRepository employeeRepository;
     private final SystemInfoService systemInfoService;
+    private final AuditPublisher auditPublisher;
 
     private static final NumberFormat COP =
             NumberFormat.getCurrencyInstance(new Locale("es", "CO"));
@@ -141,7 +146,13 @@ public class PayrollReportService {
             doc.add(new Paragraph("CST Art. 132 - Comprobante de pago de nómina obligatorio")
                     .setTextAlignment(TextAlignment.CENTER).setFontSize(8));
             doc.close();
-            return baos.toByteArray();
+            byte[] pdf = baos.toByteArray();
+            auditPublisher.publish(AuditAction.EXPORT, AuditModule.NOM, AuditSeverity.LOW,
+                    "PayrollReceipt", r.getId(),
+                    "Comprobante PDF exportado: empleado=" + emp.getFullName()
+                            + " periodo=" + r.getPeriodYear() + "-" + r.getPeriodMonth(),
+                    null, null, null);
+            return pdf;
         } catch (Exception e) {
             log.error("Error generando PDF de comprobante de nómina", e);
             throw new IllegalStateException("No se pudo generar el comprobante de pago: " + e.getMessage());
@@ -193,7 +204,13 @@ public class PayrollReportService {
                     .append(caja4.toPlainString()).append(';')
                     .append(total.toPlainString()).append('\n');
         }
-        return csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] bytes = csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        auditPublisher.publish(AuditAction.EXPORT, AuditModule.NOM, AuditSeverity.LOW,
+                "PilaReport", null,
+                "Reporte PILA exportado: periodo=" + year + "-" + month
+                        + " recibos=" + receipts.size(),
+                null, null, null);
+        return bytes;
     }
 
     // ─────────────────────────────────────────────────────────────
