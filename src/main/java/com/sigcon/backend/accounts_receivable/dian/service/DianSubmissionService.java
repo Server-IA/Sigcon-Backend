@@ -14,6 +14,8 @@ import com.sigcon.backend.accounts_receivable.dian.submissions.domain.repository
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoice;
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,7 @@ public class DianSubmissionService {
 
     private final DianInvoiceSubmissionRepository submissionRepository;
     private final SalesInvoiceRepository salesInvoiceRepository;
+    private final AuditPublisher auditPublisher;
 
     /** Tiempo de espera simulado del PSE en milisegundos. */
     private static final long MOCK_PSE_DELAY_MS = 2000L;
@@ -61,6 +64,9 @@ public class DianSubmissionService {
         last.setAttemptCount(last.getAttemptCount() + 1);
         last.setSubmissionStatus(DianSubmissionStatus.PENDING);
         submissionRepository.save(last);
+        auditPublisher.publishUpdate(AuditModule.AR, "DianSubmission", last.getId(),
+                "Envio DIAN encolado para factura " + invoiceId + " (intento "
+                        + last.getAttemptCount() + ")");
 
         Long submissionId = last.getId();
         CompletableFuture.runAsync(() -> processSubmissionAsync(submissionId));
@@ -117,6 +123,9 @@ public class DianSubmissionService {
             invoice.setCufe(s.getCufe());
             salesInvoiceRepository.save(invoice);
         }
+        auditPublisher.publishUpdate(AuditModule.AR, "DianSubmission", submissionId,
+                "Envio DIAN ACEPTADO por PSE para factura " + s.getSalesInvoiceId()
+                        + " (trackId=" + s.getTrackId() + ")");
         log.info("Envio DIAN {} marcado como ACCEPTED (simulacion)", submissionId);
     }
 

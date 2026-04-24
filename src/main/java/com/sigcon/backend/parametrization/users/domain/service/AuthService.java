@@ -17,6 +17,11 @@ import com.sigcon.backend.parametrization.users.domain.repository.UserRepository
 import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditAction;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
+import com.sigcon.backend.platform.tenant.TenantContext;
 
 import lombok.RequiredArgsConstructor;
 
@@ -51,6 +56,22 @@ public class AuthService implements UserDetailsService {
     private final RoleRepository roleRepository;
     private final AvatarStorageService avatarStorageService;
     private final CompanyRepository companyRepository;
+    private final AuditPublisher auditPublisher;
+
+    /**
+     * Publica un audit log en el contexto del tenant del usuario afectado.
+     * Si el usuario es PLATFORM_ADMIN (sin empresa) el log se publica sin
+     * company_id (cae en contexto del ejecutor actual, usualmente null).
+     */
+    private void auditUserEvent(User target, AuditAction action, AuditSeverity severity, String description) {
+        Runnable publish = () -> auditPublisher.publish(action, AuditModule.PA, severity,
+                "User", target.getId(), description, null, null, null);
+        if (target.getCompanyId() != null) {
+            TenantContext.runAs(target.getCompanyId(), false, publish);
+        } else {
+            publish.run();
+        }
+    }
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
@@ -141,6 +162,10 @@ public class AuthService implements UserDetailsService {
             user.setLockedUntil(null);
             userRepository.save(user);
 
+            // HU-AU-01: registrar login exitoso con severidad LOW
+            auditUserEvent(user, AuditAction.LOGIN, AuditSeverity.LOW,
+                    "Login exitoso: " + user.getUsername() + " (" + user.getEmail() + ")");
+
             String token = jwtService.generateToken(user);
 
             Map<String, Object> response = new HashMap<String, Object>();
@@ -168,10 +193,18 @@ public class AuthService implements UserDetailsService {
                 User foundUser = userOpt.get();
                 int attempts = (foundUser.getFailedLoginAttempts() != null ? foundUser.getFailedLoginAttempts() : 0) + 1;
                 foundUser.setFailedLoginAttempts(attempts);
+                boolean locked = false;
                 if (attempts >= 5) {
                     foundUser.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                    locked = true;
                 }
                 userRepository.save(foundUser);
+                // HU-AU-01 forense: registrar intento fallido (severidad MEDIUM) o bloqueo (HIGH)
+                auditUserEvent(foundUser, AuditAction.LOGIN,
+                        locked ? AuditSeverity.HIGH : AuditSeverity.MEDIUM,
+                        locked
+                            ? "Cuenta bloqueada tras " + attempts + " intentos fallidos: " + foundUser.getUsername()
+                            : "Intento de login fallido (" + attempts + "/5) para: " + foundUser.getUsername());
             }
 
             return ResponseEntity.badRequest()
@@ -298,6 +331,10 @@ public class AuthService implements UserDetailsService {
 
         resetToken.setUsed(true);
         tokenRepository.save(resetToken);
+
+        // HU-AU-01: cambio de credenciales por token de recuperacion (severidad HIGH, sensible)
+        auditUserEvent(user, AuditAction.UPDATE, AuditSeverity.HIGH,
+                "Contrasenia restablecida via token de recuperacion para " + user.getUsername());
     }
 
     /**
@@ -317,6 +354,15 @@ public class AuthService implements UserDetailsService {
         if (!blackListedTokenRepository.existsByToken(token)) {
             BlackListedToken blackListedToken = BlackListedToken.builder().token(token).build();
             blackListedTokenRepository.save(blackListedToken);
+            // HU-AU-01: registrar LOGOUT resolviendo el usuario desde el JWT
+            try {
+                String username = jwtService.getUsername(token);
+                userRepository.findByUsernameOrEmail(username, username).ifPresent(u ->
+                        auditUserEvent(u, AuditAction.LOGOUT, AuditSeverity.LOW,
+                                "Logout de " + u.getUsername()));
+            } catch (Exception ignored) {
+                // Token invalido o malformado: no bloquear el logout por esto
+            }
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(Optional.of("Cierre de sesión exitoso."), Optional.empty())
             );

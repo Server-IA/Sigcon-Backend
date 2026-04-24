@@ -139,9 +139,13 @@ public class ArAdvanceService {
             advanceRepository.save(advance);
             auditPublisher.publishCreate(AuditModule.AR, "ArAdvance", advance.getId(), "ArAdvance creado id=" + advance.getId());
             log.info("Asiento contable {} generado para anticipo AR {}", je.getId(), advance.getId());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para anticipo AR {}: {}",
-                    advance.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para anticipo AR {}: {}", advance.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar el anticipo: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para anticipo AR {}", advance.getId(), e);
+            throw e;
         }
 
         return ResponseEntity.ok(
@@ -268,9 +272,13 @@ public class ArAdvanceService {
             JournalEntryDTO je = journalEntryService.createEntry(jeRequest, "sistema");
             log.info("Asiento contable {} generado por aplicacion de anticipo {} a factura {}",
                     je.getId(), advance.getId(), invoice.getId());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para aplicacion de anticipo {}: {}",
-                    advance.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento para aplicacion de anticipo {}: {}", advance.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo aplicar el anticipo: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para aplicacion de anticipo {}", advance.getId(), e);
+            throw e;
         }
 
         log.info("Anticipo {} aplicado a factura {} por ${}", advanceId, invoice.getId(), request.getAmount());

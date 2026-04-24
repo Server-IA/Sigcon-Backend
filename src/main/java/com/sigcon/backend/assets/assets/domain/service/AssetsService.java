@@ -520,8 +520,13 @@ public class AssetsService {
         existingAsset.setDepretationRule(depretationRule);
         existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
         existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
-        existingAsset.setPaymentFormId(request.getPaymentFormId());
-        existingAsset.setPaymentMethodId(request.getPaymentMethodId());
+        // Preservar valores existentes si el cliente no los envia (update parcial).
+        if (request.getPaymentFormId() != null) {
+            existingAsset.setPaymentFormId(request.getPaymentFormId());
+        }
+        if (request.getPaymentMethodId() != null) {
+            existingAsset.setPaymentMethodId(request.getPaymentMethodId());
+        }
         existingAsset.setAccountingAccount(accountingAccount);
         existingAsset.setStatus(request.getStatus());
         existingAsset.setObservations(normalizedObservations);

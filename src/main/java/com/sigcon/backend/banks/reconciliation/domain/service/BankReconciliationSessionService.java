@@ -183,6 +183,10 @@ public class BankReconciliationSessionService {
         // Calcular diferencia final y generar asiento de ajuste si es necesario
         tryCreateReconciliationAdjustmentEntry(session, account, user);
 
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankReconciliationSession", session.getId(),
+                "Conciliacion bancaria cerrada: cuenta #" + account.getId()
+                        + " sesion " + session.getId() + " cerrada por " + user.getUsername());
+
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Sesion cerrada. Fecha de ultima conciliacion de la cuenta actualizada."),
                 Optional.of(toDto(session))));
@@ -399,9 +403,15 @@ public class BankReconciliationSessionService {
             journalEntryService.createEntry(entryRequest, createdBy);
             log.info("Asiento de ajuste creado para conciliacion sesion ID={}, diferencia={}", session.getId(), difference);
 
-        } catch (Exception e) {
-            log.warn("No se pudo crear asiento de ajuste para conciliacion sesion ID={}: {}",
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento de ajuste para conciliacion sesion ID={}: {}",
                     session.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo cerrar la conciliacion: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento de ajuste para conciliacion sesion ID={}",
+                    session.getId(), e);
+            throw e;
         }
     }
 

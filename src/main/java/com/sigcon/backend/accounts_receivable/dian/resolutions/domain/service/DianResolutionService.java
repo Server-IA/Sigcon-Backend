@@ -173,6 +173,8 @@ public class DianResolutionService {
         if (today.isBefore(r.getStartDate()) || today.isAfter(r.getEndDate())) {
             r.setStatus(DianResolutionStatus.EXPIRED);
             repository.save(r);
+            auditPublisher.publishUpdate(AuditModule.AR, "DianResolution", r.getId(),
+                    "Resolucion DIAN " + r.getResolutionNumber() + " marcada EXPIRED por vencimiento");
             throw new IllegalStateException("La resolucion DIAN esta vencida");
         }
         long next = r.getCurrentNumber() != null ? r.getCurrentNumber() + 1 : r.getStartNumber();
@@ -180,13 +182,20 @@ public class DianResolutionService {
         if (next > r.getEndNumber()) {
             r.setStatus(DianResolutionStatus.EXHAUSTED);
             repository.save(r);
+            auditPublisher.publishUpdate(AuditModule.AR, "DianResolution", r.getId(),
+                    "Resolucion DIAN " + r.getResolutionNumber() + " marcada EXHAUSTED (rango agotado)");
             throw new IllegalStateException("La resolucion DIAN agoto su rango autorizado");
         }
         r.setCurrentNumber(next);
+        boolean exhausted = false;
         if (next >= r.getEndNumber()) {
             r.setStatus(DianResolutionStatus.EXHAUSTED);
+            exhausted = true;
         }
         repository.save(r);
+        auditPublisher.publishUpdate(AuditModule.AR, "DianResolution", r.getId(),
+                "Resolucion DIAN " + r.getResolutionNumber() + " consumio consecutivo " + next
+                        + (exhausted ? " (rango AGOTADO)" : ""));
         return next;
     }
 

@@ -113,7 +113,10 @@ public class AccountingPeriodService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        return toDTO(repository.save(period));
+        AccountingPeriod saved = repository.save(period);
+        auditPublisher.publishCreate(AuditModule.CG, "AccountingPeriod", saved.getId(),
+                "Periodo contable creado: " + saved.getYear() + "-" + String.format("%02d", saved.getMonth()));
+        return toDTO(saved);
     }
 
     /**
@@ -149,7 +152,11 @@ public class AccountingPeriodService {
         period.setNotes(notes);
         period.setUpdatedAt(LocalDateTime.now());
 
-        return toDTO(repository.save(period));
+        AccountingPeriod saved = repository.save(period);
+        auditPublisher.publishUpdate(AuditModule.CG, "AccountingPeriod", saved.getId(),
+                "Periodo contable cerrado: " + saved.getYear() + "-" + String.format("%02d", saved.getMonth())
+                        + " por " + closedBy);
+        return toDTO(saved);
     }
 
     /**
@@ -170,7 +177,11 @@ public class AccountingPeriodService {
         period.setLockedBy(lockedBy);
         period.setUpdatedAt(LocalDateTime.now());
 
-        return toDTO(repository.save(period));
+        AccountingPeriod saved = repository.save(period);
+        auditPublisher.publishUpdate(AuditModule.CG, "AccountingPeriod", saved.getId(),
+                "Periodo contable bloqueado permanentemente: "
+                        + saved.getYear() + "-" + String.format("%02d", saved.getMonth()) + " por " + lockedBy);
+        return toDTO(saved);
     }
 
     /**
@@ -196,7 +207,11 @@ public class AccountingPeriodService {
         period.setNotes(null);
         period.setUpdatedAt(LocalDateTime.now());
 
-        return toDTO(repository.save(period));
+        AccountingPeriod saved = repository.save(period);
+        auditPublisher.publishUpdate(AuditModule.CG, "AccountingPeriod", saved.getId(),
+                "Periodo contable reabierto: "
+                        + saved.getYear() + "-" + String.format("%02d", saved.getMonth()));
+        return toDTO(saved);
     }
 
     // ───────────────────────────────────────────────────────────────

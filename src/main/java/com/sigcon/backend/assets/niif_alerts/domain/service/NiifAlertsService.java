@@ -436,9 +436,15 @@ public class NiifAlertsService {
 
                     journalEntryService.createEntry(journalRequest, "sistema");
                     log.info("Asiento contable de revaluación creado para activo {}", asset.getAssetCode());
-                } catch (Exception e) {
-                    log.warn("No se pudo crear asiento contable para revaluación del activo {}: {}",
+                } catch (IllegalArgumentException | IllegalStateException e) {
+                    log.error("Error generando asiento de revaluacion para activo {}: {}",
                             asset.getAssetCode(), e.getMessage());
+                    throw new IllegalStateException(
+                            "No se pudo aplicar la correccion NIIF: " + e.getMessage(), e);
+                } catch (RuntimeException e) {
+                    log.error("Error inesperado generando asiento de revaluacion para activo {}",
+                            asset.getAssetCode(), e);
+                    throw e;
                 }
             }
         }

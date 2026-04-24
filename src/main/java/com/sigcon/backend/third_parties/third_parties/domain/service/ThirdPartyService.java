@@ -45,6 +45,7 @@ import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -79,6 +80,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ThirdPartyService {
 
@@ -479,7 +481,13 @@ public class ThirdPartyService {
         }
         changeHistoryService.trackChanges(thirdParty.getId(), beforeValues, afterValues, currentUserId);
 
-        // TER-06: Publicar evento de actualizacion
+        // TER-06: Publicar evento de actualizacion SIEMPRE (HU-AU-01/03).
+        // Antes se publicaba solo si changedFields != empty, pero captureTrackableFields
+        // solo trackea 7 campos (businessName, nit, dv, blockingReason, creditLimit,
+        // paymentTerms, marketSegment). Ediciones a email, telefono, contactos, roles,
+        // direccion, personType, etc. quedaban sin auditar. Ahora toda llamada a update
+        // genera log, aunque los changedFields esten vacios (cliente puede haber
+        // modificado campos no rastreados aqui).
         try {
             Map<String, String> changedFields = new HashMap<>();
             for (Map.Entry<String, String> entry : afterValues.entrySet()) {
@@ -488,12 +496,11 @@ public class ThirdPartyService {
                     changedFields.put(entry.getKey(), entry.getValue());
                 }
             }
-            if (!changedFields.isEmpty()) {
-                eventPublisher.publishEvent(new ThirdPartyUpdatedEvent(
-                        thirdParty.getId(), thirdParty.getNit(), thirdParty.getBusinessName(), changedFields));
-            }
+            eventPublisher.publishEvent(new ThirdPartyUpdatedEvent(
+                    thirdParty.getId(), thirdParty.getNit(), thirdParty.getBusinessName(), changedFields));
         } catch (Exception e) {
-            // No fallar la operacion principal
+            log.warn("[ThirdPartyService] Error publicando ThirdPartyUpdatedEvent tercero id={}",
+                    thirdParty.getId(), e);
         }
 
         return ResponseEntity.ok(

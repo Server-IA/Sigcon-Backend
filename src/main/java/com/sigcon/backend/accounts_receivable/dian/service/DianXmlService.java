@@ -32,6 +32,8 @@ import com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesI
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository;
 import com.sigcon.backend.parametrization.parameters.domain.service.SystemInfoService;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +57,7 @@ public class DianXmlService {
     private final DianInvoiceSubmissionRepository submissionRepository;
     private final CufeCalculator cufeCalculator;
     private final SystemInfoService systemInfoService;
+    private final AuditPublisher auditPublisher;
 
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -110,6 +113,10 @@ public class DianXmlService {
                 .attemptCount(0)
                 .build();
         submission = submissionRepository.save(submission);
+
+        auditPublisher.publishCreate(AuditModule.AR, "DianSubmission", submission.getId(),
+                "XML UBL 2.1 generado para factura " + invoice.getInvoiceNumber()
+                        + " (CUFE: " + cufe.substring(0, Math.min(16, cufe.length())) + "...)");
 
         log.info("XML UBL generado para factura {} con CUFE {}", invoice.getInvoiceNumber(), cufe);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(

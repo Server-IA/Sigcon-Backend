@@ -213,10 +213,14 @@ public class CashAuditService {
                 audit.setJournalEntryId(journalEntry.getId());
                 log.info("Asiento contable generado para arqueo id={}: journalEntryId={}",
                         audit.getId(), journalEntry.getId());
-            } catch (Exception e) {
-                log.warn("No se pudo generar asiento contable para arqueo id={}: {}",
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                log.error("Error generando asiento contable para arqueo id={}: {}",
                         audit.getId(), e.getMessage());
-                // Se aprueba el arqueo aunque falle el asiento (se puede generar despues)
+                throw new IllegalStateException(
+                        "No se pudo aprobar el arqueo: " + e.getMessage(), e);
+            } catch (RuntimeException e) {
+                log.error("Error inesperado generando asiento para arqueo id={}", audit.getId(), e);
+                throw e;
             }
         }
 

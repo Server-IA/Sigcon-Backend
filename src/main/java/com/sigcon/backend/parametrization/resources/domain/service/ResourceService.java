@@ -35,6 +35,8 @@ import com.sigcon.backend.parametrization.resources.domain.repository.Withholdin
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -51,6 +53,7 @@ public class ResourceService {
     private final TypeOrganizationRepository typesOrganizationRepository;
     private final WithholdingRepository withholdingRepository;
     private final PaymentFormRepository paymentFormsRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<PaymentTerms> paymentTermsSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
@@ -305,7 +308,9 @@ public class ResourceService {
         if (countryRepository.findByCodeIgnoreCase(request.getCode().trim()).isPresent())
             throw new IllegalArgumentException("Ya existe un país con el código ingresado");
         Country country = Country.builder().name(request.getName().trim()).code(request.getCode().trim().toUpperCase()).build();
-        countryRepository.save(country);
+        country = countryRepository.save(country);
+        auditPublisher.publishCreate(AuditModule.PA, "Country", country.getId(),
+                "Pais creado: " + country.getName() + " (" + country.getCode() + ")");
         return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "País creado exitosamente"); }});
     }
 
@@ -318,6 +323,8 @@ public class ResourceService {
         country.setName(request.getName().trim());
         country.setCode(request.getCode().trim().toUpperCase());
         countryRepository.save(country);
+        auditPublisher.publishUpdate(AuditModule.PA, "Country", country.getId(),
+                "Pais actualizado: " + country.getName() + " (" + country.getCode() + ")");
         return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "País actualizado exitosamente"); }});
     }
 
@@ -329,6 +336,8 @@ public class ResourceService {
             throw new IllegalArgumentException("No se puede eliminar: tiene " + municipios.size() + " municipio(s) asociado(s)");
         country.setDeletedAt(java.time.LocalDateTime.now());
         countryRepository.save(country);
+        auditPublisher.publishDelete(AuditModule.PA, "Country", country.getId(),
+                "Pais eliminado: " + country.getName());
         return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "País eliminado exitosamente"); }});
     }
 
@@ -347,7 +356,9 @@ public class ResourceService {
         if (municipalityRepository.findByCodeIgnoreCase(request.getCode().trim()).isPresent())
             throw new IllegalArgumentException("Ya existe un municipio con ese código");
         Municipality mun = Municipality.builder().name(request.getName().trim()).code(request.getCode().trim()).country(country).build();
-        municipalityRepository.save(mun);
+        mun = municipalityRepository.save(mun);
+        auditPublisher.publishCreate(AuditModule.PA, "Municipality", mun.getId(),
+                "Municipio creado: " + mun.getName() + " (" + mun.getCode() + ")");
         return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "Municipio creado exitosamente"); }});
     }
 
@@ -365,6 +376,8 @@ public class ResourceService {
         mun.setName(request.getName().trim());
         mun.setCode(request.getCode().trim());
         municipalityRepository.save(mun);
+        auditPublisher.publishUpdate(AuditModule.PA, "Municipality", mun.getId(),
+                "Municipio actualizado: " + mun.getName() + " (" + mun.getCode() + ")");
         return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "Municipio actualizado exitosamente"); }});
     }
 
@@ -373,6 +386,8 @@ public class ResourceService {
         Municipality mun = municipalityRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Municipio no encontrado"));
         mun.setDeletedAt(java.time.LocalDateTime.now());
         municipalityRepository.save(mun);
+        auditPublisher.publishDelete(AuditModule.PA, "Municipality", mun.getId(),
+                "Municipio eliminado: " + mun.getName());
         return ResponseEntity.ok(new java.util.LinkedHashMap<String, Object>() {{ put("success", true); put("message", "Municipio eliminado exitosamente"); }});
     }
 

@@ -131,9 +131,13 @@ public class ApAdvanceService {
             advanceRepository.save(advance);
             auditPublisher.publishCreate(AuditModule.AP, "ApAdvance", advance.getId(), "ApAdvance creado id=" + advance.getId());
             log.info("Asiento contable {} generado para anticipo {}", je.getId(), advance.getId());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para anticipo {}: {}",
-                    advance.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para anticipo {}: {}", advance.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar el anticipo: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para anticipo {}", advance.getId(), e);
+            throw e;
         }
 
         return ResponseEntity.ok(

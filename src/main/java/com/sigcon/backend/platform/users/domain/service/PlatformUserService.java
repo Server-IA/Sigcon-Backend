@@ -5,6 +5,8 @@ import com.sigcon.backend.parametrization.users.domain.repository.UserRepository
 import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.platform.tenant.TenantContext;
 import com.sigcon.backend.platform.users.application.PlatformUserDTO;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,7 @@ public class PlatformUserService {
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditPublisher auditPublisher;
 
     /**
      * HU-PA-PLAT-04 E1/E2/E3: listado global de usuarios con filtros
@@ -111,5 +114,18 @@ public class PlatformUserService {
         userRepository.save(user);
         log.info("PLATFORM_ADMIN reseteo contrasenia de usuario id={} email={}",
                 user.getId(), user.getEmail());
+        // HU-PA-PLAT-04 E4: evidencia inmutable del cambio de credenciales.
+        // Se registra en la bitacora de la empresa a la que pertenece el usuario
+        // (o sin tenant si es un PLATFORM_ADMIN, donde el log caera en el tenant
+        // del admin ejecutor o null si este es tambien PLATFORM_ADMIN).
+        Long targetCompanyId = user.getCompanyId();
+        Runnable audit = () -> auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(),
+                "Contrasenia reseteada por PLATFORM_ADMIN para usuario " + user.getUsername()
+                        + " (" + user.getEmail() + ")");
+        if (targetCompanyId != null) {
+            TenantContext.runAs(targetCompanyId, false, audit);
+        } else {
+            audit.run();
+        }
     }
 }

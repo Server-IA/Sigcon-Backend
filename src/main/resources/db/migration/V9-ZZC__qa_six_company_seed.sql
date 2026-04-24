@@ -182,9 +182,12 @@ BEGIN
       ('Auditor' , 'QA' || p_suffix, 'auditor.qa'  || p_suffix, 'auditor@empresa'  || p_suffix || '.test', v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW())
     ON CONFLICT DO NOTHING;
 
-    SELECT id INTO v_admin_id    FROM users WHERE email='admin@empresa'    || p_suffix || '.test' LIMIT 1;
-    SELECT id INTO v_contador_id FROM users WHERE email='contador@empresa' || p_suffix || '.test' LIMIT 1;
-    SELECT id INTO v_auditor_id  FROM users WHERE email='auditor@empresa'  || p_suffix || '.test' LIMIT 1;
+    -- IMPORTANTE: filtrar deleted_at IS NULL y ORDER BY id DESC. Si corridas
+    -- previas soft-deletaron al usuario con ese email, queremos al mas reciente
+    -- (activo), no al viejo.
+    SELECT id INTO v_admin_id    FROM users WHERE email='admin@empresa'    || p_suffix || '.test' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1;
+    SELECT id INTO v_contador_id FROM users WHERE email='contador@empresa' || p_suffix || '.test' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1;
+    SELECT id INTO v_auditor_id  FROM users WHERE email='auditor@empresa'  || p_suffix || '.test' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1;
 
     INSERT INTO users_roles (user_id, role_id) VALUES
       (v_admin_id   , v_admin_role_id),

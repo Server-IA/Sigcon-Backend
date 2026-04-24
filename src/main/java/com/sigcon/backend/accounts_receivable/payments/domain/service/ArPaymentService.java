@@ -181,9 +181,13 @@ public class ArPaymentService {
             auditPublisher.publishCreate(AuditModule.AR, "ArPayment", payment.getId(), "ArPayment creado id=" + payment.getId());
             log.info("Asiento contable {} generado para cobro {} de factura {}",
                     je.getId(), payment.getId(), invoice.getId());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para cobro {}: {}",
-                    payment.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para cobro {}: {}", payment.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar el cobro: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para cobro {}", payment.getId(), e);
+            throw e;
         }
 
         return ResponseEntity.ok(

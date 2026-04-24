@@ -199,9 +199,13 @@ public class ApPaymentService {
             paymentRepository.save(payment);
             log.info("Asiento contable {} generado para pago {} de factura {}",
                     je.getId(), payment.getId(), invoice.getId());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para pago {}: {}",
-                    payment.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para pago {}: {}", payment.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar el pago: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para pago {}", payment.getId(), e);
+            throw e;
         }
 
         // Publicar evento de pago procesado

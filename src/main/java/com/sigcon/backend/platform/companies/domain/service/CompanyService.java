@@ -22,6 +22,9 @@ import com.sigcon.backend.platform.companies.application.UpdateCompanyRequest;
 import com.sigcon.backend.platform.companies.domain.model.Company;
 import com.sigcon.backend.platform.companies.domain.model.Company.CompanyStatus;
 import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
+import com.sigcon.backend.platform.tenant.TenantContext;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -61,6 +64,23 @@ public class CompanyService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditPublisher auditPublisher;
+
+    /**
+     * Publica un audit log de una operacion a nivel de plataforma sobre una empresa
+     * target, escribiendolo en la bitacora de ESA empresa. Usa TenantContext.runAs
+     * para propagar el company_id al @PrePersist de AuditLog.
+     */
+    private void auditCompany(Long targetCompanyId, String action, String description) {
+        TenantContext.runAs(targetCompanyId, false, () -> {
+            switch (action) {
+                case "CREATE" -> auditPublisher.publishCreate(AuditModule.PA, "Company", targetCompanyId, description);
+                case "UPDATE" -> auditPublisher.publishUpdate(AuditModule.PA, "Company", targetCompanyId, description);
+                case "DELETE" -> auditPublisher.publishDelete(AuditModule.PA, "Company", targetCompanyId, description);
+                default -> auditPublisher.publishUpdate(AuditModule.PA, "Company", targetCompanyId, description);
+            }
+        });
+    }
 
     /** HU-PLAT-01 E1: listado paginado de empresas (incluye INACTIVE). */
     @Transactional(readOnly = true)
@@ -114,6 +134,8 @@ public class CompanyService {
         c = companyRepository.save(c);
         log.info("Empresa creada: id={}, nit={}, businessName='{}'",
                 c.getId(), c.getNit(), c.getBusinessName());
+        auditCompany(c.getId(), "CREATE",
+                "Empresa creada: " + c.getBusinessName() + " (NIT " + c.getNit() + ")");
 
         // HU-TENANT-04 + HU-TENANT-05: auto-provisionar al crear empresa:
         // 12 periodos del ano actual + 18 mapeos contables default + 1 cost center.
@@ -176,6 +198,8 @@ public class CompanyService {
 
         c = companyRepository.save(c);
         log.info("Empresa actualizada: id={}", c.getId());
+        auditCompany(c.getId(), "UPDATE",
+                "Empresa actualizada: " + c.getBusinessName() + " (NIT " + c.getNit() + ")");
         return CompanyDTO.from(c);
     }
 
@@ -211,9 +235,14 @@ public class CompanyService {
                 .companyId(created.getId())
                 .platformRole(null)
                 .build();
-        userRepository.save(admin);
+        User savedAdmin = userRepository.save(admin);
         log.info("HU-PLAT-02: admin inicial creado para empresa id={}: username={}",
                 created.getId(), admin.getUsername());
+        // Auditar creacion del admin dentro del contexto de la nueva empresa.
+        TenantContext.runAs(created.getId(), false, () ->
+                auditPublisher.publishCreate(AuditModule.PA, "User", savedAdmin.getId(),
+                        "Usuario ADMIN inicial creado para empresa: " + savedAdmin.getUsername()
+                                + " (" + savedAdmin.getEmail() + ")"));
         return created;
     }
 
@@ -225,6 +254,8 @@ public class CompanyService {
         c.setStatus(CompanyStatus.INACTIVE);
         companyRepository.save(c);
         log.info("Empresa desactivada: id={}", id);
+        auditCompany(id, "UPDATE",
+                "Empresa desactivada: " + c.getBusinessName() + " (los usuarios no podran loguearse)");
         return CompanyDTO.from(c);
     }
 
@@ -235,6 +266,8 @@ public class CompanyService {
         c.setStatus(CompanyStatus.ACTIVE);
         companyRepository.save(c);
         log.info("Empresa re-activada: id={}", id);
+        auditCompany(id, "UPDATE",
+                "Empresa re-activada: " + c.getBusinessName());
         return CompanyDTO.from(c);
     }
 }

@@ -919,6 +919,13 @@ public class InvoiceService {
     }
 
     private void generateJournalEntry(Invoices invoice, ThirdParty thirdParty) {
+        // IMPORTANTE: NO envolver en try/catch silencioso. journalEntryService.createEntry
+        // es @Transactional y participa de la misma transaccion. Si falla (cuenta PUC
+        // inactiva, periodo cerrado, mapeo no resuelto, partida doble desbalanceada, etc.)
+        // Spring marca la tx como rollback-only. Tragarse la excepcion aqui y continuar
+        // provocaria el error opaco "Transaction silently rolled back because it has
+        // been marked as rollback-only" al final del flujo. Dejamos propagar el error
+        // real al controller para que el usuario vea el motivo concreto del fallo.
         try {
             // Obtener cuenta contable de la primera linea (gasto/activo)
             List<LinesInvoice> lines = linesInvoiceRepository.findAllByInvoiceId(invoice.getId());
@@ -1001,8 +1008,16 @@ public class InvoiceService {
             invoice.setJournalEntryId(journalEntry.getId());
             invoiceRepository.save(invoice);
             log.info("Asiento contable {} generado para factura {} con {} lineas", journalEntry.getId(), invoice.getId(), jeLines.size());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para factura {}: {}", invoice.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // Errores de validacion de negocio (cuenta inactiva, periodo cerrado, mapeo
+            // no resuelto, etc). Propagar con el mensaje original para que el usuario
+            // vea el motivo concreto; la transaccion completa se rollbackea correctamente.
+            log.error("Error generando asiento contable para factura {}: {}", invoice.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar la factura: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para factura {}", invoice.getId(), e);
+            throw e;
         }
     }
 

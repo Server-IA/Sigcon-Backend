@@ -23,6 +23,8 @@ import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,6 +35,7 @@ public class MenuPermissionsService {
 
     private final MenuPermissionsRepository menuPermissionsRepository;
     private final MenuRepositoryPort menuRepositoryPort;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<MenuPermissionsEntity> menuPermissionsSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
@@ -99,7 +102,9 @@ public class MenuPermissionsService {
                 .role(Role.builder().id(request.getRole_id()).build())
                 .build();
 
-            MenuPermissionsEntity savedMenuPermissions = menuPermissionsRepository.save(menuPermissions);   
+            MenuPermissionsEntity savedMenuPermissions = menuPermissionsRepository.save(menuPermissions);
+            auditPublisher.publishCreate(AuditModule.PA, "MenuPermission", savedMenuPermissions.getId(),
+                    "Permiso de menu asignado: menu=" + request.getMenu_id() + " rol=" + request.getRole_id());
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso de menú creado correctamente"), Optional.of(savedMenuPermissions)));
@@ -126,6 +131,8 @@ public class MenuPermissionsService {
             menuPermission.setMenu(MenuEntity.builder().id(request.getMenu_id()).build());
             menuPermission.setRole(Role.builder().id(request.getRole_id()).build());
             MenuPermissionsEntity updatedMenuPermissions = menuPermissionsRepository.save(menuPermission);
+            auditPublisher.publishUpdate(AuditModule.PA, "MenuPermission", updatedMenuPermissions.getId(),
+                    "Permiso de menu actualizado: menu=" + request.getMenu_id() + " rol=" + request.getRole_id());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso de menú actualizado correctamente"), Optional.of(updatedMenuPermissions)));
 
@@ -140,6 +147,8 @@ public class MenuPermissionsService {
 
             menuPermission.setDeletedAt(LocalDateTime.now());
             menuPermissionsRepository.save(menuPermission);
+            auditPublisher.publishDelete(AuditModule.PA, "MenuPermission", id,
+                    "Permiso de menu eliminado: id=" + id);
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permiso de menú eliminado correctamente"), Optional.empty()));

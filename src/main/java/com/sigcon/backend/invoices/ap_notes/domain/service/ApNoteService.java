@@ -214,9 +214,14 @@ public class ApNoteService {
             auditPublisher.publishCreate(AuditModule.AP, "ApNote", note.getId(), "ApNote creado id=" + note.getId());
             log.info("Asiento contable {} generado para nota {} de factura {}",
                     je.getId(), noteNumber, invoice.getId());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento contable para nota {}: {}",
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para nota {}: {}",
                     note.getNoteNumber(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar la nota: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para nota {}", note.getNoteNumber(), e);
+            throw e;
         }
 
         return ResponseEntity.ok(

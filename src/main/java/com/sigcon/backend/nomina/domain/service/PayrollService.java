@@ -412,9 +412,15 @@ public class PayrollService {
         if (r.getJournalEntryId() != null) {
             try {
                 journalEntryService.postEntry(r.getJournalEntryId());
-            } catch (Exception ex) {
-                log.warn("No se pudo postear JE {} del recibo {}: {}",
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                log.error("Error posteando JE {} del recibo {}: {}",
                         r.getJournalEntryId(), r.getId(), ex.getMessage());
+                throw new IllegalStateException(
+                        "No se pudo aprobar la nomina: " + ex.getMessage(), ex);
+            } catch (RuntimeException ex) {
+                log.error("Error inesperado posteando JE {} del recibo {}",
+                        r.getJournalEntryId(), r.getId(), ex);
+                throw ex;
             }
         }
         r = receiptRepository.save(r);

@@ -177,14 +177,20 @@ public class EmployeeService {
         e.setArl(req.getArl());
         e.setCompensationBox(req.getCompensationBox());
         e.setCostCenterId(req.getCostCenterId());
-        return ResponseEntity.ok(EmployeeDTO.from(employeeRepository.save(e)));
+        Employee saved = employeeRepository.save(e);
+        auditPublisher.publishUpdate(AuditModule.NOM, "Employee", saved.getId(),
+                "Empleado actualizado: " + saved.getFullName() + " (id=" + saved.getId() + ")");
+        return ResponseEntity.ok(EmployeeDTO.from(saved));
     }
 
     @Transactional
     public ResponseEntity<?> delete(Long id) {
         Employee e = employeeRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Empleado no encontrado"));
+        String fullName = e.getFullName();
         employeeRepository.delete(e);
+        auditPublisher.publishDelete(AuditModule.NOM, "Employee", id,
+                "Empleado eliminado: " + fullName + " (id=" + id + ")");
         return ResponseEntity.ok("Empleado eliminado");
     }
 

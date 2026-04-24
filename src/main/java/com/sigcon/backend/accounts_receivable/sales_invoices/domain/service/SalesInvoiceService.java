@@ -321,9 +321,13 @@ public class SalesInvoiceService {
             invoice.setJournalEntryId(je.getId());
             salesInvoiceRepository.save(invoice);
             log.info("Asiento {} creado para FV {}", je.getId(), invoice.getInvoiceNumber());
-        } catch (Exception e) {
-            log.warn("No se pudo generar asiento para FV {}: {}",
-                    invoice.getInvoiceNumber(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para FV {}: {}", invoice.getInvoiceNumber(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar la factura de venta: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para FV {}", invoice.getInvoiceNumber(), e);
+            throw e;
         }
     }
 
@@ -431,13 +435,20 @@ public class SalesInvoiceService {
                             invoice.getJournalEntryId(),
                             "Reversion por anulacion de FV " + invoice.getInvoiceNumber(),
                             "sistema");
-                } catch (Exception e) {
-                    log.warn("No se pudo reversar asiento {} de FV {}: {}",
+                } catch (IllegalArgumentException | IllegalStateException e) {
+                    log.error("Error reversando asiento {} de FV {}: {}",
                             invoice.getJournalEntryId(), invoice.getInvoiceNumber(), e.getMessage());
+                    throw new IllegalStateException(
+                            "No se pudo anular la factura: " + e.getMessage(), e);
+                } catch (RuntimeException e) {
+                    log.error("Error inesperado reversando asiento {} de FV {}",
+                            invoice.getJournalEntryId(), invoice.getInvoiceNumber(), e);
+                    throw e;
                 }
-            } catch (Exception e) {
-                log.warn("No se pudo procesar asiento {} de FV {}: {}",
-                        invoice.getJournalEntryId(), invoice.getInvoiceNumber(), e.getMessage());
+            } catch (RuntimeException e) {
+                log.error("Error inesperado procesando asiento {} de FV {}",
+                        invoice.getJournalEntryId(), invoice.getInvoiceNumber(), e);
+                throw e;
             }
         }
 

@@ -36,6 +36,8 @@ import com.sigcon.backend.vouchers.domain.models.VoucherTypesEntity;
 import com.sigcon.backend.vouchers.domain.models.VouchersEntity;
 import com.sigcon.backend.vouchers.domain.repository.VoucherTypeRepository;
 import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -51,6 +53,7 @@ public class VoucherService {
     private final CheckRepository checkRepository;
     private final AssetsRepository assetsRepository;
     private final CheckbookRepository checkbookRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<VouchersEntity> dataTableSpecificationBuilder =
     new DataTableSpecificationBuilder<>();
@@ -136,7 +139,11 @@ public class VoucherService {
             checkRepository.saveAndFlush(checkEntity);
         }
 
-        return voucherRepository.save(voucherEntity);
+        VouchersEntity savedVoucher = voucherRepository.save(voucherEntity);
+        auditPublisher.publishCreate(AuditModule.ACT, "Voucher", savedVoucher.getId(),
+                "Comprobante " + voucherTypeEntity.getCode() + " #" + savedVoucher.getNumber()
+                        + " creado por $" + voucherDTO.getAmount());
+        return savedVoucher;
     }
 
     public ResponseEntity<?> getVouchers(DataTableRequest request) {

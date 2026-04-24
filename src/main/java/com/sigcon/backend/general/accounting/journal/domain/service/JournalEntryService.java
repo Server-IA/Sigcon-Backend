@@ -440,6 +440,7 @@ public class JournalEntryService {
             throw new IllegalArgumentException("El asiento debe tener al menos una linea.");
         }
 
+        int lineOrder = 1;
         for (var lineReq : request.getLines()) {
             AccountingAccount account = accountingAccountRepository.findById(lineReq.getAccountingAccountId())
                     .orElseThrow(() -> new IllegalArgumentException(
@@ -461,6 +462,7 @@ public class JournalEntryService {
                     .journalEntry(entry)
                     .accountingAccount(account)
                     .costCenter(costCenter)
+                    .lineOrder(lineOrder++)
                     .debitAmount(debit)
                     .creditAmount(credit)
                     .description(lineReq.getDescription())

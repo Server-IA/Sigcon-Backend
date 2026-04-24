@@ -405,9 +405,14 @@ public class DepreciationCalculationService {
             log.info("Asiento contable de depreciacion creado exitosamente para el periodo {} con {} lineas.",
                     period, journalLines.size());
 
-        } catch (Exception e) {
-            log.warn("No se pudo crear el asiento contable de depreciacion para el periodo {}: {}",
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento de depreciacion para el periodo {}: {}",
                     period, e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo calcular la depreciacion: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento de depreciacion para el periodo {}", period, e);
+            throw e;
         }
     }
 }

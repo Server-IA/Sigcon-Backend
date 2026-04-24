@@ -566,8 +566,13 @@ public class FinancialMovementService {
             journalEntryService.createEntry(entryRequest, createdBy);
             log.info("Asiento contable creado para movimiento financiero ID={}", movement.getId());
 
-        } catch (Exception e) {
-            log.warn("No se pudo crear asiento contable para movimiento ID={}: {}", movement.getId(), e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.error("Error generando asiento contable para movimiento ID={}: {}", movement.getId(), e.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar el movimiento: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Error inesperado generando asiento para movimiento ID={}", movement.getId(), e);
+            throw e;
         }
     }
 

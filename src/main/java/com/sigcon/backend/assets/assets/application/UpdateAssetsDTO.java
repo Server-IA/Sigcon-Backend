@@ -76,12 +76,14 @@ public class UpdateAssetsDTO {
         @Schema(description = "ID del proveedor (modulo Terceros)", example = "1")
         private Long supplierId;
 
-        @NotNull(message = "La forma de pago es requerida")
-        @Schema(description = "ID de forma de pago", example = "1")
+        // Al editar un activo existente, la forma/metodo de pago son OPCIONALES:
+        // se persistieron en el voucher al momento de la creacion (HU-ACT-01 E8) y
+        // no deberian exigirse cada vez que el usuario edite nombre/vida util/etc.
+        // Si vienen null, el servicio preserva el valor existente.
+        @Schema(description = "ID de forma de pago (opcional en update)", example = "1")
         private Long paymentFormId;
 
-        @NotNull(message = "El metodo de pago es requerido")
-        @Schema(description = "ID del metodo de pago", example = "1")
+        @Schema(description = "ID del metodo de pago (opcional en update)", example = "1")
         private Long paymentMethodId;
 
         @Schema(description = "ID de la cuenta bancaria de origen", example = "1")
