@@ -413,9 +413,15 @@ public class JournalEntryService {
         // Validar que el periodo siga abierto
         accountingPeriodService.validatePeriodOpen(original.getEntryDate());
 
-        // Obtener siguiente numero de asiento
-        Long maxNumber = journalEntryRepository.findMaxEntryNumberByFiscalYear(original.getFiscalYear());
-        long nextNumber = (maxNumber != null ? maxNumber : 0) + 1;
+        // QA-BLOQUE-AL (2026-04-29): consumir siguiente numero por la serie
+        // unificada `voucherSeriesService.consumeNext("JE")`. Antes este flujo
+        // usaba `findMaxEntryNumberByFiscalYear` (forma legacy) mientras
+        // `createEntry` ya usaba consumeNext, lo que producia colisiones de
+        // entry_number cuando un mismo flujo (ej. Pull+Diff MODIFIED: cancel +
+        // recreate) corria los dos paths consecutivamente. Ahora ambos paths
+        // comparten la misma fuente de verdad y respetan el lock JVM por
+        // tipo de comprobante.
+        long nextNumber = voucherSeriesService.consumeNext("JE");
 
         // Crear asiento de reversion con lineas espejo (debitos y creditos invertidos)
         JournalEntry reversal = JournalEntry.builder()
