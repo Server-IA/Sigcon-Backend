@@ -24,11 +24,21 @@ SELECT 'INTEGRATION_AGROFUSION', 'AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS', '
        'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (SELECT 1 FROM parameters WHERE name='AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS' AND deleted_at IS NULL);
 
--- Apuntar callback al mock por defecto. UPDATE para sobrescribir el valor
--- de produccion 'https://api.agrofusion.co/integrations/aaef/ack' que se
--- inserto en V32 (este endpoint no existe aun).
-UPDATE parameters
-SET value = 'http://localhost:8080/mock-agrofusion/aaef/ack',
-    description = 'URL callback ACK. Por defecto apunta al mock embebido (Fase 7). En produccion: https://api.agrofusion.co/integrations/aaef/ack',
-    updated_at = NOW()
-WHERE name = 'AGROFUSION_ACK_CALLBACK_URL' AND deleted_at IS NULL;
+-- QA-BLOQUE-AL (2026-04-29): el override del callback URL al mock local se
+-- movio a `LocalAaefMockOverrides` (Spring component @Profile("dev") +
+-- @ConditionalOnProperty(sigcon.integration.mocks-enabled=true)).
+--
+-- Razon: la migracion no debe alterar el valor sembrado por V32
+-- (https://api.agrofusion.co/integrations/aaef/ack) en produccion, porque
+-- Dokploy no carga los mock controllers (estan tras
+-- @ConditionalOnProperty) y el ACK terminaria en 404 -> ACK_FAILED en cada
+-- lote.
+--
+-- En desarrollo local, `LocalAaefMockOverrides` corre tras `ApplicationReadyEvent`
+-- y reapunta los valores hacia los mocks embebidos.
+--
+-- Si necesitas restaurar el valor productivo en una BD que ya tiene el
+-- localhost grabado:
+--   UPDATE parameters
+--      SET value = 'https://api.agrofusion.co/integrations/aaef/ack', updated_at = NOW()
+--    WHERE name = 'AGROFUSION_ACK_CALLBACK_URL' AND deleted_at IS NULL;
