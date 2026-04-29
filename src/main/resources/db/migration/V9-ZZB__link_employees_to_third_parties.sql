@@ -33,14 +33,29 @@ BEGIN
     LOOP
         v_tp_id := NULL;
 
-        -- Buscar tercero existente por NIT + company
+        -- QA-BLOQUE-AN (2026-04-29): primero buscar por third_party_code que es
+        -- el campo deterministico que generamos en este script. Si el script
+        -- corrio en un arranque anterior y dejo el tercero, el code 'EMP-X-Y'
+        -- existe pero la query por NIT podia fallar (NIT NULL o cambio manual).
+        -- Sin esta busqueda, el INSERT de abajo violaba uk_third_parties_company_code_active
+        -- y rompia el arranque (Application run failed).
         SELECT id INTO v_tp_id FROM third_parties
          WHERE company_id = e.company_id
-           AND nit = e.document_number
+           AND third_party_code = 'EMP-' || e.company_id || '-' || e.id
            AND deleted_at IS NULL
          LIMIT 1;
 
-        -- Crear tercero si no existe
+        -- Si no se encontro por code, buscar por NIT (ej. tercero ya existia
+        -- antes de que se creara el empleado, vinculacion logica).
+        IF v_tp_id IS NULL AND e.document_number IS NOT NULL THEN
+            SELECT id INTO v_tp_id FROM third_parties
+             WHERE company_id = e.company_id
+               AND nit = e.document_number
+               AND deleted_at IS NULL
+             LIMIT 1;
+        END IF;
+
+        -- Crear tercero si no existe ni por code ni por NIT
         IF v_tp_id IS NULL THEN
             INSERT INTO third_parties (company_id, third_party_code, nit, dv,
                                          business_name, status_id,

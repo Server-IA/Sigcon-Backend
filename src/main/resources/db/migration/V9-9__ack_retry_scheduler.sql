@@ -12,17 +12,18 @@ ALTER TABLE integration_batches
 -- ==========================================================================
 -- Parametros de retry y mock callback
 -- ==========================================================================
-INSERT INTO parameters (category, name, value, description, status, created_at, updated_at)
-SELECT 'INTEGRATION_AGROFUSION', 'AGROFUSION_ACK_RETRY_MAX_ATTEMPTS', '3',
+-- QA-BLOQUE-AN (2026-04-29): agregado company_id=1 explicito. Ver V32 para detalles.
+INSERT INTO parameters (company_id, category, name, value, description, status, created_at, updated_at)
+SELECT 1, 'INTEGRATION_AGROFUSION', 'AGROFUSION_ACK_RETRY_MAX_ATTEMPTS', '3',
        'Numero maximo de intentos de envio del ACK antes de marcar ACK_FAILED definitivo (HU-INT-RF-13 E3)',
        'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM parameters WHERE name='AGROFUSION_ACK_RETRY_MAX_ATTEMPTS' AND deleted_at IS NULL);
+WHERE NOT EXISTS (SELECT 1 FROM parameters WHERE name='AGROFUSION_ACK_RETRY_MAX_ATTEMPTS' AND company_id = 1 AND deleted_at IS NULL);
 
-INSERT INTO parameters (category, name, value, description, status, created_at, updated_at)
-SELECT 'INTEGRATION_AGROFUSION', 'AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS', '60',
+INSERT INTO parameters (company_id, category, name, value, description, status, created_at, updated_at)
+SELECT 1, 'INTEGRATION_AGROFUSION', 'AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS', '60',
        'Delay inicial del backoff exponencial en segundos. Intentos: 60s, 120s, 240s (HU-INT-RF-13 E1/E2)',
        'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM parameters WHERE name='AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS' AND deleted_at IS NULL);
+WHERE NOT EXISTS (SELECT 1 FROM parameters WHERE name='AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS' AND company_id = 1 AND deleted_at IS NULL);
 
 -- QA-BLOQUE-AL (2026-04-29): el override del callback URL al mock local se
 -- movio a `LocalAaefMockOverrides` (Spring component @Profile("dev") +

@@ -17,15 +17,25 @@ services:
       SPRING_DATASOURCE_USERNAME: ${backend_user}
       SPRING_DATASOURCE_PASSWORD: ${backend_password}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      # SPRING_PROFILES_ACTIVE: dev  # Habilita Swagger
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
-      LOGGING_LEVEL_COM_SIGCON_BACKEND: DEBUG
+      # QA-BLOQUE-AN (2026-04-29): logging bajado de DEBUG a INFO. DEBUG generaba
+      # ~150 lineas por request (queries Hibernate + Spring Web filter chain) y
+      # mato el container con OOMKilled. Si se necesita DEBUG temporal, re-activar
+      # solo el modulo afectado (ej. LOGGING_LEVEL_COM_SIGCON_BACKEND_INTEGRATION: DEBUG).
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: INFO
+      LOGGING_LEVEL_COM_SIGCON_BACKEND: INFO
+      SPRING_JPA_SHOW_SQL: "false"
       SPRING_PROFILES_ACTIVE: dev
 
+    # QA-BLOQUE-AN (2026-04-29): mem_limit (Compose v2 hard limit) + deploy.resources
+    # (Swarm hint). Dokploy honra mem_limit. Subido de 512MB a 1GB tras OOMKilled.
+    mem_limit: 1024m
+    mem_reservation: 768m
     deploy:
       resources:
         limits:
-          memory: 512M # Más memoria para desarrollo
+          memory: 1024M
+        reservations:
+          memory: 768M
 
   # db:
   #   image: postgres:14

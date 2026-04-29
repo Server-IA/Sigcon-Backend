@@ -309,9 +309,13 @@ public class InvoiceService {
                 .orElseThrow(() -> new RuntimeException("El tercero no existe"));
         invoice.setThirdParty(thirdParty);
 
-        // Resolucion (consecutivo interno)
-        Invoices last = invoiceRepository.findFirstByTypeInvoiceIdAndDeletedAtIsNullOrderByIdDesc(typeInvoiceId);
-        String resolution = last == null ? "1" : String.valueOf(Integer.parseInt(last.getResolution()) + 1);
+        // Resolucion (consecutivo interno).
+        // QA-BLOQUE-AM (2026-04-29): usa MAX numerico ignorando seeds alfanumericos
+        // (ej. "FC-QA6-003" de V9-ZZC) para evitar MAPPING_ERROR "For input string" en
+        // lotes AAEF entrantes. Filtra por company_id porque la query es nativa.
+        Long companyIdForRes = thirdParty.getCompanyId();
+        Integer maxRes = invoiceRepository.findMaxNumericResolution(typeInvoiceId, companyIdForRes);
+        String resolution = String.valueOf((maxRes == null ? 0 : maxRes) + 1);
         invoice.setResolution(resolution);
         invoice.setResolutionInvoice(request.getResolutionInvoice());
         invoice.setInvoiceDate(request.getInvoiceDate());

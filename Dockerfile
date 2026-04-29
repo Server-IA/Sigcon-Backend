@@ -23,5 +23,9 @@
     
     EXPOSE 8080
     
-    ENTRYPOINT ["java", "-Xms128m", "-Xmx256m", "-XX:+UseContainerSupport", "-jar", "app.jar"]
-    
+    # QA-BLOQUE-AN (2026-04-29): heap subido de 128/256MB a 256/640MB tras OOMKilled
+    # (exit 137) en Dokploy. Spring Boot 3 + Hibernate 6 + multi-tenant filters +
+    # 11 modulos no cabia en 256MB. El container tiene 1024MB (mem_limit en compose),
+    # asi 640MB heap deja ~384MB para metaspace, threads, buffers de log.
+    # MaxRAMPercentage como fallback si en algun deploy no se setean -Xmx explicitos.
+    ENTRYPOINT ["java", "-Xms256m", "-Xmx640m", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=70.0", "-jar", "app.jar"]

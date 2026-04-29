@@ -24,8 +24,12 @@ public class UpdateChartOfAccountDTO {
     private String code;
 
     @NotBlank(message = "No se puede actualizar la informacion. Por favor complete todos los campos obligatorios antes de continuar.")
-    @Pattern(regexp = "^[\\p{L}0-9_\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
-    @Schema(description = "Nombre de la cuenta", example = "Caja General")
+    // QA-BLOQUE-AO (2026-04-29): regex ampliado. Los nombres del PUC Colombia
+    // (Decreto 2650/1993) tienen formato "X (codigo)" con tildes y parentesis,
+    // ej. "Flota y equipo aéreo (1548)". El regex anterior solo aceptaba letras,
+    // numeros, guiones y espacios -> rechazaba cualquier nombre del seed PUC.
+    @Pattern(regexp = "^[\\p{L}0-9 ()._,\\-]{1,100}$", message = "El nombre puede contener letras, numeros, espacios, guiones, parentesis, puntos y comas (max 100 chars)")
+    @Schema(description = "Nombre de la cuenta", example = "Flota y equipo aéreo (1548)")
     private String name;
 
     @NotNull(message = "No se puede actualizar la informacion. Por favor complete todos los campos obligatorios antes de continuar.")

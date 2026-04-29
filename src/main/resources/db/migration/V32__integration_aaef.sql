@@ -199,56 +199,60 @@ END $$;
 -- Configuracion inicial de la integracion. Los valores por defecto son placeholders
 -- y deben ajustarse en produccion via UI de parametros del sistema.
 
-INSERT INTO parameters (name, value, description, category, status, created_at, updated_at)
-SELECT 'AGROFUSION_API_KEY',
+-- QA-BLOQUE-AN (2026-04-29): agregado company_id=1 explicito a los INSERTs.
+-- V10-A pone parameters.company_id NOT NULL antes de que V32 corra (V10-A < V32
+-- en orden lexicografico). Sin company_id=1 los INSERTs crashean en BD limpia
+-- con "null value violates not-null constraint" -> Application run failed.
+INSERT INTO parameters (company_id, name, value, description, category, status, created_at, updated_at)
+SELECT 1, 'AGROFUSION_API_KEY',
        'changeme-in-production-' || md5(random()::text),
        'API Key para autenticar lotes AAEF entrantes de AgroFusion (header X-API-Key)',
        'INTEGRATION_AGROFUSION', 'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_API_KEY' AND deleted_at IS NULL
+    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_API_KEY' AND company_id = 1 AND deleted_at IS NULL
 );
 
-INSERT INTO parameters (name, value, description, category, status, created_at, updated_at)
-SELECT 'AGROFUSION_ACK_CALLBACK_URL',
+INSERT INTO parameters (company_id, name, value, description, category, status, created_at, updated_at)
+SELECT 1, 'AGROFUSION_ACK_CALLBACK_URL',
        'https://api.agrofusion.co/integrations/aaef/ack',
        'URL del callback donde SIGCON envia el ACK tras procesar un lote AAEF',
        'INTEGRATION_AGROFUSION', 'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_ACK_CALLBACK_URL' AND deleted_at IS NULL
+    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_ACK_CALLBACK_URL' AND company_id = 1 AND deleted_at IS NULL
 );
 
-INSERT INTO parameters (name, value, description, category, status, created_at, updated_at)
-SELECT 'AGROFUSION_JWKS_URL',
+INSERT INTO parameters (company_id, name, value, description, category, status, created_at, updated_at)
+SELECT 1, 'AGROFUSION_JWKS_URL',
        'https://sso.agrofusion.co/.well-known/jwks.json',
        'URL del JWKS de AgroFusion para validacion JWT RS256 (usado en Fase 6)',
        'INTEGRATION_AGROFUSION', 'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_JWKS_URL' AND deleted_at IS NULL
+    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_JWKS_URL' AND company_id = 1 AND deleted_at IS NULL
 );
 
-INSERT INTO parameters (name, value, description, category, status, created_at, updated_at)
-SELECT 'AGROFUSION_JWT_ISSUER',
+INSERT INTO parameters (company_id, name, value, description, category, status, created_at, updated_at)
+SELECT 1, 'AGROFUSION_JWT_ISSUER',
        'https://sso.agrofusion.co',
        'Issuer esperado en el JWT emitido por el SSO de AgroFusion (usado en Fase 6)',
        'INTEGRATION_AGROFUSION', 'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_JWT_ISSUER' AND deleted_at IS NULL
+    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_JWT_ISSUER' AND company_id = 1 AND deleted_at IS NULL
 );
 
-INSERT INTO parameters (name, value, description, category, status, created_at, updated_at)
-SELECT 'AGROFUSION_MAX_BATCH_SIZE_MB',
+INSERT INTO parameters (company_id, name, value, description, category, status, created_at, updated_at)
+SELECT 1, 'AGROFUSION_MAX_BATCH_SIZE_MB',
        '20',
        'Tamano maximo permitido por lote AAEF en megabytes (RF-INT-12)',
        'INTEGRATION_AGROFUSION', 'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_MAX_BATCH_SIZE_MB' AND deleted_at IS NULL
+    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_MAX_BATCH_SIZE_MB' AND company_id = 1 AND deleted_at IS NULL
 );
 
-INSERT INTO parameters (name, value, description, category, status, created_at, updated_at)
-SELECT 'AGROFUSION_AUTH_MODE',
+INSERT INTO parameters (company_id, name, value, description, category, status, created_at, updated_at)
+SELECT 1, 'AGROFUSION_AUTH_MODE',
        'API_KEY',
        'Modo de autenticacion activo para los endpoints AAEF: API_KEY | JWT | BOTH',
        'INTEGRATION_AGROFUSION', 'ACTIVE', NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_AUTH_MODE' AND deleted_at IS NULL
+    SELECT 1 FROM parameters WHERE name = 'AGROFUSION_AUTH_MODE' AND company_id = 1 AND deleted_at IS NULL
 );

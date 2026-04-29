@@ -30,8 +30,10 @@ public class CreateChartOfAccountDTO {
     private String code;
 
     @NotBlank(message = "Por favor diligencie todos los campos obligatorios")
-    @Pattern(regexp = "^[\\p{L}0-9_\\-\\s]{1,100}$", message = "Por favor siga el formato de los filtros")
-    @Schema(description = "Nombre de la cuenta", example = "Caja General")
+    // QA-BLOQUE-AO (2026-04-29): regex ampliado para aceptar parentesis, puntos
+    // y comas. Estandar PUC Colombia (Decreto 2650/1993) usa formato "X (codigo)".
+    @Pattern(regexp = "^[\\p{L}0-9 ()._,\\-]{1,100}$", message = "El nombre puede contener letras, numeros, espacios, guiones, parentesis, puntos y comas (max 100 chars)")
+    @Schema(description = "Nombre de la cuenta", example = "Flota y equipo aéreo (1548)")
     private String name;
 
     @NotNull(message = "Por favor diligencie todos los campos obligatorios")

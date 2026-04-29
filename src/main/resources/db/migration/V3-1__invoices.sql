@@ -121,16 +121,32 @@ BEGIN
     END IF;
 END $$;
 
-ALTER TABLE vouchers DROP CONSTRAINT IF EXISTS chk_origin_payment_not_null;
-ALTER TABLE vouchers
-ADD CONSTRAINT chk_origin_payment_not_null
-CHECK (
-    bank_account_id IS NOT NULL
-    OR cash_account_id IS NOT NULL
-    OR check_id IS NOT NULL
-);
+-- QA-BLOQUE-AN (2026-04-29): CHECKs creados solo si no existen, en lugar de
+-- DROP+ADD en cada arranque. Asi el script es idempotente real y no machaca
+-- modificaciones manuales.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conname = 'chk_origin_payment_not_null'
+           AND conrelid = 'vouchers'::regclass
+    ) THEN
+        ALTER TABLE vouchers
+        ADD CONSTRAINT chk_origin_payment_not_null
+        CHECK (
+            bank_account_id IS NOT NULL
+            OR cash_account_id IS NOT NULL
+            OR check_id IS NOT NULL
+        );
+    END IF;
 
-ALTER TABLE vouchers DROP CONSTRAINT IF EXISTS chk_amount_positive;
-ALTER TABLE vouchers
-ADD CONSTRAINT chk_amount_positive
-CHECK (amount IS NOT NULL AND amount > 0);
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conname = 'chk_amount_positive'
+           AND conrelid = 'vouchers'::regclass
+    ) THEN
+        ALTER TABLE vouchers
+        ADD CONSTRAINT chk_amount_positive
+        CHECK (amount IS NOT NULL AND amount > 0);
+    END IF;
+END $$;
