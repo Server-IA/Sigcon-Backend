@@ -19,4 +19,10 @@ public interface RuleTaxRepository extends JpaRepository<TaxRulerEntity, Long>, 
 
     List<TaxRulerEntity> findByAccountingAccountId(Long accountingAccountId);
 
+    // HU-CFG-RF-09 E3: validar unicidad de nombre.
+    boolean existsByNameAndDeletedAtIsNull(String name);
+
+    // HU-CFG-RF-11 E3: validar unicidad excluyendo el id actual al editar.
+    boolean existsByNameAndIdNotAndDeletedAtIsNull(String name, Long id);
+
 }

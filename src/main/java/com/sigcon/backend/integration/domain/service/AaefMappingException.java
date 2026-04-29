@@ -22,6 +22,12 @@ public class AaefMappingException extends RuntimeException {
     public static final String MAPPING_ERROR = "MAPPING_ERROR";
     public static final String UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
 
+    /** AgroFusion feedback v1.1 (2026-04-28). */
+    public static final String INVALID_TYPE_CODE = "INVALID_TYPE_CODE";
+    public static final String INVALID_ACCOUNTING_ACCOUNT = "INVALID_ACCOUNTING_ACCOUNT";
+    public static final String ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND";
+    public static final String MISSING_ORIGINAL_REF = "MISSING_ORIGINAL_REF";
+
     private final String errorCode;
     private final boolean retryAllowed;
 

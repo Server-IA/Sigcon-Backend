@@ -46,8 +46,12 @@ public class AuditPublisher {
      */
     public void publishCreate(AuditModule module, String entityType,
                               Long entityId, String description) {
+        // HU-AU-09 E5 (2026-04-28): si la entidad auditada ES un JournalEntry,
+        // pasar entityId tambien como journalEntryId para que la FK bidireccional
+        // (JE.auditLogId) se popule automaticamente.
+        Long jeId = "JournalEntry".equals(entityType) ? entityId : null;
         publish(AuditAction.CREATE, module, null, entityType, entityId,
-                description, null, null, null);
+                description, null, null, jeId);
     }
 
     /**

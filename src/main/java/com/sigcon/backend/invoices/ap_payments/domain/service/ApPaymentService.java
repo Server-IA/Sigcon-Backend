@@ -13,6 +13,13 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
+import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.cash_management.domain.model.Cash;
+import com.sigcon.backend.banks.cash_management.domain.repository.CashRepository;
+import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
+import com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType;
+import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.general.accounting.AccountingPeriodService;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
@@ -53,6 +60,11 @@ public class ApPaymentService {
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
     private final ApplicationEventPublisher eventPublisher;
+    // HU-AP-04 E1: registrar movimiento bancario/caja al pagar para que el
+    // pago se vea reflejado en el modulo BNK con su saldo afectado.
+    private final FinancialMovementRepository financialMovementRepository;
+    private final BankAccountRepository bankAccountRepository;
+    private final CashRepository cashRepository;
 
     private final DataTableSpecificationBuilder<ApPayment> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -199,6 +211,55 @@ public class ApPaymentService {
             paymentRepository.save(payment);
             log.info("Asiento contable {} generado para pago {} de factura {}",
                     je.getId(), payment.getId(), invoice.getId());
+
+            // HU-AP-04 E1: registrar movimiento financiero en BNK (egreso). Antes
+            // del fix el pago solo afectaba CxC contable pero NO se reflejaba en
+            // el saldo de la cuenta bancaria/caja. El monto va negativo porque
+            // es un egreso. Solo si el pago indica una cuenta bancaria o caja.
+            try {
+                FinancialMovement fm = null;
+                if (request.getBankAccountId() != null) {
+                    BankAccount ba = bankAccountRepository.findById(request.getBankAccountId())
+                            .orElse(null);
+                    if (ba != null) {
+                        fm = FinancialMovement.builder()
+                                .bankAccount(ba)
+                                .movementDate(request.getPaymentDate())
+                                .amount(request.getAmount().negate())
+                                .description("Pago factura " + invoice.getResolutionInvoice()
+                                        + " - Ref: " + (request.getPaymentReference() != null
+                                                ? request.getPaymentReference() : "N/A"))
+                                .externalReference(request.getPaymentReference())
+                                .sourceType(FinancialMovementSourceType.MANUAL)
+                                .flowActivity("OPERATIVA")
+                                .build();
+                    }
+                } else if (request.getCashId() != null) {
+                    Cash cash = cashRepository.findById(request.getCashId()).orElse(null);
+                    if (cash != null) {
+                        fm = FinancialMovement.builder()
+                                .cash(cash)
+                                .movementDate(request.getPaymentDate())
+                                .amount(request.getAmount().negate())
+                                .description("Pago factura " + invoice.getResolutionInvoice()
+                                        + " - Ref: " + (request.getPaymentReference() != null
+                                                ? request.getPaymentReference() : "N/A"))
+                                .externalReference(request.getPaymentReference())
+                                .sourceType(FinancialMovementSourceType.MANUAL)
+                                .flowActivity("OPERATIVA")
+                                .build();
+                    }
+                }
+                if (fm != null) {
+                    financialMovementRepository.save(fm);
+                    log.info("Movimiento financiero generado para pago {}", payment.getId());
+                }
+            } catch (RuntimeException e) {
+                // Si falla el FM, NO rompemos el pago (ya esta guardado el JE).
+                // El admin puede crear el FM manualmente despues. Logueamos.
+                log.warn("No se pudo registrar movimiento financiero para pago {}: {}",
+                        payment.getId(), e.getMessage());
+            }
         } catch (IllegalArgumentException | IllegalStateException e) {
             log.error("Error generando asiento contable para pago {}: {}", payment.getId(), e.getMessage());
             throw new IllegalStateException(

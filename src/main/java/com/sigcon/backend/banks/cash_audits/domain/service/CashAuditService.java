@@ -19,6 +19,8 @@ import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.banks.cash_audits.application.ApproveCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.CashAuditDTO;
 import com.sigcon.backend.banks.cash_audits.application.CreateCashAuditRequest;
+import com.sigcon.backend.banks.cash_audits.application.DeleteCashAuditRequest;
+import com.sigcon.backend.banks.cash_audits.application.VoidCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.domain.model.CashAudit;
 import com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus;
 import com.sigcon.backend.banks.cash_audits.domain.repository.CashAuditRepository;
@@ -115,7 +117,7 @@ public class CashAuditService {
                 .systemBalance(systemBalance)
                 .physicalBalance(request.getPhysicalBalance())
                 .difference(difference)
-                .status(CashAuditStatus.ABIERTO)
+                .status(CashAuditStatus.BORRADOR)
                 .notes(request.getNotes())
                 .build();
 
@@ -152,11 +154,14 @@ public class CashAuditService {
 
         CashAudit audit = optAudit.get();
 
-        // 2. Validar estado ABIERTO
-        if (audit.getStatus() != CashAuditStatus.ABIERTO) {
+        // 2. Validar estado BORRADOR (acepta ABIERTO legacy y EN_REVISION)
+        CashAuditStatus current = audit.getStatus();
+        if (current != CashAuditStatus.BORRADOR
+                && current != CashAuditStatus.EN_REVISION
+                && current != CashAuditStatus.ABIERTO) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(
-                            Optional.of("El arqueo debe estar en estado ABIERTO para ser aprobado.")));
+                            Optional.of("El arqueo debe estar en estado BORRADOR o EN_REVISION para ser aprobado.")));
         }
 
         // 3. Aprobar
@@ -258,6 +263,8 @@ public class CashAuditService {
                             Optional.of("El arqueo debe estar APROBADO para ser cerrado.")));
         }
 
+        // HU-BNK-047 E4: APROBADO ya es estado terminal inmutable. CERRADO se mantiene
+        // como sinonimo legacy para no romper UI existente.
         audit.setStatus(CashAuditStatus.CERRADO);
         CashAudit saved = cashAuditRepository.save(audit);
         log.info("Arqueo de caja cerrado: id={}", saved.getId());
@@ -269,6 +276,179 @@ public class CashAuditService {
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Arqueo de caja cerrado exitosamente."),
                         Optional.of(toDTO(saved))));
+    }
+
+    /**
+     * HU-BNK-048 E1 - Elimina fisicamente un arqueo en BORRADOR.
+     * Bloquea si:
+     *   - el arqueo no esta en BORRADOR (E3 mensaje exacto del Excel)
+     *   - tiene asiento contable asociado (no deberia ocurrir en BORRADOR pero defensivo)
+     *
+     * @param id      identificador del arqueo
+     * @param request motivo de eliminacion (min 10 chars, registrado en auditoria)
+     * @return 200 si se elimino, 400 si esta en estado no permitido
+     */
+    @Transactional
+    public ResponseEntity<?> delete(Long id, DeleteCashAuditRequest request) {
+        Optional<CashAudit> optAudit = cashAuditRepository.findById(id);
+        if (optAudit.isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El arqueo no fue encontrado.")));
+        }
+
+        CashAudit audit = optAudit.get();
+        CashAuditStatus current = audit.getStatus();
+
+        // HU-BNK-048 E3: bloqueo eliminar APROBADO/CERRADO con mensaje exacto del Excel
+        if (current == CashAuditStatus.APROBADO || current == CashAuditStatus.CERRADO) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Los arqueos aprobados no pueden eliminarse fisicamente. "
+                                    + "Use la funcion Anular Arqueo para registrar la anulacion con motivo "
+                                    + "y conservar el historial (Decreto 2649/1993 Art. 57)")));
+        }
+
+        if (current != CashAuditStatus.BORRADOR
+                && current != CashAuditStatus.ABIERTO
+                && current != CashAuditStatus.EN_REVISION
+                && current != CashAuditStatus.RECHAZADO) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Solo se pueden eliminar arqueos en estado BORRADOR.")));
+        }
+
+        if (audit.getJournalEntryId() != null) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "El arqueo tiene asiento contable asociado y no puede eliminarse. Use Anular Arqueo.")));
+        }
+
+        Long auditId = audit.getId();
+        String cashCode = audit.getCash() != null ? audit.getCash().getCashCode() : null;
+        // Soft delete via @SQLDelete (cumple HU-BNK-048 E1: registro auditable, no se reusan IDs)
+        cashAuditRepository.delete(audit);
+
+        auditPublisher.publishDelete(AuditModule.BNK, "CashAudit", auditId,
+                "Arqueo BORRADOR eliminado (caja=" + cashCode + ", motivo=" + request.getReason() + ")");
+        log.info("Arqueo BORRADOR eliminado: id={}, motivo={}", auditId, request.getReason());
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Arqueo eliminado correctamente."), Optional.empty()));
+    }
+
+    /**
+     * HU-BNK-048 E2 - Anula logicamente un arqueo APROBADO conservando el historial.
+     * El arqueo no se elimina; cambia a estado ANULADO con motivo (min 50 chars).
+     * Los movimientos financieros y el asiento contable existente NO se modifican.
+     *
+     * @param id      identificador del arqueo
+     * @param request motivo de anulacion (min 50 chars)
+     * @return 200 si se anulo, 400 si esta en estado no permitido
+     */
+    @Transactional
+    public ResponseEntity<?> voidAudit(Long id, VoidCashAuditRequest request) {
+        Optional<CashAudit> optAudit = cashAuditRepository.findById(id);
+        if (optAudit.isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El arqueo no fue encontrado.")));
+        }
+
+        CashAudit audit = optAudit.get();
+        CashAuditStatus current = audit.getStatus();
+
+        if (current != CashAuditStatus.APROBADO && current != CashAuditStatus.CERRADO) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Solo se pueden anular arqueos en estado APROBADO.")));
+        }
+
+        if (current == CashAuditStatus.ANULADO) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "El arqueo ya esta anulado.")));
+        }
+
+        audit.setStatus(CashAuditStatus.ANULADO);
+        audit.setVoidReason(request.getReason());
+        audit.setVoidedAt(LocalDateTime.now());
+
+        CashAudit saved = cashAuditRepository.save(audit);
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashAudit", saved.getId(),
+                "Arqueo APROBADO anulado (motivo=" + request.getReason() + ")");
+        log.info("Arqueo anulado: id={}, motivo={}", saved.getId(), request.getReason());
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Arqueo anulado correctamente. El historial se conserva."),
+                Optional.of(toDTO(saved))));
+    }
+
+    /**
+     * HU-042: cajero envia arqueo BORRADOR/RECHAZADO al supervisor para revision.
+     * Cambia estado a EN_REVISION (lock para edicion del cajero).
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> submitReview(Long id) {
+        Optional<CashAudit> opt = cashAuditRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El arqueo no fue encontrado.")));
+        }
+        CashAudit audit = opt.get();
+        com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus s = audit.getStatus();
+        boolean isDraftLike = s == com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus.BORRADOR
+                || s == com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus.ABIERTO
+                || s == com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus.RECHAZADO;
+        if (!isDraftLike) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("Solo se pueden enviar a revision arqueos en BORRADOR o RECHAZADO. Estado actual: " + s + ".")));
+        }
+        audit.setStatus(com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus.EN_REVISION);
+        cashAuditRepository.save(audit);
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashAudit", audit.getId(),
+                "Arqueo enviado a revision id=" + audit.getId());
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Arqueo enviado a revision."), Optional.of(toDTO(audit))));
+    }
+
+    /**
+     * HU-043: supervisor rechaza arqueo EN_REVISION con motivo (>=10 chars).
+     * Vuelve a BORRADOR y se persiste el motivo en notes para que el cajero lo vea.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> reject(Long id, String reason) {
+        if (reason == null || reason.trim().length() < 10) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El motivo del rechazo es obligatorio (minimo 10 caracteres).")));
+        }
+        Optional<CashAudit> opt = cashAuditRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El arqueo no fue encontrado.")));
+        }
+        CashAudit audit = opt.get();
+        if (audit.getStatus() != com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus.EN_REVISION) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("Solo se pueden rechazar arqueos EN_REVISION. Estado actual: " + audit.getStatus() + ".")));
+        }
+        audit.setStatus(com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus.RECHAZADO);
+        // Persistir motivo del rechazo apendiendo a notes (si existe campo)
+        try {
+            String prev = audit.getNotes() != null ? audit.getNotes() + "\n\n" : "";
+            audit.setNotes(prev + "[RECHAZO " + java.time.LocalDateTime.now() + "] " + reason.trim());
+        } catch (Exception ignored) {
+            // Si la entidad no tiene notes, ignoramos — el motivo queda solo en audit log
+        }
+        cashAuditRepository.save(audit);
+        auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.UPDATE,
+                AuditModule.BNK,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.HIGH,
+                "CashAudit", audit.getId(),
+                "Arqueo rechazado id=" + audit.getId() + " motivo: " + reason.trim(),
+                null, null, null);
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Arqueo rechazado. El cajero debe corregir y reenviar."),
+                Optional.of(toDTO(audit))));
     }
 
     /**
@@ -297,11 +477,25 @@ public class CashAuditService {
      * @return DTO con datos del arqueo y de la caja asociada
      */
     private CashAuditDTO toDTO(CashAudit audit) {
+        // Defensivo: si la caja fue desactivada (deleted_at != null) Hibernate
+        // retorna null por @Where. Mostramos placeholder para no romper el listado.
+        Cash cash = null;
+        try {
+            cash = audit.getCash();
+            if (cash != null) {
+                cash.getId();
+            }
+        } catch (org.hibernate.LazyInitializationException | jakarta.persistence.EntityNotFoundException e) {
+            cash = null;
+        }
+        Long cashId = cash != null ? cash.getId() : null;
+        String cashCode = cash != null ? cash.getCashCode() : "(caja eliminada)";
+        String cashName = cash != null ? cash.getCashName() : "(caja eliminada)";
         return CashAuditDTO.builder()
                 .id(audit.getId())
-                .cashId(audit.getCash() != null ? audit.getCash().getId() : null)
-                .cashCode(audit.getCash() != null ? audit.getCash().getCashCode() : null)
-                .cashName(audit.getCash() != null ? audit.getCash().getCashName() : null)
+                .cashId(cashId)
+                .cashCode(cashCode)
+                .cashName(cashName)
                 .auditDate(audit.getAuditDate())
                 .systemBalance(audit.getSystemBalance())
                 .physicalBalance(audit.getPhysicalBalance())
@@ -312,6 +506,9 @@ public class CashAuditService {
                 .approvedAt(audit.getApprovedAt())
                 .approvedBy(audit.getApprovedBy())
                 .journalEntryId(audit.getJournalEntryId())
+                .voidReason(audit.getVoidReason())
+                .voidedAt(audit.getVoidedAt())
+                .voidedBy(audit.getVoidedBy())
                 .createdBy(audit.getCreatedBy())
                 .createdAt(audit.getCreatedAt())
                 .updatedAt(audit.getUpdatedAt())

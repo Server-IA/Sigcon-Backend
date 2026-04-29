@@ -65,6 +65,15 @@ public class RuleTaxService {
             throw new RuntimeException("La fecha inicio no puede ser mayor a la fecha fin");
         }
 
+        // HU-CFG-RF-09 E3: nombre debe ser unico en la empresa actual. Antes el
+        // service permitia crear N reglas con el mismo nombre/tipo/tarifa, lo que
+        // genera duplicados que rompen liquidaciones y reportes tributarios.
+        if (createRuleTaxDTO.getName() != null
+                && ruleTaxRepository.existsByNameAndDeletedAtIsNull(createRuleTaxDTO.getName().trim())) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Nombre ya registrado")));
+        }
+
         AccountingAccount accountingAccount = accountingAccountRepository.findById(createRuleTaxDTO.getAccountingAccountId())
         .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada"));
 
@@ -140,6 +149,14 @@ public class RuleTaxService {
             throw new RuntimeException("La fecha inicio no puede ser mayor a la fecha fin");
         }
 
+        // HU-CFG-RF-11 E3: validar unicidad de nombre excluyendo el id actual.
+        if (updateRuleTaxDTO.getName() != null
+                && ruleTaxRepository.existsByNameAndIdNotAndDeletedAtIsNull(
+                        updateRuleTaxDTO.getName().trim(), id)) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Nombre ya registrado")));
+        }
+
         AccountingAccount accountingAccount = accountingAccountRepository.findById(updateRuleTaxDTO.getAccountingAccountId())
         .orElseThrow(() -> new RuntimeException("Cuenta contable no encontrada"));
 
@@ -170,18 +187,42 @@ public class RuleTaxService {
 
     /**
      * HU-CFG-RF-12: Eliminar regla tributaria (soft delete).
-     * Requiere motivo para auditoría según escenario E5.
+     *
+     * Cumple los siguientes escenarios de la HU:
+     *   E3: bloquea si hay cuentas contables que usan la regla (dep activa).
+     *   E5: exige motivo (`reason`) >= 10 chars (antes el endpoint no lo pedia).
+     *   E7: el motivo se persiste en la descripcion del audit log para trazabilidad.
      */
-    public ResponseEntity<?> deleteRuleTax(Long id) {
+    public ResponseEntity<?> deleteRuleTax(Long id, String reason) {
         try {
+            // HU-CFG-RF-12 E5: motivo obligatorio.
+            if (reason == null || reason.trim().length() < 10) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "Debe especificar el motivo de eliminación (mínimo 10 caracteres)")));
+            }
+
             TaxRulerEntity taxRulerEntity = ruleTaxRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Regla de impuesto no encontrada"));
+
+            // HU-CFG-RF-12 E3: validar dependencias activas (cuentas que la usan).
+            long usedBy = accountingAccountRepository.countByTaxRuleIdAndDeletedAtIsNull(id);
+            if (usedBy > 0) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "No puede inactivarse la regla porque está vinculada a procesos vigentes "
+                        + "(" + usedBy + " cuenta(s) contable(s) la usan).")));
+            }
 
             // Soft delete en vez de eliminación física
             taxRulerEntity.setDeletedAt(java.time.LocalDateTime.now());
             taxRulerEntity.setStatus(com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax.INACTIVE);
             ruleTaxRepository.save(taxRulerEntity);
-            auditPublisher.publishDelete(AuditModule.CFG, "RuleTax", taxRulerEntity.getId(), "RuleTax eliminado id=" + taxRulerEntity.getId());
+            // HU-CFG-RF-12 E7: motivo registrado en la descripcion del audit log.
+            auditPublisher.publishDelete(AuditModule.CFG, "RuleTax", taxRulerEntity.getId(),
+                "RuleTax eliminado id=" + taxRulerEntity.getId()
+                + " | nombre=" + taxRulerEntity.getName()
+                + " | motivo=" + reason.trim());
 
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("La regla tributaria ha sido eliminada exitosamente"),

@@ -20,7 +20,10 @@ import com.sigcon.backend.general.accounting.AccountingPeriodService;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO;
+import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntry;
+import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
+import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountMappingService;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
@@ -85,6 +88,10 @@ public class InvoiceService {
     private final RuleTaxRepository taxRulerRepository;
 
     private final JournalEntryService journalEntryService;
+    // HU-AP-02 E1: acceso directo al repo de JE para sincronizar el asiento
+    // asociado al editar la factura (description + entry_date) si esta en
+    // estado DRAFT. Si esta POSTED, no se toca (audit trail contable).
+    private final JournalEntryRepository journalEntryRepository;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
     private final ApplicationEventPublisher eventPublisher;
@@ -485,6 +492,9 @@ public class InvoiceService {
         row.put("totalPayment", invoice.getTotalPayment());
         row.put("balanceDue", invoice.getBalanceDue());
         row.put("journalEntryId", invoice.getJournalEntryId());
+        // HU-AP-02 E3: exponer version optimista para que el cliente la reenvie
+        // en futuros PUT y se detecten conflictos de edicion concurrente.
+        row.put("version", invoice.getVersion());
         try {
             if (invoice.getThirdParty() != null) {
                 row.put("thirdPartyId", invoice.getThirdParty().getId());
@@ -560,6 +570,18 @@ public class InvoiceService {
             throw new IllegalStateException("No se puede modificar una factura anulada o liquidada.");
         }
 
+        // HU-AP-02 E3: chequeo manual de version optimista. Hibernate solo
+        // dispara OptimisticLockException cuando la entidad esta detached y se
+        // hace merge - no cuando es managed via findById() y solo cambias
+        // setters. Asi que comparamos manualmente y lanzamos la excepcion
+        // estandar para que el GlobalExceptionHandler la traduzca a HTTP 409.
+        if (request.getVersion() != null
+                && invoice.getVersion() != null
+                && !request.getVersion().equals(invoice.getVersion())) {
+            throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                    "Invoices", invoice.getId());
+        }
+
         // Validar periodo contable abierto
         accountingPeriodService.validatePeriodOpen(
             request.getInvoiceDate() != null ? request.getInvoiceDate() : invoice.getInvoiceDate());
@@ -588,6 +610,54 @@ public class InvoiceService {
 
         invoice = invoiceRepository.save(invoice);
 
+        // HU-AP-02 E1: sincronizar JE asociado en CG cuando esta en DRAFT.
+        // Reglas:
+        //   - Si la factura tiene journalEntryId Y el JE esta en DRAFT:
+        //     actualizar description (con nueva resolucion + nombre tercero) y
+        //     entry_date (con nueva fecha de factura). Es la edicion natural
+        //     porque el comprobante aun no se contabilizo.
+        //   - Si el JE esta en POSTED o REVERSED: NO se toca por integridad
+        //     contable (audit trail). El usuario debe hacer correccion via
+        //     comprobante de ajuste (HU-CG-07B).
+        boolean jeSynced = false;
+        boolean jePostedSkipped = false;
+        if (invoice.getJournalEntryId() != null) {
+            try {
+                JournalEntry je = journalEntryRepository.findById(invoice.getJournalEntryId())
+                        .orElse(null);
+                if (je != null) {
+                    if (je.getStatus() == JournalEntryStatus.DRAFT) {
+                        String newDesc = "Factura compra " + invoice.getResolutionInvoice()
+                                + " - " + (invoice.getThirdParty() != null
+                                        && invoice.getThirdParty().getBusinessName() != null
+                                                ? invoice.getThirdParty().getBusinessName()
+                                                : "tercero #" + (invoice.getThirdParty() != null
+                                                        ? invoice.getThirdParty().getId() : "-"));
+                        je.setDescription(newDesc);
+                        if (invoice.getInvoiceDate() != null) {
+                            je.setEntryDate(invoice.getInvoiceDate());
+                            je.setPeriodYear(invoice.getInvoiceDate().getYear());
+                            je.setPeriodMonth(invoice.getInvoiceDate().getMonthValue());
+                        }
+                        journalEntryRepository.save(je);
+                        jeSynced = true;
+                        log.info("HU-AP-02 E1: JE {} sincronizado (DRAFT) tras update factura {}",
+                                je.getId(), invoice.getId());
+                    } else {
+                        // JE POSTED o REVERSED: no tocar.
+                        jePostedSkipped = true;
+                        log.warn("HU-AP-02 E1: JE {} en estado {} no se sincroniza tras update "
+                                + "factura {}. Use correccion via comprobante de ajuste.",
+                                je.getId(), je.getStatus(), invoice.getId());
+                    }
+                }
+            } catch (RuntimeException syncEx) {
+                // No bloquear el update por una falla de sync. Logueamos y seguimos.
+                log.warn("HU-AP-02 E1: no se pudo sincronizar JE de factura {}: {}",
+                        invoice.getId(), syncEx.getMessage());
+            }
+        }
+
         // AP-14: publicar evento de actualizacion para consumidores (CG, BNK)
         try {
             eventPublisher.publishEvent(new ApInvoiceUpdatedEvent(
@@ -601,9 +671,17 @@ public class InvoiceService {
                     invoice.getId(), e.getMessage());
         }
 
+        // HU-AP-02 E1: mensaje contextual segun el resultado del sync.
+        String successMsg = "Factura actualizada exitosamente";
+        if (jeSynced) {
+            successMsg += ". El comprobante contable asociado se sincronizo.";
+        } else if (jePostedSkipped) {
+            successMsg += ". El comprobante contable ya esta contabilizado y no se "
+                    + "sincronizo automaticamente; use correccion via ajuste contable.";
+        }
         return ResponseEntity.ok(
             SuccessRespondJson.getSuccessRespondMessage(
-                Optional.of("Factura actualizada exitosamente"), Optional.of(toListRow(invoice))));
+                Optional.of(successMsg), Optional.of(toListRow(invoice))));
     }
 
     /**
@@ -948,7 +1026,19 @@ public class InvoiceService {
             Long idRetPracticadas = accountMappingService.resolveOrThrow(
                     AccountingConcept.AP_RET_PRACTICADAS);
 
-            BigDecimal subtotal = BigDecimal.valueOf(invoice.getTotalAmount() != null ? invoice.getTotalAmount() : 0.0);
+            // HU-AP-01 E1 FIX: el subtotal de la factura es la BASE GRAVABLE
+            // (price*quantity por linea), NO `invoice.totalAmount` que aqui se
+            // asigna como total NETO (subtotal + IVA - retenciones). Si
+            // usaramos totalAmount como debito de gasto, la partida doble se
+            // descuadraba en exactamente totalDiscount + (totalAmount-subtotal):
+            //   D = totalAmount + totalTax
+            //   C = totalPayment + totalDiscount
+            // Solucion: calcular subtotal sumando price*quantity de cada linea.
+            BigDecimal subtotal = lines.stream()
+                .map(l -> BigDecimal.valueOf(
+                    (l.getPrice() != null ? l.getPrice() : 0.0)
+                  * (l.getQuantity() != null ? l.getQuantity() : 0.0)))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal totalTax = BigDecimal.valueOf(invoice.getTotalTax() != null ? invoice.getTotalTax() : 0.0);
             BigDecimal totalDiscount = BigDecimal.valueOf(invoice.getTotalDiscount() != null ? invoice.getTotalDiscount() : 0.0);
             BigDecimal totalPayment = BigDecimal.valueOf(invoice.getTotalPayment() != null ? invoice.getTotalPayment() : 0.0);

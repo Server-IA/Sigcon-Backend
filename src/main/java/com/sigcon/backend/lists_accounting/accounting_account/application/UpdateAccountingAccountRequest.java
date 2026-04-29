@@ -29,10 +29,16 @@ public class UpdateAccountingAccountRequest {
     @NotNull(message = "El identificador PUC es obligatorio")
     private Long puc_id;
 
-    @Schema(description = "Nombre personalizado de la cuenta para visualización en el sistema", example = "Caja Principal Medellín", maxLength = 50)
+    @Schema(description = "Nombre personalizado de la cuenta para visualización en el sistema", example = "Bancos (1110)", maxLength = 100)
     @NotBlank(message = "El nombre de la cuenta personalizada es obligatorio")
-    @Size(min = 1, max = 50, message = "El nombre debe tener entre 1 y 50 caracteres")
-    @Pattern(regexp = "^[a-zA-Z0-9 _-]+$", message = "El nombre debe tener entre 1 y 50 caracteres y solo puede contener letras, números, espacios, guiones y guiones bajos")
+    @Size(min = 1, max = 100, message = "El nombre debe tener entre 1 y 100 caracteres")
+    // Permite letras (incluyendo acentos y ñ), numeros, espacios, guiones, parentesis,
+    // puntos y comas. Los nombres contables en espaniol comunmente usan parentesis
+    // (ej. "Bancos (1110)") y acentos (ej. "Préstamos a corto plazo"). La regla
+    // anterior `^[a-zA-Z0-9 _-]+$` rechazaba esos caracteres y bloqueaba la edicion
+    // de cuentas auto-provisionadas con esos formatos.
+    @Pattern(regexp = "^[a-zA-Z0-9 áéíóúÁÉÍÓÚñÑüÜ()._,\\-]+$",
+            message = "El nombre solo puede contener letras, números, espacios, guiones, puntos, comas y paréntesis")
     private String custom_name;
 
     @Schema(description = "ID del tipo de moneda base de la cuenta", example = "1", nullable = false)

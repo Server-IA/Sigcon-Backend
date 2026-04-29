@@ -26,14 +26,16 @@ import java.time.LocalDateTime;
  * {@code journal_entries.id}. No se usa FK estricta para permitir procesamiento
  * asincrono y evitar bloqueos.
  *
- * <p>Tabla: {@code integration_transfers} (creada en V32).
+ * <p>Tabla: {@code af_accounting_transfers} (creada en V32 como
+ * {@code integration_transfers}, renombrada en V9-ZZL para alinearse con la
+ * spec AAEF v1.0 Bloque W).
  *
  * @see IntegrationBatch
  * @see com.sigcon.backend.integration.domain.model.enums.TransferStatus
  */
 @Entity
-@Table(name = "integration_transfers")
-@SQLDelete(sql = "UPDATE integration_transfers SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "af_accounting_transfers")
+@SQLDelete(sql = "UPDATE af_accounting_transfers SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data

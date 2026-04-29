@@ -27,6 +27,9 @@ public class CurrencyTypeRequestDTO {
 
     @NotBlank(message = "Debe ingresar un nombre de moneda")
     @Size(min = 1, max = 100, message = "Debe ingresar un nombre de moneda")
+    // HU-CFG-21 MT-1 (2026-04-27): rechazar tags HTML/XSS en el nombre.
+    @Pattern(regexp = "^[^<>]+$",
+            message = "El nombre de la moneda no puede contener los caracteres < o >")
     @Schema(description = "Nombre descriptivo de la moneda", example = "Dólar estadounidense")
     private String name;
 

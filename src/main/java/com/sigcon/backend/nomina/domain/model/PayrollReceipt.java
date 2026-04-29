@@ -99,6 +99,14 @@ public class PayrollReceipt {
     @Column(name = "journal_entry_id")
     private Long journalEntryId;
 
+    /**
+     * HU-NOM-04 DEF#2 (2026-04-28): si este recibo es complementario de otro
+     * (correccion post-cierre), guarda el ID del recibo CLOSED original. Null
+     * si el recibo es la liquidacion principal del periodo.
+     */
+    @Column(name = "complementary_of_receipt_id")
+    private Long complementaryOfReceiptId;
+
     @Column(name = "approved_by", length = 150)
     private String approvedBy;
 

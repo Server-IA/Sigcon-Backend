@@ -94,8 +94,14 @@ public class ApNoteService {
         if ("CREDIT".equals(noteType)) {
             BigDecimal balanceDue = BigDecimal.valueOf(invoice.getBalanceDue());
             if (request.getAmount().compareTo(balanceDue) > 0) {
+                // HU-AP-10 MT-#02 (2026-04-28): formatear saldo en formato
+                // monetario legible. Antes mostraba "1.0E+7" cientifico que
+                // confundia al contador.
+                String saldoFmt = String.format(java.util.Locale.US, "%,.2f", balanceDue);
                 throw new IllegalArgumentException(
-                        "El valor de la nota credito excede el saldo pendiente. Saldo actual: $" + balanceDue);
+                        "El valor de la nota credito ($" + String.format(java.util.Locale.US, "%,.2f", request.getAmount())
+                        + ") excede el saldo pendiente de la factura ($" + saldoFmt
+                        + "). Reduzca el monto de la nota o aplique parcialmente.");
             }
         }
 

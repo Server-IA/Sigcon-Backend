@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sigcon.backend.integration.application.AaefBatchRequest;
 import com.sigcon.backend.integration.application.AgroFusionExchangeUpdateDTO;
 import com.sigcon.backend.integration.application.IntegrationBatchDTO;
+import com.sigcon.backend.integration.domain.model.IntegrationIdempotencyKey;
+import com.sigcon.backend.integration.domain.repository.IntegrationIdempotencyKeyRepository;
 import com.sigcon.backend.integration.domain.service.AaefMappingException;
 import com.sigcon.backend.integration.domain.service.AaefReceiverService;
 import com.sigcon.backend.integration.domain.service.CancellationService;
@@ -69,6 +71,11 @@ public class AaefController {
     private final CompanyRepository companyRepository;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+    // Spec AAEF Bloque W: idempotencia para Pull+Diff. Registramos el
+    // ExchangeId del update con standardVersion="UPDATE-1.0" para que NO
+    // colisione con la del lote inicial pero si detecte reenvios duplicados.
+    private final IntegrationIdempotencyKeyRepository idempotencyKeyRepository;
+    private static final String UPDATE_STANDARD_VERSION = "UPDATE-1.0";
 
     @Operation(
         summary = "Recibir lote AAEF o AgroFusionExchangeUpdate",
@@ -214,6 +221,35 @@ public class AaefController {
         String updateExchangeId = metadata.has("ExchangeId")
                 ? metadata.get("ExchangeId").asText()
                 : null;
+
+        // Spec AAEF Bloque W: idempotencia del Pull+Diff. Si ya recibimos un
+        // update con el mismo ExchangeId (sin importar el lote padre), rechazar
+        // con HTTP 409 para que AgroFusion no procese dos veces. Se usa la
+        // standardVersion "UPDATE-1.0" para no colisionar con la del lote
+        // inicial.
+        if (updateExchangeId != null && !updateExchangeId.isBlank()) {
+            var existing = idempotencyKeyRepository
+                    .findByExchangeIdAndStandardVersion(updateExchangeId, UPDATE_STANDARD_VERSION)
+                    .orElse(null);
+            if (existing != null) {
+                Map<String, Object> dup = new LinkedHashMap<>();
+                dup.put("success", false);
+                dup.put("code", 409);
+                dup.put("error", "Update duplicado");
+                dup.put("message", "Este AgroFusionExchangeUpdate.Metadata.ExchangeId ya fue procesado");
+                dup.put("exchangeId", updateExchangeId);
+                dup.put("existingBatchId", existing.getBatchId());
+                return ResponseEntity.status(409).body(dup);
+            }
+            // Registrar la llave para bloquear futuros duplicados.
+            idempotencyKeyRepository.save(IntegrationIdempotencyKey.builder()
+                    .exchangeId(updateExchangeId)
+                    .standardVersion(UPDATE_STANDARD_VERSION)
+                    .firstReceivedAt(java.time.LocalDateTime.now())
+                    .lastAttemptAt(java.time.LocalDateTime.now())
+                    .attemptCount(1)
+                    .build());
+        }
 
         // Iterar Changes.Invoices[] y Changes.Transactions[]
         JsonNode changes = envelope.get("Changes");

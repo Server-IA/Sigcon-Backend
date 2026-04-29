@@ -36,8 +36,16 @@ public class AuditLog {
     private Long id;
 
 
-    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
-    @jakarta.persistence.Column(name = "company_id", nullable = false)
+    /**
+     * Multi-tenant (V10-C). Auto-inyectado en @PrePersist.
+     * <p>
+     * 2026-04-28: NULLABLE en eventos de PLATFORM_ADMIN cross-tenant
+     * (LOGIN/LOGOUT/CREATE_COMPANY del superadmin sin empresa). Antes la
+     * columna era NOT NULL y el LOGOUT del superadmin tumbaba el sistema con
+     * `null value in column "company_id" violates not-null constraint`.
+     * Ver migracion V9-ZZP que afloja el constraint en BD.
+     */
+    @jakarta.persistence.Column(name = "company_id", nullable = true)
     private Long companyId;
     /** Momento exacto del evento. */
     @Column(name = "timestamp", nullable = false, updatable = false)

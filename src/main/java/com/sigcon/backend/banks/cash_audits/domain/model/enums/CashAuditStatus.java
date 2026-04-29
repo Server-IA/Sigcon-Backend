@@ -1,16 +1,29 @@
 package com.sigcon.backend.banks.cash_audits.domain.model.enums;
 
 /**
- * BNK-RF-17 a BNK-RF-20 - Estados validos de un arqueo de caja.
+ * BNK-HU-046 a BNK-HU-048 - Estados validos de un arqueo de caja.
  *
- * ABIERTO     : Estado inicial tras el conteo fisico.
- * EN_REVISION : En proceso de revision por supervisor.
- * APROBADO    : Aprobado, diferencia registrada contablemente.
- * CERRADO     : Proceso finalizado e inmutable.
+ * Ciclo de vida (HU-BNK-047 E4):
+ *   BORRADOR (cajero en ejecucion) -> EN_REVISION (enviado a supervisor)
+ *     -> APROBADO (inmutable) | RECHAZADO (vuelve a BORRADOR)
+ *
+ * Operaciones excepcionales (HU-BNK-048):
+ *   BORRADOR -> eliminacion fisica (con motivo).
+ *   APROBADO -> ANULADO (soft delete, conserva historial, motivo min 50 chars).
+ *
+ * ABIERTO/CERRADO se conservan por compatibilidad con datos creados antes de
+ * la migracion BORRADOR. ABIERTO se trata como sinonimo funcional de BORRADOR.
  */
 public enum CashAuditStatus {
-    ABIERTO,
+    BORRADOR,
     EN_REVISION,
     APROBADO,
+    RECHAZADO,
+    ANULADO,
+    /** @deprecated usar BORRADOR. Conservado para datos historicos. */
+    @Deprecated
+    ABIERTO,
+    /** @deprecated usar APROBADO. Conservado para datos historicos. */
+    @Deprecated
     CERRADO
 }

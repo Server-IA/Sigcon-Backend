@@ -145,6 +145,19 @@ public class PayrollService {
     }
 
     private List<Employee> resolveEmployees(LiquidatePayrollRequest req) {
+        // HU-NOM-04 DEF#2 (2026-04-28): si es complementaria, reusa el empleado del recibo padre.
+        if (req.getComplementaryOfReceiptId() != null) {
+            PayrollReceipt parent = receiptRepository.findById(req.getComplementaryOfReceiptId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Recibo padre #" + req.getComplementaryOfReceiptId() + " no encontrado"));
+            if (!"CLOSED".equals(parent.getStatus())) {
+                throw new IllegalStateException(
+                        "Solo se puede crear nomina complementaria sobre recibos CERRADOS. "
+                        + "Estado actual: " + parent.getStatus());
+            }
+            return employeeRepository.findById(parent.getEmployeeId())
+                    .map(List::of).orElse(List.of());
+        }
         if (req.getEmployeeIds() != null && !req.getEmployeeIds().isEmpty()) {
             return employeeRepository.findAllById(req.getEmployeeIds()).stream()
                     .filter(e -> "ACTIVE".equals(e.getStatus()))
@@ -163,6 +176,23 @@ public class PayrollService {
      */
     private PayrollReceipt liquidateEmployee(Employee emp, LiquidatePayrollRequest req,
                                                List<LiquidatePayrollRequest.ExtraLine> extras) {
+        // HU-NOM-03 DEF#1 (2026-04-28): bloquear liquidacion en periodos
+        // anteriores a la fecha de ingreso del empleado. Antes el sistema
+        // calculaba y generaba asientos sin advertencia.
+        if (emp.getHireDate() != null) {
+            java.time.LocalDate periodStart = java.time.LocalDate.of(
+                    req.getYear(), req.getMonth(), 1);
+            java.time.LocalDate periodEnd = periodStart.withDayOfMonth(
+                    periodStart.lengthOfMonth());
+            if (emp.getHireDate().isAfter(periodEnd)) {
+                throw new IllegalStateException(
+                        "Error de liquidación: la fecha de ingreso ("
+                        + emp.getHireDate() + ") es posterior al periodo "
+                        + req.getYear() + "-" + String.format("%02d", req.getMonth())
+                        + ". El empleado no pertenecía a la empresa en ese periodo.");
+            }
+        }
+
         // HU-NOM-03 E3: empleado sin EPS o fondo de pension -> excluido
         if (emp.getEps() == null || emp.getEps().isBlank()
                 || emp.getPensionFund() == null || emp.getPensionFund().isBlank()) {
@@ -170,12 +200,14 @@ public class PayrollService {
                     "Error de liquidación: faltan datos de seguridad social (EPS o fondo de pensión)");
         }
 
-        // HU-NOM-03: evitar duplicados por empleado/periodo
-        if (receiptRepository.existsByEmployeeIdAndPeriodYearAndPeriodMonthAndDeletedAtIsNull(
+        // HU-NOM-03: evitar duplicados por empleado/periodo (excepto si es complementaria)
+        boolean isComplementary = req.getComplementaryOfReceiptId() != null;
+        if (!isComplementary && receiptRepository.existsByEmployeeIdAndPeriodYearAndPeriodMonthAndDeletedAtIsNull(
                 emp.getId(), req.getYear(), req.getMonth())) {
             throw new IllegalStateException(
                     "Ya existe un recibo para " + req.getYear() + "-" + req.getMonth()
-                    + " del empleado " + emp.getFullName());
+                    + " del empleado " + emp.getFullName()
+                    + ". Si necesita corregir, use Nomina Complementaria desde el recibo CERRADO.");
         }
 
         BigDecimal salary = emp.getBaseSalary();
@@ -255,6 +287,7 @@ public class PayrollService {
                 .totalEmployerContributions(totalEmployer)
                 .netPay(netPay)
                 .status("DRAFT")
+                .complementaryOfReceiptId(req.getComplementaryOfReceiptId())
                 .build();
         receipt = receiptRepository.save(receipt);
 
@@ -494,5 +527,82 @@ public class PayrollService {
         List<PayrollLine> lines = lineRepository
                 .findByReceiptIdAndDeletedAtIsNullOrderByLineOrder(r.getId());
         return PayrollReceiptDTO.from(r, employeeName, employeeDoc, lines);
+    }
+
+    /**
+     * HU-NOM-03 DEF#2 (2026-04-28): editar amount de una linea SOLO en DRAFT.
+     * Recalcula totales del recibo a partir de las lineas activas.
+     */
+    @Transactional
+    public PayrollReceiptDTO updateLine(Long receiptId, Long lineId, BigDecimal newAmount) {
+        PayrollReceipt r = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new IllegalArgumentException("Recibo no encontrado"));
+        if (!"DRAFT".equals(r.getStatus())) {
+            throw new IllegalStateException(
+                    "Solo se pueden editar lineas de recibos en BORRADOR. "
+                    + "Estado actual: " + r.getStatus()
+                    + ". Para correcciones post-aprobacion use Nomina Complementaria.");
+        }
+        if (newAmount == null || newAmount.signum() < 0) {
+            throw new IllegalArgumentException("El monto debe ser >= 0");
+        }
+        PayrollLine line = lineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Linea no encontrada"));
+        if (!receiptId.equals(line.getReceiptId())) {
+            throw new IllegalArgumentException("La linea no pertenece a este recibo");
+        }
+        line.setAmount(newAmount.setScale(2, RoundingMode.HALF_UP));
+        lineRepository.save(line);
+        recomputeTotals(r);
+        receiptRepository.save(r);
+        auditPublisher.publishUpdate(AuditModule.NOM, "PayrollLine", lineId,
+                "Linea " + line.getConceptCode() + " del recibo #" + receiptId
+                + " actualizada a " + newAmount);
+        return toDTO(r);
+    }
+
+    /**
+     * HU-NOM-03 DEF#2 (2026-04-28): eliminar (soft) linea SOLO en DRAFT.
+     * Recalcula totales del recibo.
+     */
+    @Transactional
+    public PayrollReceiptDTO deleteLine(Long receiptId, Long lineId) {
+        PayrollReceipt r = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new IllegalArgumentException("Recibo no encontrado"));
+        if (!"DRAFT".equals(r.getStatus())) {
+            throw new IllegalStateException(
+                    "Solo se pueden eliminar lineas de recibos en BORRADOR. "
+                    + "Estado actual: " + r.getStatus());
+        }
+        PayrollLine line = lineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Linea no encontrada"));
+        if (!receiptId.equals(line.getReceiptId())) {
+            throw new IllegalArgumentException("La linea no pertenece a este recibo");
+        }
+        // Soft delete via @SQLDelete del entity
+        lineRepository.delete(line);
+        recomputeTotals(r);
+        receiptRepository.save(r);
+        auditPublisher.publishDelete(AuditModule.NOM, "PayrollLine", lineId,
+                "Linea " + line.getConceptCode() + " del recibo #" + receiptId + " eliminada");
+        return toDTO(r);
+    }
+
+    /** Recalcula totalEarnings, totalDeductions, totalEmployer y netPay desde las lineas activas. */
+    private void recomputeTotals(PayrollReceipt r) {
+        List<PayrollLine> lines = lineRepository
+                .findByReceiptIdAndDeletedAtIsNullOrderByLineOrder(r.getId());
+        BigDecimal totEarn = BigDecimal.ZERO, totDed = BigDecimal.ZERO, totEmp = BigDecimal.ZERO;
+        for (PayrollLine l : lines) {
+            switch (l.getLineType()) {
+                case "EARNING" -> totEarn = totEarn.add(l.getAmount());
+                case "DEDUCTION" -> totDed = totDed.add(l.getAmount());
+                case "EMPLOYER_CONTRIBUTION" -> totEmp = totEmp.add(l.getAmount());
+            }
+        }
+        r.setTotalEarnings(totEarn);
+        r.setTotalDeductions(totDed);
+        r.setTotalEmployerContributions(totEmp);
+        r.setNetPay(totEarn.subtract(totDed));
     }
 }

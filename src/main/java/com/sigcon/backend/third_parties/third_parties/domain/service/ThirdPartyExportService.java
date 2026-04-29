@@ -32,7 +32,18 @@ public class ThirdPartyExportService {
      * Exporta todos los terceros activos en formato CSV.
      */
     public byte[] exportCsv() {
-        List<ThirdParty> terceros = thirdPartyRepository.findAll();
+        return exportCsv(null, null);
+    }
+
+    /**
+     * HU-TER-09 E1/E3 (2026-04-27): exportar con filtros opcionales por rol
+     * (CLIENTE/PROVEEDOR/EMPLEADO/ACREEDOR/DEUDOR/OTRO) y estado
+     * (ACTIVO/INACTIVO/BLOQUEADO). Si no se aplican filtros, exporta todos.
+     * Si los filtros no devuelven resultados, retorna archivo vacio con
+     * solo headers (frontend mostrara mensaje "No se encontraron registros").
+     */
+    public byte[] exportCsv(String roleFilter, String statusFilter) {
+        List<ThirdParty> terceros = applyFilters(thirdPartyRepository.findAll(), roleFilter, statusFilter);
         StringBuilder sb = new StringBuilder();
 
         // BOM UTF-8 para compatibilidad con Excel
@@ -64,7 +75,11 @@ public class ThirdPartyExportService {
      * Exporta todos los terceros activos en formato Excel (XLSX).
      */
     public byte[] exportExcel() {
-        List<ThirdParty> terceros = thirdPartyRepository.findAll();
+        return exportExcel(null, null);
+    }
+
+    public byte[] exportExcel(String roleFilter, String statusFilter) {
+        List<ThirdParty> terceros = applyFilters(thirdPartyRepository.findAll(), roleFilter, statusFilter);
 
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Terceros");
@@ -125,5 +140,27 @@ public class ThirdPartyExportService {
 
     private String safe(String value) {
         return value != null ? value : "";
+    }
+
+    /**
+     * HU-TER-09 E1/E3: filtra el listado por rol y/o estado (case-insensitive).
+     * Acepta tanto el code (ej. CLIENT) como el nombre traducido (ej. Cliente).
+     * Si los filtros son null o vacios, devuelve la lista intacta.
+     */
+    private List<ThirdParty> applyFilters(List<ThirdParty> source, String roleFilter, String statusFilter) {
+        List<ThirdParty> result = source;
+        if (statusFilter != null && !statusFilter.isBlank()) {
+            String needle = statusFilter.trim();
+            result = result.stream().filter(tp -> tp.getStatus() != null
+                    && needle.equalsIgnoreCase(tp.getStatus().getName()))
+                    .collect(Collectors.toList());
+        }
+        if (roleFilter != null && !roleFilter.isBlank()) {
+            String needle = roleFilter.trim();
+            result = result.stream().filter(tp -> tp.getRoles() != null && tp.getRoles().stream()
+                    .anyMatch(r -> needle.equalsIgnoreCase(r.getName())))
+                    .collect(Collectors.toList());
+        }
+        return result;
     }
 }

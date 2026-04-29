@@ -29,7 +29,13 @@ public class BankDTO {
     private Long id;
 
     @NotBlank(message = "El código del banco no puede ser nulo")
-    @Schema(description = "Código oficial del banco", example = "B001")
+    // QA HU-006 E1: el regex ahora acepta guion para codigos como BC-001 que ya
+    // existen en BD (seeds). Antes era ^[A-Za-z0-9]+$ y rechazaba guiones.
+    @jakarta.validation.constraints.Pattern(
+            regexp = "^[A-Za-z0-9-]+$",
+            message = "El código solo admite letras, números y guion (-)")
+    @jakarta.validation.constraints.Size(min = 2, max = 20)
+    @Schema(description = "Código oficial del banco", example = "BC-001")
     private String code;
 
     @NotBlank(message = "El nombre del banco no puede ser nulo")
@@ -69,7 +75,10 @@ public class BankDTO {
     @Schema(description = "URL del webservice del banco", example = "https://api.banco.com")
     private String urlWebservice;
 
-    @Schema(description = "Días de conciliación del banco", example = "3")
+    // QA HU-006 E2: dias entre 1 y 31. Antes aceptaba cualquier valor.
+    @jakarta.validation.constraints.Min(value = 1, message = "Los días de conciliación deben estar entre 1 y 31")
+    @jakarta.validation.constraints.Max(value = 31, message = "Los días de conciliación deben estar entre 1 y 31")
+    @Schema(description = "Días de conciliación del banco (1-31)", example = "3")
     private Integer conciliationDays;
 
     @Schema(description = "Teléfono principal del banco", example = "6012345678")
@@ -86,4 +95,13 @@ public class BankDTO {
 
     @Schema(description = "Fecha de última actualización")
     private LocalDateTime updatedAt;
+
+    // QA HU-008 E1: el frontend deshabilita campos criticos (codigo, NIT) si
+    // el banco ya tiene cuentas bancarias asociadas. Backend calcula este flag
+    // para que la UI no tenga que hacer un GET adicional.
+    @Schema(description = "Tiene cuentas bancarias asociadas (vigentes)")
+    private Boolean hasAssociatedAccounts;
+
+    @Schema(description = "Tiene cuentas bancarias asociadas en estado ACTIVA")
+    private Boolean hasActiveAssociatedAccounts;
 }

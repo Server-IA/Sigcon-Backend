@@ -70,6 +70,15 @@ public class PurchaseOrderService {
         ThirdParty thirdParty = thirdPartyRepository.findById(request.getThirdPartyId())
                 .orElseThrow(() -> new IllegalArgumentException("El proveedor no fue encontrado"));
 
+        // HU-AP-16 E2 (2026-04-28): bloquear OC con proveedor inactivo o
+        // bloqueado. Antes el sistema permitia crear ordenes de compra a
+        // proveedores en cualquier estado.
+        if (thirdParty.getStatus() != null
+                && !"ACTIVO".equalsIgnoreCase(thirdParty.getStatus().getName())) {
+            throw new IllegalStateException(
+                    "El proveedor no esta activo o no existe en el sistema.");
+        }
+
         // 2. Generar numero de orden
         String orderNumber = generateOrderNumber();
 
@@ -293,6 +302,10 @@ public class PurchaseOrderService {
 
         order = orderRepository.save(order);
         log.info("Orden de compra {} aprobada por usuario {}", order.getOrderNumber(), order.getApprovedBy());
+        // HU-AP-18 E1 (2026-04-28): registrar la aprobacion en auditoria.
+        auditPublisher.publishUpdate(AuditModule.AP, "PurchaseOrder", order.getId(),
+                "OC " + order.getOrderNumber() + " APROBADA por user " + order.getApprovedBy()
+                        + " (monto $" + order.getTotalAmount() + ")");
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -323,6 +336,9 @@ public class PurchaseOrderService {
 
         order = orderRepository.save(order);
         log.info("Orden de compra {} rechazada: {}", order.getOrderNumber(), request.getRejectionReason());
+        // HU-AP-18 E2 (2026-04-28): registrar el rechazo en auditoria con motivo.
+        auditPublisher.publishUpdate(AuditModule.AP, "PurchaseOrder", order.getId(),
+                "OC " + order.getOrderNumber() + " RECHAZADA - motivo: " + request.getRejectionReason());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

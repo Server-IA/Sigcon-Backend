@@ -22,6 +22,7 @@ import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalE
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountNature;
+import com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository;
 import com.sigcon.backend.utils.SuccessRespondJson;
 
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,10 @@ import lombok.extern.slf4j.Slf4j;
 public class AccountingBookService {
 
     private final JournalEntryRepository journalEntryRepository;
+    // QA imagen 3: validar accountId antes de construir Libro Mayor para evitar
+    // 500 "Unable to find AccountingAccount with id N" cuando el dropdown del
+    // frontend tenia un id stale (cambio de tenant, cuenta soft-deleted, etc).
+    private final AccountingAccountRepository accountingAccountRepository;
 
     // ───────────────────────────────────────────────────────────────
     // Libro Diario
@@ -56,10 +61,50 @@ public class AccountingBookService {
      * @return lista de asientos con sus lineas, en formato Libro Diario
      */
     public ResponseEntity<?> getLibroDiario(Integer year, Integer month) {
+        return getLibroDiario(year, month, null, null, null);
+    }
+
+    /**
+     * HU-CG-06C E3: Variante con filtros adicionales por cuenta y rango de fechas.
+     * Si dateFrom/dateTo vienen, prevalecen sobre year/month. Si accountId viene,
+     * filtra solo asientos que tengan al menos una linea con esa cuenta.
+     */
+    public ResponseEntity<?> getLibroDiario(Integer year, Integer month,
+                                              Long accountId, String dateFrom, String dateTo) {
         List<LibroDiarioDTO> result = buildLibroDiario(year, month);
+        // Filtrado en memoria: aceptable porque el resultado de buildLibroDiario ya
+        // esta acotado al periodo. Si se requiere optimizar, el filter podria moverse
+        // a la query JPA con un metodo nuevo en JournalEntryRepository.
+        java.time.LocalDate from = parseDateOrNull(dateFrom);
+        java.time.LocalDate to = parseDateOrNull(dateTo);
+        if (from != null || to != null) {
+            result = result.stream()
+                    .filter(d -> (from == null || !d.getDate().isBefore(from))
+                              && (to == null || !d.getDate().isAfter(to)))
+                    .collect(Collectors.toList());
+        }
+        if (accountId != null) {
+            result = result.stream()
+                    .filter(d -> d.getLines() != null && d.getLines().stream()
+                            .anyMatch(l -> accountId.equals(l.getAccountingAccountId())))
+                    .collect(Collectors.toList());
+        }
+        String periodo = (from != null || to != null)
+                ? "rango " + (from != null ? from : "*") + " a " + (to != null ? to : "*")
+                : year + "-" + String.format("%02d", month);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-                Optional.of("Libro Diario generado correctamente para " + year + "-" + String.format("%02d", month)),
+                Optional.of("Libro Diario generado correctamente para " + periodo),
                 Optional.of(result)));
+    }
+
+    /** Parsea yyyy-MM-dd o devuelve null si la cadena es invalida o vacia. */
+    private static java.time.LocalDate parseDateOrNull(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return java.time.LocalDate.parse(s.trim());
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     /**
@@ -130,7 +175,90 @@ public class AccountingBookService {
      * @param accountId identificador de cuenta especifica (opcional, null = todas)
      * @return lista de cuentas con totales de debito, credito y saldo
      */
+    /**
+     * HU-CG-06C E3: variante con filtro por rango de fechas. Si dateFrom/dateTo
+     * estan presentes, filtra los asientos a las lineas cuyo entryDate caiga en
+     * el rango. Reutiliza la logica original cuando no hay rango.
+     */
+    public ResponseEntity<?> getLibroMayor(Integer year, Integer month, Long accountId,
+                                            String dateFrom, String dateTo) {
+        java.time.LocalDate from = parseDateOrNull(dateFrom);
+        java.time.LocalDate to = parseDateOrNull(dateTo);
+        if (from == null && to == null) {
+            return getLibroMayor(year, month, accountId);
+        }
+        // Validar accountId stale
+        if (accountId != null) {
+            boolean exists = accountingAccountRepository.findById(accountId).isPresent();
+            if (!exists) {
+                return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("La cuenta seleccionada no existe en esta empresa. "
+                                + "Recargue el listado de cuentas."),
+                        Optional.of(java.util.Collections.emptyList())));
+            }
+        }
+        // Construir mayor por rango: leer asientos POSTED y filtrar por fecha + cuenta
+        List<JournalEntry> entries = journalEntryRepository.findByPeriodAndStatus(
+                year, month, JournalEntryStatus.POSTED);
+        Map<Long, LibroMayorAccumulator> map = new LinkedHashMap<>();
+        for (JournalEntry e : entries) {
+            if (e.getEntryDate() == null) continue;
+            if (from != null && e.getEntryDate().isBefore(from)) continue;
+            if (to != null && e.getEntryDate().isAfter(to)) continue;
+            if (e.getLines() == null) continue;
+            for (JournalEntryLine line : e.getLines()) {
+                if (line.getAccountingAccount() == null) continue;
+                Long accId = line.getAccountingAccount().getId();
+                if (accountId != null && !accountId.equals(accId)) continue;
+                map.computeIfAbsent(accId, k -> {
+                    String code = line.getAccountingAccount().getPucAccount() != null
+                            ? line.getAccountingAccount().getPucAccount().getCode() : "";
+                    String name = line.getAccountingAccount().getPucAccount() != null
+                            ? line.getAccountingAccount().getPucAccount().getName() : "";
+                    return new LibroMayorAccumulator(accId, code, name,
+                            line.getAccountingAccount().getNature());
+                });
+                LibroMayorAccumulator acc = map.get(accId);
+                acc.totalDebit = acc.totalDebit.add(
+                        line.getDebitAmount() != null ? line.getDebitAmount() : BigDecimal.ZERO);
+                acc.totalCredit = acc.totalCredit.add(
+                        line.getCreditAmount() != null ? line.getCreditAmount() : BigDecimal.ZERO);
+            }
+        }
+        List<LibroMayorDTO> result = map.values().stream()
+                .sorted(Comparator.comparing(a -> a.pucCode))
+                .map(acc -> LibroMayorDTO.builder()
+                        .accountId(acc.accountId)
+                        .pucCode(acc.pucCode)
+                        .accountName(acc.accountName)
+                        .totalDebit(acc.totalDebit)
+                        .totalCredit(acc.totalCredit)
+                        .balance(acc.nature == AccountNature.CREDIT
+                                ? acc.totalCredit.subtract(acc.totalDebit)
+                                : acc.totalDebit.subtract(acc.totalCredit))
+                        .build())
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Libro Mayor generado correctamente para rango "
+                        + (from != null ? from : "*") + " a " + (to != null ? to : "*")),
+                Optional.of(result)));
+    }
+
     public ResponseEntity<?> getLibroMayor(Integer year, Integer month, Long accountId) {
+        // QA imagen 3 / AP-01 anexo: si el frontend manda un accountId que no
+        // existe en el tenant (state stale o cuenta soft-deleted), evitar 500
+        // y devolver lista vacia con mensaje claro. El @PostLoad de la entidad
+        // tiraba TenantIsolationException -> mapeada a 404 con texto genérico,
+        // y tambien Hibernate podia tirar EntityNotFoundException 500.
+        if (accountId != null) {
+            boolean exists = accountingAccountRepository.findById(accountId).isPresent();
+            if (!exists) {
+                return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("La cuenta seleccionada no existe en esta empresa. "
+                                + "Recargue el listado de cuentas."),
+                        Optional.of(java.util.Collections.emptyList())));
+            }
+        }
         List<LibroMayorDTO> result = buildLibroMayor(year, month, accountId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Libro Mayor generado correctamente para " + year + "-" + String.format("%02d", month)),

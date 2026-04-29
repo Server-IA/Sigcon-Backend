@@ -31,8 +31,9 @@ public class CreateSalesInvoiceRequest {
     @NotNull(message = "La fecha de factura es requerida")
     private LocalDate invoiceDate;
 
-    @Schema(description = "Fecha de vencimiento", example = "2026-05-13")
-    @NotNull(message = "La fecha de vencimiento es requerida")
+    @Schema(description = "Fecha de vencimiento. Si se omite, el sistema la calcula sumando "
+            + "los dias del termino de pago configurado en los Datos Comerciales del cliente "
+            + "(HU-AR-01A E3).", example = "2026-05-13")
     private LocalDate dueDate;
 
     @Schema(description = "ID de la moneda (null = COP)", example = "1")

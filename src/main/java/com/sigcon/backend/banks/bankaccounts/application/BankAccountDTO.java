@@ -76,4 +76,29 @@ public class BankAccountDTO {
 
     @Schema(description = "Fecha de eliminación lógica")
     private LocalDateTime deletedAt;
+
+    // QA HU-001 E5 / HU-002 E2/E3 / HU-008 E1: campos faltantes en el DTO.
+    // Antes el toDto NO los incluia y al re-abrir el modal de edicion los
+    // toggles y descripcion aparecian vacios (NO persistian aparentemente).
+
+    @Schema(description = "Descripcion libre de la cuenta")
+    private String description;
+
+    @Schema(description = "Permite sobregiro")
+    private Boolean allowsOverdraft;
+
+    @Schema(description = "Limite de credito (cupo)")
+    private BigDecimal creditLimit;
+
+    @Schema(description = "Notificar saldo minimo")
+    private Boolean notifyLowBalance;
+
+    @Schema(description = "Saldo minimo configurado")
+    private BigDecimal minimumBalance;
+
+    @Schema(description = "Telefono de banco / sucursal")
+    private String bankPhone;
+
+    @Schema(description = "Indica si la cuenta tiene chequeras o movimientos asociados (frontend deshabilita campos criticos)")
+    private Boolean hasAssociatedAccounts;
 }

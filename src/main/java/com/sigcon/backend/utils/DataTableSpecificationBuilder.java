@@ -38,11 +38,19 @@ public class DataTableSpecificationBuilder<T> {
                 for (DataTableRequest.DataTableColumn column : request.getColumns()) {
     
                     if (!column.isSearchable()) continue;
-    
-                    String field = column.getData();
-                    Path<?> path = getPath(root, field);
+
+                    String field = resolveFieldName(column);
+                    Path<?> path;
+                    try {
+                        path = getPath(root, field);
+                    } catch (IllegalArgumentException ex) {
+                        // Campo virtual del DTO sin atributo real en la entidad
+                        // (ej. column.data='thirdPartyName' sin name='thirdParty.businessName').
+                        // Lo saltamos en busqueda en lugar de tumbar la query con HTTP 400.
+                        continue;
+                    }
                     Class<?> type = path.getJavaType();
-    
+
                     /* -------- STRING -------- */
                     if (String.class.equals(type)) {
                         if (regex) {
@@ -145,7 +153,7 @@ public class DataTableSpecificationBuilder<T> {
                         continue;
                     }
     
-                    String field = column.getData();
+                    String field = resolveFieldName(column);
                     String searchValue = column.getSearch().getValue().trim();
 
                     if (!searchValue.matches("^[a-zA-Z0-9_\\-\\s%,.]+$")) {
@@ -153,8 +161,14 @@ public class DataTableSpecificationBuilder<T> {
                     }
 
                     boolean regex = column.getSearch().isRegex();
-    
-                    Path<?> path = getPath(root, field);
+
+                    Path<?> path;
+                    try {
+                        path = getPath(root, field);
+                    } catch (IllegalArgumentException ex) {
+                        // Campo virtual sin mapping a entidad: ignorar este filtro de columna.
+                        continue;
+                    }
                     Class<?> type = path.getJavaType();
     
                     /* -------- IN (multi-select) -------- */
@@ -262,6 +276,24 @@ public class DataTableSpecificationBuilder<T> {
         };
     }
     
+
+    /**
+     * Resuelve el nombre del atributo a usar para construir la query.
+     * Prioridad:
+     *   1. column.name (cuando es un dot-path explicito tipo "thirdParty.businessName")
+     *   2. column.data (cuando es un atributo plano)
+     * El name se prefiere porque permite que el frontend mantenga `data` igual al campo
+     * del DTO de respuesta (para render con DataTables) y al mismo tiempo apunte a
+     * la columna real de la entidad para filtrar/buscar.
+     */
+    private String resolveFieldName(DataTableRequest.DataTableColumn column) {
+        String name = column.getName();
+        String data = column.getData();
+        if (name != null && !name.isBlank() && !name.equals(data)) {
+            return name;
+        }
+        return data;
+    }
 
     private Path<?> getPath(Root<T> root, String field) {
         if(field.equals("roles")) {

@@ -54,6 +54,8 @@ public class IntegrationAdminController {
     private final JwtConfigService jwtConfigService;
     private final AgroFusionJwtValidator jwtValidator;
     private final JwtAuditService jwtAuditService;
+    // Spec AAEF Bloque W: scheduler de retencion 5 anios.
+    private final com.sigcon.backend.integration.domain.service.IntegrationRetentionScheduler retentionScheduler;
 
     @Operation(
         summary = "Inspeccionar configuracion JWT actualmente cacheada",
@@ -180,5 +182,29 @@ public class IntegrationAdminController {
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> jwtAuditSummary() {
         return ResponseEntity.ok(jwtAuditService.summary());
+    }
+
+    // ===================================================================
+    // Spec AAEF Bloque W: Retencion 5 anios automatica
+    // ===================================================================
+
+    @Operation(
+        summary = "Forzar purga de retencion AAEF (manual)",
+        description = "Ejecuta la purga inmediata de batches/transfers AAEF mas viejos "
+                    + "que el cutoff (5 anios por defecto, configurable via parametro "
+                    + "AGROFUSION_RETENTION_YEARS). Util para auditorias o limpieza puntual. "
+                    + "Tambien corre automaticamente cada noche a las 03:00 AM via "
+                    + "IntegrationRetentionScheduler. Solo ROLE_ADMIN.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Purga ejecutada con conteo de "
+                + "transfers/batches eliminados"),
+        @ApiResponse(responseCode = "401", description = "No autenticado"),
+        @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
+    })
+    @org.springframework.web.bind.annotation.PostMapping(value = "/retention/run",
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> runRetention() {
+        return ResponseEntity.ok(retentionScheduler.runRetentionManually());
     }
 }

@@ -172,4 +172,40 @@ public class RetentionController {
     public ResponseEntity<?> status() {
         return service.getStatus();
     }
+
+    /**
+     * HU-AU-10 E6 (2026-04-28): descarga PDF de evidencia de un lote de purga.
+     * Incluye metadata + hash SHA-256 del lote para verificacion de integridad.
+     */
+    @Operation(
+        summary = "Descargar PDF de evidencia de purga (HU-AU-10 E6)",
+        description = "Genera PDF con metadata del proceso (fecha, usuario, lote) + hash SHA-256 "
+                    + "global. NO firmado digitalmente — el hash sirve como evidencia de integridad. "
+                    + "Para firma digital con certificado X.509 ver HU-AU-11.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "PDF generado"),
+        @ApiResponse(responseCode = "404", description = "Registro de purga no encontrado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @GetMapping("/purge/records/{id}/pdf")
+    public ResponseEntity<?> downloadPurgePdf(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        try {
+            byte[] body = service.exportPurgeRecordPdf(id);
+            return ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=audit-purge-" + id + ".pdf")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                    .body(body);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(java.util.Map.of(
+                    "error", e.getMessage(),
+                    "message", e.getMessage(),
+                    "msg", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(java.util.Map.of(
+                    "error", "No se pudo generar el reporte en el formato solicitado",
+                    "message", "No se pudo generar el reporte en el formato solicitado",
+                    "msg", "No se pudo generar el reporte en el formato solicitado"));
+        }
+    }
 }

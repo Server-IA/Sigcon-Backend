@@ -1,6 +1,7 @@
 package com.sigcon.backend.general.accounting.journal.interfaces.controller;
 
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
@@ -51,6 +52,7 @@ public class JournalEntryController {
     private final JournalEntryService journalEntryService;
     private final JournalEntryExportService journalEntryExportService;
     private final AuditPublisher auditPublisher;
+    private final com.sigcon.backend.audit.domain.service.AuditLogService auditLogService;
 
     // ─────────────────────────────────────────────────────
     // Busqueda paginada DataTable
@@ -91,7 +93,10 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "Error de validacion (partida doble, periodo cerrado, cuenta inactiva)"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    // HU-CG-03A E1: el rol CONTADOR debe poder crear comprobantes contables.
+    // Antes solo aceptaba ROLE_ADMIN -> 403 al CONTADOR. V9-ZZM agrega
+    // PERM_CREATE_JOURNAL_ENTRY al rol CONTADOR.
+    @PreAuthorize("hasAuthority('PERM_CREATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody CreateJournalEntryRequest request,
             Authentication authentication) {
@@ -157,7 +162,9 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "El asiento no esta en estado BORRADOR"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    // HU-CG-02B: contabilizar requiere permiso APPROVE (no solo VIEW).
+    // Segregacion de funciones: el operador VIEW solo lee, contabilizar es accion.
+    @PreAuthorize("hasAuthority('PERM_APPROVE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> post(@PathVariable Long id) {
         try {
             JournalEntryDTO result = journalEntryService.postEntry(id);
@@ -185,7 +192,8 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "El asiento no esta en estado CONTABILIZADO o el periodo esta cerrado"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    // HU-CG-07B: reversar requiere permiso REVERSE explicito.
+    @PreAuthorize("hasAuthority('PERM_REVERSE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> reverse(
             @PathVariable Long id,
             @Valid @RequestBody ReverseEntryRequest request,
@@ -239,7 +247,8 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "Asiento no esta en DRAFT, partida doble desbalanceada, o periodo cerrado"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    // HU-CG-07A: editar borrador requiere permiso UPDATE.
+    @PreAuthorize("hasAuthority('PERM_UPDATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @Valid @RequestBody CreateJournalEntryRequest request) {
         try {
@@ -266,7 +275,9 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "Asiento original no esta CONTABILIZADO o validacion fallida"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    // HU-CG-07B: crear correccion sobre POSTED requiere permiso UPDATE
+    // (genera un DRAFT nuevo, no toca el original).
+    @PreAuthorize("hasAuthority('PERM_UPDATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> correct(@PathVariable Long id,
                                       @Valid @RequestBody CreateJournalEntryRequest request) {
         try {
@@ -294,7 +305,8 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "El asiento no esta en estado BORRADOR"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    // Eliminar (soft) requiere permiso DELETE explicito.
+    @PreAuthorize("hasAuthority('PERM_DELETE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             journalEntryService.deleteEntry(id);
@@ -307,6 +319,71 @@ public class JournalEntryController {
     // ─────────────────────────────────────────────────────
     // Documentos relacionados (HU-CG-08C E2)
     // ─────────────────────────────────────────────────────
+
+    /**
+     * HU-CG-07C E1/E2/E3: arbol completo de versiones del comprobante.
+     * Recorre RECURSIVAMENTE las relaciones reversalOf/correctionOf desde la raiz
+     * y devuelve un grafo plano con todas las versiones (originales + correcciones
+     * + reversiones) vinculadas. Cada nodo trae parentId + depth para que el
+     * frontend renderice un arbol jerarquico.
+     */
+    @GetMapping("/{id}/versions")
+    @Operation(
+            summary = "Historial completo de versiones del comprobante",
+            description = "HU-CG-07C: Arbol jerarquico de TODAS las versiones (originales, "
+                        + "correcciones y reversiones) vinculadas al comprobante. Util para "
+                        + "auditoria forense contable. Incluye parentId + depth por nodo."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Historial de versiones obtenido"),
+            @ApiResponse(responseCode = "404", description = "Comprobante no encontrado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> versionHistory(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(Map.of(
+                    "data", journalEntryService.getVersionHistory(id)
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
+        }
+    }
+
+    /**
+     * HU-AU-09 E5 (2026-04-28): consulta inversa via FK bidireccional.
+     * Retorna el log de auditoria principal del JE + todos los logs vinculados
+     * (los que tengan journal_entry_id apuntando a este id).
+     */
+    @GetMapping("/{id}/audit-trail")
+    @Operation(
+            summary = "Trazabilidad de auditoria del comprobante (HU-AU-09 E5)",
+            description = "Retorna el log principal de creacion (JE.audit_log_id) + "
+                        + "todos los logs vinculados a este JE (journal_entry_id). "
+                        + "Confirma vinculacion bidireccional para cumplimiento normativo."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Trazabilidad obtenida"),
+            @ApiResponse(responseCode = "400", description = "Asiento no encontrado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> auditTrail(@PathVariable Long id) {
+        try {
+            var je = journalEntryService.getEntry(id);
+            Map<String, Object> response = new HashMap<>();
+            response.put("journalEntryId", id);
+            response.put("auditLogId", je.getAuditLogId());
+            response.put("voucherCode", je.getVoucherCode());
+            response.put("status", je.getStatus());
+            // Logs adicionales: por journalEntryId
+            response.put("relatedAuditLogs", auditLogService.findByJournalEntry(id));
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", e.getMessage() != null ? e.getMessage() : "Asiento contable no encontrado",
+                    "message", e.getMessage() != null ? e.getMessage() : "Asiento contable no encontrado",
+                    "msg", e.getMessage() != null ? e.getMessage() : "Asiento contable no encontrado"));
+        }
+    }
 
     @GetMapping("/{id}/related-docs")
     @Operation(

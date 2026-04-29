@@ -42,7 +42,9 @@ public class LiquidatePayrollRequest {
     @Schema(description = "Mes del periodo (1-12)", requiredMode = Schema.RequiredMode.REQUIRED, example = "4")
     private Integer month;
 
-    @Schema(description = "Tipo de periodo", allowableValues = {"MONTHLY", "BIWEEKLY"}, example = "MONTHLY")
+    // HU-NOM-04 DEF#1 (2026-04-28): incluir WEEKLY ademas de MONTHLY/BIWEEKLY
+    @Schema(description = "Tipo de periodo",
+            allowableValues = {"MONTHLY", "BIWEEKLY", "WEEKLY"}, example = "MONTHLY")
     @Builder.Default
     private String periodType = "MONTHLY";
 
@@ -58,6 +60,12 @@ public class LiquidatePayrollRequest {
 
     @Schema(description = "Extras opcionales por empleado (horas extras, bonif, etc.)")
     private List<ExtraLine> extras;
+
+    /** HU-NOM-04 DEF#2 (2026-04-28): si es complementaria, ID del recibo CLOSED original. */
+    @Schema(description = "Si presente, crea liquidacion complementaria del recibo CLOSED indicado. "
+            + "El recibo nuevo se crea para el mismo empleado y queda DRAFT independiente.",
+            example = "42")
+    private Long complementaryOfReceiptId;
 
     @Data
     @Builder

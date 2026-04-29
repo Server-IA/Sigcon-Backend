@@ -8,7 +8,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.LocalDate;
 
 import com.sigcon.backend.invoices.ap_reports.domain.service.ApReportService;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -89,6 +91,31 @@ public class ApReportController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * HU-AP-21 (2026-04-28): Reporte de Ordenes de Compra con filtros opcionales.
+     */
+    @Operation(summary = "Reporte de Ordenes de Compra",
+        description = "Reporte agregado de OCs por estado + listado filtrable (proveedor, estado, rango fechas)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Reporte generado")
+    })
+    @PostMapping("/purchase-orders")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> getPurchaseOrdersReport(
+            @RequestParam(required = false) Long thirdPartyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo) {
+        try {
+            LocalDate from = (dateFrom != null && !dateFrom.isBlank()) ? LocalDate.parse(dateFrom) : null;
+            LocalDate to = (dateTo != null && !dateTo.isBlank()) ? LocalDate.parse(dateTo) : null;
+            return reportService.getPurchaseOrdersReport(thirdPartyId, status, from, to);
+        } catch (java.time.format.DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Formato fecha invalido (yyyy-MM-dd)")));
         }
     }
 }

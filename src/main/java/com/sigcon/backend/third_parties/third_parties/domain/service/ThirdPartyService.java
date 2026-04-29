@@ -99,6 +99,8 @@ public class ThirdPartyService {
     private final CommercialDataRepository commercialDataRepository;
     /** TER-10 x NOM: bloquea eliminacion si el tercero es empleado activo. */
     private final com.sigcon.backend.nomina.domain.repository.EmployeeRepository employeeRepository;
+    /** HU-TER-10 E1/E3 (2026-04-27): bloquea eliminacion si tiene facturas AR. */
+    private final com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository salesInvoiceRepository;
     private final UserUtil userUtil;
     private final ApplicationEventPublisher eventPublisher;
     private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -217,49 +219,66 @@ public class ThirdPartyService {
         Set<String> seenNitsInFile = new HashSet<>();
         List<ThirdParty> toCreate = new ArrayList<>();
         List<ThirdParty> toUpdate = new ArrayList<>();
+        // HU-TER-07 E2/E3 (2026-04-27): procesamiento tolerante. Acumular
+        // errores por fila en lugar de tirar excepcion al primer fallo.
+        List<BulkThirdPartyUploadResponse.BulkRowError> errors = new ArrayList<>();
         long codeSequence = thirdPartyRepository.count() + 1;
 
         for (BulkThirdPartyRow row : rows) {
-            validateBulkRow(row);
-            String normalizedNit = row.nit().trim();
-            if (!seenNitsInFile.add(normalizedNit)) {
-                throw new IllegalArgumentException(
-                        "BULK_002: Linea " + row.line() + ": NIT duplicado en archivo/sistema.");
-            }
+            try {
+                validateBulkRow(row);
+                String normalizedNit = row.nit().trim();
+                if (!seenNitsInFile.add(normalizedNit)) {
+                    errors.add(BulkThirdPartyUploadResponse.BulkRowError.builder()
+                            .line(row.line()).nit(normalizedNit)
+                            .message("NIT duplicado en archivo").build());
+                    continue;
+                }
 
-            List<ThirdParty> existingByNit = thirdPartyRepository.findByNitAndDeletedAtIsNull(normalizedNit);
-            if (!existingByNit.isEmpty() && !overwrite) {
-                throw new IllegalArgumentException(
-                        "BULK_002: Linea " + row.line() + ": NIT duplicado en archivo/sistema.");
-            }
-            if (existingByNit.size() > 1) {
-                throw new IllegalArgumentException(
-                        "BULK_004: Error en linea " + row.line() + ": existen multiples terceros con el mismo NIT.");
-            }
+                List<ThirdParty> existingByNit = thirdPartyRepository.findByNitAndDeletedAtIsNull(normalizedNit);
+                if (!existingByNit.isEmpty() && !overwrite) {
+                    errors.add(BulkThirdPartyUploadResponse.BulkRowError.builder()
+                            .line(row.line()).nit(normalizedNit)
+                            .message("NIT ya registrado en el sistema").build());
+                    continue;
+                }
+                if (existingByNit.size() > 1) {
+                    errors.add(BulkThirdPartyUploadResponse.BulkRowError.builder()
+                            .line(row.line()).nit(normalizedNit)
+                            .message("Existen multiples terceros con el mismo NIT").build());
+                    continue;
+                }
 
-            ThirdPartyStatusCatalog status = resolveStatusByName(row.status(), statusesByName, row.line());
-            validateAllowedBulkStatus(status, row.line());
-            Set<ThirdPartyRoleCatalog> roles = resolveRolesByNames(row.thirdPartyType(), rolesByName, row.line());
-            Municipality municipality = resolveMunicipalityForBulk(row.municipality(), row.line());
+                ThirdPartyStatusCatalog status = resolveStatusByName(row.status(), statusesByName, row.line());
+                validateAllowedBulkStatus(status, row.line());
+                Set<ThirdPartyRoleCatalog> roles = resolveRolesByNames(row.thirdPartyType(), rolesByName, row.line());
+                Municipality municipality = resolveMunicipalityForBulk(row.municipality(), row.line());
 
-            if (existingByNit.isEmpty()) {
-                ThirdParty entity = ThirdParty.builder()
-                        .thirdPartyCode(String.format("TER%d%06d", LocalDate.now().getYear(), codeSequence++))
-                        .nit(normalizedNit)
-                        .dv(resolveBulkDv(row.dv(), row.line()))
-                        .businessName(row.businessName().trim())
-                        .roles(roles)
-                        .status(status)
-                        .municipality(municipality)
-                        .build();
-                toCreate.add(entity);
-            } else {
-                ThirdParty entity = existingByNit.get(0);
-                entity.setBusinessName(row.businessName().trim());
-                entity.setMunicipality(municipality);
-                entity.setStatus(status);
-                entity.setRoles(roles);
-                toUpdate.add(entity);
+                if (existingByNit.isEmpty()) {
+                    ThirdParty entity = ThirdParty.builder()
+                            .thirdPartyCode(String.format("TER%d%06d", LocalDate.now().getYear(), codeSequence++))
+                            .nit(normalizedNit)
+                            .dv(resolveBulkDv(row.dv(), row.line()))
+                            .businessName(row.businessName().trim())
+                            .roles(roles)
+                            .status(status)
+                            .municipality(municipality)
+                            .build();
+                    toCreate.add(entity);
+                } else {
+                    ThirdParty entity = existingByNit.get(0);
+                    entity.setBusinessName(row.businessName().trim());
+                    entity.setMunicipality(municipality);
+                    entity.setStatus(status);
+                    entity.setRoles(roles);
+                    toUpdate.add(entity);
+                }
+            } catch (IllegalArgumentException ex) {
+                errors.add(BulkThirdPartyUploadResponse.BulkRowError.builder()
+                        .line(row.line())
+                        .nit(row.nit() == null ? "" : row.nit().trim())
+                        .message(ex.getMessage())
+                        .build());
             }
         }
 
@@ -274,6 +293,8 @@ public class ThirdPartyService {
                 .totalProcessed(rows.size())
                 .created(toCreate.size())
                 .updated(toUpdate.size())
+                .failed(errors.size())
+                .errors(errors)
                 .build();
 
         return ResponseEntity.ok(
@@ -465,8 +486,49 @@ public class ThirdPartyService {
             thirdParty.setMarketSegment(emptyToNull(request.getMarketSegment()));
         }
         if (request.getContacts() != null) {
-            thirdParty.getContacts().clear();
-            thirdParty.getContacts().addAll(toContactEntities(request.getContacts(), thirdParty));
+            // HU-TER-03 DEF#2 (2026-04-27): Sync incremental de contactos.
+            // Antes se usaba clear() + addAll() pero con orphanRemoval=true +
+            // @SQLDelete (soft delete) Hibernate marcaba los viejos como
+            // deleted_at != null y al re-insertar los mismos ids fallaba con
+            // DataIntegrityViolation, mostrando "empresa tiene registros
+            // asociados". Ahora se hace merge: los existentes se actualizan
+            // in-place, los faltantes se eliminan via orphanRemoval, los
+            // nuevos (sin id) se insertan.
+            Map<Long, ThirdContact> currentById = thirdParty.getContacts().stream()
+                    .filter(c -> c.getId() != null)
+                    .collect(Collectors.toMap(ThirdContact::getId, java.util.function.Function.identity(),
+                            (a, b) -> a));
+            Set<Long> incomingIds = new HashSet<>();
+            List<ThirdContact> finalList = new ArrayList<>();
+            for (ThirdContactDTO dto : request.getContacts()) {
+                if (dto.getId() != null && currentById.containsKey(dto.getId())) {
+                    ThirdContact existing = currentById.get(dto.getId());
+                    existing.setPosition(emptyToNull(dto.getPosition()));
+                    existing.setPhone(emptyToNull(dto.getPhone()));
+                    existing.setEmail(emptyToNull(dto.getEmail()));
+                    existing.setContactPerson(emptyToNull(dto.getContactPerson()));
+                    finalList.add(existing);
+                    incomingIds.add(dto.getId());
+                } else {
+                    ThirdContact fresh = ThirdContact.builder()
+                            .thirdParty(thirdParty)
+                            .position(emptyToNull(dto.getPosition()))
+                            .phone(emptyToNull(dto.getPhone()))
+                            .email(emptyToNull(dto.getEmail()))
+                            .contactPerson(emptyToNull(dto.getContactPerson()))
+                            .build();
+                    finalList.add(fresh);
+                }
+            }
+            // Reemplaza el contenido de la coleccion sin invocar clear() para
+            // preservar las referencias gestionadas por Hibernate.
+            thirdParty.getContacts().removeIf(c -> c.getId() != null && !incomingIds.contains(c.getId()));
+            // Agregar los nuevos (sin id) que no estaban antes
+            for (ThirdContact c : finalList) {
+                if (c.getId() == null && !thirdParty.getContacts().contains(c)) {
+                    thirdParty.getContacts().add(c);
+                }
+            }
         }
 
         thirdPartyRepository.save(thirdParty);
@@ -525,6 +587,16 @@ public class ThirdPartyService {
         }
 
         ThirdParty thirdParty = getThirdPartyOrThrow(id);
+
+        // HU-TER-04 E5 (2026-04-27): un tercero siempre debe tener al menos un
+        // rol activo. Antes el unique-constraint del request lo bloqueaba con
+        // mensaje generico "Error de validacion"; ahora respondemos con el
+        // mensaje exacto que pide la HU.
+        if (request.getRoleIds() == null || request.getRoleIds().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No se puede eliminar el unico rol activo del tercero");
+        }
+
         thirdParty.setRoles(resolveRoles(request.getRoleIds()));
         ThirdPartyStatusCatalog targetStatus = resolveStatus(request.getStatusId());
         validateBlockingReason(targetStatus, request.getBlockingReason());
@@ -556,7 +628,14 @@ public class ThirdPartyService {
             dependencies.add("activos fijos (proveedor)");
         }
         if (invoiceRepository.existsByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())) {
-            dependencies.add("facturas");
+            dependencies.add("facturas de compra (AP)");
+        }
+        // HU-TER-10 E1/E3: el bug critico era que NO se validaba AR. Resultado:
+        // se podia eliminar tercero con facturas de venta vigentes y al traer
+        // las FV con join a third_parties (deleted_at IS NULL) las facturas
+        // desaparecian del listado. Ahora se bloquea explicitamente.
+        if (salesInvoiceRepository.countActiveByThirdParty(thirdParty.getId()) > 0) {
+            dependencies.add("facturas de venta (AR) pendientes en Cuentas por Cobrar");
         }
         if (commercialDataRepository.existsByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())) {
             dependencies.add("datos comerciales activos");

@@ -54,8 +54,12 @@ public class AccountingBookController {
     @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> libroDiario(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
-            @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month) {
-        return accountingBookService.getLibroDiario(year, month);
+            @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,
+            // HU-CG-06C E3: filtros adicionales opcionales por cuenta y rango de fechas
+            @Parameter(description = "ID de cuenta contable (opcional)") @RequestParam(required = false) Long accountId,
+            @Parameter(description = "Fecha desde (yyyy-MM-dd, opcional, prevalece sobre year/month)") @RequestParam(required = false) String dateFrom,
+            @Parameter(description = "Fecha hasta (yyyy-MM-dd, opcional, prevalece sobre year/month)") @RequestParam(required = false) String dateTo) {
+        return accountingBookService.getLibroDiario(year, month, accountId, dateFrom, dateTo);
     }
 
     // ─────────────────────────────────────────────────────
@@ -78,8 +82,11 @@ public class AccountingBookController {
     public ResponseEntity<?> libroMayor(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,
-            @Parameter(description = "ID de cuenta contable (opcional, null = todas)") @RequestParam(required = false) Long accountId) {
-        return accountingBookService.getLibroMayor(year, month, accountId);
+            @Parameter(description = "ID de cuenta contable (opcional, null = todas)") @RequestParam(required = false) Long accountId,
+            // HU-CG-06C E3: filtro adicional opcional por rango de fechas
+            @Parameter(description = "Fecha desde (yyyy-MM-dd, opcional)") @RequestParam(required = false) String dateFrom,
+            @Parameter(description = "Fecha hasta (yyyy-MM-dd, opcional)") @RequestParam(required = false) String dateTo) {
+        return accountingBookService.getLibroMayor(year, month, accountId, dateFrom, dateTo);
     }
 
     // ─────────────────────────────────────────────────────

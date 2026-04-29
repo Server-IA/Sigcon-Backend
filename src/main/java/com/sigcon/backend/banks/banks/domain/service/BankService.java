@@ -57,6 +57,13 @@ public class BankService {
                                         .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
                 }
 
+                // QA HU-006 E3: validar codigo unico ANTES del NIT.
+                if (bankRepository.existsByCodeAndDeletedAtIsNull(request.getCode().trim())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("BNK-ERR-002: Ya existe un banco con el código '" + request.getCode().trim() + "'.")));
+                }
+
                 // Validar NIT unico
                 if (bankRepository.existsByNitAndDeletedAtIsNull(request.getNit().trim())) {
                         return ResponseEntity.badRequest()
@@ -241,6 +248,12 @@ public class BankService {
                 Country country = bank.getCountry();
                 List<BankBranch> branches = bank.getBranches();
 
+                // QA HU-008 E1: flag para que el frontend deshabilite campos
+                // criticos (codigo, NIT) cuando el banco ya tiene cuentas asociadas.
+                long totalAccounts = bankAccountRepository.countByBank_IdAndDeletedAtIsNull(bank.getId());
+                long activeAccounts = bankAccountRepository.countByBank_IdAndStatusAndDeletedAtIsNull(
+                        bank.getId(), com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus.ACTIVA);
+
                 return BankDTO.builder()
                                 .id(bank.getId())
                                 .code(bank.getCode())
@@ -262,6 +275,8 @@ public class BankService {
                                                 : List.of())
                                 .createdAt(bank.getCreatedAt())
                                 .updatedAt(bank.getUpdatedAt())
+                                .hasAssociatedAccounts(totalAccounts > 0)
+                                .hasActiveAssociatedAccounts(activeAccounts > 0)
                                 .build();
         }
 

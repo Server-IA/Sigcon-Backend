@@ -36,6 +36,8 @@ import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.C
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountMappingService;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
 import com.sigcon.backend.parametrization.resources.domain.repository.PaymentFormRepository;
+import com.sigcon.backend.third_parties.commercial_data.domain.model.CommercialData;
+import com.sigcon.backend.third_parties.commercial_data.domain.repository.CommercialDataRepository;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -65,6 +67,7 @@ public class SalesInvoiceService {
     private final SalesInvoiceRepository salesInvoiceRepository;
     private final SalesInvoiceLineRepository salesInvoiceLineRepository;
     private final ThirdPartyRepository thirdPartyRepository;
+    private final CommercialDataRepository commercialDataRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
     private final PaymentFormRepository paymentFormRepository;
     private final AssetsRepository assetsRepository;
@@ -97,6 +100,31 @@ public class SalesInvoiceService {
 
         // AR-01A: validar periodo contable abierto
         accountingPeriodService.validatePeriodOpen(request.getInvoiceDate());
+
+        // HU-AR-01A E3: si el contador no envia fecha de vencimiento, calcularla
+        // automaticamente sumando los dias del termino de pago configurado en
+        // los Datos Comerciales del cliente. Si el cliente no tiene termino de
+        // pago configurado, alertar para que se complete antes de continuar.
+        if (request.getDueDate() == null) {
+            CommercialData commercial = commercialDataRepository
+                    .findByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "El cliente no tiene terminos de pago configurados. "
+                          + "Registre los datos comerciales del cliente antes de continuar."));
+            if (commercial.getPaymentTerm() == null || commercial.getPaymentTerm().getDays() == null) {
+                throw new IllegalArgumentException(
+                        "El cliente no tiene terminos de pago configurados. "
+                      + "Registre los datos comerciales del cliente antes de continuar.");
+            }
+            request.setDueDate(request.getInvoiceDate().plusDays(commercial.getPaymentTerm().getDays()));
+        }
+
+        // HU-AR-01A E3 (defecto adicional): no permitir vencimiento anterior a la
+        // fecha de la factura. Generaria saldo vencido apenas se emite.
+        if (request.getDueDate().isBefore(request.getInvoiceDate())) {
+            throw new IllegalArgumentException(
+                    "La fecha de vencimiento no puede ser anterior a la fecha de la factura.");
+        }
 
         // AR-11: moneda y tasa de cambio
         CurrencyType currency = null;
@@ -157,7 +185,50 @@ public class SalesInvoiceService {
             withholdingTotal = withholdingTotal.add(line.getWithholdingAmount());
         }
 
-        BigDecimal totalAmount = subtotalTotal.add(taxTotal).subtract(withholdingTotal);
+        // HU-AR-04 E2: la suma de retenciones no puede igualar ni superar la base
+        // gravable + IVA (subtotal + tax). Si lo hace, la factura quedaria con neto
+        // <= 0, lo cual es contablemente invalido. Bloquear con mensaje claro.
+        BigDecimal grossBeforeWithholding = subtotalTotal.add(taxTotal);
+        if (withholdingTotal.compareTo(grossBeforeWithholding) >= 0
+                && grossBeforeWithholding.compareTo(BigDecimal.ZERO) > 0) {
+            throw new IllegalArgumentException(
+                    "El total de retenciones ($" + withholdingTotal + ") no puede ser igual ni "
+                  + "superior al total de la factura ($" + grossBeforeWithholding + "). "
+                  + "Revise la configuracion fiscal del cliente y de las reglas tributarias aplicadas.");
+        }
+
+        BigDecimal totalAmount = grossBeforeWithholding.subtract(withholdingTotal);
+
+        // HU-TER-11 E5 (2026-04-27): validar limite de credito del cliente.
+        // Suma cartera pendiente + el monto de la factura nueva. Si supera el
+        // creditLimit configurado en commercial-data, BLOQUEA la emision con
+        // mensaje claro mostrando los 3 montos. Si el cliente no tiene
+        // commercial-data o creditLimit es null, no aplica el check.
+        try {
+            CommercialData commercial = commercialDataRepository
+                    .findByThirdPartyIdAndDeletedAtIsNull(thirdParty.getId())
+                    .orElse(null);
+            if (commercial != null && commercial.getLimitCredit() != null
+                    && commercial.getLimitCredit().compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal currentBalance = salesInvoiceRepository
+                        .sumBalanceDueByThirdParty(thirdParty.getId());
+                if (currentBalance == null) currentBalance = BigDecimal.ZERO;
+                BigDecimal projected = currentBalance.add(totalAmount);
+                if (projected.compareTo(commercial.getLimitCredit()) > 0) {
+                    throw new IllegalArgumentException(
+                            "Esta factura superaria el limite de credito del cliente. "
+                          + "Limite: $" + commercial.getLimitCredit() + ", "
+                          + "cartera pendiente: $" + currentBalance + ", "
+                          + "factura nueva: $" + totalAmount + ". "
+                          + "Se requiere aprobacion previa de un supervisor.");
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("No se pudo validar limite de credito para tercero {}: {}",
+                    thirdParty.getId(), e.getMessage());
+        }
 
         invoice.setSubtotal(subtotalTotal);
         invoice.setTotalTax(taxTotal);
@@ -209,6 +280,9 @@ public class SalesInvoiceService {
                 .taxAmount(calc.tax)
                 .withholdingAmount(calc.withholding)
                 .total(total)
+                // AAEF v1.1: persistir overrides PUC si vienen del mapper
+                .accountDebitOverride(req.getAccountDebitOverride())
+                .accountCreditOverride(req.getAccountCreditOverride())
                 .build();
     }
 
@@ -259,6 +333,26 @@ public class SalesInvoiceService {
                     AccountingConcept.AR_RET_PRACTICADAS_CLIENTE);
             Long idIngresos = accountMappingService.resolveOrThrow(AccountingConcept.AR_INGRESOS);
             Long idIvaGenerado = accountMappingService.resolveOrThrow(AccountingConcept.AR_IVA_GENERADO);
+
+            // AAEF v1.1 (2026-04-28): si CUALQUIER linea de la factura trae override
+            // de cuentas (accounting_account), respetarlas. Si solo algunas lineas las
+            // traen, se usan los defaults para el resto. Nota: para multi-cuenta por
+            // factura habria que emitir N lineas de ingreso al JE; aqui simplificamos
+            // tomando el primer override no-null encontrado.
+            if (invoice.getLines() != null) {
+                for (SalesInvoiceLine sline : invoice.getLines()) {
+                    if (sline.getAccountDebitOverride() != null) {
+                        idCxcClientes = sline.getAccountDebitOverride();
+                        break;
+                    }
+                }
+                for (SalesInvoiceLine sline : invoice.getLines()) {
+                    if (sline.getAccountCreditOverride() != null) {
+                        idIngresos = sline.getAccountCreditOverride();
+                        break;
+                    }
+                }
+            }
 
             BigDecimal subtotal = nonNull(invoice.getSubtotal());
             BigDecimal totalTax = nonNull(invoice.getTotalTax());

@@ -3,6 +3,7 @@ package com.sigcon.backend.integration.domain.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sigcon.backend.integration.application.AaefAckDTO;
+import com.sigcon.backend.integration.application.AgroFusionAcknowledgmentDTO;
 import com.sigcon.backend.integration.domain.model.IntegrationBatch;
 import com.sigcon.backend.integration.domain.model.IntegrationTransfer;
 import com.sigcon.backend.integration.domain.model.enums.BatchStatus;
@@ -49,6 +50,16 @@ public class AgroFusionAckClient {
     private static final String CALLBACK_URL_PARAM = "AGROFUSION_ACK_CALLBACK_URL";
     private static final String MAX_ATTEMPTS_PARAM = "AGROFUSION_ACK_RETRY_MAX_ATTEMPTS";
     private static final String INITIAL_DELAY_PARAM = "AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS";
+    /**
+     * Spec AAEF Bloque W: API Key fija para autenticar el POST del ACK al
+     * callback de AgroFusion. Se envia como header {@code X-API-Key}, mismo
+     * mecanismo que SIGCON usa al recibir lotes (HU-INT-RF-12). Configurable
+     * via parametro `AGROFUSION_ACK_API_KEY` por canal seguro con AgroFusion.
+     *
+     * <p>Si esta vacio o ausente, el ACK se envia sin header de autenticacion
+     * (modo legacy para tests sin auth). En produccion debe estar configurada.
+     */
+    private static final String ACK_API_KEY_PARAM = "AGROFUSION_ACK_API_KEY";
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final int DEFAULT_INITIAL_DELAY_SECONDS = 60;
     private static final int CONNECT_TIMEOUT_MS = 10_000;
@@ -103,12 +114,19 @@ public class AgroFusionAckClient {
             return;
         }
 
-        // Construir ACK
-        AaefAckDTO ack = buildAck(batch);
-
+        // Spec AAEF Bloque W: elegir envelope segun el tipo de batch.
+        //   - isUpdate=true -> AgroFusionAcknowledgmentDTO PascalCase (Pull+Diff)
+        //   - isUpdate=false -> AaefAckDTO camelCase (lote inicial)
+        boolean isUpdate = Boolean.TRUE.equals(batch.getIsUpdate());
         String body;
         try {
-            body = objectMapper.writeValueAsString(ack);
+            if (isUpdate) {
+                AgroFusionAcknowledgmentDTO ack = buildUpdateAck(batch);
+                body = objectMapper.writeValueAsString(ack);
+            } else {
+                AaefAckDTO ack = buildAck(batch);
+                body = objectMapper.writeValueAsString(ack);
+            }
         } catch (JsonProcessingException e) {
             log.error("Error serializando ACK", e);
             batch.setStatus(BatchStatus.ACK_FAILED);
@@ -125,6 +143,13 @@ public class AgroFusionAckClient {
             RestTemplate restTemplate = buildRestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            // Spec AAEF Bloque W: agregar X-API-Key si esta configurada (mismo
+            // mecanismo que SIGCON usa al recibir lotes). Si esta vacio el
+            // ACK se envia sin auth (modo legacy para tests).
+            String apiKey = parameterRepository.findGlobalValueByName(ACK_API_KEY_PARAM).orElse(null);
+            if (apiKey != null && !apiKey.isBlank()) {
+                headers.set("X-API-Key", apiKey.trim());
+            }
             HttpEntity<String> request = new HttpEntity<>(body, headers);
 
             ResponseEntity<String> response = restTemplate.exchange(
@@ -203,6 +228,53 @@ public class AgroFusionAckClient {
         }
 
         return ack;
+    }
+
+    /**
+     * Spec AAEF Bloque W: construye el ACK del Pull+Diff con envelope PascalCase
+     * {@code AgroFusionAcknowledgment}. Envia el {@code OriginalExchangeId}
+     * del envelope (lote padre) y los documentos procesados con sus
+     * {@code accountingEntryId} (los nuevos asientos generados por la
+     * reversa/correccion).
+     */
+    private AgroFusionAcknowledgmentDTO buildUpdateAck(IntegrationBatch batch) {
+        List<IntegrationTransfer> transfers =
+                transferRepository.findByBatch_IdAndDeletedAtIsNull(batch.getId());
+
+        AgroFusionAcknowledgmentDTO.Inner inner = AgroFusionAcknowledgmentDTO.Inner.builder()
+                .version("1.0")
+                // Si el batch tiene OriginalExchangeId conservado por
+                // CancellationService, usarlo. Si no, fallback al exchangeId
+                // del propio batch sintetico (mismo significado segun spec).
+                .originalExchangeId(batch.getOriginalExchangeId() != null
+                        ? batch.getOriginalExchangeId() : batch.getExchangeId())
+                .processedAt(LocalDateTime.now())
+                .status(resolveAckStatus(batch))
+                .build();
+
+        for (IntegrationTransfer t : transfers) {
+            if (t.getTransferStatus() == TransferStatus.PROCESSED) {
+                String docStatus = (t.getAccountingEntryId() == null) ? "NO_CHANGE" : "PROCESSED";
+                inner.getProcessedDocuments().add(AgroFusionAcknowledgmentDTO.ProcessedDocument.builder()
+                        .documentId(t.getDocumentId())
+                        .documentType(t.getDocumentType() != null ? t.getDocumentType().name() : null)
+                        .accountingEntryId(t.getAccountingEntryId() != null
+                                ? String.valueOf(t.getAccountingEntryId()) : null)
+                        .status(docStatus)
+                        .build());
+            } else if (t.getTransferStatus() == TransferStatus.FAILED) {
+                inner.getFailedDocuments().add(AgroFusionAcknowledgmentDTO.FailedDocument.builder()
+                        .documentId(t.getDocumentId())
+                        .errorCode(t.getErrorCode())
+                        .errorMessage(t.getErrorMessage())
+                        .retryAllowed(Boolean.TRUE.equals(t.getRetryAllowed()))
+                        .build());
+            }
+        }
+
+        return AgroFusionAcknowledgmentDTO.builder()
+                .agroFusionAcknowledgment(inner)
+                .build();
     }
 
     private String resolveAckStatus(IntegrationBatch batch) {

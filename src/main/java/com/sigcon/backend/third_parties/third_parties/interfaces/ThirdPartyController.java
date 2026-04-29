@@ -213,21 +213,28 @@ public class ThirdPartyController {
                                                 Optional.of(assignments)));
         }
 
-        /** TER-09: Exportar maestro de terceros en CSV o XLSX */
+        /**
+         * TER-09: Exportar maestro de terceros en CSV o XLSX.
+         * HU-TER-09 E1/E3 (2026-04-27): acepta filtros opcionales por rol y
+         * estado. Ej: GET /export/csv?role=Cliente&status=Activo
+         */
         @GetMapping("/export/{format}")
         @PreAuthorize("hasAuthority('PERM_EXPORT_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
-        public ResponseEntity<byte[]> export(@PathVariable String format) {
+        public ResponseEntity<byte[]> export(
+                        @PathVariable String format,
+                        @org.springframework.web.bind.annotation.RequestParam(required = false) String role,
+                        @org.springframework.web.bind.annotation.RequestParam(required = false) String status) {
                 String fmt = format.toUpperCase();
                 byte[] data;
                 String contentType;
                 String filename;
 
                 if ("CSV".equals(fmt)) {
-                        data = exportService.exportCsv();
+                        data = exportService.exportCsv(role, status);
                         contentType = "text/csv";
                         filename = "terceros_export.csv";
                 } else if ("XLSX".equals(fmt)) {
-                        data = exportService.exportExcel();
+                        data = exportService.exportExcel(role, status);
                         contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                         filename = "terceros_export.xlsx";
                 } else {

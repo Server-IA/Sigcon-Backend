@@ -48,4 +48,13 @@ public class InvoiceFCRequestDTO {
 
     @Schema (description = "Lista de items de la factura", example = "[]")
     private List<LineInvoiceRequestDTO> lineInvoices;
+
+    /**
+     * HU-AP-02 E3: version optimista. El cliente recibe `version` al cargar
+     * la factura y lo envia en el PUT. Si la version en BD difiere (otro
+     * usuario guardo en el medio), Hibernate lanza OptimisticLockException
+     * traducida a HTTP 409 con mensaje legible. Opcional para retro-compat.
+     */
+    @Schema(description = "Version cargada por el cliente (HU-AP-02 E3)", example = "0")
+    private Long version;
 }

@@ -85,6 +85,23 @@ public class SalesInvoiceLine {
     @Builder.Default
     private BigDecimal total = BigDecimal.ZERO;
 
+    /**
+     * AAEF v1.1 (2026-04-28): override de cuenta contable PUC para la linea.
+     * Si null, el JE usa el mapeo por defecto (AR_INGRESOS = PUC 4135).
+     * Solo se popula via mapper AAEF cuando el documento trae
+     * {@code accounting_account[1]} (cuenta credito = ingreso).
+     */
+    @Column(name = "account_credit_override")
+    private Long accountCreditOverride;
+
+    /**
+     * AAEF v1.1 (2026-04-28): override de cuenta contable PUC para debito.
+     * Si null, el JE usa AR_CLIENTES (PUC 1305). Solo se popula via mapper AAEF
+     * con {@code accounting_account[0]}.
+     */
+    @Column(name = "account_debit_override")
+    private Long accountDebitOverride;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

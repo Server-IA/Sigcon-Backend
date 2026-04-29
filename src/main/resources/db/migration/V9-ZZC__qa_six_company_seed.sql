@@ -358,14 +358,14 @@ BEGIN
     INSERT INTO sales_invoices (company_id, third_party_id, invoice_number, invoice_date, due_date,
                                  subtotal, total_tax, total_withholding, total_amount, balance_due,
                                  status, exchange_rate, xml_sent, currency_id, created_at, updated_at)
-    SELECT p_company_id, v_cliente1_id, 'FV-' || v_year || LPAD((p_suffix*1000 + 1)::TEXT, 6, '0'),
+    SELECT p_company_id, v_cliente1_id, 'FV-' || v_year || LPAD(1::TEXT, 6, '0'),
            v_today - INTERVAL '30 days', v_today - INTERVAL '15 days',
            1000000, 0, 0, 1000000, 0, 'PAID', 1, FALSE, v_currency_cop_id, NOW(), NOW()
     WHERE NOT EXISTS (SELECT 1 FROM sales_invoices WHERE company_id=p_company_id
-                       AND invoice_number='FV-' || v_year || LPAD((p_suffix*1000 + 1)::TEXT, 6, '0'));
+                       AND invoice_number='FV-' || v_year || LPAD(1::TEXT, 6, '0'));
 
     SELECT id INTO v_fv_id FROM sales_invoices WHERE company_id=p_company_id
-       AND invoice_number='FV-' || v_year || LPAD((p_suffix*1000 + 1)::TEXT, 6, '0') LIMIT 1;
+       AND invoice_number='FV-' || v_year || LPAD(1::TEXT, 6, '0') LIMIT 1;
 
     INSERT INTO sales_invoice_lines (company_id, invoice_id, description, quantity, unit_price,
                                       discount, subtotal, tax_amount, withholding_amount, total, created_at, updated_at)
@@ -384,25 +384,34 @@ BEGIN
     INSERT INTO sales_invoices (company_id, third_party_id, invoice_number, invoice_date, due_date,
                                  subtotal, total_tax, total_withholding, total_amount, balance_due,
                                  status, exchange_rate, xml_sent, currency_id, created_at, updated_at)
-    SELECT p_company_id, v_cliente2_id, 'FV-' || v_year || LPAD((p_suffix*1000 + 2)::TEXT, 6, '0'),
+    SELECT p_company_id, v_cliente2_id, 'FV-' || v_year || LPAD(2::TEXT, 6, '0'),
            v_today - INTERVAL '20 days', v_today + INTERVAL '10 days',
            2500000, 475000, 0, 2975000, 1500000, 'PARTIALLY_PAID', 1, FALSE, v_currency_cop_id, NOW(), NOW()
     WHERE NOT EXISTS (SELECT 1 FROM sales_invoices WHERE company_id=p_company_id
-                       AND invoice_number='FV-' || v_year || LPAD((p_suffix*1000 + 2)::TEXT, 6, '0'));
+                       AND invoice_number='FV-' || v_year || LPAD(2::TEXT, 6, '0'));
 
     -- FV3: ISSUED (sin cobros)
     INSERT INTO sales_invoices (company_id, third_party_id, invoice_number, invoice_date, due_date,
                                  subtotal, total_tax, total_withholding, total_amount, balance_due,
                                  status, exchange_rate, xml_sent, currency_id, created_at, updated_at)
-    SELECT p_company_id, v_cliente3_id, 'FV-' || v_year || LPAD((p_suffix*1000 + 3)::TEXT, 6, '0'),
+    SELECT p_company_id, v_cliente3_id, 'FV-' || v_year || LPAD(3::TEXT, 6, '0'),
            v_today - INTERVAL '5 days', v_today + INTERVAL '25 days',
            3000000, 570000, 75000, 3495000, 3495000, 'ISSUED', 1, FALSE, v_currency_cop_id, NOW(), NOW()
     WHERE NOT EXISTS (SELECT 1 FROM sales_invoices WHERE company_id=p_company_id
-                       AND invoice_number='FV-' || v_year || LPAD((p_suffix*1000 + 3)::TEXT, 6, '0'));
+                       AND invoice_number='FV-' || v_year || LPAD(3::TEXT, 6, '0'));
 
     -- --------------------------------------------------------------------- --
     -- 8) FACTURAS DE COMPRA + PAGOS
     -- --------------------------------------------------------------------- --
+    -- Guard: garantizar DEFAULT 0 en invoices.version (Hibernate ddl-auto crea
+    -- la columna NOT NULL pero V9-ZZJ aplica el DEFAULT despues de este seed.
+    -- Sin este guard, los INSERTs siguientes fallan con "null value in column version").
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name='invoices' AND column_name='version') THEN
+        ALTER TABLE invoices ALTER COLUMN version SET DEFAULT 0;
+        UPDATE invoices SET version = 0 WHERE version IS NULL;
+    END IF;
+
     -- FC1: PAID
     INSERT INTO invoices (company_id, third_party_id, type_invoice_id, invoice_state_id, payment_forms_id, user_id,
                            resolution, resolution_invoice, supplier_invoice_number, invoice_date, invoice_due_day,

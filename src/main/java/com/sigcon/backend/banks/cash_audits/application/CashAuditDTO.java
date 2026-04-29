@@ -35,6 +35,10 @@ public class CashAuditDTO {
     private LocalDateTime approvedAt;
     private Long approvedBy;
     private Long journalEntryId;
+    /** HU-BNK-048 E2 */
+    private String voidReason;
+    private LocalDateTime voidedAt;
+    private Long voidedBy;
     private Long createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

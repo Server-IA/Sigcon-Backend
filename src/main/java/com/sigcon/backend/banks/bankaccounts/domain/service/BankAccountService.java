@@ -85,6 +85,8 @@ public class BankAccountService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final CostCenterRepository costCenterRepository;
     private final CheckbookRepository checkbookRepository;
+    // QA HU-003 E1: validar movimientos antes de eliminar cuenta bancaria.
+    private final com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository financialMovementRepository;
     private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
@@ -326,6 +328,19 @@ public class BankAccountService {
             );
         }
 
+        // QA HU-003 E1: validar tambien movimientos financieros y arqueos.
+        // Antes solo se chequeaban chequeras y la HU exige bloquear cualquier
+        // dependencia transaccional para preservar la auditoria contable.
+        long movements = financialMovementRepository.countByBankAccount_Id(id);
+        if (movements > 0) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("La cuenta no puede eliminarse porque tiene "
+                                    + movements + " movimiento(s) financiero(s) asociado(s). "
+                                    + "Se recomienda desactivar la cuenta en lugar de eliminar."))
+            );
+        }
+
         account.setDeletedAt(LocalDateTime.now());
         bankAccountRepository.save(account);
         auditPublisher.publishDelete(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount eliminado id=" + account.getId());
@@ -563,6 +578,19 @@ public class BankAccountService {
                 .lastReconciliationDate(e.getLastReconciliationDate())
                 .createdAt(e.getCreatedAt())
                 .deletedAt(e.getDeletedAt())
+                // QA HU-001 E5 / HU-002 E2/E3 / HU-008 E1: campos persistentes
+                // que antes no llegaban al frontend.
+                .description(e.getDescription())
+                .allowsOverdraft(e.getAllowsOverdraft())
+                .creditLimit(e.getCreditLimit())
+                .notifyLowBalance(e.getNotifyLowBalance())
+                .minimumBalance(e.getMinimumBalance())
+                .bankPhone(e.getBankPhone())
+                // Flag para que el frontend deshabilite campos criticos como
+                // codigo y banco si la cuenta ya tiene chequeras/movimientos.
+                .hasAssociatedAccounts(
+                        checkbookRepository.countByBankAccount_Id(e.getId()) > 0
+                        || financialMovementRepository.countByBankAccount_Id(e.getId()) > 0)
                 .build();
     }
 

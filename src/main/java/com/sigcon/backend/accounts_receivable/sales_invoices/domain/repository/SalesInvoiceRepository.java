@@ -81,4 +81,14 @@ public interface SalesInvoiceRepository
          + "WHERE s.thirdParty.id = :thirdPartyId AND s.balanceDue > 0 "
          + "AND s.status NOT IN ('VOIDED','PAID','SETTLED') AND s.deletedAt IS NULL")
     BigDecimal sumBalanceDueByThirdParty(@Param("thirdPartyId") Long thirdPartyId);
+
+    /**
+     * HU-TER-10 E1/E3 (2026-04-27): cuenta facturas AR (cualquier estado no
+     * VOIDED/SETTLED) asociadas al tercero para validar dependencias antes
+     * de eliminar. Antes el delete de tercero solo validaba AP (invoices),
+     * ACT y commercial-data; ahora bloquea tambien si hay FV vigentes.
+     */
+    @Query("SELECT COUNT(s) FROM SalesInvoice s WHERE s.thirdParty.id = :thirdPartyId "
+         + "AND s.deletedAt IS NULL AND s.status NOT IN ('VOIDED','SETTLED')")
+    long countActiveByThirdParty(@Param("thirdPartyId") Long thirdPartyId);
 }

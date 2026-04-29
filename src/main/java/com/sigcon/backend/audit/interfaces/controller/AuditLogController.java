@@ -182,58 +182,123 @@ public class AuditLogController {
 
     @Operation(
         summary = "Exportar logs (HU-AU-06)",
-        description = "Exporta los logs en el formato indicado: csv, xlsx o pdf. "
-                    + "Acepta los mismos filtros que /logs/search via query params.")
+        description = "Exporta logs en el formato indicado: csv, xlsx o pdf. "
+                    + "Si se envia body con filtros, exporta SOLO los resultados filtrados (HU-AU-05 E4).")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Archivo generado y descargado"),
+        @ApiResponse(responseCode = "204", description = "No hay registros para exportar"),
         @ApiResponse(responseCode = "400", description = "Formato no soportado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
     @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
-    @GetMapping("/export/{format}")
-    public ResponseEntity<byte[]> export(
+    @PostMapping("/export/{format}")
+    public ResponseEntity<?> exportFiltered(
             @Parameter(description = "Formato (csv | xlsx | pdf)", example = "csv")
-            @PathVariable String format) {
-        // Para simplicidad: exporta los ultimos 1000 registros sin filtros adicionales.
-        // Para filtros usar POST /logs/search y luego un endpoint de export por ids.
-        var pageable = PageRequest.of(0, 1000, Sort.by(Sort.Direction.DESC, "timestamp"));
-        Page<AuditLogDTO> page = auditLogService.search(new AuditLogFilterRequest(), pageable);
-        List<AuditLogDTO> logs = page.getContent();
+            @PathVariable String format,
+            @RequestBody(required = false) AuditLogFilterRequest filter) {
+        return doExport(format, filter != null ? filter : new AuditLogFilterRequest());
+    }
 
-        byte[] body;
-        MediaType contentType;
-        String filename;
-        switch (format.toLowerCase()) {
-            case "csv":
-                body = exportService.exportToCsv(logs);
-                contentType = MediaType.parseMediaType("text/csv; charset=UTF-8");
-                filename = "audit-logs.csv";
-                break;
-            case "xlsx":
-                body = exportService.exportToExcel(logs);
-                contentType = MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                filename = "audit-logs.xlsx";
-                break;
-            case "pdf":
-                body = exportService.exportToPdf(logs);
-                contentType = MediaType.parseMediaType("text/plain; charset=UTF-8");
-                filename = "audit-logs.txt";
-                break;
-            default:
-                return ResponseEntity.badRequest().body(("Formato no soportado: " + format).getBytes());
+    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @GetMapping("/export/{format}")
+    public ResponseEntity<?> exportSimple(@PathVariable String format) {
+        return doExport(format, new AuditLogFilterRequest());
+    }
+
+    private ResponseEntity<?> doExport(String format, AuditLogFilterRequest filter) {
+        try {
+            var pageable = PageRequest.of(0, 5000, Sort.by(Sort.Direction.DESC, "timestamp"));
+            Page<AuditLogDTO> page = auditLogService.search(filter, pageable);
+            List<AuditLogDTO> logs = page.getContent();
+
+            // HU-AU-08 E7 (2026-04-28): si no hay datos, devolver mensaje exacto
+            // con HTTP 200 (en vez de 204 que descarta el body) para que el
+            // frontend reciba el mensaje y lo muestre al usuario.
+            if (logs.isEmpty()) {
+                Map<String, Object> body = new HashMap<>();
+                body.put("success", false);
+                body.put("totalElements", 0);
+                body.put("message", "No se encontraron registros para los parametros seleccionados");
+                // Registra el intento en audit log con conteo=0 (HU-AU-08 E7).
+                try {
+                    auditLogService.register(
+                            com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                            com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
+                            null, "AuditLog", null,
+                            "Exportacion " + format + " sin resultados (filtros sin coincidencias)",
+                            null, null, null);
+                } catch (Exception ignored) {}
+                return ResponseEntity.ok(body);
+            }
+
+            byte[] body;
+            MediaType contentType;
+            String filename;
+            switch (format.toLowerCase()) {
+                case "csv":
+                    body = exportService.exportToCsv(logs);
+                    contentType = MediaType.parseMediaType("text/csv; charset=UTF-8");
+                    filename = "audit-logs.csv";
+                    break;
+                case "xlsx":
+                    body = exportService.exportToExcel(logs);
+                    contentType = MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    filename = "audit-logs.xlsx";
+                    break;
+                case "pdf":
+                    // HU-AU-06 E1 / HU-AU-08 E3 (2026-04-28): PDF real con iText.
+                    body = exportService.exportToPdf(logs);
+                    contentType = MediaType.APPLICATION_PDF;
+                    filename = "audit-logs.pdf";
+                    break;
+                default:
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("success", false);
+                    err.put("message", "No se pudo generar el reporte en el formato solicitado");
+                    return ResponseEntity.badRequest().body(err);
+            }
+
+            // HU-AU-06 E6: registrar evento de exportacion con conteo + filtros.
+            auditLogService.register(
+                    com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                    com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
+                    null, "AuditLog", null,
+                    "Exportacion de logs en formato " + format + " (" + logs.size() + " registros)",
+                    null, null, null);
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                    .contentType(contentType)
+                    .body(body);
+        } catch (Exception e) {
+            // HU-AU-06 E5 / HU-AU-08 E8 (2026-04-28): mensaje exacto HU.
+            log.error("Error generando export {}: {}", format, e.getMessage(), e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "No se pudo generar el reporte en el formato solicitado");
+            err.put("incidentRef", "AU-EXP-" + System.currentTimeMillis());
+            return ResponseEntity.status(500).body(err);
         }
+    }
 
-        // HU-AU-06 E6: registrar evento de exportacion
-        auditLogService.register(
-                com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
-                com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
-                null, "AuditLog", null,
-                "Exportacion de logs en formato " + format + " (" + logs.size() + " registros)",
-                null, null, null);
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
-                .contentType(contentType)
-                .body(body);
+    @Operation(summary = "Exportar dashboard como PDF (HU-AU-07 E6)",
+               description = "Genera un PDF con los KPIs y conteos del dashboard, no la lista de logs individuales.")
+    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @GetMapping("/dashboard/export/pdf")
+    public ResponseEntity<?> exportDashboardPdf() {
+        try {
+            var dashboard = auditLogService.getDashboardData();
+            byte[] body = exportService.exportDashboardToPdf(dashboard);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=audit-dashboard.pdf")
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .body(body);
+        } catch (Exception e) {
+            log.error("Error generando PDF dashboard", e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "No se pudo generar el reporte en el formato solicitado");
+            return ResponseEntity.status(500).body(err);
+        }
     }
 }

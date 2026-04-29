@@ -314,14 +314,20 @@ public class CashService {
 
         // 3. Verificar dependencias
         boolean hasMovements = financialMovementRepository.existsByCash_Id(id);
+        boolean hasAnyAudit = cashAuditRepository.existsByCashIdAndDeletedAtIsNull(id);
         boolean hasOpenAudits = cashAuditRepository.existsByCashIdAndStatusInAndDeletedAtIsNull(
-                id, List.of(CashAuditStatus.ABIERTO, CashAuditStatus.EN_REVISION));
+                id, List.of(CashAuditStatus.BORRADOR, CashAuditStatus.ABIERTO, CashAuditStatus.EN_REVISION));
         long movementsCount = financialMovementRepository.countByCash_Id(id);
-        long auditsCount = cashAuditRepository.findByCashIdAndStatusAndDeletedAtIsNull(id, CashAuditStatus.ABIERTO).size()
+        long auditsCount = cashAuditRepository.findByCashIdAndStatusAndDeletedAtIsNull(id, CashAuditStatus.BORRADOR).size()
+                + cashAuditRepository.findByCashIdAndStatusAndDeletedAtIsNull(id, CashAuditStatus.ABIERTO).size()
                 + cashAuditRepository.findByCashIdAndStatusAndDeletedAtIsNull(id, CashAuditStatus.EN_REVISION).size();
 
-        // 4. Flujo alternativo: si hay dependencias, desactivar en lugar de eliminar
-        if (hasMovements || hasOpenAudits) {
+        // 4. Flujo alternativo: si hay dependencias (movimientos o cualquier arqueo
+        //    historico), se DESACTIVA en lugar de eliminar para preservar la
+        //    trazabilidad. Bug fix 2026-04-25: antes solo verificaba arqueos abiertos,
+        //    asi una caja con arqueos APROBADOS se eliminaba y los arqueos quedaban
+        //    huerfanos referenciando un cash_id con deleted_at != null.
+        if (hasMovements || hasAnyAudit) {
             cash.setCashStatus(CashStatus.INACTIVE);
             cashRepository.save(cash);
             auditPublisher.publishDelete(AuditModule.BNK, "Cash", cash.getId(), "Cash eliminado id=" + cash.getId());

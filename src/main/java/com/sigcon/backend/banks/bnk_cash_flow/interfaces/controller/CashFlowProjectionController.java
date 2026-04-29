@@ -172,6 +172,45 @@ public class CashFlowProjectionController {
         return cashFlowProjectionService.inactivate(id);
     }
 
+    /**
+     * QA HU-030/031: aprobar proyeccion BORRADOR -> APROBADA.
+     */
+    @PostMapping("/{id}/approve")
+    @Operation(
+        summary = "Aprobar proyección de flujo de caja",
+        description = "HU-030/031: Cambia estado de BORRADOR a APROBADA. "
+                + "Solo proyecciones APROBADAS son consideradas en reportes consolidados."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Proyección aprobada"),
+        @ApiResponse(responseCode = "400", description = "Estado no permite aprobacion"),
+        @ApiResponse(responseCode = "404", description = "No encontrada")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> approve(@PathVariable Long id) {
+        return cashFlowProjectionService.approve(id);
+    }
+
+    /**
+     * QA HU-059: marcar proyeccion APROBADA -> EJECUTADA (cuando ya se realizo).
+     * Estado terminal; no se puede revertir.
+     */
+    @PostMapping("/{id}/execute")
+    @Operation(
+        summary = "Marcar proyección como EJECUTADA",
+        description = "HU-059: Cambia estado de APROBADA a EJECUTADA cuando el flujo "
+                + "previsto ya se realizo. Estado terminal — no se puede modificar despues."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Proyección ejecutada"),
+        @ApiResponse(responseCode = "400", description = "Solo proyecciones APROBADAS pueden marcarse como EJECUTADA"),
+        @ApiResponse(responseCode = "404", description = "No encontrada")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> execute(@PathVariable Long id) {
+        return cashFlowProjectionService.execute(id);
+    }
+
     // ─────────────────────────────────────────────────────
     // BNK-RF-32 — Consultas
     // ─────────────────────────────────────────────────────

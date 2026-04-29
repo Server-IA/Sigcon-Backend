@@ -23,6 +23,11 @@
 -- Funcion helper para no repetir el patron 55 veces.
 CREATE OR REPLACE FUNCTION _mt_add_company(tbl text) RETURNS void AS $$
 BEGIN
+    -- Tolerante a tablas inexistentes (renombradas o eliminadas en migraciones posteriores)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = tbl) THEN
+        RAISE NOTICE 'Tabla % no existe, _mt_add_company omitido.', tbl;
+        RETURN;
+    END IF;
     EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS company_id BIGINT NULL', tbl);
     EXECUTE format('UPDATE %I SET company_id = 1 WHERE company_id IS NULL', tbl);
     EXECUTE format('ALTER TABLE %I ALTER COLUMN company_id SET NOT NULL', tbl);
@@ -37,6 +42,18 @@ $$ LANGUAGE plpgsql;
 -- Variante para tablas hijas: hereda company_id del padre antes de set NOT NULL.
 CREATE OR REPLACE FUNCTION _mt_add_company_child(child text, parent_fk text, parent_tbl text) RETURNS void AS $$
 BEGIN
+    -- Tolerante a tablas renombradas/eliminadas en migraciones posteriores
+    -- (ej. integration_transfers -> af_accounting_transfers en V9-ZZL).
+    -- Si el child o el parent no existen, se omite silenciosamente.
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = child) THEN
+        RAISE NOTICE 'Tabla % no existe, _mt_add_company_child omitido.', child;
+        RETURN;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = parent_tbl) THEN
+        RAISE NOTICE 'Parent % no existe, _mt_add_company_child omitido para %.', parent_tbl, child;
+        RETURN;
+    END IF;
+
     EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS company_id BIGINT NULL', child);
     EXECUTE format('UPDATE %I c SET company_id = p.company_id FROM %I p WHERE c.%I = p.id AND c.company_id IS NULL',
                    child, parent_tbl, parent_fk);

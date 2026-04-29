@@ -142,6 +142,71 @@ public class NiifAlertsService {
                 }
             }
 
+            // Check 7 (HU-ACT-05 E2): la cuenta contable debe ser de clase 1 (activos)
+            // o 2 (pasivos en pocos casos especificos). NIC 16/38 prohibe capitalizar
+            // gastos. Si la cuenta es clase 5 (gastos) o 6 (costos), NON_COMPLIANT.
+            if (asset.getAccountingAccount() != null
+                    && asset.getAccountingAccount().getPucAccount() != null
+                    && asset.getAccountingAccount().getPucAccount().getCode() != null) {
+                String pucCode = asset.getAccountingAccount().getPucAccount().getCode();
+                if (pucCode.startsWith("5") || pucCode.startsWith("6") || pucCode.startsWith("7")) {
+                    alerts.add("La cuenta contable (PUC " + pucCode + ") corresponde a gastos/costos. "
+                            + "NIC 38 §10/§11: solo se capitalizan recursos controlados que generen beneficios futuros");
+                    result = NiifResult.NON_COMPLIANT;
+                } else if (!pucCode.startsWith("1")) {
+                    alerts.add("La cuenta contable (PUC " + pucCode + ") no pertenece a clase 1 (activos). "
+                            + "Verifique la clasificación.");
+                    if (result != NiifResult.NON_COMPLIANT) {
+                        result = NiifResult.WARNING;
+                    }
+                }
+            } else {
+                alerts.add("El activo no tiene cuenta contable asignada");
+                result = NiifResult.NON_COMPLIANT;
+            }
+
+            // Check 8 (HU-ACT-05 E2): heuristica para detectar gastos registrados como
+            // activos por error. Capacitacion, formacion, mantenimiento, viaticos, etc.
+            // segun NIC 38 §69 NO cumplen criterios de capitalizacion.
+            String haystack = (
+                (asset.getAssetName()    != null ? asset.getAssetName()    : "") + " " +
+                (asset.getDescription()  != null ? asset.getDescription()  : "")
+            ).toLowerCase();
+            String[] expensePatterns = {
+                "capacitacion", "capacitación",
+                "formacion",   "formación",
+                "training",    "curso",        "certificacion", "certificación",
+                "mantenimien", // mantenimiento, mantenimientos
+                "viatico",     "viático",
+                "publicidad",  "marketing",    "consultoria",   "consultoría",
+            };
+            for (String p : expensePatterns) {
+                if (haystack.contains(p)) {
+                    alerts.add("El activo presenta indicios de ser un gasto del periodo (palabra clave: '"
+                            + p + "'). NIC 38 §69 NO permite capitalizar capacitación, mantenimiento "
+                            + "ni gastos similares. Verifique los criterios de capitalización antes de mantenerlo como activo.");
+                    if (result != NiifResult.NON_COMPLIANT) {
+                        result = NiifResult.WARNING;
+                    }
+                    break;
+                }
+            }
+
+            // Check 9 (HU-ACT-05 E3): informacion incompleta requerida para evaluar.
+            if (asset.getSupplier() == null) {
+                alerts.add("El activo no tiene proveedor asociado. "
+                        + "Complete los datos en Terceros antes de finalizar la verificación.");
+                if (result != NiifResult.NON_COMPLIANT) {
+                    result = NiifResult.WARNING;
+                }
+            }
+            if (asset.getDepretationRule() == null
+                    && asset.getAssetType() != null
+                    && "TANGIBLE".equals(asset.getAssetType().name())) {
+                alerts.add("El activo tangible no tiene regla de depreciación asignada (NIC 16 §50)");
+                result = NiifResult.NON_COMPLIANT;
+            }
+
             // Persistir verificacion y alertas
             NiifVerification verification = verificationRepository.save(
                     NiifVerification.builder()
@@ -172,7 +237,21 @@ public class NiifAlertsService {
                             .alerts(alerts)
                             .build()
             );
+
+            // HU-ACT-05 E4: trazabilidad por activo en el modulo de auditoria.
+            auditPublisher.publishCreate(AuditModule.ACT, "NiifVerification", verification.getId(),
+                    "Verificación NIIF activo " + asset.getAssetCode() + " (" + asset.getAssetName()
+                            + ") → " + result.name() + " · " + alerts.size() + " alerta(s)");
         }
+
+        // HU-ACT-05 E4: resumen consolidado del proceso para auditoria forense.
+        long compliant    = results.stream().filter(r -> "COMPLIANT".equals(r.getResult())).count();
+        long warning      = results.stream().filter(r -> "WARNING".equals(r.getResult())).count();
+        long nonCompliant = results.stream().filter(r -> "NON_COMPLIANT".equals(r.getResult())).count();
+        auditPublisher.publishCreate(AuditModule.ACT, "NiifVerificationBatch", null,
+                "Verificación NIIF ejecutada: " + results.size() + " activo(s) procesado(s) · "
+                        + compliant + " cumplen · " + warning + " advertencia(s) · "
+                        + nonCompliant + " no cumplen");
 
         return results;
     }

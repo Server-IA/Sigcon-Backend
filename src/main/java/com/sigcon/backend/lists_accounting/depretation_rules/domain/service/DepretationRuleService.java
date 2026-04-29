@@ -69,12 +69,21 @@ public class DepretationRuleService {
                         .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
             }
 
-            // 2. Validar duplicados (método + cuenta + vigencia)
-        //     validateNoDuplicates(
-        //             request.getDepretationType(),
-        //             request.getAccountingAccountId(),
-        //             request.getEffectiveDate()
-        //     );
+            // 2. CFG-RF-13 E4: validar duplicados (metodo + cuenta + vigencia).
+            //    Antes solo el UK de BD bloqueaba el INSERT, generando el mensaje
+            //    confuso "la empresa tiene registros asociados". Ahora rechazamos
+            //    explicitamente con un texto legible que coincide con la HU.
+            boolean duplicate = depretationRuleRepository
+                    .existsByDepretationTypeAndAccountingAccountIdAndEffectiveDate(
+                            request.getDepretationType(),
+                            request.getAccountingAccountId(),
+                            request.getEffectiveDate());
+            if (duplicate) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "Regla duplicada, ya existe una regla de depreciación con esos parámetros "
+                        + "(método, cuenta contable y fecha de vigencia)")));
+            }
 
             // 3. Validar vida útil según tipo de depreciación
             validateUsefulLifeByType(request.getDepretationType(), request.getUsefulLifeYears());

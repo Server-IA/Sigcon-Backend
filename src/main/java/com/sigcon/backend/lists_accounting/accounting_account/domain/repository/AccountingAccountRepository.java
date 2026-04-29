@@ -28,8 +28,33 @@ public interface AccountingAccountRepository extends JpaRepository<AccountingAcc
     boolean existsByCustomNameAndIdNotAndDeletedAtIsNull(String customName, Long idNot);
 
     AccountingAccount findByCostCenter_Id(Long costCenterId);
-    
-    
+
+    // HU-CFG-RF-12 E3: cuentas que usan una regla tributaria (impide eliminarla).
+    long countByTaxRuleIdAndDeletedAtIsNull(Long taxRuleId);
+
+    /**
+     * AAEF v1.1 feedback (2026-04-28): buscar cuenta contable activa del tenant
+     * por codigo PUC. Usado para resolver el override {@code accounting_account}
+     * que llega en cada Line del documento AAEF.
+     *
+     * <p>Multi-tenant: filtra explicitamente por {@code company_id} en el JPQL
+     * (no podemos delegar al @Filter porque algunas llamadas vienen de flujos
+     * donde el filter no esta habilitado durante la consulta).
+     *
+     * @param pucCode codigo PUC (ej. "1305", "4135")
+     * @param companyId tenant actual
+     * @return cuenta contable activa del tenant o vacio
+     */
+    @Query("""
+        SELECT a
+        FROM AccountingAccount a
+        WHERE a.pucAccount.code = :pucCode
+        AND a.status = 'ACTIVE'
+        AND a.companyId = :companyId
+        AND a.deletedAt IS NULL
+    """)
+    Optional<AccountingAccount> findActiveByPucCodeAndCompany(String pucCode, Long companyId);
+
     // TODO: Método para validar dependencias activas (pendiente módulo transacciones)
     // long countActiveDependenciesById(Long id);
 }

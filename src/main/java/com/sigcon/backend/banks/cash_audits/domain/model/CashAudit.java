@@ -72,7 +72,7 @@ public class CashAudit {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
-    private CashAuditStatus status = CashAuditStatus.ABIERTO;
+    private CashAuditStatus status = CashAuditStatus.BORRADOR;
 
     @Column(name = "notes", length = 500)
     private String notes;
@@ -88,6 +88,16 @@ public class CashAudit {
 
     @Column(name = "journal_entry_id")
     private Long journalEntryId;
+
+    /** HU-BNK-048 E2 - Motivo de anulacion (min 50 chars) cuando status=ANULADO. */
+    @Column(name = "void_reason", length = 1000)
+    private String voidReason;
+
+    @Column(name = "voided_at")
+    private LocalDateTime voidedAt;
+
+    @Column(name = "voided_by")
+    private Long voidedBy;
 
     @Column(name = "created_by")
     private Long createdBy;
@@ -107,7 +117,7 @@ public class CashAudit {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
-            this.status = CashAuditStatus.ABIERTO;
+            this.status = CashAuditStatus.BORRADOR;
         }
     }
 

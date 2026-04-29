@@ -58,5 +58,21 @@
   {
     "code": "INT_015",
     "message": "Documento no cumple validaciones de tipo (se reportara en failedDocuments del ACK)"
+  },
+  {
+    "code": "INT_016",
+    "message": "Header.Type.Code no es valido. Valores admitidos: 01,02,03,04,05"
+  },
+  {
+    "code": "INT_017",
+    "message": "accounting_account no puede tener mas de 2 elementos o tiene formato invalido"
+  },
+  {
+    "code": "INT_018",
+    "message": "Cuenta contable PUC referenciada en accounting_account no existe o esta inactiva"
+  },
+  {
+    "code": "INT_019",
+    "message": "Nota credito o debito (Type=04/05) sin referencia al documento original"
   }
 ]

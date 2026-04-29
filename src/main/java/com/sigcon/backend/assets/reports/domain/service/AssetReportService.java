@@ -145,6 +145,17 @@ public class AssetReportService {
                 ? asset.getSupplier().getBusinessName()
                 : null;
 
+        // HU-ACT-07 E2: incluir cuenta contable PUC en formato "codigo - nombre".
+        String accountInfo = null;
+        if (asset.getAccountingAccount() != null
+                && asset.getAccountingAccount().getPucAccount() != null) {
+            String code = asset.getAccountingAccount().getPucAccount().getCode();
+            String name = asset.getAccountingAccount().getPucAccount().getName();
+            if (code != null && name != null) accountInfo = code + " - " + name;
+            else if (code != null) accountInfo = code;
+            else if (name != null) accountInfo = name;
+        }
+
         return AssetReportDTO.builder()
                 .assetCode(asset.getAssetCode())
                 .assetName(asset.getAssetName())
@@ -157,6 +168,8 @@ public class AssetReportService {
                 .depreciation(depreciation)
                 .status(asset.getStatus() != null ? asset.getStatus().name() : "N/A")
                 .supplierName(supplierName)
+                .description(asset.getDescription())
+                .accountInfo(accountInfo)
                 .build();
     }
 

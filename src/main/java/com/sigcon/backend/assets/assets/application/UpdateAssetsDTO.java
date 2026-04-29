@@ -58,8 +58,10 @@ public class UpdateAssetsDTO {
         @Schema(description = "Regla tributaria para el calculo de impuestos", example = "1")
         private Long rulerTax;
 
-        @NotNull(message = "Faltan datos requeridos")
-        @Schema(description = "Fecha de adquisicion", example = "2026-01-15")
+        // Al editar un activo existente, la fecha de adquisicion ya esta registrada
+        // en el voucher original. El form de edit no la expone, asi que la dejamos
+        // OPCIONAL: si viene null, el servicio preserva el valor existente.
+        @Schema(description = "Fecha de adquisicion (opcional en update)", example = "2026-01-15")
         private LocalDate acquisitionDate;
 
         @NotNull(message = "Faltan datos requeridos")
@@ -67,13 +69,12 @@ public class UpdateAssetsDTO {
         @Schema(description = "Vida util en meses", example = "60")
         private Integer usefulLifeMonths;
 
-        @NotNull(message = "Faltan datos requeridos")
-        @Schema(description = "ID de la regla de depreciacion", example = "1")
+        // Opcional en update: si el usuario no la cambia, se mantiene la regla actual.
+        @Schema(description = "ID de la regla de depreciacion (opcional en update)", example = "1")
         private Long depreciationRuleId;
 
-        @NotNull(message = "Faltan datos requeridos")
-        @Positive(message = "Faltan datos requeridos")
-        @Schema(description = "ID del proveedor (modulo Terceros)", example = "1")
+        // Opcional en update por la misma razon que paymentFormId/paymentMethodId.
+        @Schema(description = "ID del proveedor (opcional en update)", example = "1")
         private Long supplierId;
 
         // Al editar un activo existente, la forma/metodo de pago son OPCIONALES:

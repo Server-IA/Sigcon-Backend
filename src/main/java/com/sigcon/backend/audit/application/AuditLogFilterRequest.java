@@ -6,6 +6,7 @@ import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
 @Schema(description = "Filtros para busqueda avanzada de logs de auditoria (HU-AU-05)")
@@ -30,4 +31,18 @@ public class AuditLogFilterRequest {
     private LocalDateTime dateTo;
     @Schema(description = "Texto libre en descripcion", example = "factura")
     private String searchText;
+
+    // HU-AU-02 E4 / HU-AU-05 E5 (2026-04-28): nuevos filtros tecnicos.
+    @Schema(description = "Filtrar por direccion IP (parcial)", example = "192.168.1")
+    private String ipAddress;
+
+    @Schema(description = "Filtrar por User-Agent (parcial)", example = "Mobile")
+    private String userAgent;
+
+    // HU-AU-05 E3 (2026-04-28): filtros multi-valor (combinados).
+    @Schema(description = "Filtro multi-modulo (combinado)", example = "[\"AP\", \"AR\"]")
+    private List<AuditModule> modules;
+
+    @Schema(description = "Filtro multi-severidad (combinado)", example = "[\"HIGH\", \"CRITICAL\"]")
+    private List<AuditSeverity> severities;
 }

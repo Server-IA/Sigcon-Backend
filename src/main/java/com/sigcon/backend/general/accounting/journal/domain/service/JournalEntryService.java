@@ -22,6 +22,7 @@ import com.sigcon.backend.general.accounting.journal.application.JournalEntryLin
 import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntry;
 import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntryLine;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus;
+import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryLineRepository;
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.lists_accounting.accounting_account.domain.model.AccountingAccount;
@@ -56,6 +57,9 @@ public class JournalEntryService {
     private final CostCenterRepository costCenterRepository;
     private final ThirdPartyRepository thirdPartyRepository;
     private final AuditPublisher auditPublisher;
+    private final com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository parameterRepository;
+    private final com.sigcon.backend.general.accounting.journal.attachments.domain.repository.JournalEntrySupportRepository supportRepository;
+    private final com.sigcon.backend.general.accounting.series.domain.service.VoucherSeriesService voucherSeriesService;
 
     private final DataTableSpecificationBuilder<JournalEntry> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -98,15 +102,28 @@ public class JournalEntryService {
             totalCredit = totalCredit.add(
                     line.getCreditAmount() != null ? line.getCreditAmount() : BigDecimal.ZERO);
         }
-        if (totalDebit.compareTo(totalCredit) != 0) {
+        // HU-CG-02B: en BORRADOR se PERMITE descuadre. La validacion estricta de
+        // partida doble se aplica al contabilizar (postEntry). Esto permite al
+        // contador construir el asiento por etapas sin perder el progreso.
+        // Solo bloqueamos descuadre si el flag CG_STRICT_DRAFT esta en true.
+        if (totalDebit.compareTo(totalCredit) != 0 && readBoolParam("CG_STRICT_DRAFT", false)) {
             throw new IllegalArgumentException(
                     "Partida doble desbalanceada: debitos $" + totalDebit + " != creditos $" + totalCredit);
         }
 
-        // 4. Obtener siguiente numero de asiento
+        // 4. Obtener siguiente numero de asiento desde VoucherSeriesService.
+        // HU-CG-03A E3/E5: el rango y prefijo viven en voucher_series_config.
+        // Si la empresa no tiene serie 'JE' configurada, se auto-provisiona en
+        // el primer consumo (rango 1..999999). El fail-fast aqui es importante:
+        // si la serie esta EXHAUSTED, el endpoint retorna 400 con mensaje claro.
         int fiscalYear = entryDate.getYear();
-        Long maxNumber = journalEntryRepository.findMaxEntryNumberByFiscalYear(fiscalYear);
-        long nextNumber = (maxNumber != null ? maxNumber : 0) + 1;
+        long nextNumber;
+        try {
+            nextNumber = voucherSeriesService.consumeNext("JE");
+        } catch (IllegalStateException seriesEx) {
+            // Re-lanza con mensaje original; controller lo convierte a 400.
+            throw new IllegalStateException(seriesEx.getMessage(), seriesEx);
+        }
 
         // 5. Construir cabecera del asiento
         JournalEntry entry = JournalEntry.builder()
@@ -132,8 +149,10 @@ public class JournalEntryService {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Cuenta contable no encontrada: " + lineReq.getAccountingAccountId()));
 
-            // ERR-MNT-CG-01A / HU-CG-01A E3: mensaje exacto del Excel.
-            if (!"ACTIVE".equals(account.getStatus().name())) {
+            // HU-CG-02B: en BORRADOR se PERMITE cuenta inactiva (el contador puede
+            // capturar primero y reactivar la cuenta despues). La validacion estricta
+            // se aplica al contabilizar (postEntry). Activable via CG_STRICT_DRAFT.
+            if (!"ACTIVE".equals(account.getStatus().name()) && readBoolParam("CG_STRICT_DRAFT", false)) {
                 throw new IllegalArgumentException(
                         "La cuenta proporcionada está inactiva. "
                         + "Cuenta " + account.getPucAccount().getCode()
@@ -165,17 +184,28 @@ public class JournalEntryService {
             // (un activo puede acreditarse al venderlo); por eso solo restringimos
             // las clases 4, 5, 6 y 7 cuyo movimiento contrario es excepcional y
             // tipicamente indica error de captura.
+            //
+            // HU-AR-07 DEF#2 (2026-04-27): la validacion solo aplica a asientos
+            // MANUALES del CG. Notas credito/debito, reversiones de pago y otros
+            // movimientos automatizados de modulos AR/AP/BNK/ACT/NOM SI debitan
+            // legitimamente cuentas de ingreso (es un anti-ingreso). Si el JE
+            // viene con sourceModule != null, el modulo origen ya validó la
+            // logica contable y este chequeo se omite.
+            boolean isManualEntry = request.getSourceModule() == null
+                    || request.getSourceModule() == JournalSourceModule.CG;
             String pucCode = account.getPucAccount().getCode();
             char clazz = pucCode != null && !pucCode.isEmpty() ? pucCode.charAt(0) : ' ';
             boolean isExpenseLike = clazz == '5' || clazz == '6' || clazz == '7';
             boolean isIncomeLike  = clazz == '4';
-            if (isExpenseLike && c.signum() > 0 && account.getNature() == AccountNature.DEBIT) {
+            if (isManualEntry && isExpenseLike && c.signum() > 0
+                    && account.getNature() == AccountNature.DEBIT) {
                 throw new IllegalArgumentException(
                         "La naturaleza de la cuenta " + pucCode + " (" + account.getPucAccount().getName()
                         + ") no corresponde al tipo de movimiento contable. "
                         + "Las cuentas de gastos/costos (clases 5, 6, 7) deben debitarse, no acreditarse.");
             }
-            if (isIncomeLike && d.signum() > 0 && account.getNature() == AccountNature.CREDIT) {
+            if (isManualEntry && isIncomeLike && d.signum() > 0
+                    && account.getNature() == AccountNature.CREDIT) {
                 throw new IllegalArgumentException(
                         "La naturaleza de la cuenta " + pucCode + " (" + account.getPucAccount().getName()
                         + ") no corresponde al tipo de movimiento contable. "
@@ -261,11 +291,96 @@ public class JournalEntryService {
         if (entry.getStatus() != JournalEntryStatus.DRAFT) {
             throw new IllegalStateException("Solo se pueden contabilizar asientos en estado BORRADOR.");
         }
+
+        // HU-CG-02B: validaciones obligatorias al contabilizar (no en createEntry).
+        // El BORRADOR puede tener inconsistencias mientras el contador lo construye;
+        // al contabilizar el sistema bloquea cualquier irregularidad.
+
+        // 1. Periodo abierto (siempre)
+        accountingPeriodService.validatePeriodOpen(entry.getEntryDate());
+
+        // 2. Partida doble cuadrada (siempre)
+        if (entry.getTotalDebit() == null || entry.getTotalCredit() == null
+                || entry.getTotalDebit().compareTo(entry.getTotalCredit()) != 0) {
+            throw new IllegalArgumentException(
+                    "El asiento no se puede contabilizar: la partida doble esta desbalanceada. "
+                    + "Debitos $" + entry.getTotalDebit() + " != creditos $" + entry.getTotalCredit() + ".");
+        }
+
+        // 3. Todas las cuentas siguen activas (HU-CG-02B E3)
+        if (entry.getLines() != null) {
+            for (JournalEntryLine line : entry.getLines()) {
+                AccountingAccount acc = line.getAccountingAccount();
+                if (acc == null) {
+                    throw new IllegalArgumentException(
+                            "Una de las lineas del asiento no tiene cuenta contable asignada.");
+                }
+                if (acc.getStatus() == null || !"ACTIVE".equals(acc.getStatus().name())) {
+                    // HU-CG-01A E3: mensaje exacto del Excel (preservado tras relajar createEntry).
+                    throw new IllegalArgumentException(
+                            "La cuenta proporcionada está inactiva. "
+                            + "Cuenta " + (acc.getPucAccount() != null ? acc.getPucAccount().getCode() : acc.getId())
+                            + (acc.getPucAccount() != null ? " (" + acc.getPucAccount().getName() + ")" : "") + ".");
+                }
+            }
+        }
+
+        // 4. HU-CG-02A E2 / HU-CG-05B: NIT obligatorio en todas las lineas si el
+        // parametro CG_NIT_REQUIRED_ON_POST esta en true (default false para no
+        // romper flujos AP/AR/BNK que crean POSTED directamente). Configurable
+        // por empresa desde modulo de parametros.
+        if (readBoolParam("CG_NIT_REQUIRED_ON_POST", false)) {
+            if (entry.getLines() != null) {
+                for (JournalEntryLine line : entry.getLines()) {
+                    String nit = line.getThirdPartyNit();
+                    if (nit == null || nit.trim().isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "El comprobante no se puede contabilizar: la linea con cuenta "
+                                + (line.getAccountingAccount() != null && line.getAccountingAccount().getPucAccount() != null
+                                        ? line.getAccountingAccount().getPucAccount().getCode() : "?")
+                                + " no tiene NIT del tercero. La empresa requiere NIT obligatorio "
+                                + "en todas las lineas para contabilizar.");
+                    }
+                }
+            }
+        }
+
+        // 5. HU-CG-05B: soporte documental obligatorio si el parametro
+        // CG_SUPPORT_REQUIRED_ON_POST esta en true. Default false: el contador
+        // puede contabilizar sin soporte pero la HU recomienda activarlo para
+        // cumplir con los principios de auditoria contable.
+        if (readBoolParam("CG_SUPPORT_REQUIRED_ON_POST", false)) {
+            long supports = supportRepository.countByJournalEntryIdAndDeletedAtIsNull(entry.getId());
+            if (supports == 0) {
+                throw new IllegalArgumentException(
+                        "El comprobante no se puede contabilizar: no tiene soportes documentales adjuntos. "
+                        + "Adjunte al menos un PDF/JPG/PNG (factura, recibo, contrato) antes de contabilizar.");
+            }
+        }
+
         entry.setStatus(JournalEntryStatus.POSTED);
         JournalEntry saved = journalEntryRepository.save(entry);
         auditPublisher.publishUpdate(AuditModule.CG, "JournalEntry", saved.getId(),
                 "Asiento contable contabilizado #" + saved.getEntryNumber());
         return toDTO(saved);
+    }
+
+    /**
+     * HU-CG-02A E2 / HU-CG-05B: lee un parametro booleano de la tabla parameters
+     * SIN tenant filter (config global de plataforma). Si el parametro no existe
+     * o no es parseable, devuelve el default. Acepta "true", "TRUE", "1", "YES".
+     */
+    private boolean readBoolParam(String name, boolean def) {
+        try {
+            return parameterRepository.findGlobalValueByName(name)
+                    .map(s -> s != null && (s.equalsIgnoreCase("true")
+                                          || s.equalsIgnoreCase("yes")
+                                          || s.trim().equals("1")))
+                    .orElse(def);
+        } catch (Exception ex) {
+            log.warn("No se pudo leer parametro {}: {}", name, ex.getMessage());
+            return def;
+        }
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -617,6 +732,94 @@ public class JournalEntryService {
         return related;
     }
 
+    /**
+     * HU-CG-07C E1/E2/E3: arbol completo de versiones del comprobante.
+     *
+     * Recorre RECURSIVAMENTE las relaciones reversalOf y correctionOf en ambos
+     * sentidos (hacia arriba: ancestros; hacia abajo: descendientes) y construye
+     * un grafo plano de todas las versiones vinculadas al comprobante consultado.
+     *
+     * Cada nodo del resultado incluye:
+     *   - id, voucherCode, entryNumber, status, description, entryDate
+     *   - relation: "ORIGINAL" (raiz), "REVERSAL" (anula), "CORRECTION" (corrige)
+     *   - parentId: id del comprobante padre en el arbol (null para la raiz)
+     *   - depth: profundidad desde la raiz (0 = original)
+     *
+     * El frontend lo renderiza como arbol en una pestaña "Historial de versiones"
+     * del modal view.
+     */
+    public List<java.util.Map<String, Object>> getVersionHistory(Long id) {
+        JournalEntry start = findByIdOrThrow(id);
+        // 1. Encontrar la raiz: subir por reversalOf/correctionOf hasta no encontrar mas.
+        JournalEntry root = findRootAncestor(start);
+
+        // 2. BFS hacia abajo desde la raiz, recolectando todos los descendientes.
+        java.util.Set<Long> visited = new java.util.LinkedHashSet<>();
+        List<java.util.Map<String, Object>> tree = new ArrayList<>();
+        java.util.Deque<Object[]> queue = new java.util.ArrayDeque<>();
+        queue.add(new Object[]{root, null, 0, "ORIGINAL"});
+
+        while (!queue.isEmpty()) {
+            Object[] node = queue.poll();
+            JournalEntry e = (JournalEntry) node[0];
+            Long parentId = (Long) node[1];
+            int depth = (int) node[2];
+            String relation = (String) node[3];
+            if (visited.contains(e.getId())) continue;
+            visited.add(e.getId());
+            tree.add(toVersionNode(e, relation, parentId, depth));
+            // Buscar descendientes: comprobantes que reversaron o corrigieron a este
+            journalEntryRepository.findFirstByReversalOf_IdAndDeletedAtIsNull(e.getId())
+                    .ifPresent(rev -> queue.add(new Object[]{rev, e.getId(), depth + 1, "REVERSAL"}));
+            journalEntryRepository.findFirstByCorrectionOf_IdAndDeletedAtIsNull(e.getId())
+                    .ifPresent(cor -> queue.add(new Object[]{cor, e.getId(), depth + 1, "CORRECTION"}));
+        }
+        // HU-CG-07C E4: registrar consulta del historial para forensia
+        auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.VIEW,
+                AuditModule.CG,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                "JournalEntry", id,
+                "Consulta historial de versiones del comprobante " + buildVoucherCode(start)
+                        + " (" + tree.size() + " versiones)",
+                null, null, id);
+        return tree;
+    }
+
+    /** Sube por reversalOf/correctionOf hasta encontrar la raiz original. */
+    private JournalEntry findRootAncestor(JournalEntry e) {
+        JournalEntry current = e;
+        java.util.Set<Long> guard = new java.util.HashSet<>();
+        while (current != null) {
+            if (!guard.add(current.getId())) break;  // proteccion contra ciclo
+            JournalEntry parent = current.getReversalOf() != null
+                    ? current.getReversalOf()
+                    : current.getCorrectionOf();
+            if (parent == null) return current;
+            current = parent;
+        }
+        return e;
+    }
+
+    private java.util.Map<String, Object> toVersionNode(JournalEntry e, String relation,
+                                                          Long parentId, int depth) {
+        java.util.Map<String, Object> m = new java.util.HashMap<>();
+        m.put("id", e.getId());
+        m.put("entryNumber", e.getEntryNumber());
+        m.put("voucherCode", buildVoucherCode(e));
+        m.put("status", e.getStatus() != null ? e.getStatus().name() : null);
+        m.put("description", e.getDescription());
+        m.put("entryDate", e.getEntryDate() != null ? e.getEntryDate().toString() : null);
+        m.put("totalDebit", e.getTotalDebit());
+        m.put("totalCredit", e.getTotalCredit());
+        m.put("createdBy", e.getCreatedBy());
+        m.put("createdAt", e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
+        m.put("relation", relation);
+        m.put("parentId", parentId);
+        m.put("depth", depth);
+        return m;
+    }
+
     private static java.util.Map<String, Object> toRelatedMap(String relation, JournalEntry e) {
         java.util.Map<String, Object> m = new java.util.HashMap<>();
         m.put("relation", relation);
@@ -666,6 +869,7 @@ public class JournalEntryService {
                 .lines(lineDTOs)
                 .createdBy(entry.getCreatedBy())
                 .createdAt(entry.getCreatedAt())
+                .auditLogId(entry.getAuditLogId()) // HU-AU-09 E5
                 .build();
     }
 

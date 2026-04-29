@@ -52,6 +52,8 @@ public class CommercialDataService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final UserUtil userUtil;
     private final AuditPublisher auditPublisher;
+    /** HU-TER-12 E4 (2026-04-27): bloquea delete si hay cartera AR. */
+    private final com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository salesInvoiceRepository;
 
    /*
      * Crear datos comerciales de un tercero.
@@ -112,6 +114,14 @@ public class CommercialDataService {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+
+        // HU-TER-12 E2 (2026-04-27): justificacion minima 30 caracteres en
+        // update. La HU lo exige para cambios de limite de credito + riesgo.
+        String reason = request.getChangeReason();
+        if (reason == null || reason.trim().length() < 30) {
+            throw new IllegalArgumentException(
+                    "Debe ingresar el motivo del cambio (minimo 30 caracteres).");
         }
 
         // 2. Validar que el tercero exista
@@ -187,7 +197,21 @@ public class CommercialDataService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "CD_003: No existen datos comerciales vigentes para este tercero."));
 
+        // HU-TER-12 E4 (2026-04-27): bloquear si el cliente tiene cartera AR
+        // activa. Antes se permitia eliminar las condiciones aunque hubiera
+        // facturas de venta sin pagar; el calculo de provision quedaba sin
+        // marco de referencia. Ahora bloquea y exige liquidar primero.
+        long openInvoices = salesInvoiceRepository.countActiveByThirdParty(thirdPartyId);
+        if (openInvoices > 0) {
+            throw new IllegalArgumentException(
+                    "No se pueden eliminar las condiciones comerciales: el tercero tiene "
+                  + "cartera activa pendiente de cobro. Primero cancele o salde las facturas "
+                  + "vigentes en Cuentas por Cobrar.");
+        }
+
         commercialDataRepository.delete(commercialData);
+        auditPublisher.publishDelete(AuditModule.TER, "CommercialData", commercialData.getId(),
+                "CommercialData eliminado id=" + commercialData.getId());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

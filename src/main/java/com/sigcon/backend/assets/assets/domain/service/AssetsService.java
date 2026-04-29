@@ -267,7 +267,11 @@ public class AssetsService {
         //     assetTaxesRetentionRepository.save(assetTaxesRetention);
         // }
 
-        for (CreateAssetTaxesRetention taxesRetention : request.getTaxesRetention()) {
+        // ACT-01 E2 (2026-04-28): tolerar taxesRetention null o vacio. El frontend
+        // puede no enviar el array si el activo no tiene impuestos asociados.
+        List<CreateAssetTaxesRetention> taxesRetentionList = request.getTaxesRetention() != null
+                ? request.getTaxesRetention() : java.util.Collections.emptyList();
+        for (CreateAssetTaxesRetention taxesRetention : taxesRetentionList) {
 
             TaxRulerEntity ruleTax = taxRuleRepository.findById(taxesRetention.getTaxRuleId())
                     .orElseThrow(() -> new IllegalArgumentException("Regla de impuesto no encontrada"));
@@ -489,17 +493,30 @@ public class AssetsService {
                 + existingAsset.getStatus() + "' y no permite modificaciones.");
         }
 
-        // Validar período contable abierto
+        // Validar período contable abierto SOLO si la fecha viene en el request
+        // (en update es opcional; si null se preserva la fecha existente).
         if (request.getAcquisitionDate() != null) {
             accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
         }
 
-        ThirdParty supplier = resolveSupplier(request.getSupplierId());
+        // Proveedor: si null se preserva el actual (HU-ACT-09 update parcial).
+        ThirdParty supplier = request.getSupplierId() != null
+                ? resolveSupplier(request.getSupplierId())
+                : existingAsset.getSupplier();
         AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
-        DepretationRule depretationRule = depretationRuleRepository
-                .findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
-        if (depretationRule == null) {
-            throw new IllegalArgumentException("Regla de depreciacion no encontrada");
+
+        // Regla de depreciacion: si null se preserva la actual. Si llega y la
+        // cuenta cambio, se busca con la nueva cuenta.
+        DepretationRule depretationRule;
+        if (request.getDepreciationRuleId() != null) {
+            depretationRule = depretationRuleRepository
+                    .findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
+            if (depretationRule == null) {
+                throw new IllegalArgumentException(
+                    "El metodo de depreciacion no aplica para la cuenta contable seleccionada.");
+            }
+        } else {
+            depretationRule = existingAsset.getDepretationRule();
         }
 
         validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
@@ -515,7 +532,9 @@ public class AssetsService {
         // existingAsset.setChartOfAccount(chartOfAccount);
         existingAsset.setSupplier(supplier);
         existingAsset.setAcquisitionValue(request.getAcquisitionValue());
-        existingAsset.setAcquisitionDate(request.getAcquisitionDate());
+        if (request.getAcquisitionDate() != null) {
+            existingAsset.setAcquisitionDate(request.getAcquisitionDate());
+        }
         existingAsset.setUsefulLifeMonths(request.getUsefulLifeMonths());
         existingAsset.setDepretationRule(depretationRule);
         existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
@@ -528,7 +547,10 @@ public class AssetsService {
             existingAsset.setPaymentMethodId(request.getPaymentMethodId());
         }
         existingAsset.setAccountingAccount(accountingAccount);
-        existingAsset.setStatus(request.getStatus());
+        // Status: si el cliente no lo manda, preservar el existente.
+        if (request.getStatus() != null) {
+            existingAsset.setStatus(request.getStatus());
+        }
         existingAsset.setObservations(normalizedObservations);
         existingAsset.setUpdatedBy(currentUser);
 

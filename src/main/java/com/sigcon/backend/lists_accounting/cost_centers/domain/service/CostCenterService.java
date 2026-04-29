@@ -140,6 +140,15 @@ public class CostCenterService {
 
         public ResponseEntity<?> deleteCostCenter(Long id, String reason) {
                 try {
+                        // HU-CFG-20 MT-01 (2026-04-27): motivo de eliminacion obligatorio
+                        // (minimo 10 caracteres). Antes se permitia DELETE sin reason
+                        // y el front solo lo bloqueaba. Cualquier curl directo lo
+                        // saltaba.
+                        if (reason == null || reason.trim().length() < 10) {
+                                return ResponseEntity.badRequest().body(
+                                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                                "Debe ingresar el motivo de la eliminacion (minimo 10 caracteres).")));
+                        }
                         CostCenter costCenter = costCenterRepository.findByIdAndDeletedAtIsNull(id)
                                         .orElseThrow(() -> new RuntimeException("Centro de costo no encontrado"));
 

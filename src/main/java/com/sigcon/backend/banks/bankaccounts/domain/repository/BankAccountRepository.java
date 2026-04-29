@@ -23,4 +23,12 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, Long>,
      */
     boolean existsByBankIdAndDeletedAtIsNull(Long bankId);
 
+    /** QA HU-008 E1: total de cuentas vigentes de un banco. */
+    long countByBank_IdAndDeletedAtIsNull(Long bankId);
+
+    /** QA HU-008 E1: cuentas en estado especifico de un banco. */
+    long countByBank_IdAndStatusAndDeletedAtIsNull(
+            Long bankId,
+            com.sigcon.backend.banks.bankaccounts.domain.model.enums.BankAccountStatus status);
+
 }

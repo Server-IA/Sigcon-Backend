@@ -19,6 +19,7 @@ import com.sigcon.backend.nomina.domain.model.PayrollReceipt;
 import com.sigcon.backend.nomina.domain.repository.EmployeeRepository;
 import com.sigcon.backend.nomina.domain.repository.PayrollLineRepository;
 import com.sigcon.backend.nomina.domain.repository.PayrollReceiptRepository;
+import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -56,6 +57,7 @@ public class PayrollReportService {
     private final EmployeeRepository employeeRepository;
     private final SystemInfoService systemInfoService;
     private final AuditPublisher auditPublisher;
+    private final CostCenterRepository costCenterRepository;
 
     private static final NumberFormat COP =
             NumberFormat.getCurrencyInstance(new Locale("es", "CO"));
@@ -234,15 +236,28 @@ public class PayrollReportService {
                 .map(PayrollReceipt::getNetPay)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Desglose por centro de costo
-        Map<Long, BigDecimal> earningsByCostCenter = new LinkedHashMap<>();
-        Map<Long, BigDecimal> netByCostCenter = new LinkedHashMap<>();
+        // Desglose por centro de costo (HU-NOM-06 E3 - 2026-04-28):
+        // Las llaves del Map son nombres legibles ("CC-DEFAULT - Centro de Costo Default"),
+        // no ids. Antes el frontend mostraba "CC #20" o "CC (sin asignar)" - confuso.
+        Map<String, BigDecimal> earningsByCostCenter = new LinkedHashMap<>();
+        Map<String, BigDecimal> netByCostCenter = new LinkedHashMap<>();
         for (PayrollReceipt r : receipts) {
             Long ccId = employeeRepository.findById(r.getEmployeeId())
                     .map(Employee::getCostCenterId).orElse(null);
-            if (ccId == null) ccId = 0L; // "sin centro de costo"
-            earningsByCostCenter.merge(ccId, r.getTotalEarnings(), BigDecimal::add);
-            netByCostCenter.merge(ccId, r.getNetPay(), BigDecimal::add);
+            String ccLabel;
+            if (ccId == null) {
+                ccLabel = "(sin centro de costo)";
+            } else {
+                ccLabel = costCenterRepository.findById(ccId)
+                        .map(cc -> {
+                            String code = cc.getCode() != null ? cc.getCode() : ("#" + cc.getId());
+                            String name = cc.getName() != null ? cc.getName() : "";
+                            return name.isEmpty() ? code : (code + " - " + name);
+                        })
+                        .orElse("CC #" + ccId);
+            }
+            earningsByCostCenter.merge(ccLabel, r.getTotalEarnings(), BigDecimal::add);
+            netByCostCenter.merge(ccLabel, r.getNetPay(), BigDecimal::add);
         }
 
         // Referencia a los JE consecutivos

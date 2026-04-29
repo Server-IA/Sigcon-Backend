@@ -81,6 +81,15 @@ public class JournalEntry {
     @Column(name = "source_id")
     private Long sourceId;
 
+    /**
+     * HU-AU-09 E5 (2026-04-28): FK bidireccional al log de auditoria que
+     * registro la creacion del asiento. Se popula automaticamente desde
+     * {@code AuditLogService.register} al detectar journalEntryId no null.
+     * Permite consulta inversa via {@code GET /api/v1/journal-entries/{id}/audit-trail}.
+     */
+    @Column(name = "audit_log_id")
+    private Long auditLogId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default

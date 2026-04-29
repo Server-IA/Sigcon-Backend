@@ -22,6 +22,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +47,12 @@ public class AuditLogService {
     private final UserUtil userUtil;
     private final RiskRuleService riskRuleService;
     private final RetentionService retentionService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository journalEntryRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.assets.niif_alerts.domain.repository.NiifVerificationRepository niifVerificationRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.assets.niif_alerts.domain.repository.NiifAlertRepository niifAlertRepository;
 
     /**
      * HU-AU-01: Registra un evento de auditoria inmutable con hash encadenado.
@@ -88,6 +95,22 @@ public class AuditLogService {
 
         LocalDateTime now = LocalDateTime.now();
 
+        // HU-AU-09 E2 (2026-04-28): si llega journalEntryId, validar que exista.
+        // Antes era una FK logica sin verificacion: cualquier id (o uno borrado)
+        // se persistia. Ahora se descarta el ID si el JE no esta presente.
+        if (journalEntryId != null && journalEntryRepository != null) {
+            try {
+                if (!journalEntryRepository.existsById(journalEntryId)) {
+                    log.warn("AuditLog: journalEntryId={} no existe en BD, se descarta del log",
+                             journalEntryId);
+                    journalEntryId = null;
+                }
+            } catch (Exception ignored) {
+                // Si la verificacion falla por algun problema transversal, persistir
+                // tal cual (fallback defensivo, no rompe el audit principal).
+            }
+        }
+
         // Hash encadenado SHA-256 (HU-AU-01 E5/E6)
         String previousHash = hashService.getLastHash();
         String hash = hashService.computeHash(
@@ -119,6 +142,23 @@ public class AuditLogService {
         entry = repository.save(entry);
         log.debug("Audit: [{}] {} {} {} id={} severity={} hash={}",
                 module, action, entityType, entityId, entry.getId(), severity, hash.substring(0, 8));
+
+        // HU-AU-09 E5 (2026-04-28): FK bidireccional. Si el log esta vinculado a
+        // un JE, popular tambien JE.audit_log_id apuntando al log recien creado.
+        if (journalEntryId != null && journalEntryRepository != null) {
+            try {
+                final Long auditLogId = entry.getId();
+                final Long jeId = journalEntryId;
+                journalEntryRepository.findById(jeId).ifPresent(je -> {
+                    if (je.getAuditLogId() == null) {
+                        je.setAuditLogId(auditLogId);
+                        journalEntryRepository.save(je);
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("HU-AU-09 E5: no se pudo poblar JE.auditLogId: {}", e.getMessage());
+            }
+        }
         return entry;
     }
 
@@ -148,10 +188,45 @@ public class AuditLogService {
                 .stream().map(this::toDTO).collect(Collectors.toList());
     }
 
-    /** HU-AU-05: Busqueda avanzada con filtros. */
+    /**
+     * HU-AU-05: Busqueda avanzada con filtros.
+     *
+     * <p>HU-AU-05 E5 (2026-04-28): la consulta se autorregistra como evento
+     * {@code VIEW} con descripcion que resume los filtros aplicados, para que
+     * un auditor externo pueda saber quien busco que datos.
+     */
     public Page<AuditLogDTO> search(AuditLogFilterRequest filter, Pageable pageable) {
         Specification<AuditLog> spec = buildSpecification(filter);
-        return repository.findAll(spec, pageable).map(this::toDTO);
+        Page<AuditLogDTO> result = repository.findAll(spec, pageable).map(this::toDTO);
+        // Registrar la consulta como evento VIEW para forensia.
+        try {
+            String summary = describeFilter(filter, result.getTotalElements());
+            register(AuditAction.VIEW, AuditModule.AU, AuditSeverity.LOW,
+                     "AuditLog", null,
+                     "Consulta avanzada de logs: " + summary,
+                     null, null, null);
+        } catch (Exception e) {
+            log.warn("No se pudo registrar VIEW de consulta de logs: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    private String describeFilter(AuditLogFilterRequest f, long total) {
+        List<String> parts = new ArrayList<>();
+        if (f.getUserId() != null)        parts.add("userId=" + f.getUserId());
+        if (f.getUserEmail() != null && !f.getUserEmail().isBlank()) parts.add("user~" + f.getUserEmail());
+        if (f.getAction() != null)        parts.add("action=" + f.getAction());
+        if (f.getModule() != null)        parts.add("module=" + f.getModule());
+        if (f.getModules() != null && !f.getModules().isEmpty()) parts.add("modules=" + f.getModules());
+        if (f.getSeverity() != null)      parts.add("sev=" + f.getSeverity());
+        if (f.getSeverities() != null && !f.getSeverities().isEmpty()) parts.add("severities=" + f.getSeverities());
+        if (f.getEntityType() != null && !f.getEntityType().isBlank()) parts.add("entity=" + f.getEntityType());
+        if (f.getDateFrom() != null)      parts.add("from=" + f.getDateFrom());
+        if (f.getDateTo() != null)        parts.add("to=" + f.getDateTo());
+        if (f.getIpAddress() != null && !f.getIpAddress().isBlank()) parts.add("ip~" + f.getIpAddress());
+        if (f.getUserAgent() != null && !f.getUserAgent().isBlank()) parts.add("ua~" + f.getUserAgent());
+        if (f.getSearchText() != null && !f.getSearchText().isBlank()) parts.add("text~" + f.getSearchText());
+        return (parts.isEmpty() ? "(sin filtros)" : String.join(", ", parts)) + " -> " + total + " resultados";
     }
 
     /** HU-AU-07: Datos del dashboard. */
@@ -170,12 +245,45 @@ public class AuditLogService {
         repository.countByActionSince(since).forEach(r ->
                 byAction.put(r[0].toString(), (Long) r[1]));
 
+        // HU-AU-07 E4 (2026-04-28): metricas NIIF/SOX
+        Long niifVerificationsTotal = 0L;
+        Long niifAlertsOpen = 0L;
+        Double niifCompliancePct = 0.0;
+        try {
+            if (niifVerificationRepository != null) {
+                niifVerificationsTotal = niifVerificationRepository.count();
+                if (niifVerificationsTotal > 0) {
+                    long compliant = niifVerificationRepository.findAll().stream()
+                            .filter(v -> v.getResult() != null
+                                    && v.getResult().name().equals("COMPLIANT"))
+                            .count();
+                    niifCompliancePct = (compliant * 100.0) / niifVerificationsTotal;
+                }
+            }
+            if (niifAlertRepository != null) {
+                niifAlertsOpen = niifAlertRepository.count();
+            }
+        } catch (Exception e) {
+            log.warn("HU-AU-07 E4: error calculando metricas NIIF: {}", e.getMessage());
+        }
+
+        // SOX-like: % eventos NO criticos sobre el total ult. 30 dias
+        Long criticalEventsRecent = bySeverity.getOrDefault("CRITICAL", 0L);
+        Long totalRecent = bySeverity.values().stream().mapToLong(Long::longValue).sum();
+        Double soxControlPct = totalRecent == 0 ? 100.0
+                : ((totalRecent - criticalEventsRecent) * 100.0) / totalRecent;
+
         return AuditDashboardDTO.builder()
                 .totalEvents(repository.count())
                 .countBySeverity(bySeverity)
                 .countByModule(byModule)
                 .countByAction(byAction)
                 .latestEvents(findLatest(10))
+                .niifVerificationsTotal(niifVerificationsTotal)
+                .niifAlertsOpen(niifAlertsOpen)
+                .niifCompliancePct(niifCompliancePct)
+                .soxControlPct(soxControlPct)
+                .criticalEventsRecent(criticalEventsRecent)
                 .build();
     }
 
@@ -189,13 +297,36 @@ public class AuditLogService {
         };
     }
 
+    // HU-AU-02 E2 (2026-04-28): validar formato IP antes de almacenar.
+    // IPv4: 1.2.3.4 | IPv6: 2001:db8::1 | localhost: ::1, 127.0.0.1
+    private static final Pattern IPV4_RX =
+            Pattern.compile("^(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d?\\d)$");
+    private static final Pattern IPV6_RX =
+            Pattern.compile("^[0-9a-fA-F:]{2,}$");
+
+    private boolean isValidIp(String ip) {
+        if (ip == null || ip.isBlank()) return false;
+        String t = ip.trim();
+        if ("::1".equals(t) || "localhost".equalsIgnoreCase(t)) return true;
+        if (IPV4_RX.matcher(t).matches()) return true;
+        return IPV6_RX.matcher(t).matches() && t.contains(":");
+    }
+
     private String resolveIpAddress() {
         try {
             var attrs = RequestContextHolder.getRequestAttributes();
             if (attrs instanceof ServletRequestAttributes sra) {
                 HttpServletRequest req = sra.getRequest();
                 String forwarded = req.getHeader("X-Forwarded-For");
-                return forwarded != null ? forwarded.split(",")[0].trim() : req.getRemoteAddr();
+                String candidate = forwarded != null ? forwarded.split(",")[0].trim() : req.getRemoteAddr();
+                // HU-AU-02 E2: si la IP capturada es invalida (ej. inyeccion via
+                // X-Forwarded-For), almacenar marca de invalidez en lugar del valor
+                // malformado para preservar integridad y trazabilidad.
+                if (!isValidIp(candidate)) {
+                    log.warn("AuditLog: IP invalida descartada: '{}'", candidate);
+                    return "INVALID_IP";
+                }
+                return candidate;
             }
         } catch (Exception ignored) {}
         return "N/A (event-driven)";
@@ -229,6 +360,18 @@ public class AuditLogService {
             if (f.getSearchText() != null && !f.getSearchText().isBlank())
                 predicates.add(cb.like(cb.lower(root.get("description")),
                         "%" + f.getSearchText().toLowerCase() + "%"));
+            // HU-AU-02 E4: filtros tecnicos por IP / User-Agent
+            if (f.getIpAddress() != null && !f.getIpAddress().isBlank())
+                predicates.add(cb.like(cb.lower(root.get("ipAddress")),
+                        "%" + f.getIpAddress().toLowerCase() + "%"));
+            if (f.getUserAgent() != null && !f.getUserAgent().isBlank())
+                predicates.add(cb.like(cb.lower(root.get("userAgent")),
+                        "%" + f.getUserAgent().toLowerCase() + "%"));
+            // HU-AU-05 E3: filtros multi-valor combinados (modulo + severidad)
+            if (f.getModules() != null && !f.getModules().isEmpty())
+                predicates.add(root.get("module").in(f.getModules()));
+            if (f.getSeverities() != null && !f.getSeverities().isEmpty())
+                predicates.add(root.get("severity").in(f.getSeverities()));
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

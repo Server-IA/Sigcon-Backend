@@ -84,19 +84,41 @@ public class MockAgroFusionController {
     @PostMapping(value = "/aaef/ack", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> receiveAck(
             @RequestBody Map<String, Object> ackPayload,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false)
+            String authorizationHeader,
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-API-Key", required = false)
+            String apiKeyHeader,
             @Parameter(description = "Modo de respuesta override (ALWAYS_OK | FAIL_FIRST_N | ALWAYS_FAIL | TIMEOUT)")
             @RequestParam(required = false) Mode mode) throws InterruptedException {
 
         Mode effective = mode != null ? mode : defaultMode;
-        String exchangeId = ackPayload.get("OriginalExchangeId") != null
-                ? ackPayload.get("OriginalExchangeId").toString()
-                : (ackPayload.get("originalExchangeId") != null ? ackPayload.get("originalExchangeId").toString() : "unknown");
+        // Spec AAEF Bloque W: el ExchangeId puede venir en payload root (lote
+        // inicial camelCase) o anidado en AgroFusionAcknowledgment (Pull+Diff
+        // PascalCase). Soportamos ambos formatos.
+        String exchangeId = "unknown";
+        if (ackPayload.get("OriginalExchangeId") != null) {
+            exchangeId = ackPayload.get("OriginalExchangeId").toString();
+        } else if (ackPayload.get("originalExchangeId") != null) {
+            exchangeId = ackPayload.get("originalExchangeId").toString();
+        } else if (ackPayload.get("AgroFusionAcknowledgment") instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> inner = (Map<String, Object>) ackPayload.get("AgroFusionAcknowledgment");
+            if (inner.get("OriginalExchangeId") != null) {
+                exchangeId = inner.get("OriginalExchangeId").toString();
+            }
+        }
 
+        // Spec AAEF Bloque W: capturar headers de auth (X-API-Key principal,
+        // Authorization legacy) para validar en smoke tests que SIGCON los
+        // esta enviando.
         // Persistir el ACK recibido
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("receivedAt", Instant.now().toString());
         entry.put("exchangeId", exchangeId);
         entry.put("mode", effective.name());
+        entry.put("authorization", authorizationHeader != null ? authorizationHeader : "(ausente)");
+        entry.put("apiKey", apiKeyHeader != null ? apiKeyHeader : "(ausente)");
+        entry.put("hasApiKey", apiKeyHeader != null && !apiKeyHeader.isBlank());
         entry.put("payload", ackPayload);
         receivedAcks.add(entry);
 

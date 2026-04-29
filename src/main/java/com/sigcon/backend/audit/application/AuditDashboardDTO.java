@@ -18,4 +18,28 @@ public class AuditDashboardDTO {
     private Map<String, Long> countByAction;
     @Schema(description = "Ultimos 10 eventos")
     private List<AuditLogDTO> latestEvents;
+
+    /**
+     * HU-AU-07 E4 (2026-04-28): metricas de cumplimiento normativo NIIF.
+     * Calculadas a partir del modulo NiifAlerts del area de Activos.
+     */
+    @Schema(description = "Total de verificaciones NIIF realizadas")
+    private Long niifVerificationsTotal;
+
+    @Schema(description = "Total de alertas NIIF abiertas (severidad WARNING + CRITICAL)")
+    private Long niifAlertsOpen;
+
+    @Schema(description = "Porcentaje de cumplimiento NIIF (% verificaciones COMPLIANT vs total)")
+    private Double niifCompliancePct;
+
+    /**
+     * HU-AU-07 E4 (2026-04-28): metricas de cumplimiento control interno (SOX-like).
+     * SIGCON no implementa SOX formal pero exponemos indicador derivado:
+     * % de eventos NO criticos sobre el total (mas alto = mejor control).
+     */
+    @Schema(description = "Porcentaje de control interno (eventos no-CRITICAL / total) ultimos 30 dias")
+    private Double soxControlPct;
+
+    @Schema(description = "Eventos criticos pendientes de revision en los ultimos 30 dias")
+    private Long criticalEventsRecent;
 }

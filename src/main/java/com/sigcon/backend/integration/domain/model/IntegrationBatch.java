@@ -130,6 +130,25 @@ public class IntegrationBatch {
     @Column(name = "payload_json", nullable = false, columnDefinition = "TEXT")
     private String payloadJson;
 
+    /**
+     * Spec AAEF Bloque W: distingue lote inicial (false) de Pull+Diff
+     * (AgroFusionExchangeUpdate, true). El AckClient usa este flag para elegir
+     * el envelope del ACK:
+     *   - false -> AaefAckDTO camelCase (lote inicial)
+     *   - true  -> AgroFusionAcknowledgmentDTO PascalCase (Pull+Diff)
+     */
+    @Builder.Default
+    @Column(name = "is_update", nullable = false)
+    private Boolean isUpdate = false;
+
+    /**
+     * Spec AAEF Bloque W: cuando isUpdate=true, conserva el OriginalExchangeId
+     * del envelope (lote padre) para incluirlo en el ACK del Pull+Diff.
+     * En lotes iniciales queda null.
+     */
+    @Column(name = "original_exchange_id", length = 64)
+    private String originalExchangeId;
+
     // V9-P: columnas TIMESTAMPTZ (guardan instante absoluto, cliente elige TZ al mostrar).
     // Hibernate respeta columnDefinition y NO intenta revertirlo en ddl-auto=update.
     @Column(name = "received_at", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")

@@ -395,7 +395,25 @@ public class EclSegmentationService {
                 .calculationDate(segmentation.getCalculationDate())
                 .createdAt(segmentation.getCreatedAt())
                 .updatedAt(segmentation.getUpdatedAt())
+                .provisionPct(provisionPctFor(segmentation.getFinalSegment()))
                 .build();
+    }
+
+    /**
+     * HU-TER-11 E6 (2026-04-27): porcentaje de provision ECL por nivel.
+     * Valores estandar NIIF 9 (stage 1-3) en mercado colombiano.
+     * Si en el futuro se requiere parametrizar, agregar tabla
+     * cfg_ecl_provision_rate (risk_level, percentage).
+     */
+    private java.math.BigDecimal provisionPctFor(
+            com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation level) {
+        if (level == null) return java.math.BigDecimal.ZERO;
+        switch (level) {
+            case LOW:    return new java.math.BigDecimal("1.0");
+            case MEDIUM: return new java.math.BigDecimal("5.0");
+            case HIGH:   return new java.math.BigDecimal("20.0");
+            default:     return java.math.BigDecimal.ZERO;
+        }
     }
 
     /**

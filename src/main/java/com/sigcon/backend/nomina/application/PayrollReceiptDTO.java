@@ -47,6 +47,10 @@ public class PayrollReceiptDTO {
     @Schema(description = "ID del JournalEntry generado")
     private Long journalEntryId;
 
+    /** HU-NOM-04 DEF#2 (2026-04-28): si es complementaria, ID del recibo CLOSED original. */
+    @Schema(description = "ID del recibo CLOSED original si es complementaria. null si es liquidacion principal.")
+    private Long complementaryOfReceiptId;
+
     private String approvedBy;
     private LocalDateTime approvedAt;
     private String closedBy;
@@ -90,6 +94,7 @@ public class PayrollReceiptDTO {
                 .netPay(r.getNetPay())
                 .status(r.getStatus())
                 .journalEntryId(r.getJournalEntryId())
+                .complementaryOfReceiptId(r.getComplementaryOfReceiptId())
                 .approvedBy(r.getApprovedBy())
                 .approvedAt(r.getApprovedAt())
                 .closedBy(r.getClosedBy())

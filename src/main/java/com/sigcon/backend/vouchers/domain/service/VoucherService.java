@@ -23,6 +23,9 @@ import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository
 import com.sigcon.backend.banks.checks.domain.model.Check;
 import com.sigcon.backend.banks.checks.domain.model.enums.CheckStatus;
 import com.sigcon.backend.banks.checks.domain.repository.CheckRepository;
+import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
+import com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType;
+import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.invoices.domain.model.PaymentForms;
 import com.sigcon.backend.parametrization.resources.domain.repository.PaymentFormRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -53,6 +56,7 @@ public class VoucherService {
     private final CheckRepository checkRepository;
     private final AssetsRepository assetsRepository;
     private final CheckbookRepository checkbookRepository;
+    private final FinancialMovementRepository financialMovementRepository;
     private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<VouchersEntity> dataTableSpecificationBuilder =
@@ -70,13 +74,18 @@ public class VoucherService {
         PaymentForms paymentFormEntity = paymentFormRepository.findById(voucherDTO.getPaymentFormId())
         .orElseThrow(() -> new RuntimeException("El formulario de pago no existe"));
 
-        if (
+        // HU-ACT-01 E8/E9: la validacion de origenes de pago solo aplica para
+        // forma de pago CONTADO. En CREDITO no hay salida inmediata de bancos/caja
+        // (la CxP se genera automaticamente), asi que los 3 origenes pueden ser null.
+        boolean noOrigin =
             (voucherDTO.getBankAccountId() == null || voucherDTO.getBankAccountId() == 0) &&
             (voucherDTO.getCashAccountId() == null || voucherDTO.getCashAccountId() == 0) &&
-            (voucherDTO.getCheckId() == null || voucherDTO.getCheckId() == 0)
-        ) {
-            // HU-ACT-01 E9: mensaje alineado a la HU (forma de pago valida).
-            throw new IllegalArgumentException("Debe seleccionar una forma de pago válida (contado o crédito).");
+            (voucherDTO.getCheckId() == null || voucherDTO.getCheckId() == 0);
+
+        if (noOrigin && Boolean.TRUE.equals(paymentFormEntity.getIsContado())) {
+            // HU-ACT-01 E9: mensaje EXACTO de la historia de usuario.
+            throw new IllegalArgumentException(
+                "Debe especificar la cuenta o caja desde donde se realizó el pago");
         }
 
         VouchersEntity voucherEntity = VouchersEntity.builder().build();
@@ -95,21 +104,43 @@ public class VoucherService {
             voucherEntity.setAsset(assetEntity);
         }
 
+        // HU-ACT-01 E1/E8: el voucher PC (Pago Compra) representa la salida de
+        // efectivo asociada a la compra de un activo de contado. Ademas de
+        // actualizar el saldo de la cuenta/caja, debe registrar un
+        // FinancialMovement para que el contador lo vea en Bancos y Cajas.
+        boolean isAssetCashPayment = "PC".equals(voucherTypeEntity.getCode());
+
         if (voucherDTO.getBankAccountId() != null) {
             BankAccount bankAccount = bankAccountRepository
                 .findByIdAndDeletedAtIsNull(voucherDTO.getBankAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
-        
+
             voucherEntity.setBankAccount(bankAccount);
+            BigDecimal signedAmount;
             switch (voucherTypeEntity.getCode()) {
                 case "PC":
                     bankAccount.setInitialBalance(bankAccount.getInitialBalance().subtract(voucherDTO.getAmount()));
+                    signedAmount = voucherDTO.getAmount().negate();
                     break;
                 default:
                     bankAccount.setInitialBalance(bankAccount.getInitialBalance().add(voucherDTO.getAmount()));
+                    signedAmount = voucherDTO.getAmount();
                     break;
             }
             bankAccountRepository.saveAndFlush(bankAccount);
+
+            if (isAssetCashPayment) {
+                FinancialMovement mv = FinancialMovement.builder()
+                        .bankAccount(bankAccount)
+                        .movementDate(voucherDTO.getDate() != null ? voucherDTO.getDate() : java.time.LocalDate.now())
+                        .amount(signedAmount)
+                        .description("Pago compra activo (voucher #" + voucherEntity.getNumber() + ")")
+                        .externalReference(voucherDTO.getDescription())
+                        .sourceType(FinancialMovementSourceType.MANUAL)
+                        .flowActivity("INVERSION")
+                        .build();
+                financialMovementRepository.save(mv);
+            }
         }
 
         if(voucherDTO.getCashAccountId() != null) {
@@ -120,6 +151,19 @@ public class VoucherService {
             cashRepository.saveAndFlush(cashEntity);
 
             voucherEntity.setCash(cashEntity);
+
+            if (isAssetCashPayment) {
+                FinancialMovement mv = FinancialMovement.builder()
+                        .cash(cashEntity)
+                        .movementDate(voucherDTO.getDate() != null ? voucherDTO.getDate() : java.time.LocalDate.now())
+                        .amount(voucherDTO.getAmount().negate())
+                        .description("Pago compra activo (voucher #" + voucherEntity.getNumber() + ")")
+                        .externalReference(voucherDTO.getDescription())
+                        .sourceType(FinancialMovementSourceType.MANUAL)
+                        .flowActivity("INVERSION")
+                        .build();
+                financialMovementRepository.save(mv);
+            }
         }
 
         if(voucherDTO.getCheckId() != null) {
@@ -137,6 +181,21 @@ public class VoucherService {
 
             checkEntity.setStatusCheck(CheckStatus.COBRADO);
             checkRepository.saveAndFlush(checkEntity);
+
+            if (isAssetCashPayment) {
+                FinancialMovement mv = FinancialMovement.builder()
+                        .bankAccount(bankAccount)
+                        .movementDate(voucherDTO.getDate() != null ? voucherDTO.getDate() : java.time.LocalDate.now())
+                        .amount(voucherDTO.getAmount().negate())
+                        .description("Pago compra activo - Cheque #" + checkEntity.getNumberCheck()
+                                + " (voucher #" + voucherEntity.getNumber() + ")")
+                        .externalReference(voucherDTO.getDescription())
+                        .sourceType(FinancialMovementSourceType.MANUAL)
+                        .flowActivity("INVERSION")
+                        .matchedCheckId(checkEntity.getId())
+                        .build();
+                financialMovementRepository.save(mv);
+            }
         }
 
         VouchersEntity savedVoucher = voucherRepository.save(voucherEntity);

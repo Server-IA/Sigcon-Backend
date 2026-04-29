@@ -465,6 +465,95 @@ public class FinancialMovementService {
     }
 
     /**
+     * QA HU-026: matching automatico de movimientos sin cruzar contra
+     * comprobantes (vouchers) por monto exacto y fecha cercana (+/- N dias).
+     * <p>
+     * No cruza si el voucher ya esta cruzado con otro movimiento o si el monto
+     * no coincide. Reporta cuantos quedaron pendientes para revision manual.
+     */
+    @Transactional
+    public ResponseEntity<?> autoMatchMovements(Long bankAccountId, Integer dateToleranceDays) {
+        int tolerance = dateToleranceDays != null && dateToleranceDays >= 0 ? dateToleranceDays : 3;
+
+        // Movimientos no cruzados (sin cheque ni comprobante)
+        java.util.List<FinancialMovement> candidates;
+        if (bankAccountId != null) {
+            candidates = financialMovementRepository.findAllByBankAccountIdOrdered(bankAccountId).stream()
+                    .filter(m -> m.getMatchedCheckId() == null && m.getMatchedVoucherId() == null)
+                    .toList();
+        } else {
+            candidates = financialMovementRepository.findAll().stream()
+                    .filter(m -> m.getMatchedCheckId() == null && m.getMatchedVoucherId() == null)
+                    .toList();
+        }
+
+        int matched = 0;
+        int skipped = 0;
+        java.util.List<java.util.Map<String, Object>> details = new java.util.ArrayList<>();
+        for (FinancialMovement mov : candidates) {
+            if (mov.getMovementDate() == null || mov.getAmount() == null) {
+                skipped++;
+                continue;
+            }
+            java.time.LocalDate from = mov.getMovementDate().minusDays(tolerance);
+            java.time.LocalDate to = mov.getMovementDate().plusDays(tolerance);
+            // Buscar vouchers de la misma cuenta con monto coincidente y fecha en rango
+            java.util.List<VouchersEntity> vouchers = mov.getBankAccount() != null
+                    ? voucherRepository.findAll().stream()
+                        .filter(v -> v.getDeletedAt() == null
+                                && v.getBankAccount() != null
+                                && v.getBankAccount().getId().equals(mov.getBankAccount().getId())
+                                && v.getAmount() != null
+                                && v.getAmount().abs().compareTo(mov.getAmount().abs()) == 0
+                                && v.getDate() != null
+                                && !v.getDate().isBefore(from)
+                                && !v.getDate().isAfter(to))
+                        .toList()
+                    : java.util.List.of();
+            // Filtrar los ya emparejados con otro movimiento
+            java.util.List<VouchersEntity> available = vouchers.stream()
+                    .filter(v -> financialMovementRepository.findByMatchedVoucherId(v.getId())
+                                .map(other -> other.getId().equals(mov.getId()))
+                                .orElse(true))
+                    .toList();
+
+            if (available.size() == 1) {
+                mov.setMatchedVoucherId(available.get(0).getId());
+                financialMovementRepository.save(mov);
+                matched++;
+                details.add(java.util.Map.of(
+                        "movementId", mov.getId(),
+                        "voucherId", available.get(0).getId(),
+                        "amount", mov.getAmount(),
+                        "date", String.valueOf(mov.getMovementDate())));
+            } else {
+                // 0 candidates -> skip; >1 candidates -> ambiguo, requiere revision manual
+                skipped++;
+            }
+        }
+
+        java.util.Map<String, Object> result = java.util.Map.of(
+                "evaluated", candidates.size(),
+                "matched", matched,
+                "skipped", skipped,
+                "toleranceDays", tolerance,
+                "matches", details);
+
+        auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.UPDATE,
+                AuditModule.BNK,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.MEDIUM,
+                "FinancialMovement", null,
+                "Auto-match HU-026: " + matched + " emparejados de " + candidates.size() + " candidatos",
+                null, null, null);
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Matching automatico ejecutado: " + matched + " emparejados, "
+                        + skipped + " requieren revision manual."),
+                Optional.of(result)));
+    }
+
+    /**
      * Marca un movimiento financiero como conciliado con un cheque especifico.
      * Usado internamente por el servicio de cheques durante la conciliacion automatica.
      *

@@ -23,6 +23,9 @@ public class CurrencyTypeUpdateRequestDTO {
     private String isoCode;
 
     @Size(min = 1, max = 100, message = "El nombre de la moneda debe tener máximo 100 caracteres")
+    // HU-CFG-23 E4 (2026-04-27): rechazar tags HTML/XSS tambien en update.
+    @Pattern(regexp = "^[^<>]+$",
+            message = "El nombre de la moneda no puede contener los caracteres < o >")
     @Schema(description = "Nuevo nombre de la moneda", example = "Euro")
     private String name;
 

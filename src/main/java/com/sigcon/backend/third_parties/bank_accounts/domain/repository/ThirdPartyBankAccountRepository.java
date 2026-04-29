@@ -22,4 +22,11 @@ public interface ThirdPartyBankAccountRepository extends JpaRepository<ThirdPart
      * Verifica si ya existe una vinculacion activa entre un tercero y una cuenta bancaria.
      */
     boolean existsByThirdPartyIdAndBankAccountIdAndDeletedAtIsNull(Long thirdPartyId, Long bankAccountId);
+
+    /**
+     * HU-TER-05 (2026-04-27): Lista todas las vinculaciones activas de una
+     * cuenta bancaria (lookup inverso). Permite mostrar desde el modulo BNK
+     * que terceros tienen asociada una cuenta bancaria especifica.
+     */
+    List<ThirdPartyBankAccount> findByBankAccountIdAndDeletedAtIsNull(Long bankAccountId);
 }

@@ -34,4 +34,14 @@ public class CommercialDataRequest {
 
     /** TER-12: Fecha fin de vigencia */
     private LocalDate validityTo;
+
+    /**
+     * HU-TER-12 E2 (2026-04-27): motivo del cambio (minimo 30 caracteres).
+     * Obligatorio en update; opcional en create. La HU exige justificacion
+     * detallada para cambios de limite de credito y nivel de riesgo, asi
+     * que se valida en el service cuando se trata de update.
+     */
+    @jakarta.validation.constraints.Size(max = 500,
+            message = "El motivo del cambio no debe superar 500 caracteres.")
+    private String changeReason;
 }

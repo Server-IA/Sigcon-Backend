@@ -26,6 +26,13 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
 
     long countByCash_Id(Long cashId);
 
+    /**
+     * QA HU-003 E1: cuenta movimientos de una cuenta bancaria.
+     * Usado para bloquear eliminacion de cuenta con movimientos asociados.
+     * (FinancialMovement no tiene soft delete, los movimientos no se borran).
+     */
+    long countByBankAccount_Id(Long bankAccountId);
+
     boolean existsByMatchedVoucherId(Long matchedVoucherId);
 
     @Query("SELECT fm FROM FinancialMovement fm WHERE fm.id = :id AND fm.bankAccount.id = :bankAccountId "

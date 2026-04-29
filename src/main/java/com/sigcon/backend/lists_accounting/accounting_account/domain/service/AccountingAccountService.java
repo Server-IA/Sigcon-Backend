@@ -267,29 +267,36 @@ public class AccountingAccountService {
      */
     public ResponseEntity<?> deleteAccountingAccount(Long id, String reason, Long userId) {
         try {
+            // Validación: Motivo de eliminación requerido (mover ANTES de cualquier
+            // operacion de borrado para no exponer al usuario a un soft delete sin
+            // motivo en caso de race condition).
+            if (reason == null || reason.trim().isEmpty()) {
+                throw new IllegalArgumentException("Debe especificar el motivo de eliminación");
+            }
+
             // Validación: La cuenta existe y no está eliminada
             AccountingAccount accountingAccount = accountingAccountRepository.findByIdAndDeletedAtIsNull(id)
                     .orElseThrow(() -> new IllegalArgumentException("La cuenta contable seleccionada no existe"));
 
-            // TODO: Validación de dependencias activas (pendiente módulo de transacciones)
-            // CFG-RF-08 Excepción 2: Si tiene dependencias activas
-
+            // CFG-RF-08 E2/E4: validacion robusta de dependencias activas. Antes solo
+            // verificaba `depretation_rules`, lo que dejaba que se "eliminara" cuentas
+            // referenciadas por bancos/cajas/JE/facturas/reglas tributarias, generando
+            // FK constraint silencioso o cascada peligrosa.
             String dependency = hasActiveDependencies(accountingAccount.getId());
-
             if (dependency != null) {
                 throw new IllegalArgumentException(dependency);
-            }
-
-            // Validación: Motivo de eliminación requerido
-            if (reason == null || reason.trim().isEmpty()) {
-                throw new IllegalArgumentException("Debe especificar el motivo de eliminación");
             }
 
             // Borrado Lógico: Marcar como eliminada e inactiva
             accountingAccount.setDeletedAt(LocalDateTime.now());
             accountingAccount.setStatus(AccountStatus.INACTIVE);
             accountingAccountRepository.save(accountingAccount);
-            auditPublisher.publishDelete(AuditModule.CFG, "AccountingAccount", accountingAccount.getId(), "AccountingAccount eliminado id=" + accountingAccount.getId());
+            // CFG-RF-08 E9: el motivo se persiste en la descripcion del audit log
+            // para trazabilidad legal.
+            auditPublisher.publishDelete(AuditModule.CFG, "AccountingAccount", accountingAccount.getId(),
+                    "AccountingAccount eliminado id=" + accountingAccount.getId()
+                    + " | nombre=" + accountingAccount.getCustomName()
+                    + " | motivo=" + reason.trim());
 
             // AUDITORÍA COMENTADA - NO IMPLEMENTAR AÚN
             // CFG-RF-08 Paso 8: Registro en auditoría
@@ -316,11 +323,39 @@ public class AccountingAccountService {
         }
     }
 
+    /**
+     * CFG-RF-08 E2/E4: verifica que la cuenta no este vinculada a registros de
+     * otros modulos antes de permitir su eliminacion logica.
+     *
+     * Cubre: reglas de depreciacion, lineas de asiento contable (JE), reglas
+     * tributarias, bancos, cajas, activos. Si alguno tiene refs activas, devuelve
+     * un mensaje legible que el usuario pueda accionar.
+     */
     private String hasActiveDependencies(Long accountingAccountId) {
+        // 1) Reglas de depreciacion
         List<DepretationRule> depretationRules = depretationRuleRepository.findByAccountingAccount_Id(accountingAccountId);
         if (!depretationRules.isEmpty()) {
-            return "No se puede inactivar la cuenta contable, porque está vinculada a registros de depreciación activos. Retire las dependencias e intente de nuevo";
+            return "No se puede inactivar la cuenta contable, porque está vinculada a "
+                    + depretationRules.size() + " regla(s) de depreciación activas. "
+                    + "Retire las dependencias e intente de nuevo.";
         }
+
+        // 2) Reglas tributarias
+        List<TaxRulerEntity> ruleTaxes = ruleTaxRepository.findByAccountingAccountId(accountingAccountId);
+        if (!ruleTaxes.isEmpty()) {
+            return "No se puede inactivar la cuenta contable, porque está vinculada a "
+                    + ruleTaxes.size() + " regla(s) tributaria(s) activas. "
+                    + "Retire las dependencias e intente de nuevo.";
+        }
+
+        // 3) Lineas de asientos contables (transacciones)
+        long jeLines = journalEntryLineRepository.countByAccountingAccount_IdAndDeletedAtIsNull(accountingAccountId);
+        if (jeLines > 0) {
+            return "No se puede inactivar la cuenta contable, porque tiene "
+                    + jeLines + " transacción(es) registrada(s) en comprobantes contables. "
+                    + "Las cuentas con movimientos no pueden eliminarse para preservar la trazabilidad.";
+        }
+
         return null;
     }
 

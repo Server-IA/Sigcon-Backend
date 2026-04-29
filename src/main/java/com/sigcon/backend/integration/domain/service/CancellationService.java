@@ -328,6 +328,11 @@ public class CancellationService {
                     .totalTransactions("TRANSACTION".equalsIgnoreCase(dto.getDocumentType()) ? 1 : 0)
                     .status(BatchStatus.RECEIVED)
                     .payloadJson(objectMapper.writeValueAsString(payload))
+                    // Spec AAEF Bloque W: marcar como update y conservar
+                    // OriginalExchangeId para que el AckClient elija el envelope
+                    // PascalCase (AgroFusionAcknowledgment).
+                    .isUpdate(true)
+                    .originalExchangeId(dto.getOriginalExchangeId())
                     .build();
             batch = batchRepository.save(batch);
 

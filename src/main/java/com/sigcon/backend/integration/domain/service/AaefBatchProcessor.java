@@ -269,11 +269,52 @@ public class AaefBatchProcessor {
 
                 return successTransfer(batch, documentId, DocumentType.INVOICE,
                         created.getJournalEntryId());
-            } else {
-                // Type=03 NC / 04 ND → requieren Pull+Diff (Fase 4)
+            } else if (invoiceMapper.isFeesInvoice(invoice)) {
+                // AAEF v1.1: Type=03 Honorarios -> AP con tratamiento tributario
+                // especial (retencion en la fuente Art. 383/384 ET). Reusa el motor
+                // de retenciones existente via tax rules del proveedor.
+                InvoiceFCRequestDTO req = invoiceMapper.toPurchaseInvoiceRequest(invoice);
+                TypesInvoices typeFC = typeInvoiceRepository
+                        .findByCodeAndDeletedAtIsNull(PURCHASE_INVOICE_TYPE_CODE)
+                        .orElseThrow(() -> new AaefMappingException(
+                                AaefMappingException.MAPPING_ERROR,
+                                "Tipo de factura 'FC' no encontrado en types_invoices"));
+                AaefInvoiceDTO.Totals t = invoice.getTotals();
+                java.math.BigDecimal subtotal = t.getSubtotal() != null ? t.getSubtotal() : java.math.BigDecimal.ZERO;
+                java.math.BigDecimal vat = t.getTotalVAT() != null ? t.getTotalVAT() : java.math.BigDecimal.ZERO;
+                java.math.BigDecimal withholdings = t.getTotalWithholdings() != null ? t.getTotalWithholdings() : java.math.BigDecimal.ZERO;
+                java.math.BigDecimal totalPayment = t.getTotalPayment() != null ? t.getTotalPayment() : java.math.BigDecimal.ZERO;
+                Invoices created = invoiceService.createInvoiceFromAaef(
+                        req, typeFC.getId(), subtotal, vat, withholdings, totalPayment);
+                created.setIntegrationSource(IntegrationSource.builder()
+                        .source(SourceOrigin.AAEF)
+                        .externalId(documentId)
+                        .exchangeId(batch.getExchangeId())
+                        .build());
+                // Marca el documento como honorarios en notes para distinguirlo en
+                // reportes contables. Las retenciones aplicables se calculan via
+                // los tax rules del proveedor (motor existente en InvoiceService).
+                if (created.getNotes() == null || !created.getNotes().toUpperCase().contains("HONORARIO")) {
+                    created.setNotes(("[HONORARIOS Type=03] " +
+                            (created.getNotes() != null ? created.getNotes() : "")).trim());
+                }
+                invoiceRepository.save(created);
+                return successTransfer(batch, documentId, DocumentType.INVOICE,
+                        created.getJournalEntryId());
+            } else if (invoiceMapper.isCreditNote(invoice) || invoiceMapper.isDebitNote(invoice)) {
+                // AAEF v1.1: Type=04 NC / 05 ND -> requieren Pull+Diff
+                // (mecanismo CancellationService) que vincula al documento original.
+                String tipoNota = invoiceMapper.isCreditNote(invoice) ? "credito (Type=04)" : "debito (Type=05)";
                 return failedTransfer(batch, documentId, DocumentType.INVOICE,
                         AaefMappingException.UNSUPPORTED_TYPE,
-                        "NC/ND (Type=03/04) requieren Pull+Diff via /anulaciones (Fase 4)", true);
+                        "Nota " + tipoNota + " debe enviarse via Pull+Diff "
+                        + "(POST /api/contabilidad/aaef con AgroFusionExchangeUpdate envelope) "
+                        + "para vincular al documento original", true);
+            } else {
+                // Type.Code invalido (ya capturado por validateTypeCode pero defense in depth)
+                return failedTransfer(batch, documentId, DocumentType.INVOICE,
+                        AaefMappingException.INVALID_TYPE_CODE,
+                        "Header.Type.Code no es valido. Valores admitidos: 01,02,03,04,05", false);
             }
         } catch (AaefMappingException e) {
             return failedTransfer(batch, documentId, DocumentType.INVOICE,

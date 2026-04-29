@@ -2,6 +2,8 @@ package com.sigcon.backend.banks.cash_audits.interfaces.controller;
 
 import com.sigcon.backend.banks.cash_audits.application.ApproveCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.CreateCashAuditRequest;
+import com.sigcon.backend.banks.cash_audits.application.DeleteCashAuditRequest;
+import com.sigcon.backend.banks.cash_audits.application.VoidCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.domain.service.CashAuditService;
 import com.sigcon.backend.utils.DataTableRequest;
 
@@ -101,6 +103,79 @@ public class CashAuditController {
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> close(@PathVariable Long id) {
         return cashAuditService.close(id);
+    }
+
+    /**
+     * HU-BNK-048 E1 - Elimina fisicamente un arqueo en BORRADOR.
+     */
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Eliminar arqueo en BORRADOR",
+               description = "Elimina fisicamente un arqueo en estado BORRADOR. "
+                       + "Bloquea con error 400 (Decreto 2649/1993 Art. 57) si esta APROBADO. "
+                       + "Requiere motivo (min 10 chars).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Arqueo eliminado correctamente"),
+        @ApiResponse(responseCode = "400", description = "Arqueo no esta en BORRADOR o tiene asiento contable"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> delete(@PathVariable Long id,
+                                     @Valid @RequestBody DeleteCashAuditRequest request) {
+        return cashAuditService.delete(id, request);
+    }
+
+    /**
+     * HU-BNK-048 E2 - Anula logicamente un arqueo APROBADO.
+     */
+    @PostMapping("/{id}/void")
+    @Operation(summary = "Anular arqueo APROBADO",
+               description = "Anula logicamente un arqueo APROBADO conservando el historial. "
+                       + "Cambia estado a ANULADO con motivo (min 50 chars). "
+                       + "Los movimientos financieros y asientos contables no se modifican.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Arqueo anulado correctamente"),
+        @ApiResponse(responseCode = "400", description = "Arqueo no esta en APROBADO o motivo invalido"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> voidAudit(@PathVariable Long id,
+                                         @Valid @RequestBody VoidCashAuditRequest request) {
+        return cashAuditService.voidAudit(id, request);
+    }
+
+    /**
+     * HU-042: enviar arqueo BORRADOR a revision (cajero -> supervisor).
+     */
+    @PostMapping("/{id}/submit-review")
+    @Operation(summary = "Enviar arqueo BORRADOR a revision",
+               description = "HU-042: el cajero finaliza la captura y envia el arqueo BORRADOR/RECHAZADO "
+                       + "al supervisor. Cambia estado a EN_REVISION.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Arqueo enviado a revision"),
+        @ApiResponse(responseCode = "400", description = "Arqueo no esta en BORRADOR/ABIERTO/RECHAZADO"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> submitReview(@PathVariable Long id) {
+        return cashAuditService.submitReview(id);
+    }
+
+    /**
+     * HU-043: rechazar arqueo en EN_REVISION con motivo (vuelve a BORRADOR).
+     */
+    @PostMapping("/{id}/reject")
+    @Operation(summary = "Rechazar arqueo EN_REVISION",
+               description = "HU-043: el supervisor rechaza un arqueo en revision con motivo "
+                       + "(min 10 chars). Vuelve a BORRADOR para que el cajero corrija.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Arqueo rechazado"),
+        @ApiResponse(responseCode = "400", description = "Arqueo no esta en EN_REVISION o motivo invalido"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> reject(@PathVariable Long id,
+                                     @RequestBody java.util.Map<String, String> body) {
+        return cashAuditService.reject(id, body != null ? body.get("reason") : null);
     }
 
     /**

@@ -109,6 +109,28 @@ public class AaefInvoiceDTO {
         @JsonProperty("UnitPrice") private BigDecimal unitPrice;
         @JsonProperty("Value") private BigDecimal value;
         @JsonProperty("Taxes") private List<Tax> taxes;
+
+        /**
+         * Override de cuentas PUC para esta linea (AAEF feedback v1.1, 2026-04-28).
+         *
+         * <p>Array opcional con maximo 2 elementos:
+         * <ul>
+         *   <li>{@code accounting_account[0]} = cuenta DEBITO (siempre que array no sea vacio)</li>
+         *   <li>{@code accounting_account[1]} = cuenta CREDITO (solo si array tiene 2 elementos)</li>
+         * </ul>
+         *
+         * <p>Si viene null o vacio: el sistema usa el mapeo PUC configurado en
+         * Parametrizacion (comportamiento original).
+         *
+         * <p>Validaciones:
+         * <ul>
+         *   <li>Maximo 2 elementos. Mas de 2 -> {@code INVALID_ACCOUNTING_ACCOUNT}</li>
+         *   <li>Cada codigo debe existir y estar activo en el PUC del tenant. Si no
+         *       existe -> {@code ACCOUNT_NOT_FOUND}</li>
+         * </ul>
+         */
+        @JsonProperty("accounting_account")
+        private List<String> accountingAccount;
     }
 
     @Data

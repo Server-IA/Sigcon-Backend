@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -69,12 +70,15 @@ public class RulerTaxController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Eliminar regla de impuesto", description = "Eliminar una regla de impuesto, requiere permisos de eliminación (PERM_DELETE_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
+    @Operation(summary = "Eliminar regla de impuesto", description = "HU-CFG-RF-12: Inactiva una regla de impuesto. " +
+            "Requiere motivo (>= 10 chars) que se persiste en auditoria y valida que no este vinculada a cuentas contables. " +
+            "Requiere permisos PERM_DELETE_RULER_TAX o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Regla de impuesto eliminada correctamente")
-    @ApiResponse(responseCode = "400", description = "Error al eliminar la regla de impuesto")
+    @ApiResponse(responseCode = "400", description = "Error al eliminar la regla de impuesto (motivo faltante o dependencias activas)")
     @PreAuthorize("hasAuthority('PERM_DELETE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<?> deleteRulerTax(@PathVariable Long id) {
-        return ruleTaxService.deleteRuleTax(id);
+    public ResponseEntity<?> deleteRulerTax(@PathVariable Long id,
+            @RequestParam(name = "reason", required = false) String reason) {
+        return ruleTaxService.deleteRuleTax(id, reason);
     }
 
     @PostMapping("/accounting-accounts")

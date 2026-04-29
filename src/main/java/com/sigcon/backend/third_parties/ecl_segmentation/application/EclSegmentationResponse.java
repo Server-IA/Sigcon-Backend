@@ -40,4 +40,18 @@ public class EclSegmentationResponse {
     private LocalDateTime createdAt; // Fecha de creacion del registro 
     @Schema(description = "Fecha de la última actualización del registro", example = "2026-03-10T10:00:00")
     private LocalDateTime updatedAt; // Fecha de la ultima actualizacion del registro
+
+    /**
+     * HU-TER-11 E6 (2026-04-27): porcentaje de provision ECL asociado al
+     * nivel de riesgo. Valores recomendados por NIIF 9 stage 1-3:
+     *   LOW    -> 1%
+     *   MEDIUM -> 5%
+     *   HIGH   -> 20%
+     *   PENDING-> 0% (sin clasificar todavia)
+     * Lo usa el modulo de Contabilidad General al calcular la provision de
+     * deterioro de cartera al cierre del periodo.
+     */
+    @Schema(description = "Porcentaje de provision ECL asociado al nivel de riesgo (NIIF 9)",
+            example = "1.0")
+    private java.math.BigDecimal provisionPct;
 }

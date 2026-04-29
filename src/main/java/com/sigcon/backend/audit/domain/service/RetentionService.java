@@ -55,6 +55,8 @@ public class RetentionService {
     private final AuditLogRepository logRepository;
     private final AuditRetentionPolicyRepository policyRepository;
     private final AuditPurgeRecordRepository purgeRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AuditExportService exportService;
 
     /** Cache de politicas activas. */
     private final AtomicReference<List<AuditRetentionPolicy>> cachedPolicies = new AtomicReference<>();
@@ -131,15 +133,36 @@ public class RetentionService {
     @Scheduled(cron = "${sigcon.audit.purge-cron:0 30 2 * * *}")
     public void runPurgeScheduled() {
         log.info("HU-AU-10: iniciando purga programada de logs vencidos");
-        // Multi-tenant (Bloque G fix): modo plataforma para procesar logs de todas
-        // las empresas. Cada AuditPurgeRecord creado hereda company_id=1 (default)
-        // al no haber tenant especifico — aceptable porque purge records son
-        // evidencia forense cross-tenant, no operacionales.
         com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
         try {
-            executePurge("scheduler-cron");
-        } catch (Exception e) {
-            log.error("HU-AU-10 E4: error en purga programada", e);
+            // HU-AU-10 E4 (2026-04-28): hasta 3 reintentos automaticos en caso de fallo.
+            int maxAttempts = 3;
+            Exception lastException = null;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    executePurge("scheduler-cron-attempt-" + attempt);
+                    if (attempt > 1) {
+                        log.info("HU-AU-10 E4: purga exitosa en intento {}/{}", attempt, maxAttempts);
+                    }
+                    return;
+                } catch (Exception e) {
+                    lastException = e;
+                    log.warn("HU-AU-10 E4: intento {}/{} fallo: {}",
+                             attempt, maxAttempts, e.getMessage());
+                    if (attempt < maxAttempts) {
+                        try {
+                            Thread.sleep(1000L * attempt);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+                }
+            }
+            log.error("HU-AU-10 E4: No fue posible eliminar el log. Fallo en la eliminacion. "
+                    + "Despues de {} intentos. Causa raiz: {}",
+                    maxAttempts, lastException == null ? "?" : lastException.getMessage(),
+                    lastException);
         } finally {
             com.sigcon.backend.platform.tenant.TenantContext.clear();
         }
@@ -151,13 +174,28 @@ public class RetentionService {
      */
     @Transactional
     public ResponseEntity<?> executePurgeManual(String executedBy) {
+        // HU-AU-10 E7 (2026-04-28): contar registros excluidos por legal hold
+        // (que tendrian retencion vencida si no estuvieran retenidos legalmente).
+        long legalHoldExcluded = logRepository.countByLegalHoldTrue();
         AuditPurgeRecord record = executePurge(executedBy);
+        Map<String, Object> response = new HashMap<>();
         if (record == null) {
-            return ResponseEntity.ok(Map.of(
-                    "purged", 0,
-                    "message", "Sin registros candidatos a purga en este momento"));
+            response.put("purged", 0);
+            response.put("message", "Sin registros candidatos a purga en este momento");
+        } else {
+            response.put("purged", record.getRecordsPurged());
+            response.put("batchHash", record.getBatchHash());
+            response.put("oldestPurged", record.getOldestPurged());
+            response.put("newestPurged", record.getNewestPurged());
         }
-        return ResponseEntity.ok(record);
+        response.put("legalHoldExcluded", legalHoldExcluded);
+        if (legalHoldExcluded > 0) {
+            // Mensaje exacto HU-AU-10 E7
+            response.put("legalHoldMessage", "El registro no puede eliminarse mientras "
+                    + "exista retencion legal activa. " + legalHoldExcluded
+                    + " registro(s) fueron excluidos del proceso de purga.");
+        }
+        return ResponseEntity.ok(response);
     }
 
     @Transactional
@@ -208,6 +246,18 @@ public class RetentionService {
         return ResponseEntity.ok(purgeRepository.findTop20ByOrderByPurgeDateDesc());
     }
 
+    /**
+     * HU-AU-10 E6 (2026-04-28): genera PDF de evidencia de un registro de purga.
+     */
+    public byte[] exportPurgeRecordPdf(Long id) {
+        AuditPurgeRecord record = purgeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Registro de purga no encontrado"));
+        if (exportService == null) {
+            throw new IllegalStateException("Servicio de exportacion no disponible");
+        }
+        return exportService.exportPurgeRecordToPdf(record);
+    }
+
     // ─── CRUD de politicas ───────────────────────────────
 
     public ResponseEntity<?> listPolicies() {
@@ -216,18 +266,85 @@ public class RetentionService {
 
     @Transactional
     public ResponseEntity<?> createPolicy(AuditRetentionPolicy policy, String createdBy) {
-        if (policy.getRetentionDays() == null || policy.getRetentionDays() <= 0) {
-            throw new IllegalArgumentException(
-                    "Error en configuracion de politica de retencion. Operacion cancelada. "
-                    + "retention_days debe ser positivo (HU-AU-10 E8).");
-        }
+        validatePolicyOrThrow(policy);
+        // HU-AU-10 E8: detectar contradiccion (otra politica con mismo
+        // matchModule + matchSeverity ya existe).
+        policyRepository.findByEnabledTrue().stream()
+                .filter(p -> java.util.Objects.equals(p.getMatchModule(), policy.getMatchModule())
+                          && java.util.Objects.equals(p.getMatchSeverity(), policy.getMatchSeverity()))
+                .findFirst().ifPresent(p -> {
+                    throw new IllegalArgumentException(
+                            "Error en configuracion de politica de retencion. Operacion cancelada. "
+                            + "Ya existe una politica activa con los mismos criterios "
+                            + "(modulo + severidad). ID conflictivo: " + p.getId());
+                });
         policy.setCreatedBy(createdBy);
         policy.setEnabled(policy.getEnabled() == null ? true : policy.getEnabled());
         AuditRetentionPolicy saved = policyRepository.save(policy);
         invalidatePolicyCache();
         log.info("HU-AU-10 E1: politica creada id={} retention={}d",
                 saved.getId(), saved.getRetentionDays());
-        return ResponseEntity.ok(saved);
+        // HU-AU-10 E1 (2026-04-28): aplicar la politica a logs existentes
+        // que aun no tienen retention_until (o lo tienen muy lejano).
+        int recalculated = recalculateExistingRetentions(saved);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("policy", saved);
+        resp.put("logsRecalculated", recalculated);
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * HU-AU-10 E8 (2026-04-28): valida rangos legales colombianos.
+     * Decreto 2649/1993 Art. 134: archivo contable minimo 10 anios para CRITICAL,
+     * 5 anios para HIGH (Estatuto Tributario Art. 632).
+     */
+    private void validatePolicyOrThrow(AuditRetentionPolicy policy) {
+        if (policy.getRetentionDays() == null || policy.getRetentionDays() <= 0) {
+            throw new IllegalArgumentException(
+                    "Error en configuracion de politica de retencion. Operacion cancelada. "
+                    + "retention_days debe ser positivo.");
+        }
+        AuditSeverity sev = policy.getMatchSeverity();
+        if (sev == AuditSeverity.CRITICAL && policy.getRetentionDays() < 3650) {
+            throw new IllegalArgumentException(
+                    "Error en configuracion de politica de retencion. Operacion cancelada. "
+                    + "Severidad CRITICAL requiere minimo 10 anios (3650 dias) segun "
+                    + "Decreto 2649/1993 Art. 134.");
+        }
+        if (sev == AuditSeverity.HIGH && policy.getRetentionDays() < 1825) {
+            throw new IllegalArgumentException(
+                    "Error en configuracion de politica de retencion. Operacion cancelada. "
+                    + "Severidad HIGH requiere minimo 5 anios (1825 dias) segun "
+                    + "Estatuto Tributario Art. 632.");
+        }
+    }
+
+    /**
+     * HU-AU-10 E1 (2026-04-28): recalcula retention_until en logs existentes
+     * que cumplen los criterios de la nueva politica.
+     */
+    private int recalculateExistingRetentions(AuditRetentionPolicy policy) {
+        try {
+            List<AuditLog> all = logRepository.findAll();
+            int updated = 0;
+            LocalDateTime now = LocalDateTime.now();
+            for (AuditLog l : all) {
+                if (l.getArchivedAt() != null) continue; // ya purgado
+                boolean modMatch = policy.getMatchModule() == null || policy.getMatchModule() == l.getModule();
+                boolean sevMatch = policy.getMatchSeverity() == null || policy.getMatchSeverity() == l.getSeverity();
+                if (modMatch && sevMatch) {
+                    l.setRetentionUntil(now.plusDays(policy.getRetentionDays()));
+                    updated++;
+                }
+            }
+            if (updated > 0) logRepository.saveAll(all);
+            log.info("HU-AU-10 E1: politica id={} aplicada a {} logs existentes",
+                    policy.getId(), updated);
+            return updated;
+        } catch (Exception e) {
+            log.warn("HU-AU-10 E1: error al recalcular retencion existente: {}", e.getMessage());
+            return 0;
+        }
     }
 
     @Transactional

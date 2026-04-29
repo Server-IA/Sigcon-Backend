@@ -59,10 +59,24 @@ public class CancellationController {
                  produces = MediaType.APPLICATION_JSON_VALUE)
     @Deprecated
     public ResponseEntity<?> processUpdate(@Valid @RequestBody AgroFusionExchangeUpdateDTO dto) {
+        // Spec AAEF Bloque W: log de warning explicito al invocar el endpoint
+        // legacy para que quede traza forense de quien sigue usandolo. Cuando
+        // se confirme que AgroFusion 100% migrado al envelope unificado en
+        // /aaef, se elimina este controller.
+        log.warn("DEPRECATED endpoint POST /api/contabilidad/anulaciones invocado. "
+                + "AgroFusion debe migrar a POST /api/contabilidad/aaef con envelope "
+                + "AgroFusionExchangeUpdate. originalExchangeId={}, documentId={}",
+                dto.getOriginalExchangeId(), dto.getDocumentId());
         try {
             Map<String, Object> result = cancellationService.processUpdate(dto);
             result.put("success", true);
-            return ResponseEntity.ok(result);
+            // Header X-Deprecated-Endpoint para que el cliente vea facilmente
+            // que esta consumiendo un endpoint deprecated.
+            return ResponseEntity.ok()
+                    .header("X-Deprecated-Endpoint", "true")
+                    .header("X-Deprecation-Notice",
+                            "Use POST /api/contabilidad/aaef con envelope AgroFusionExchangeUpdate")
+                    .body(result);
         } catch (AaefMappingException e) {
             Map<String, Object> body = new HashMap<>();
             body.put("success", false);

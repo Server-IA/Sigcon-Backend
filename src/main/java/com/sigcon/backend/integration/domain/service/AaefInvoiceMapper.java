@@ -52,12 +52,22 @@ public class AaefInvoiceMapper {
     private static final Set<String> VALID_STATUSES =
             Set.of("ACTIVE", "PAID", "CANCELLED", "PARTIAL");
 
-    private static final String SALES_TYPE_CODE = "01";
-    private static final String PURCHASE_TYPE_CODE = "02";
+    /** AgroFusion feedback v1.1 (2026-04-28): set completo de Type.Code validos. */
+    public static final String SALES_TYPE_CODE = "01";          // Factura venta
+    public static final String PURCHASE_TYPE_CODE = "02";       // Factura compra
+    public static final String FEES_TYPE_CODE = "03";           // Honorarios (NUEVO)
+    public static final String CREDIT_NOTE_TYPE_CODE = "04";    // Nota credito (movido de 03)
+    public static final String DEBIT_NOTE_TYPE_CODE = "05";     // Nota debito (movido de 04)
+
+    public static final Set<String> VALID_TYPE_CODES =
+            Set.of(SALES_TYPE_CODE, PURCHASE_TYPE_CODE,
+                   FEES_TYPE_CODE, CREDIT_NOTE_TYPE_CODE, DEBIT_NOTE_TYPE_CODE);
 
     private final ThirdPartyResolver thirdPartyResolver;
     private final AccountMappingService accountMappingService;
     private final PaymentFormRepository paymentFormRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.lists_accounting.accounting_account.domain.repository.AccountingAccountRepository accountingAccountRepository;
 
     /**
      * Valida y mapea una factura AAEF de venta (Type=01) a CreateSalesInvoiceRequest.
@@ -103,6 +113,8 @@ public class AaefInvoiceMapper {
                             "Linea '" + (l.getDescription() != null ? l.getDescription() : l.getCode())
                                     + "' no tiene LineType");
                 }
+                // AAEF v1.1: resolver override de accounting_account si viene en la linea
+                Long[] accOverride = resolveAccountOverride(l);
                 lines.add(CreateSalesInvoiceLineRequest.builder()
                         .description(
                                 l.getDescription() != null
@@ -111,6 +123,8 @@ public class AaefInvoiceMapper {
                         .quantity(safe(l.getQuantity()))
                         .unitPrice(safe(l.getUnitPrice()))
                         .discount(BigDecimal.ZERO)
+                        .accountDebitOverride(accOverride[0])
+                        .accountCreditOverride(accOverride[1])
                         .build());
             }
         }
@@ -220,8 +234,15 @@ public class AaefInvoiceMapper {
                 }
                 BigDecimal qty = safe(l.getQuantity());
                 BigDecimal unit = safe(l.getUnitPrice());
+                // AAEF v1.1 (2026-04-28): override accounting_account[0] = cuenta debito.
+                // Si la linea trae accounting_account, sobreescribe el default
+                // AP_COMPRAS_DEFAULT (PUC 5135). El indice [1] (credito) NO se aplica
+                // aqui porque el motor AP usa AP_PROVEEDORES (PUC 2205) por convencion
+                // contable. Para casos especiales sera futuro work item.
+                Long[] accOverride = resolveAccountOverride(l);
+                Long debitAccount = (accOverride[0] != null) ? accOverride[0] : defaultDebitAccountId;
                 lines.add(LineInvoiceRequestDTO.builder()
-                        .accountingAccountId(defaultDebitAccountId)
+                        .accountingAccountId(debitAccount)
                         .description(
                                 l.getDescription() != null
                                         ? l.getDescription()
@@ -299,6 +320,107 @@ public class AaefInvoiceMapper {
                 && PURCHASE_TYPE_CODE.equals(invoice.getHeader().getType().getCode());
     }
 
+    /**
+     * AAEF v1.1 (2026-04-28): determina si una factura es de honorarios (Type=03).
+     * Se procesa en AP con tratamiento tributario especial (retencion en la fuente
+     * Art. 383/384 ET via motor existente).
+     */
+    public boolean isFeesInvoice(AaefInvoiceDTO invoice) {
+        return invoice.getHeader() != null
+                && invoice.getHeader().getType() != null
+                && FEES_TYPE_CODE.equals(invoice.getHeader().getType().getCode());
+    }
+
+    /** AAEF v1.1: Type=04 Nota credito. */
+    public boolean isCreditNote(AaefInvoiceDTO invoice) {
+        return invoice.getHeader() != null
+                && invoice.getHeader().getType() != null
+                && CREDIT_NOTE_TYPE_CODE.equals(invoice.getHeader().getType().getCode());
+    }
+
+    /** AAEF v1.1: Type=05 Nota debito. */
+    public boolean isDebitNote(AaefInvoiceDTO invoice) {
+        return invoice.getHeader() != null
+                && invoice.getHeader().getType() != null
+                && DEBIT_NOTE_TYPE_CODE.equals(invoice.getHeader().getType().getCode());
+    }
+
+    /**
+     * AAEF v1.1 (2026-04-28): valida que Type.Code este en la lista de valores
+     * validos. Lanza {@link AaefMappingException#INVALID_TYPE_CODE} si no.
+     *
+     * @param invoice factura AAEF a validar
+     */
+    public void validateTypeCode(AaefInvoiceDTO invoice) {
+        if (invoice == null || invoice.getHeader() == null
+                || invoice.getHeader().getType() == null) {
+            throw new AaefMappingException(AaefMappingException.INVALID_TYPE_CODE,
+                    "Header.Type es obligatorio");
+        }
+        String code = invoice.getHeader().getType().getCode();
+        if (code == null || !VALID_TYPE_CODES.contains(code)) {
+            throw new AaefMappingException(AaefMappingException.INVALID_TYPE_CODE,
+                    "Header.Type.Code='" + code + "' no es valido. Valores admitidos: "
+                    + VALID_TYPE_CODES + " (01=Venta, 02=Compra, 03=Honorarios, 04=NC, 05=ND)");
+        }
+    }
+
+    /**
+     * AAEF v1.1 (2026-04-28): resuelve el override de cuentas PUC de una linea.
+     *
+     * <p>Si {@code accounting_account} viene presente:
+     * <ul>
+     *   <li>Valida que tenga maximo 2 elementos (lanza {@code INVALID_ACCOUNTING_ACCOUNT}).</li>
+     *   <li>Valida que cada codigo PUC exista y este activo en el tenant
+     *       (lanza {@code ACCOUNT_NOT_FOUND}).</li>
+     * </ul>
+     *
+     * @param line linea AAEF (puede traer accounting_account null/vacio)
+     * @return arreglo {@code [debitAccountId, creditAccountId]}; cualquiera puede
+     *         ser {@code null} si no se override
+     */
+    public Long[] resolveAccountOverride(AaefInvoiceDTO.Line line) {
+        Long[] result = new Long[]{null, null};
+        if (line == null || line.getAccountingAccount() == null
+                || line.getAccountingAccount().isEmpty()) {
+            return result;
+        }
+        java.util.List<String> codes = line.getAccountingAccount();
+        if (codes.size() > 2) {
+            throw new AaefMappingException(
+                    AaefMappingException.INVALID_ACCOUNTING_ACCOUNT,
+                    "accounting_account no puede tener mas de 2 elementos. Recibido: "
+                    + codes.size() + " (line code=" + line.getCode() + ")");
+        }
+        for (int i = 0; i < codes.size(); i++) {
+            String pucCode = codes.get(i);
+            if (pucCode == null || pucCode.isBlank()) {
+                throw new AaefMappingException(
+                        AaefMappingException.INVALID_ACCOUNTING_ACCOUNT,
+                        "accounting_account[" + i + "] esta vacio (line code=" + line.getCode() + ")");
+            }
+            if (accountingAccountRepository == null) {
+                // Si el repo no esta disponible (test unitario), retornamos nulls.
+                continue;
+            }
+            Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+            if (tenantId == null) {
+                throw new AaefMappingException(
+                        AaefMappingException.ACCOUNT_NOT_FOUND,
+                        "TenantContext sin companyId al resolver accounting_account");
+            }
+            Long accId = accountingAccountRepository
+                    .findActiveByPucCodeAndCompany(pucCode.trim(), tenantId)
+                    .map(a -> a.getId())
+                    .orElseThrow(() -> new AaefMappingException(
+                            AaefMappingException.ACCOUNT_NOT_FOUND,
+                            "Cuenta contable PUC '" + pucCode + "' no existe o esta "
+                            + "inactiva en el sistema (line code=" + line.getCode() + ")"));
+            result[i] = accId;
+        }
+        return result;
+    }
+
     // ---------- Validaciones comunes ----------
 
     private void validateCommon(AaefInvoiceDTO invoice) {
@@ -308,6 +430,9 @@ public class AaefInvoiceMapper {
                     "La factura AAEF no tiene header");
         }
         AaefInvoiceDTO.Header h = invoice.getHeader();
+
+        // AAEF v1.1 (2026-04-28): validar Type.Code antes que el resto.
+        validateTypeCode(invoice);
 
         if (h.getStatus() == null || !VALID_STATUSES.contains(h.getStatus().toUpperCase())) {
             throw new AaefMappingException(

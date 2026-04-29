@@ -235,23 +235,37 @@ public class ChartOfAccountService {
             throw new IllegalStateException("La cuenta seleccionada del catalogo PUC no existe");
         }
 
-        // Prerrequisito: la cuenta debe estar inactiva antes de poder eliminarse
-        if (account.getStatus() != AccountStatus.INACTIVE) {
-            throw new IllegalStateException("La cuenta esta activa, debe estar en estado inactiva para poder ser eliminada");
+        // CFG-RF-04 E2: validar PRIMERO dependencias para que el mensaje de error
+        // sea consistente con la HU ("vinculada a registros activos. Retire las
+        // dependencias..."). Antes el orden hacia que primero se gritara "esta
+        // activa, debe estar inactiva", confundiendo al usuario sobre la causa real.
+        String dependency = hasActiveDependencies(account);
+        if (dependency != null) {
+            throw new IllegalStateException(
+                    "No se puede eliminar la cuenta del catalogo PUC, porque esta vinculada a "
+                    + "registros activos. Retire las dependencias e intente de nuevo");
         }
 
-        // Verificar que no tenga cuentas contables hijas vinculadas
-        String dependency = hasActiveDependencies(account);
-
-        if (dependency != null) {
-            throw new IllegalStateException("No se puede inactivar la cuenta del catalogo PUC, porque esta vinculada a registros activos. Retire las dependencias e intente de nuevo");
+        // Prerrequisito: la cuenta debe estar inactiva antes de poder eliminarse
+        if (account.getStatus() != AccountStatus.INACTIVE) {
+            throw new IllegalStateException(
+                    "La cuenta debe estar en estado inactiva antes de eliminarla. "
+                    + "Cambie el estado a INACTIVE y reintente la operacion.");
         }
 
         account.setDeletedAt(LocalDateTime.now());
 
-        account.setDeletedReason(request.getReason().trim());
+        String reason = request.getReason() != null ? request.getReason().trim() : "";
+        account.setDeletedReason(reason);
         chartOfAccountRepository.save(account);
-        auditPublisher.publishDelete(AuditModule.CFG, "ChartOfAccount", account.getId(), "ChartOfAccount eliminado id=" + account.getId());
+        // CFG-RF-04 E3/E4: motivo se persiste en la descripcion del audit log para
+        // trazabilidad legal (ya estaba en `account.deletedReason`, pero el log
+        // central de auditoria no lo capturaba).
+        auditPublisher.publishDelete(AuditModule.CFG, "ChartOfAccount", account.getId(),
+                "ChartOfAccount eliminado id=" + account.getId()
+                + " | codigo=" + account.getCode()
+                + " | nombre=" + account.getName()
+                + " | motivo=" + reason);
     }
 
     /**

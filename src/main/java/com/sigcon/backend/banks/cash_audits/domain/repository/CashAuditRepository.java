@@ -26,4 +26,12 @@ public interface CashAuditRepository extends JpaRepository<CashAudit, Long>,
      * Verifica si existen arqueos abiertos o en revision para una caja dada.
      */
     boolean existsByCashIdAndStatusInAndDeletedAtIsNull(Long cashId, List<CashAuditStatus> statuses);
+
+    /**
+     * HU-BNK-048 - Verifica si la caja tiene arqueos historicos no anulados
+     * (cualquier arqueo que no haya sido eliminado fisicamente ni anulado).
+     * Usado para bloquear eliminacion fisica de la caja.
+     */
+    boolean existsByCashIdAndDeletedAtIsNull(Long cashId);
 }
+

@@ -42,4 +42,24 @@ public class CreateSalesInvoiceLineRequest {
     @Schema(description = "IDs de reglas tributarias a aplicar")
     @Builder.Default
     private List<Long> taxRuleIds = new ArrayList<>();
+
+    /**
+     * AAEF v1.1 (2026-04-28): override de cuenta contable PUC para esta linea.
+     *
+     * <p>Si viene null, el motor usa el mapeo PUC configurado en Parametrizacion
+     * (comportamiento original). Si viene populado, sobreescribe la cuenta de
+     * ingreso (debito en NC, credito en venta).
+     *
+     * <p>Solo se popula via mapper AAEF cuando el documento trae el campo
+     * {@code accounting_account[0]}. Para creacion manual se deja null.
+     */
+    @Schema(description = "Override AAEF: ID accounting_account para debito de la linea")
+    private Long accountDebitOverride;
+
+    /**
+     * AAEF v1.1 (2026-04-28): override de cuenta contable PUC para credito.
+     * Solo se popula cuando el documento trae {@code accounting_account[1]}.
+     */
+    @Schema(description = "Override AAEF: ID accounting_account para credito de la linea")
+    private Long accountCreditOverride;
 }

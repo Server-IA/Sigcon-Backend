@@ -147,13 +147,17 @@ public class BankBranchService {
                                 branch.getBank().getId()
                         );
 
-                // ✅ Validación 1: evitar múltiples principales
-                if (request.getMainBranch() != null && request.getMainBranch()) {
-                        if (existingMainBranch.isPresent() &&
-                        !existingMainBranch.get().getId().equals(id)) {
-
-                        throw new IllegalArgumentException("El banco ya tiene una sucursal principal.");
-                        }
+                // QA HU-057 E2: si el usuario marca esta sucursal como principal y
+                // ya existe OTRA principal, hacemos SWAP (la otra pasa a Secundaria)
+                // en lugar de rechazar. Mantiene la regla de una sola principal.
+                if (request.getMainBranch() != null && request.getMainBranch()
+                        && existingMainBranch.isPresent()
+                        && !existingMainBranch.get().getId().equals(id)) {
+                        BankBranch oldMain = existingMainBranch.get();
+                        oldMain.setMainBranch(false);
+                        bankBranchRepository.save(oldMain);
+                        auditPublisher.publishUpdate(AuditModule.BNK, "BankBranch", oldMain.getId(),
+                                "Swap sede principal: BankBranch " + oldMain.getId() + " ahora secundaria");
                 }
 
                 // ✅ Validación 2: evitar dejar el banco sin principal

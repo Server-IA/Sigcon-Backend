@@ -111,4 +111,25 @@ public class FinancialMovementController {
     public ResponseEntity<?> getById(@PathVariable Long id) {
         return financialMovementService.listForBankAccount(id, false);
     }
+
+    /**
+     * QA HU-026: matching automatico de movimientos sin cruzar contra comprobantes
+     * por similitud (mismo monto, fecha +/- N dias). Reusa la infraestructura
+     * existente de matchVoucher/suggestVouchers (HU-052/053 ya tiene endpoints
+     * en BankAccountController bajo /bank-accounts/{id}/financial-movements/...).
+     */
+    @PostMapping("/auto-match")
+    @Operation(summary = "Matching automatico de movimientos no cruzados",
+               description = "HU-026: el sistema busca asientos contables (POSTED) cuyo monto y "
+                           + "fecha (+/- N dias) coincidan con movimientos no cruzados. "
+                           + "Marca matchedVoucherId automaticamente. Reporta cuantos quedaron sin emparejar.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Matching ejecutado")
+    })
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> autoMatch(
+            @RequestParam(required = false) Long bankAccountId,
+            @RequestParam(required = false, defaultValue = "3") Integer dateToleranceDays) {
+        return financialMovementService.autoMatchMovements(bankAccountId, dateToleranceDays);
+    }
 }

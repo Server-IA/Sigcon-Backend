@@ -30,6 +30,15 @@ import com.sigcon.backend.parametrization.account_mappings.domain.service.Accoun
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
+// HU-AP-05 E3 + AP-15 (2026-04-28): registrar movimiento financiero en BNK
+// para que el anticipo descuente fondos de la cuenta bancaria/caja real.
+import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
+import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.cash_management.domain.model.Cash;
+import com.sigcon.backend.banks.cash_management.domain.repository.CashRepository;
+import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
+import com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType;
+import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
@@ -58,6 +67,10 @@ public class ApAdvanceService {
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
     private final AuditPublisher auditPublisher;
+    // HU-AP-05 E3 + AP-15: dependencias para registrar movimiento bancario.
+    private final BankAccountRepository bankAccountRepository;
+    private final CashRepository cashRepository;
+    private final FinancialMovementRepository financialMovementRepository;
 
     private final DataTableSpecificationBuilder<ApAdvance> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -76,8 +89,14 @@ public class ApAdvanceService {
         ThirdParty thirdParty = thirdPartyRepository.findById(request.getThirdPartyId())
                 .orElseThrow(() -> new IllegalArgumentException("El tercero no fue encontrado"));
 
-        if (thirdParty.getStatus() != null && !"ACTIVE".equalsIgnoreCase(thirdParty.getStatus().getName())) {
-            throw new IllegalStateException("El tercero no se encuentra activo");
+        // HU-AP-05+07 (2026-04-28): el catalogo `third_party_status_catalog`
+        // guarda el name en español (ACTIVO/INACTIVO/BLOQUEADO). Antes el
+        // codigo comparaba con "ACTIVE" y bloqueaba TODO anticipo aunque el
+        // proveedor estuviera activo. Resultado: error "El tercero no se
+        // encuentra activo" en flujo de anticipos, descuentos pronto pago, etc.
+        if (thirdParty.getStatus() != null && !"ACTIVO".equalsIgnoreCase(thirdParty.getStatus().getName())) {
+            throw new IllegalStateException(
+                    "El proveedor no esta activo o no existe. Verifique los datos en el modulo de Terceros.");
         }
 
         // 2. Validar periodo contable abierto
@@ -131,6 +150,46 @@ public class ApAdvanceService {
             advanceRepository.save(advance);
             auditPublisher.publishCreate(AuditModule.AP, "ApAdvance", advance.getId(), "ApAdvance creado id=" + advance.getId());
             log.info("Asiento contable {} generado para anticipo {}", je.getId(), advance.getId());
+
+            // HU-AP-05 E3 + AP-15 (2026-04-28): registrar movimiento financiero
+            // en BNK (egreso). Antes el anticipo solo afectaba el contable; el
+            // saldo de la cuenta bancaria nunca bajaba ni aparecia el movimiento
+            // en /cash-and-banks/financial-movements.
+            try {
+                FinancialMovement fm = null;
+                if (request.getBankAccountId() != null) {
+                    BankAccount ba = bankAccountRepository.findById(request.getBankAccountId()).orElse(null);
+                    if (ba != null) {
+                        fm = FinancialMovement.builder()
+                                .bankAccount(ba)
+                                .movementDate(request.getAdvanceDate())
+                                .amount(request.getAmount().negate())
+                                .description("Anticipo a proveedor " + thirdParty.getBusinessName())
+                                .sourceType(FinancialMovementSourceType.MANUAL)
+                                .flowActivity("OPERATIVA")
+                                .build();
+                    }
+                } else if (request.getCashId() != null) {
+                    Cash cash = cashRepository.findById(request.getCashId()).orElse(null);
+                    if (cash != null) {
+                        fm = FinancialMovement.builder()
+                                .cash(cash)
+                                .movementDate(request.getAdvanceDate())
+                                .amount(request.getAmount().negate())
+                                .description("Anticipo a proveedor " + thirdParty.getBusinessName())
+                                .sourceType(FinancialMovementSourceType.MANUAL)
+                                .flowActivity("OPERATIVA")
+                                .build();
+                    }
+                }
+                if (fm != null) {
+                    financialMovementRepository.save(fm);
+                    log.info("Movimiento financiero generado para anticipo {}", advance.getId());
+                }
+            } catch (RuntimeException e) {
+                log.warn("No se pudo registrar movimiento financiero para anticipo {}: {}",
+                        advance.getId(), e.getMessage());
+            }
         } catch (IllegalArgumentException | IllegalStateException e) {
             log.error("Error generando asiento contable para anticipo {}: {}", advance.getId(), e.getMessage());
             throw new IllegalStateException(

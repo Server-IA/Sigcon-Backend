@@ -80,12 +80,30 @@ public class ThirdPartyBankAccountService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "TPBA_002: La cuenta bancaria no existe."));
 
-        // 3. Validar que no exista ya la vinculacion
+        // 3. Validar que no exista ya la vinculacion al MISMO tercero
         if (thirdPartyBankAccountRepository.existsByThirdPartyIdAndBankAccountIdAndDeletedAtIsNull(
                 thirdPartyId, request.getBankAccountId())) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ErrorRespondJson.getErrorRespondMessage(
                             Optional.of("TPBA_003: La cuenta bancaria ya esta vinculada a este tercero.")));
+        }
+
+        // 3.b QA-BLOQUE-AK (2026-04-29): la cuenta bancaria solo puede estar vinculada
+        // a UN tercero a la vez. Si otro tercero ya la tiene asignada, rechazamos.
+        // Para reasignar, primero hay que desvincular del tercero anterior.
+        List<ThirdPartyBankAccount> existingLinks = thirdPartyBankAccountRepository
+                .findByBankAccountIdAndDeletedAtIsNull(request.getBankAccountId());
+        if (!existingLinks.isEmpty()) {
+            ThirdPartyBankAccount otherLink = existingLinks.get(0);
+            String otherTpName = otherLink.getThirdParty().getBusinessName();
+            String otherTpNit = otherLink.getThirdParty().getNit();
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of(String.format(
+                                    "TPBA_005: La cuenta bancaria '%s' ya esta vinculada al tercero '%s' (NIT %s). "
+                                            + "Una cuenta bancaria solo puede pertenecer a un tercero. "
+                                            + "Desvinculela primero del tercero actual.",
+                                    bankAccount.getCode(), otherTpName, otherTpNit))));
         }
 
         // 4. Crear la vinculacion
@@ -102,6 +120,28 @@ public class ThirdPartyBankAccountService {
                 .body(SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Cuenta bancaria vinculada exitosamente al tercero"),
                         Optional.of(toDTO(saved))));
+    }
+
+    /**
+     * HU-TER-05 (2026-04-27): Lookup inverso. Lista los terceros que tienen
+     * vinculada una cuenta bancaria especifica. Usado por el modulo BNK
+     * para mostrar "asociado a" en el detalle de la cuenta.
+     */
+    public ResponseEntity<?> getByBankAccount(Long bankAccountId) {
+        bankAccountRepository.findByIdAndDeletedAtIsNull(bankAccountId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "TPBA_002: La cuenta bancaria no existe."));
+
+        List<ThirdPartyBankAccountDTO> links = thirdPartyBankAccountRepository
+                .findByBankAccountIdAndDeletedAtIsNull(bankAccountId)
+                .stream()
+                .map(this::toDTOWithThirdParty)
+                .toList();
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Terceros vinculados a la cuenta bancaria obtenidos exitosamente"),
+                        Optional.of(links)));
     }
 
     /**
@@ -131,6 +171,25 @@ public class ThirdPartyBankAccountService {
         return ThirdPartyBankAccountDTO.builder()
                 .id(entity.getId())
                 .thirdPartyId(entity.getThirdParty().getId())
+                .bankAccountId(entity.getBankAccount().getId())
+                .bankAccountCode(entity.getBankAccount().getCode())
+                .bankName(entity.getBankAccount().getBank() != null
+                        ? entity.getBankAccount().getBank().getName() : null)
+                .accountNumber(entity.getBankAccount().getAccountNumber())
+                .isPrimary(entity.getIsPrimary())
+                .build();
+    }
+
+    /**
+     * Variante de toDTO que incluye datos del tercero. Usada por el lookup
+     * inverso (desde BNK ver que terceros tienen asociada la cuenta).
+     */
+    private ThirdPartyBankAccountDTO toDTOWithThirdParty(ThirdPartyBankAccount entity) {
+        return ThirdPartyBankAccountDTO.builder()
+                .id(entity.getId())
+                .thirdPartyId(entity.getThirdParty().getId())
+                .thirdPartyNit(entity.getThirdParty().getNit())
+                .thirdPartyBusinessName(entity.getThirdParty().getBusinessName())
                 .bankAccountId(entity.getBankAccount().getId())
                 .bankAccountCode(entity.getBankAccount().getCode())
                 .bankName(entity.getBankAccount().getBank() != null

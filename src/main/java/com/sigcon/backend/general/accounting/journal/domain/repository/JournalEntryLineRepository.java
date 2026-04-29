@@ -45,4 +45,17 @@ public interface JournalEntryLineRepository extends JpaRepository<JournalEntryLi
           + "AND l.journalEntry.status = com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.POSTED")
     java.math.BigDecimal netBalanceByAccountingAccountId(
             @org.springframework.data.repository.query.Param("accountingAccountId") Long accountingAccountId);
+
+    /**
+     * CFG-RF-08 E2/E4: cuenta cuantas lineas de asientos contables (no anulados)
+     * referencian a una cuenta contable. Usado para impedir su eliminacion logica.
+     * `JournalEntryLine` no tiene soft delete propio; se filtra por el JE padre
+     * que NO este reversado/anulado.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(l) FROM JournalEntryLine l "
+          + "WHERE l.accountingAccount.id = :accountingAccountId "
+          + "AND l.journalEntry.status <> com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.REVERSED")
+    long countByAccountingAccount_IdAndDeletedAtIsNull(
+            @org.springframework.data.repository.query.Param("accountingAccountId") Long accountingAccountId);
 }

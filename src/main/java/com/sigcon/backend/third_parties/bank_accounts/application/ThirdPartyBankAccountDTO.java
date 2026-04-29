@@ -16,6 +16,9 @@ public class ThirdPartyBankAccountDTO {
 
     private Long id;
     private Long thirdPartyId;
+    /** HU-TER-05 (2026-04-27): incluido cuando el lookup es desde BNK. */
+    private String thirdPartyNit;
+    private String thirdPartyBusinessName;
     private Long bankAccountId;
     private String bankAccountCode;
     private String bankName;

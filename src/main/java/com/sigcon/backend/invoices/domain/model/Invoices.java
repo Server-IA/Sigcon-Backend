@@ -144,6 +144,19 @@ public class Invoices {
     private LocalDateTime deletedAt;
 
     /**
+     * HU-AP-02 E3: optimistic locking para detectar edicion concurrente.
+     * Hibernate incrementa este contador en cada UPDATE. Si dos usuarios
+     * cargan la misma version y el segundo intenta guardar, Hibernate lanza
+     * {@code OptimisticLockException} que el GlobalExceptionHandler traduce a
+     * HTTP 409 con mensaje legible para el usuario. La columna se crea
+     * automaticamente por Hibernate ddl-auto.
+     */
+    @jakarta.persistence.Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
+
+    /**
      * Trazabilidad del origen del documento (MANUAL vs AAEF).
      * Campos: source, external_id, exchange_id (creados en V32).
      */

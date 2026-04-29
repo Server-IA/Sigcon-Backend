@@ -286,6 +286,46 @@ public class CashFlowProjectionService {
         );
     }
 
+    /**
+     * QA HU-030/031: aprueba una proyeccion BORRADOR -> APROBADA.
+     */
+    public ResponseEntity<?> approve(Long id) {
+        CashFlowProjection projection = getProjectionOrThrow(id);
+        if (projection.getStatus() != ProjectionStatus.BORRADOR) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("Solo proyecciones en BORRADOR pueden aprobarse. Estado actual: "
+                                    + projection.getStatus() + ".")));
+        }
+        projection.setStatus(ProjectionStatus.APROBADA);
+        projectionRepository.save(projection);
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashFlowProjection", projection.getId(),
+                "Proyeccion aprobada id=" + projection.getId());
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Proyección aprobada correctamente."),
+                Optional.of(toDto(projection))));
+    }
+
+    /**
+     * QA HU-059: marca proyeccion APROBADA -> EJECUTADA (estado terminal).
+     */
+    public ResponseEntity<?> execute(Long id) {
+        CashFlowProjection projection = getProjectionOrThrow(id);
+        if (projection.getStatus() != ProjectionStatus.APROBADA) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("Solo proyecciones APROBADAS pueden marcarse como EJECUTADA. Estado actual: "
+                                    + projection.getStatus() + ".")));
+        }
+        projection.setStatus(ProjectionStatus.EJECUTADA);
+        projectionRepository.save(projection);
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashFlowProjection", projection.getId(),
+                "Proyeccion marcada como ejecutada id=" + projection.getId());
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Proyección marcada como EJECUTADA."),
+                Optional.of(toDto(projection))));
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // BNK-RF-32 — Consultas
     // ═══════════════════════════════════════════════════════════════════

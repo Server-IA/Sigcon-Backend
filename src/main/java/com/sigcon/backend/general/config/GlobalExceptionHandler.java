@@ -165,6 +165,26 @@ public class GlobalExceptionHandler {
                         Optional.of("Recurso no encontrado")));
     }
 
+    /**
+     * HU-AP-02 E3: Optimistic locking. Cuando dos usuarios cargan la misma
+     * factura simultaneamente y uno guarda primero, el segundo recibe
+     * {@link org.springframework.orm.ObjectOptimisticLockingFailureException}
+     * (wrapper de Spring sobre {@link jakarta.persistence.OptimisticLockException}).
+     * Devolvemos HTTP 409 Conflict con el mensaje exacto de la HU para que el
+     * usuario sepa que debe recargar y reintentar.
+     */
+    @ExceptionHandler({
+            org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+            jakarta.persistence.OptimisticLockException.class
+    })
+    public ResponseEntity<?> handleOptimisticLock(Exception ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Esta factura fue modificada por otro usuario. "
+                                + "Recarga los datos y vuelve a intentarlo.")));
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<?> handleIllegalStateException(IllegalStateException ex) {
 
@@ -194,13 +214,32 @@ public class GlobalExceptionHandler {
                         Optional.of(ex.getMessage() != null ? ex.getMessage() : "Recurso no encontrado.")));
     }
 
-    /** Captura AccessDeniedException como HTTP 403 (sin permisos) */
+    /**
+     * Captura AccessDeniedException como HTTP 403 (sin permisos).
+     *
+     * <p>HU-AU-07 E2 / HU-AU-08 E2 / HU-AU-09 E6 (2026-04-28): mensaje contextual
+     * segun el endpoint accedido. Para rutas del modulo Auditoria devuelve
+     * el mensaje exacto que pide la HU correspondiente.
+     */
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
-    public ResponseEntity<?> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+    public ResponseEntity<?> handleAccessDenied(
+            org.springframework.security.access.AccessDeniedException ex,
+            jakarta.servlet.http.HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : "";
+        String message;
+        if (path.contains("/audit/dashboard")) {
+            message = "Acceso restringido al dashboard";
+        } else if (path.contains("/audit/logs/journal-entry")
+                || path.contains("/audit/logs/entity")) {
+            message = "Acceso restringido para vinculacion";
+        } else if (path.contains("/audit")) {
+            message = "Acceso denegado";
+        } else {
+            message = "No tiene permisos para realizar esta acción.";
+        }
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ErrorRespondJson.getErrorRespondMessage(
-                        Optional.of("No tiene permisos para realizar esta acción.")));
+                .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(message)));
     }
 
     @ExceptionHandler(Exception.class)

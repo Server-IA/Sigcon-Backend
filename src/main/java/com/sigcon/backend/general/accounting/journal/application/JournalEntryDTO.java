@@ -48,4 +48,10 @@ public class JournalEntryDTO {
     private List<JournalEntryLineDTO> lines;
     private String createdBy;
     private LocalDateTime createdAt;
+
+    /**
+     * HU-AU-09 E5 (2026-04-28): FK al log de auditoria que registro la creacion.
+     * Permite consulta inversa via {@code GET /journal-entries/{id}/audit-trail}.
+     */
+    private Long auditLogId;
 }

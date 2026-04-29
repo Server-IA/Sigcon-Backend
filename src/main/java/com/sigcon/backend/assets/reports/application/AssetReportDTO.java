@@ -48,4 +48,10 @@ public class AssetReportDTO {
 
     /** Nombre o razon social del proveedor. */
     private String supplierName;
+
+    /** HU-ACT-07 E2: descripcion funcional del activo. */
+    private String description;
+
+    /** HU-ACT-07 E2: cuenta contable PUC asociada en formato "codigo - nombre". */
+    private String accountInfo;
 }

@@ -151,4 +151,34 @@ public class PayrollController {
             @Parameter(description = "ID del recibo", example = "1") @PathVariable Long id) {
         return ResponseEntity.ok(payrollService.close(id));
     }
+
+    /** HU-NOM-03 DEF#2 (2026-04-28): editar amount de una linea SOLO en DRAFT. */
+    @Operation(summary = "Actualizar valor de linea (HU-NOM-03 DEF#2)",
+            description = "Modifica el amount de una linea de un recibo en estado DRAFT y "
+                    + "recalcula los totales. Inmutable en APPROVED/CLOSED.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Linea actualizada"),
+            @ApiResponse(responseCode = "400", description = "Recibo no en DRAFT, linea inexistente o monto invalido")
+    })
+    @PutMapping("/{id}/lineas/{lineId}")
+    public ResponseEntity<?> updateLine(
+            @PathVariable Long id, @PathVariable Long lineId,
+            @RequestBody java.util.Map<String, Object> body) {
+        java.math.BigDecimal amount = body.get("amount") != null
+                ? new java.math.BigDecimal(body.get("amount").toString())
+                : java.math.BigDecimal.ZERO;
+        return ResponseEntity.ok(payrollService.updateLine(id, lineId, amount));
+    }
+
+    /** HU-NOM-03 DEF#2 (2026-04-28): eliminar linea SOLO en DRAFT. */
+    @Operation(summary = "Eliminar linea (HU-NOM-03 DEF#2)",
+            description = "Soft-delete de una linea de recibo en DRAFT y recalcula totales.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Linea eliminada"),
+            @ApiResponse(responseCode = "400", description = "Recibo no en DRAFT o linea inexistente")
+    })
+    @DeleteMapping("/{id}/lineas/{lineId}")
+    public ResponseEntity<?> deleteLine(@PathVariable Long id, @PathVariable Long lineId) {
+        return ResponseEntity.ok(payrollService.deleteLine(id, lineId));
+    }
 }

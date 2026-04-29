@@ -24,6 +24,8 @@ import com.sigcon.backend.invoices.ap_reports.application.AgingReportDTO;
 import com.sigcon.backend.invoices.ap_reports.application.SupplierStatementDTO;
 import com.sigcon.backend.invoices.domain.model.Invoices;
 import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
+import com.sigcon.backend.invoices.purchase_orders.domain.model.PurchaseOrder;
+import com.sigcon.backend.invoices.purchase_orders.domain.repository.PurchaseOrderRepository;
 import com.sigcon.backend.reports.domain.service.ReportPdfService;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
@@ -46,6 +48,7 @@ public class ApReportService {
     private final ApNoteRepository noteRepository;
     private final ThirdPartyRepository thirdPartyRepository;
     private final ReportPdfService reportPdfService;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     private static final String RANGE_0_30 = "0-30 dias";
     private static final String RANGE_31_60 = "31-60 dias";
@@ -281,5 +284,86 @@ public class ApReportService {
         if (daysOverdue <= 60) return RANGE_31_60;
         if (daysOverdue <= 90) return RANGE_61_90;
         return RANGE_90_PLUS;
+    }
+
+    /**
+     * HU-AP-21 (2026-04-28): Reporte de Ordenes de Compra con filtros.
+     * Devuelve resumen agregado por estado + detalle filtrable.
+     *
+     * @param thirdPartyId opcional, filtra por proveedor
+     * @param status opcional, filtra por estado (DRAFT/PENDING/APPROVED/REJECTED/RECEIVED/CANCELLED)
+     * @param dateFrom opcional, fecha inicial
+     * @param dateTo opcional, fecha final
+     * @return reporte con summaryByStatus + orders[]
+     */
+    public ResponseEntity<?> getPurchaseOrdersReport(Long thirdPartyId, String status,
+                                                     LocalDate dateFrom, LocalDate dateTo) {
+        List<PurchaseOrder> orders = purchaseOrderRepository.findAll().stream()
+                .filter(o -> thirdPartyId == null
+                        || (o.getThirdParty() != null && thirdPartyId.equals(o.getThirdParty().getId())))
+                .filter(o -> status == null || status.isBlank() || status.equalsIgnoreCase(o.getStatus()))
+                .filter(o -> dateFrom == null || o.getOrderDate() == null
+                        || !o.getOrderDate().isBefore(dateFrom))
+                .filter(o -> dateTo == null || o.getOrderDate() == null
+                        || !o.getOrderDate().isAfter(dateTo))
+                .collect(Collectors.toList());
+
+        Map<String, BigDecimal> amountByStatus = new HashMap<>();
+        Map<String, Integer> countByStatus = new HashMap<>();
+        BigDecimal grandTotal = BigDecimal.ZERO;
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (PurchaseOrder o : orders) {
+            String st = o.getStatus() != null ? o.getStatus() : "UNKNOWN";
+            BigDecimal amount = o.getTotalAmount() != null ? o.getTotalAmount() : BigDecimal.ZERO;
+            amountByStatus.merge(st, amount, BigDecimal::add);
+            countByStatus.merge(st, 1, Integer::sum);
+            grandTotal = grandTotal.add(amount);
+
+            String thirdPartyName = "";
+            String thirdPartyNit = "";
+            try {
+                if (o.getThirdParty() != null) {
+                    thirdPartyName = o.getThirdParty().getBusinessName() != null
+                            ? o.getThirdParty().getBusinessName() : "";
+                    thirdPartyNit = o.getThirdParty().getNit() != null
+                            ? o.getThirdParty().getNit() : "";
+                }
+            } catch (Exception ignored) { }
+
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", o.getId());
+            row.put("orderNumber", o.getOrderNumber());
+            row.put("orderDate", o.getOrderDate());
+            row.put("deliveryDate", o.getDeliveryDate());
+            row.put("status", st);
+            row.put("totalAmount", amount);
+            row.put("thirdPartyName", thirdPartyName);
+            row.put("thirdPartyNit", thirdPartyNit);
+            row.put("notes", o.getNotes());
+            rows.add(row);
+        }
+
+        List<Map<String, Object>> summary = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> e : amountByStatus.entrySet()) {
+            Map<String, Object> bucket = new HashMap<>();
+            bucket.put("status", e.getKey());
+            bucket.put("count", countByStatus.getOrDefault(e.getKey(), 0));
+            bucket.put("amount", e.getValue());
+            summary.add(bucket);
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("summaryByStatus", summary);
+        resp.put("totalAmount", grandTotal);
+        resp.put("totalCount", orders.size());
+        resp.put("orders", rows);
+        resp.put("filters", Map.of(
+                "thirdPartyId", thirdPartyId == null ? "" : thirdPartyId,
+                "status", status == null ? "" : status,
+                "dateFrom", dateFrom == null ? "" : dateFrom.toString(),
+                "dateTo", dateTo == null ? "" : dateTo.toString()
+        ));
+        return ResponseEntity.ok(resp);
     }
 }

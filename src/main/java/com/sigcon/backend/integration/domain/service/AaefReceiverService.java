@@ -136,9 +136,13 @@ public class AaefReceiverService {
                 .generatedBy(meta.getGeneratedBy())
                 .periodFrom(meta.getRequestedPeriod() != null ? meta.getRequestedPeriod().getFrom() : null)
                 .periodTo(meta.getRequestedPeriod() != null ? meta.getRequestedPeriod().getTo() : null)
-                .totalDocuments(safeInt(summary != null ? summary.getTotalDocuments() : 0))
-                .totalInvoices(safeInt(summary != null ? summary.getTotalInvoices() : 0))
-                .totalTransactions(safeInt(summary != null ? summary.getTotalTransactions() : 0))
+                // Bug auto-unboxing: el ternario `Integer : 0` (donde 0 es int)
+                // forzaba unboxing de getTotalXxx() ANTES de pasar a safeInt(),
+                // produciendo NPE si el campo venia null. Pasar `null` (Integer)
+                // como brazo alterno deja a safeInt() resolver -> 0.
+                .totalDocuments(safeInt(summary != null ? summary.getTotalDocuments() : null))
+                .totalInvoices(safeInt(summary != null ? summary.getTotalInvoices() : null))
+                .totalTransactions(safeInt(summary != null ? summary.getTotalTransactions() : null))
                 .totalGrossAmount(safeBigDecimal(summary != null ? summary.getTotalGrossAmount() : null))
                 .totalTaxes(safeBigDecimal(summary != null ? summary.getTotalTaxes() : null))
                 .totalNet(safeBigDecimal(summary != null ? summary.getTotalNet() : null))
