@@ -311,29 +311,13 @@ public class AaefController {
                 continue;
             }
 
-            // QA-BLOQUE-AL (2026-04-29): el invoice/transaction completo (en formato
-            // AAEF v1.1 con Header/ThirdParty/Totals/Lines/Taxes) va DENTRO del
-            // campo "Document" del envelope Pull+Diff, NO en el wrapper. Por eso
-            // extraemos node.get("Document") y NO `node` (el wrapper solo tiene
-            // changeType + DocumentId + ChangeMetadata + Document).
-            // Para CANCELLED, "Document" suele venir vacio o ausente (basta el
-            // DocumentId para lookup del JE original).
-            JsonNode innerDocument = null;
-            if (node.has("Document") && !node.get("Document").isNull()) {
-                JsonNode candidate = node.get("Document");
-                // Aceptar solo si es un objeto NO vacio (para MODIFIED/NEW).
-                if (candidate.isObject() && candidate.size() > 0) {
-                    innerDocument = candidate;
-                }
-            }
-
             // Construir DTO y delegar
             AgroFusionExchangeUpdateDTO dto = AgroFusionExchangeUpdateDTO.builder()
                     .originalExchangeId(originalExchangeId)
                     .changeType(AgroFusionExchangeUpdateDTO.ChangeType.valueOf(mappedChangeType))
                     .documentType(documentType)
                     .documentId(documentIdOf(node))
-                    .document(innerDocument)
+                    .document(node)
                     .reason(node.has("ChangeMetadata") && node.get("ChangeMetadata").has("Reason")
                             ? node.get("ChangeMetadata").get("Reason").asText()
                             : null)
@@ -361,21 +345,7 @@ public class AaefController {
     }
 
     private String documentIdOf(JsonNode node) {
-        // 1. DocumentId al nivel del wrapper Pull+Diff (caso normal v1.1).
-        if (node.has("DocumentId") && !node.get("DocumentId").isNull()) {
-            String v = node.get("DocumentId").asText();
-            if (v != null && !v.isBlank()) return v;
-        }
-        // 2. Si el wrapper no lo trae, mirar dentro de Document.Header.DocumentId
-        //    (formato AAEF estandar de invoice/transaction).
-        if (node.has("Document") && node.get("Document").isObject()) {
-            JsonNode doc = node.get("Document");
-            if (doc.has("Header") && doc.get("Header").has("DocumentId")) {
-                return doc.get("Header").get("DocumentId").asText();
-            }
-            if (doc.has("DocumentId")) return doc.get("DocumentId").asText();
-        }
-        // 3. Compatibilidad con envelopes legacy donde el invoice venia plano.
+        if (node.has("DocumentId")) return node.get("DocumentId").asText();
         if (node.has("Header") && node.get("Header").has("DocumentId")) {
             return node.get("Header").get("DocumentId").asText();
         }
