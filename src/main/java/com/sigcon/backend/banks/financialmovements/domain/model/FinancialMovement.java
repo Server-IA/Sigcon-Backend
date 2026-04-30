@@ -69,14 +69,6 @@ public class FinancialMovement {
     @Column(name = "matched_voucher_id")
     private Long matchedVoucherId;
 
-    /**
-     * QA-BLOQUE-AP (2026-04-29): emparejamiento alternativo con JournalEntry
-     * cuando la empresa no usa Vouchers legacy. Mutuamente exclusivo con
-     * matchedVoucherId (no se valida a nivel BD para no romper datos previos).
-     */
-    @Column(name = "matched_journal_entry_id")
-    private Long matchedJournalEntryId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reconciliation_session_id")
     private BankReconciliationSession reconciliationSession;

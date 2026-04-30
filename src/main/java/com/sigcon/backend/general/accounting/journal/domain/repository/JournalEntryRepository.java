@@ -101,29 +101,4 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
             @Param("year") Integer year,
             @Param("month") Integer month,
             @Param("status") JournalEntryStatus status);
-
-    /**
-     * QA-BLOQUE-AP (2026-04-29): busca JournalEntries POSTED que tienen al menos
-     * una linea sobre la cuenta contable (PUC) indicada y estan en una ventana
-     * de fechas. Usado por el modal "Emparejar con comprobante" en conciliacion
-     * bancaria cuando la empresa no usa Vouchers legacy y opera unicamente con
-     * JournalEntries.
-     *
-     * @param accountingAccountId la cuenta PUC asociada a la cuenta bancaria (BankAccount.accountingAccount.id)
-     * @param companyId           filtro de tenant
-     * @param from                fecha minima (inclusive)
-     * @param to                  fecha maxima (inclusive)
-     */
-    @Query("SELECT DISTINCT je FROM JournalEntry je "
-         + "JOIN JournalEntryLine jel ON jel.journalEntry.id = je.id "
-         + "WHERE je.deletedAt IS NULL AND je.companyId = :companyId "
-         + "AND je.status = com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.POSTED "
-         + "AND jel.accountingAccount.id = :accountingAccountId "
-         + "AND je.entryDate >= :from AND je.entryDate <= :to "
-         + "ORDER BY je.entryDate DESC, je.entryNumber DESC")
-    List<JournalEntry> findReconciliationCandidatesByAccount(
-            @Param("accountingAccountId") Long accountingAccountId,
-            @Param("companyId") Long companyId,
-            @Param("from") LocalDate from,
-            @Param("to") LocalDate to);
 }

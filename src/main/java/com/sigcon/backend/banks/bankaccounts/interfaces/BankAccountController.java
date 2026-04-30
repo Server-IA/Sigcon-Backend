@@ -270,29 +270,6 @@ public class BankAccountController {
         return financialMovementService.matchVoucher(id, movementId, request, bindingResult);
     }
 
-    /**
-     * QA-BLOQUE-AP (2026-04-29): sugerencias contra JournalEntries (asientos
-     * contables) para empresas que no usan Vouchers legacy.
-     */
-    @GetMapping("/{id}/financial-movements/{movementId}/journal-entry-suggestions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
-    @Operation(summary = "Sugerencias de asientos contables (JE) para emparejar movimiento")
-    public ResponseEntity<?> journalEntrySuggestions(
-            @PathVariable Long id,
-            @PathVariable Long movementId) {
-        return financialMovementService.suggestJournalEntries(id, movementId);
-    }
-
-    @PutMapping("/{id}/financial-movements/{movementId}/match-journal-entry")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
-    @Operation(summary = "Emparejar movimiento con asiento contable (JournalEntry)")
-    public ResponseEntity<?> matchMovementToJournalEntry(
-            @PathVariable Long id,
-            @PathVariable Long movementId,
-            @RequestBody MatchVoucherRequest request) {
-        return financialMovementService.matchJournalEntry(id, movementId, request);
-    }
-
     @PutMapping("/{id}/financial-movements/{movementId}/unmatch")
     @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Quitar emparejamiento con comprobante")
