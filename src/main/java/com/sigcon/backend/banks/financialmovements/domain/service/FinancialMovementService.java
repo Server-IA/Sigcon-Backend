@@ -14,7 +14,9 @@ import com.sigcon.backend.banks.reconciliation.domain.model.enums.Reconciliation
 import com.sigcon.backend.banks.reconciliation.domain.repository.BankReconciliationSessionRepository;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
+import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntry;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
+import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -83,6 +85,7 @@ public class FinancialMovementService {
     private final VoucherTypeRepository voucherTypeRepository;
     private final VoucherService voucherService;
     private final JournalEntryService journalEntryService;
+    private final JournalEntryRepository journalEntryRepository;
     private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
@@ -431,6 +434,114 @@ public class FinancialMovementService {
      * @return ResponseEntity con el movimiento actualizado o error si no tiene comprobante
      * @throws IllegalArgumentException si el movimiento esta conciliado con cheque o no tiene comprobante
      */
+
+    /**
+     * QA-BLOQUE-AP (2026-04-29): sugiere JournalEntries POSTED que tienen al
+     * menos una linea sobre la cuenta PUC del banco, en ventana de fecha
+     * +/-7 dias y mismo importe absoluto que el movimiento. Para empresas
+     * que operan con asientos contables modernos en lugar de Vouchers legacy.
+     */
+    public ResponseEntity<?> suggestJournalEntries(Long bankAccountId, Long movementId) {
+        User user = userUtil.getUser();
+        BankAccount bankAccount = assertBankAccount(bankAccountId, user);
+
+        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
+                .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
+
+        Long pucAccountId = bankAccount.getAccountingAccount() != null
+                ? bankAccount.getAccountingAccount().getId() : null;
+        if (pucAccountId == null) {
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                    Optional.of("La cuenta bancaria no tiene cuenta PUC asociada."),
+                    Optional.of(java.util.Collections.emptyList())));
+        }
+
+        LocalDate from = mov.getMovementDate().minusDays(7);
+        LocalDate to = mov.getMovementDate().plusDays(7);
+
+        List<JournalEntry> candidates = journalEntryRepository.findReconciliationCandidatesByAccount(
+                pucAccountId, bankAccount.getCompanyId(), from, to);
+
+        // Filtrar JEs ya emparejados con otro movimiento + retornar DTO ligero
+        List<VoucherMatchSuggestionDTO> suggestions = candidates.stream()
+                .filter(je -> financialMovementRepository.findByMatchedJournalEntryId(je.getId()).isEmpty())
+                .limit(50)
+                .map(je -> VoucherMatchSuggestionDTO.builder()
+                        .id(je.getId())
+                        .number(je.getEntryNumber() != null
+                                ? "JE-" + je.getFiscalYear() + "-" + je.getEntryNumber()
+                                : ("#" + je.getId()))
+                        .date(je.getEntryDate())
+                        .amount(je.getTotalDebit() != null ? je.getTotalDebit() : BigDecimal.ZERO)
+                        .description(je.getDescription())
+                        .build())
+                .toList();
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Sugerencias obtenidas."),
+                Optional.of(suggestions)));
+    }
+
+    /**
+     * QA-BLOQUE-AP (2026-04-29): empareja un movimiento financiero con un
+     * JournalEntry. Reusa el mismo DTO MatchVoucherRequest porque el campo
+     * voucherId se interpreta como journalEntryId en este contexto.
+     */
+    @Transactional
+    public ResponseEntity<?> matchJournalEntry(Long bankAccountId, Long movementId, MatchVoucherRequest request) {
+        User user = userUtil.getUser();
+        BankAccount bankAccount = assertBankAccount(bankAccountId, user);
+
+        FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
+                .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
+
+        if (mov.getMatchedCheckId() != null) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El movimiento ya esta conciliado con un cheque y no puede emparejarse con un asiento.")));
+        }
+        if (mov.getMatchedVoucherId() != null) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El movimiento ya esta emparejado con un comprobante (voucher).")));
+        }
+        if (mov.getMatchedJournalEntryId() != null) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El movimiento ya esta emparejado con un asiento contable.")));
+        }
+
+        Long jeId = request != null ? request.getVoucherId() : null;
+        if (jeId == null) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("Debe indicar el ID del asiento contable a emparejar.")));
+        }
+
+        JournalEntry je = journalEntryRepository.findById(jeId)
+                .orElseThrow(() -> new IllegalArgumentException("Asiento contable no encontrado."));
+
+        // Validar tenant
+        if (!java.util.Objects.equals(je.getCompanyId(), bankAccount.getCompanyId())) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El asiento contable pertenece a otra empresa.")));
+        }
+
+        // Validar que no este ya emparejado con otro movimiento
+        if (financialMovementRepository.findByMatchedJournalEntryId(jeId).isPresent()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("El asiento ya esta emparejado con otro movimiento financiero.")));
+        }
+
+        mov.setMatchedJournalEntryId(jeId);
+        FinancialMovement saved = financialMovementRepository.save(mov);
+
+        auditPublisher.publishUpdate(
+                com.sigcon.backend.audit.domain.model.enums.AuditModule.BNK,
+                "FinancialMovement", saved.getId(),
+                "Emparejado con JournalEntry id=" + jeId);
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Movimiento emparejado con asiento contable."),
+                Optional.of(toDto(saved))));
+    }
+
     @Transactional
     public ResponseEntity<?> unmatch(Long bankAccountId, Long movementId) {
         User user = userUtil.getUser();
@@ -441,10 +552,13 @@ public class FinancialMovementService {
         if (mov.getMatchedCheckId() != null) {
             throw new IllegalArgumentException("Movimiento conciliado con cheque: no se puede desemparejar desde aqui.");
         }
-        if (mov.getMatchedVoucherId() == null) {
+        // QA-BLOQUE-AP (2026-04-29): unmatch limpia ambos campos. Si el movimiento
+        // estaba emparejado con JE en lugar de Voucher, tambien lo libera.
+        if (mov.getMatchedVoucherId() == null && mov.getMatchedJournalEntryId() == null) {
             throw new IllegalArgumentException("El movimiento no tiene comprobante asociado.");
         }
         mov.setMatchedVoucherId(null);
+        mov.setMatchedJournalEntryId(null);
         financialMovementRepository.save(mov);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(

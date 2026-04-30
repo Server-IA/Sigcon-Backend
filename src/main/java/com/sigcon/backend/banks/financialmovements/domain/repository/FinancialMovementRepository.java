@@ -45,6 +45,14 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
 
     Optional<FinancialMovement> findByMatchedVoucherId(Long matchedVoucherId);
 
+    /**
+     * QA-BLOQUE-AP (2026-04-29): empareja con JournalEntry (no Voucher).
+     * Devuelve la coleccion: un mismo JE puede emparejar varios FMs (1 JE
+     * con multiples lineas que afectan la misma cuenta), pero por simplicidad
+     * el flujo de emparejamiento es 1:1 (UI valida).
+     */
+    Optional<FinancialMovement> findByMatchedJournalEntryId(Long matchedJournalEntryId);
+
     @Query("SELECT COALESCE(SUM(fm.amount), 0) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
             + "AND fm.movementDate >= :from AND fm.movementDate <= :to")
     BigDecimal sumAmountByBankAccountAndPeriod(
