@@ -263,6 +263,13 @@ public class GoodsReceiptService {
         receipt = receiptRepository.save(receipt);
         log.info("Recepcion {} rechazada. Motivo: {}", receipt.getReceiptNumber(), request.getReason());
 
+        // QA-BLOQUE-AS (2026-04-30): publicar auditoria de la devolucion.
+        // Antes el reject no aparecia en la bitacora — solo CREATE de
+        // GoodsReceipt y UPDATE de PurchaseOrder. La devolucion + motivo es
+        // critica para trazabilidad legal y QA lo reporto explicitamente.
+        auditPublisher.publishUpdate(AuditModule.AP, "GoodsReceipt", receipt.getId(),
+                "Recepcion " + receipt.getReceiptNumber() + " RECHAZADA. Motivo: " + request.getReason());
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Recepcion rechazada exitosamente"), Optional.of(toDTO(receipt))));

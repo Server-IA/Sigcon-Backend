@@ -38,6 +38,21 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
     public static final String API_KEY_HEADER = "X-API-Key";
     public static final String API_KEY_PARAMETER_NAME = "AGROFUSION_API_KEY";
+    public static final String API_KEY_TEST_PARAMETER_NAME = "AGROFUSION_API_KEY_TEST";
+
+    /**
+     * Atributo del request que indica el "tier" de la API Key validada.
+     * Lo lee {@code AaefRateLimitFilter} para aplicar el limite por hora correcto.
+     * Valores: {@code "PRODUCTION"} (10/h) o {@code "TEST"} (50/h).
+     *
+     * <p>Nota: AaefRateLimitFilter corre ANTES de este filter en la cadena, por lo
+     * que el rate filter NO puede leer este atributo de forma confiable. Por eso
+     * AaefRateLimitFilter resuelve el tier por su cuenta consultando ambas keys.
+     * Este atributo se mantiene como debug/observabilidad para handlers downstream.
+     */
+    public static final String AAEF_KEY_TIER_ATTR = "aaef.key.tier";
+    public static final String TIER_PRODUCTION = "PRODUCTION";
+    public static final String TIER_TEST = "TEST";
 
     /** Paths protegidos por API Key. */
     private static final String AAEF_PATH_PREFIX = "/api/contabilidad/";
@@ -106,25 +121,33 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Leer API Key GLOBAL de AgroFusion desde tabla parameters.
-        // Multi-tenant: AgroFusion autentica con UNA sola key cross-empresa; el
-        // enrutamiento a la empresa destino se hace despues por el NIT del payload
-        // (ver AaefReceiverService). Por eso usamos query nativa que bypasea el
-        // @Filter("tenantFilter") y devuelve la key de la empresa con id mas bajo
-        // (convencion: SIGCON DEMO id=1 es la fuente autoritativa de config global).
-        Optional<String> expectedKeyOpt = parameterRepository
+        // Leer ambas API Keys GLOBALES desde tabla parameters:
+        //   - AGROFUSION_API_KEY      (PRODUCTION, rate limit 10/h - usada por AgroFusion)
+        //   - AGROFUSION_API_KEY_TEST (TEST,       rate limit 50/h - usada por QA / integradores)
+        //
+        // Multi-tenant: las keys son globales cross-empresa; el enrutamiento a la
+        // empresa destino se hace despues por el NIT del payload (ver
+        // AaefReceiverService). Query nativa bypasea el @Filter("tenantFilter").
+        Optional<String> prodKeyOpt = parameterRepository
                 .findGlobalValueByName(API_KEY_PARAMETER_NAME);
+        Optional<String> testKeyOpt = parameterRepository
+                .findGlobalValueByName(API_KEY_TEST_PARAMETER_NAME);
 
-        if (expectedKeyOpt.isEmpty() || expectedKeyOpt.get().trim().isEmpty()) {
-            log.error("AGROFUSION_API_KEY global no esta configurado en tabla parameters");
+        // Al menos una de las dos debe estar configurada
+        boolean prodAvailable = prodKeyOpt.isPresent() && !prodKeyOpt.get().trim().isEmpty();
+        boolean testAvailable = testKeyOpt.isPresent() && !testKeyOpt.get().trim().isEmpty();
+        if (!prodAvailable && !testAvailable) {
+            log.error("Ninguna API Key AAEF (prod/test) esta configurada en parameters");
             reject(response, 500, "API Key del sistema no configurado");
             return;
         }
 
-        String expectedKey = expectedKeyOpt.get();
+        // Comparacion de tiempo constante contra ambas keys.
+        // Evaluamos las dos para no filtrar por timing si la key recibida es prod o test.
+        boolean matchesProd = prodAvailable && constantTimeEquals(providedKey, prodKeyOpt.get());
+        boolean matchesTest = testAvailable && constantTimeEquals(providedKey, testKeyOpt.get());
 
-        // Comparacion de tiempo constante para evitar timing attacks
-        if (!constantTimeEquals(providedKey, expectedKey)) {
+        if (!matchesProd && !matchesTest) {
             log.warn("Intento de autenticacion con API Key invalida desde {}",
                     request.getRemoteAddr());
             // HU-INT-RF-01 E3: mensaje generico para no revelar si la key existe
@@ -132,12 +155,18 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Autenticacion OK: establecer auth en SecurityContext para que
-        // UserUtil.getUser() y otros componentes tengan usuario identificado.
-        // El TenantContext se setea DESPUES en AaefReceiverService por el NIT del payload.
+        // Stamp del tier en el request para downstream / observabilidad
+        String tier = matchesProd ? TIER_PRODUCTION : TIER_TEST;
+        request.setAttribute(AAEF_KEY_TIER_ATTR, tier);
+        log.debug("AAEF auth OK con API Key tier={}", tier);
+
+        // Autenticacion OK: establecer auth en SecurityContext con authority diferenciada
+        // por tier (util si en el futuro se quiere @PreAuthorize por tier).
+        String authority = matchesProd ? "ROLE_AGROFUSION_API_KEY" : "ROLE_AGROFUSION_API_KEY_TEST";
+        String principal = matchesProd ? "agrofusion-api-key" : "agrofusion-api-key-test";
         var auth = new UsernamePasswordAuthenticationToken(
-                "agrofusion-api-key", null,
-                List.of(new SimpleGrantedAuthority("ROLE_AGROFUSION_API_KEY")));
+                principal, null,
+                List.of(new SimpleGrantedAuthority(authority)));
         SecurityContextHolder.getContext().setAuthentication(auth);
         chain.doFilter(request, response);
     }

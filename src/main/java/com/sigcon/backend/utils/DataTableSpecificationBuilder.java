@@ -247,27 +247,49 @@ public class DataTableSpecificationBuilder<T> {
                         predicate = cb.and(predicate, cb.equal(path, Boolean.valueOf(searchValue)));
                     }
 
-    
-                    /* -------- NUMERIC / BOOLEAN -------- */
+                    /* -------- DATE / DATETIME -------- */
+                    // QA-BLOQUE-AT (2026-04-30): el filtro de fecha pasaba a la rama
+                    // numerica, no matcheaba el regex \\d+ y se ignoraba silenciosamente.
+                    // Soporte: yyyy-MM-dd para LocalDate, yyyy-MM-dd[ HH:mm[:ss]] para
+                    // LocalDateTime. Coincidencia exacta del dia.
+                    else if (java.time.LocalDate.class.equals(type)) {
+                        try {
+                            java.time.LocalDate parsed = java.time.LocalDate.parse(searchValue);
+                            predicate = cb.and(predicate, cb.equal(path, parsed));
+                        } catch (Exception ex) {
+                            // formato invalido -> ignorar filtro
+                        }
+                    }
+                    else if (java.time.LocalDateTime.class.equals(type)) {
+                        try {
+                            java.time.LocalDate parsed = java.time.LocalDate.parse(searchValue);
+                            // rango: [00:00:00, 23:59:59.999999999] del dia indicado
+                            java.time.LocalDateTime start = parsed.atStartOfDay();
+                            java.time.LocalDateTime end = parsed.atTime(23, 59, 59, 999_999_999);
+                            predicate = cb.and(predicate,
+                                    cb.between(path.as(java.time.LocalDateTime.class), start, end));
+                        } catch (Exception ex) {
+                            // formato invalido -> ignorar filtro
+                        }
+                    }
+
+                    /* -------- NUMERIC -------- */
                     else {
-                        if(searchValue.matches("\\d+")) {
-                            Object convertedValue = convertValue(searchValue, type);
-    
-                            if(regex) {
-                                String palabra = verifyValue(searchValue);
-                                
-                                predicate = cb.and(
-                                        predicate,
-                                        cb.like(path.as(String.class), palabra)
-                                );
-                            } else {
-                                predicate = cb.and(
-                                        predicate,
-                                        cb.equal(path, convertedValue)  
-                                );
+                        // QA-BLOQUE-AT (2026-04-30): nunca usar LIKE en numericos.
+                        // Hibernate lo traduce a SQL `<col> LIKE ?` y PostgreSQL
+                        // falla con "operator does not exist: double precision ~~ text"
+                        // (ej. al filtrar AP invoices por totalPayment).
+                        // Acepta numeros con separadores (. , espacios) y ejecuta
+                        // siempre comparacion exacta.
+                        String cleaned = searchValue.replaceAll("[^0-9.\\-]", "");
+                        if (!cleaned.isEmpty() && cleaned.matches("-?\\d+(\\.\\d+)?")) {
+                            try {
+                                Object convertedValue = convertValue(cleaned, type);
+                                predicate = cb.and(predicate, cb.equal(path, convertedValue));
+                            } catch (Exception ex) {
+                                // tipo no soportado o conversion invalida -> ignorar filtro
                             }
                         }
-    
                     }
                 }
             }

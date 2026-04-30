@@ -18,4 +18,9 @@ public class VoucherMatchSuggestionDTO {
     private LocalDate date;
     private BigDecimal amount;
     private String description;
+    /**
+     * QA-BLOQUE-AP v2: true si el JE/Voucher tiene linea sobre la cuenta del
+     * banco. Usado en el frontend para mostrar badge visual al contador.
+     */
+    private Boolean affectsAccount;
 }

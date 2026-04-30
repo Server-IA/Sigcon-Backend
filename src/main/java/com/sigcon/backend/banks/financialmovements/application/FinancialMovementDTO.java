@@ -24,5 +24,10 @@ public class FinancialMovementDTO {
     private String flowActivity;
     private Long matchedCheckId;
     private Long matchedVoucherId;
+    /** QA-BLOQUE-AP v2 (2026-04-30): expuesto al frontend para que la columna
+     * EMPAREJADO muestre el JE asociado tras hacer match. */
+    private Long matchedJournalEntryId;
+    /** Etiqueta legible (JE-2026-N) para mostrar en UI. */
+    private String matchedJournalEntryNumber;
     private Long reconciliationSessionId;
 }

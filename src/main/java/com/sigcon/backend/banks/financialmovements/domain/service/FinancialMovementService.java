@@ -448,21 +448,22 @@ public class FinancialMovementService {
         FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
 
-        Long pucAccountId = bankAccount.getAccountingAccount() != null
+        // QA-BLOQUE-AP v2 (2026-04-30): listar TODOS los JEs POSTED en ventana
+        // ±7d de la fecha del movimiento, sin filtrar por cuenta. Marcar con
+        // affectsAccount=true los que tienen al menos una linea sobre la cuenta
+        // operativa del banco (para que el frontend los destaque visualmente).
+        // Antes el filtro estricto por cuenta dejaba el modal vacio aunque
+        // hubiera JEs visibles en el listado de comprobantes contables.
+        Long bankPucAccountId = bankAccount.getAccountingAccount() != null
                 ? bankAccount.getAccountingAccount().getId() : null;
-        if (pucAccountId == null) {
-            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-                    Optional.of("La cuenta bancaria no tiene cuenta PUC asociada."),
-                    Optional.of(java.util.Collections.emptyList())));
-        }
 
         LocalDate from = mov.getMovementDate().minusDays(7);
         LocalDate to = mov.getMovementDate().plusDays(7);
 
         List<JournalEntry> candidates = journalEntryRepository.findReconciliationCandidatesByAccount(
-                pucAccountId, bankAccount.getCompanyId(), from, to);
+                bankAccount.getCompanyId(), from, to);
 
-        // Filtrar JEs ya emparejados con otro movimiento + retornar DTO ligero
+        final Long pucIdRef = bankPucAccountId;
         List<VoucherMatchSuggestionDTO> suggestions = candidates.stream()
                 .filter(je -> financialMovementRepository.findByMatchedJournalEntryId(je.getId()).isEmpty())
                 .limit(50)
@@ -474,7 +475,13 @@ public class FinancialMovementService {
                         .date(je.getEntryDate())
                         .amount(je.getTotalDebit() != null ? je.getTotalDebit() : BigDecimal.ZERO)
                         .description(je.getDescription())
+                        .affectsAccount(pucIdRef != null
+                                && journalEntryRepository.existsLineForAccount(je.getId(), pucIdRef))
                         .build())
+                // Ordenar primero los que afectan la cuenta (relevancia) luego los demas
+                .sorted((a, b) -> Boolean.compare(
+                        Boolean.TRUE.equals(b.getAffectsAccount()),
+                        Boolean.TRUE.equals(a.getAffectsAccount())))
                 .toList();
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -780,6 +787,17 @@ public class FinancialMovementService {
     }
 
     private FinancialMovementDTO toDto(FinancialMovement m) {
+        // QA-BLOQUE-AP v2 (2026-04-30): expone matchedJournalEntryId + numero
+        // legible (JE-YYYY-N) para que el frontend muestre el emparejamiento
+        // tras hacer match. Antes solo se exponia matchedVoucherId.
+        String jeNumber = null;
+        if (m.getMatchedJournalEntryId() != null) {
+            jeNumber = journalEntryRepository.findById(m.getMatchedJournalEntryId())
+                    .map(je -> je.getEntryNumber() != null
+                            ? "JE-" + je.getFiscalYear() + "-" + je.getEntryNumber()
+                            : "#" + je.getId())
+                    .orElse("#" + m.getMatchedJournalEntryId());
+        }
         return FinancialMovementDTO.builder()
                 .id(m.getId())
                 .bankAccountId(m.getBankAccount() != null ? m.getBankAccount().getId() : null)
@@ -791,6 +809,8 @@ public class FinancialMovementService {
                 .flowActivity(m.getFlowActivity())
                 .matchedCheckId(m.getMatchedCheckId())
                 .matchedVoucherId(m.getMatchedVoucherId())
+                .matchedJournalEntryId(m.getMatchedJournalEntryId())
+                .matchedJournalEntryNumber(jeNumber)
                 .reconciliationSessionId(m.getReconciliationSession() != null ? m.getReconciliationSession().getId() : null)
                 .build();
     }

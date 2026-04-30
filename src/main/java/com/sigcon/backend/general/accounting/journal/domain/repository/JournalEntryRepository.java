@@ -103,27 +103,41 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
             @Param("status") JournalEntryStatus status);
 
     /**
-     * QA-BLOQUE-AP (2026-04-29): busca JournalEntries POSTED que tienen al menos
-     * una linea sobre la cuenta contable (PUC) indicada y estan en una ventana
-     * de fechas. Usado por el modal "Emparejar con comprobante" en conciliacion
-     * bancaria cuando la empresa no usa Vouchers legacy y opera unicamente con
-     * JournalEntries.
+     * QA-BLOQUE-AP (2026-04-29) v2 (2026-04-30): busca JournalEntries POSTED en
+     * ventana de fechas. NO filtra por cuenta contable: el contador puede
+     * emparejar manualmente con cualquier asiento del periodo, no solo con los
+     * que afectan directamente la cuenta del banco. La validacion de
+     * coherencia contable queda al usuario.
      *
-     * @param accountingAccountId la cuenta PUC asociada a la cuenta bancaria (BankAccount.accountingAccount.id)
-     * @param companyId           filtro de tenant
-     * @param from                fecha minima (inclusive)
-     * @param to                  fecha maxima (inclusive)
+     * <p>El filtro estricto previo (por accounting_account_id) era demasiado
+     * restrictivo: en empresas QA los JEs de nomina, factura compra, etc.
+     * afectan cuentas distintas a la del banco y por tanto no aparecian aunque
+     * cuadraran en monto y fecha. El usuario en pantalla veia 6 JEs visibles
+     * pero el modal decia "no hay asientos disponibles" — confuso.
+     *
+     * @param companyId filtro de tenant
+     * @param from      fecha minima (inclusive)
+     * @param to        fecha maxima (inclusive)
      */
-    @Query("SELECT DISTINCT je FROM JournalEntry je "
-         + "JOIN JournalEntryLine jel ON jel.journalEntry.id = je.id "
+    @Query("SELECT je FROM JournalEntry je "
          + "WHERE je.deletedAt IS NULL AND je.companyId = :companyId "
          + "AND je.status = com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.POSTED "
-         + "AND jel.accountingAccount.id = :accountingAccountId "
          + "AND je.entryDate >= :from AND je.entryDate <= :to "
          + "ORDER BY je.entryDate DESC, je.entryNumber DESC")
     List<JournalEntry> findReconciliationCandidatesByAccount(
-            @Param("accountingAccountId") Long accountingAccountId,
             @Param("companyId") Long companyId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
+
+    /**
+     * QA-BLOQUE-AP v2: chequeo auxiliar — un JE afecta o no la cuenta del banco.
+     * El frontend usa esto via flag affectsAccount en el DTO para mostrar un
+     * badge visual al contador.
+     */
+    @Query("SELECT COUNT(jel) > 0 FROM JournalEntryLine jel "
+         + "WHERE jel.journalEntry.id = :journalEntryId "
+         + "AND jel.accountingAccount.id = :accountingAccountId")
+    boolean existsLineForAccount(
+            @Param("journalEntryId") Long journalEntryId,
+            @Param("accountingAccountId") Long accountingAccountId);
 }
