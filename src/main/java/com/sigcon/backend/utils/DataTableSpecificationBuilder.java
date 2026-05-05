@@ -27,7 +27,12 @@ public class DataTableSpecificationBuilder<T> {
     
                 String globalValue = request.getSearch().getValue().trim();
 
-                if (!globalValue.matches("^[a-zA-Z0-9_\\-\\s%,.]+$")) {
+                // HU-CFG (Bloque AQ, 2026-05-04): permitir caracteres en espaniol (tildes,
+                // ñ, ü) y parentesis. Usar \p{L}\p{N} (Unicode letters + numbers) en
+                // modo Unicode para evitar issues con encoding del literal en el .class.
+                // Antes el regex con literales `áéíóúÁÉÍÓÚñÑüÜ` rechazaba datos validos
+                // del seed con tildes / ñ.
+                if (!globalValue.matches("(?U)^[\\p{L}\\p{N} ()_\\-%,.]+$")) {
                     throw new IllegalArgumentException("Entrada de busqueda inválida");
                 }
 
@@ -156,11 +161,18 @@ public class DataTableSpecificationBuilder<T> {
                     String field = resolveFieldName(column);
                     String searchValue = column.getSearch().getValue().trim();
 
-                    if (!searchValue.matches("^[a-zA-Z0-9_\\-\\s%,.]+$")) {
+                    boolean regex = column.getSearch().isRegex();
+                    // HU-CFG (Bloque AQ, 2026-05-04): permitir caracteres en espaniol (tildes,
+                    // ñ, ü) y parentesis. Usar \p{L}\p{N} en modo Unicode (?U) para
+                    // matchear letras/numeros de cualquier idioma sin depender del
+                    // encoding del literal compilado.
+                    // Cuando regex=true, permitir ademas `|` como separador OR.
+                    String allowedPattern = regex
+                            ? "(?U)^[\\p{L}\\p{N} ()_\\-%,.|]+$"
+                            : "(?U)^[\\p{L}\\p{N} ()_\\-%,.]+$";
+                    if (!searchValue.matches(allowedPattern)) {
                         throw new IllegalArgumentException("Entrada de busqueda inválida");
                     }
-
-                    boolean regex = column.getSearch().isRegex();
 
                     Path<?> path;
                     try {

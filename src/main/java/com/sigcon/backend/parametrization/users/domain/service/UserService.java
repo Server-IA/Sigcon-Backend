@@ -22,6 +22,7 @@ import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
+import com.sigcon.backend.platform.tenant.TenantContext;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -75,6 +76,21 @@ public class UserService {
                     : PageRequest.of(page, safeLength);
             Specification<User> spec = userSpecificationBuilder.build(request)
                     .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
+
+            // Bloque AM (2026-05-03): User NO tiene @Filter("tenantFilter")
+            // intencionalmente para que PLATFORM_ADMIN pueda ver todos los users
+            // de todas las empresas. Pero un ADMIN_EMPRESA llamando este endpoint
+            // recibia TODOS los users (leak cross-tenant). Filtrar manualmente
+            // por TenantContext cuando NO es PLATFORM_ADMIN.
+            if (!TenantContext.isPlatformAdmin()) {
+                Long currentTenant = TenantContext.getCompanyId();
+                if (currentTenant != null) {
+                    spec = spec.and((root, query, cb) -> cb.equal(root.get("companyId"), currentTenant));
+                } else {
+                    // usuario sin tenant ni platform => no ve nada (defensivo)
+                    spec = spec.and((root, query, cb) -> cb.isFalse(cb.literal(true)));
+                }
+            }
 
             Page<User> users = userRepository.findAll(spec, pageable);
 

@@ -24,35 +24,34 @@ import com.sigcon.backend.assets.assets_depreciation.domain.model.enums.Deprecia
 public class UpdateAssetsDTO {
 
 
-        @NotBlank(message = "Faltan datos requeridos")
+        // HU-ACT-06 (QA 2026-05-05): edicion parcial. Cualquier campo no enviado
+        // por el frontend se preserva con el valor actual del activo en el
+        // service. Las validaciones de formato (@Pattern, @DecimalMin) siguen
+        // aplicando solo cuando el campo llega no-null.
         @Pattern(regexp = "^[\\p{L}0-9\\-_/.,\\s]{3,150}$", message = "Faltan datos requeridos")
-        @Schema(description = "Nombre del activo", example = "Impresora laser oficina")
+        @Schema(description = "Nombre del activo (opcional en update)", example = "Impresora laser oficina")
         private String name;
 
         @Size(max = 500, message = "Faltan datos requeridos")
         @Schema(description = "Descripcion funcional del activo", example = "Activo fijo para area administrativa")
         private String description;
 
-        @NotNull(message = "Faltan datos requeridos")
-        @Schema(description = "Clasificacion del activo", example = "NON_CURRENT", allowableValues = { "CURRENT",
+        @Schema(description = "Clasificacion del activo (opcional en update)", example = "NON_CURRENT", allowableValues = { "CURRENT",
                         "NON_CURRENT" })
         private AssetClassification classification;
 
-        @NotNull(message = "Faltan datos requeridos")
-        @Schema(description = "Tipo del activo", example = "TANGIBLE", allowableValues = { "TANGIBLE", "INTANGIBLE" })
+        @Schema(description = "Tipo del activo (opcional en update)", example = "TANGIBLE", allowableValues = { "TANGIBLE", "INTANGIBLE" })
         private AssetType type;
 
-        @NotNull(message = "Faltan datos requeridos")
         @Positive(message = "Faltan datos requeridos")
-        @Schema(description = "ID de la cuenta contable asociada al activo", example = "12")
+        @Schema(description = "ID de la cuenta contable asociada al activo (opcional en update)", example = "12")
         private Long accountingAccountId;
 
         @Schema(description = "Estado del activo", example = "ACTIVE", allowableValues = { "ACTIVE", "IN_REPAIR", "DECOMMISSIONED", "TRANSFERRED" })
         private AssetStatus status;
 
-        @NotNull(message = "Faltan datos requeridos")
         @DecimalMin(value = "0.01", message = "Faltan datos requeridos")
-        @Schema(description = "Valor de adquisicion", example = "3200000.00")
+        @Schema(description = "Valor de adquisicion (opcional en update)", example = "3200000.00")
         private BigDecimal acquisitionValue;
         
         @Schema(description = "Regla tributaria para el calculo de impuestos", example = "1")
@@ -64,9 +63,8 @@ public class UpdateAssetsDTO {
         @Schema(description = "Fecha de adquisicion (opcional en update)", example = "2026-01-15")
         private LocalDate acquisitionDate;
 
-        @NotNull(message = "Faltan datos requeridos")
         @Min(value = 1, message = "Faltan datos requeridos")
-        @Schema(description = "Vida util en meses", example = "60")
+        @Schema(description = "Vida util en meses (opcional en update)", example = "60")
         private Integer usefulLifeMonths;
 
         // Opcional en update: si el usuario no la cambia, se mantiene la regla actual.

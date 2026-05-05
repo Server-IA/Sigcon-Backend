@@ -97,7 +97,7 @@ public class RuleTaxService {
         RuleTaxDTO ruleTaxDTO = convertToDTO(taxRulerEntity);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-            Optional.of("Regla de impuesto creada correctamente"),
+            Optional.of("La Creacion ha sido exitosa"),
             Optional.of(ruleTaxDTO)
         ));
 
@@ -180,7 +180,7 @@ public class RuleTaxService {
         RuleTaxDTO ruleTaxDTO = convertToDTO(taxRulerEntity);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-            Optional.of("Regla de impuesto actualizada correctamente"),
+            Optional.of("El registro fue actualizado correctamente"),
             Optional.of(ruleTaxDTO)
         ));
     }
@@ -232,6 +232,39 @@ public class RuleTaxService {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
+    }
+
+    /**
+     * HU-CFG-RF-09 E8: exporta el listado completo (no paginado) en CSV o XLSX.
+     * Respeta el tenant filter activo (multi-tenant). Incluye todos los campos
+     * relevantes: nombre, tipo, tarifa, alcance, vigencia, cuenta contable, status.
+     *
+     * @param format "csv" o "xlsx"
+     * @return bytes del archivo generado
+     */
+    public byte[] exportAll(String format) {
+        java.util.List<TaxRulerEntity> all = ruleTaxRepository.findAll().stream()
+                .filter(t -> t.getDeletedAt() == null)
+                .collect(java.util.stream.Collectors.toList());
+        java.util.List<String> headers = java.util.List.of(
+                "Id", "Nombre", "Tipo", "Tarifa %", "Alcance",
+                "Inicio vigencia", "Fin vigencia", "Cuenta contable", "Estado");
+        java.util.List<java.util.function.Function<TaxRulerEntity, Object>> cols = java.util.List.of(
+                TaxRulerEntity::getId,
+                TaxRulerEntity::getName,
+                t -> t.getTypeRulerTax() != null ? t.getTypeRulerTax().name() : "",
+                TaxRulerEntity::getPercentage,
+                TaxRulerEntity::getScope,
+                TaxRulerEntity::getDateStart,
+                TaxRulerEntity::getDateEnd,
+                t -> t.getAccountingAccount() != null ? t.getAccountingAccount().getCustomName() : "",
+                t -> t.getStatus() != null ? t.getStatus().name() : "");
+        if ("xlsx".equalsIgnoreCase(format)) {
+            return com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx("Reglas tributarias", headers, cols, all);
+        }
+        return com.sigcon.backend.utils.export.SimpleTableExporter
+                .toCsv(headers, cols, all);
     }
 
     private RuleTaxDTO convertToDTO(TaxRulerEntity taxRulerEntity) {

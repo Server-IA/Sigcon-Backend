@@ -55,6 +55,7 @@ public class ArPaymentService {
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
     private final AuditPublisher auditPublisher;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private final DataTableSpecificationBuilder<ArPayment> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -96,14 +97,26 @@ public class ArPaymentService {
             throw new IllegalArgumentException("El monto del cobro debe ser mayor a cero");
         }
         if (request.getAmount().compareTo(balanceDue) > 0) {
+            // HU-AR-08 E2: mensaje literal de la HU
             throw new IllegalArgumentException(
-                    "El monto del cobro supera el saldo pendiente. Saldo actual: $" + balanceDue);
+                    "El valor del pago supera el saldo pendiente de la factura. Saldo actual: $" + balanceDue);
         }
 
         // 4. Validar referencia de cobro no duplicada
         if (request.getPaymentReference() != null && !request.getPaymentReference().isBlank()) {
             if (paymentRepository.existsByPaymentReferenceAndDeletedAtIsNull(request.getPaymentReference())) {
                 throw new IllegalArgumentException("Ya existe un cobro con esta referencia: " + request.getPaymentReference());
+            }
+        }
+
+        // HU-AR-02 E3 + HU-AR-08 E3: idempotencia por (invoice, amount, paymentDate)
+        // cuando paymentReference es null. Evita doble-click.
+        if (request.getPaymentReference() == null || request.getPaymentReference().isBlank()) {
+            if (paymentRepository.existsByInvoice_IdAndAmountAndPaymentDateAndDeletedAtIsNull(
+                    invoice.getId(), request.getAmount(), request.getPaymentDate())) {
+                throw new IllegalArgumentException(
+                        "Ya existe un cobro identico para esta factura (mismo monto y fecha). "
+                        + "Si realmente es un pago separado, informe un paymentReference distinto.");
             }
         }
 
@@ -188,6 +201,17 @@ public class ArPaymentService {
         } catch (RuntimeException e) {
             log.error("Error inesperado generando asiento para cobro {}", payment.getId(), e);
             throw e;
+        }
+
+        // HU-AR-02 E4: publicar evento Spring para integracion CG/INT/AU.
+        try {
+            boolean partial = invoice.getStatus() == SalesInvoiceStatus.PARTIALLY_PAID;
+            eventPublisher.publishEvent(new com.sigcon.backend.accounts_receivable.events
+                    .ArPaymentProcessedEvent(this, payment.getId(), invoice.getId(),
+                    payment.getAmount(), payment.getJournalEntryId(),
+                    payment.getPaymentMethod(), partial));
+        } catch (Exception ev) {
+            log.warn("No se pudo publicar ArPaymentProcessedEvent: {}", ev.getMessage());
         }
 
         return ResponseEntity.ok(

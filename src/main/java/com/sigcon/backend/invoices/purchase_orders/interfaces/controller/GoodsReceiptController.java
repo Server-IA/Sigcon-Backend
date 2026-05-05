@@ -50,7 +50,7 @@ public class GoodsReceiptController {
             @ApiResponse(responseCode = "200", description = "Listado de recepciones")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_READ_GOODS_RECEIPT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchReceipts(@RequestBody(required = false) DataTableRequest request) {
         return receiptService.getReceipts(request);
     }
@@ -68,7 +68,7 @@ public class GoodsReceiptController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_GOODS_RECEIPT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createReceipt(@Valid @RequestBody CreateGoodsReceiptRequest request,
                                            BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -94,7 +94,7 @@ public class GoodsReceiptController {
             @ApiResponse(responseCode = "400", description = "Recepcion no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_GOODS_RECEIPT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getReceiptById(@PathVariable Long id) {
         try {
             return receiptService.getReceiptById(id);
@@ -117,7 +117,7 @@ public class GoodsReceiptController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o la recepcion ya tiene factura")
     })
     @PostMapping("/{id}/link-invoice")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_GOODS_RECEIPT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> linkInvoice(@PathVariable Long id,
                                          @Valid @RequestBody LinkInvoiceRequest request,
                                          BindingResult bindingResult) {
@@ -150,7 +150,7 @@ public class GoodsReceiptController {
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_GOODS_RECEIPT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> rejectReceipt(@PathVariable Long id,
                                            @Valid @RequestBody RejectGoodsReceiptRequest request,
                                            BindingResult bindingResult) {

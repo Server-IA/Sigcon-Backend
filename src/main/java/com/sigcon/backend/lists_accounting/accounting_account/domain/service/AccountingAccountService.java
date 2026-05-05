@@ -101,6 +101,13 @@ public class AccountingAccountService {
                                 .toList()
                             )
                             // .taxRuleId(accountingAccount.getTaxRuleId())
+                            // HU-CFG-RF-05/07 (Bloque AP): exponer regla depreciacion
+                            // como columna y para edicion. Se resuelve a nombre legible.
+                            .depretationRuleId(accountingAccount.getDepretationRuleId())
+                            .depretationRuleName(accountingAccount.getDepretationRuleId() != null
+                                    ? depretationRuleRepository.findById(accountingAccount.getDepretationRuleId())
+                                            .map(DepretationRule::getName).orElse(null)
+                                    : null)
                             .nature(accountingAccount.getNature())
                             .status(accountingAccount.getStatus())
                             .createdAt(accountingAccount.getCreatedAt())
@@ -136,7 +143,7 @@ public class AccountingAccountService {
             // Validación: Moneda existe
             CurrencyType currencyType = currencyTypeRepository.findById(request.getCurrency_type_id())
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "El tipo de moneda seleccionado no está disponible o no existe"));
+                            "Moneda base asociada inexistente o no disponible"));
 
             // Resolver centro de costos (opcional)
             CostCenter costCenter = null;
@@ -146,12 +153,20 @@ public class AccountingAccountService {
                                 "El centro de costos seleccionado no está disponible o no existe"));
             }
 
+            // HU-CFG-RF-05 (Bloque AP): validar que la regla de depreciacion existe si se especifica.
+            if (request.getDepretation_rule_id() != null) {
+                depretationRuleRepository.findById(request.getDepretation_rule_id())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "La regla de depreciacion seleccionada no esta disponible o no existe"));
+            }
+
             AccountingAccount accountingAccount = AccountingAccount.builder()
                     .pucAccount(ChartOfAccount.builder().id(request.getPuc_id()).build())
                     .customName(request.getCustom_name())
                     .currencyType(currencyType)
                     .costCenter(costCenter)
                     .taxRuleId(request.getTax_rule_id())
+                    .depretationRuleId(request.getDepretation_rule_id())
                     .nature(request.getNature())
                     .status(AccountStatus.ACTIVE)
                     .createdBy(userId)
@@ -165,7 +180,7 @@ public class AccountingAccountService {
 
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("Cuenta contable creada exitosamente"),
+                            Optional.of("La Creacion ha sido exitosa"),
                             Optional.empty()));
         // } catch (Exception e) {
         //     return ResponseEntity.badRequest()
@@ -192,7 +207,8 @@ public class AccountingAccountService {
             // Validacion: Nombre unico excluyendo el actual (sin company, mono-empresa)
             if (accountingAccountRepository.existsByCustomNameAndIdNotAndDeletedAtIsNull(
                     request.getCustom_name(), request.getId())) {
-                throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
+                // HU-CFG-RF-07 E3: literal HU
+                throw new IllegalArgumentException("Nombre ya registrado");
             }
 
             // Validación: PUC existe
@@ -203,7 +219,7 @@ public class AccountingAccountService {
             // Validación: Moneda existe
             CurrencyType currencyType = currencyTypeRepository.findById(request.getCurrency_type_id())
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "El tipo de moneda seleccionado no está disponible o no existe"));
+                            "Moneda base asociada inexistente o no disponible"));
 
             // CFG-08: si se esta INACTIVANDO la cuenta (ACTIVE -> INACTIVE) y el saldo
             // neto de la cuenta en asientos POSTED es distinto de cero, rechazar.
@@ -241,6 +257,16 @@ public class AccountingAccountService {
 
             accountingAccount.setTaxRuleId(request.getTax_rule_id());
 
+            // HU-CFG-RF-07 (Bloque AP): regla de depreciacion opcional.
+            if (request.getDepretation_rule_id() != null) {
+                depretationRuleRepository.findById(request.getDepretation_rule_id())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "La regla de depreciacion seleccionada no esta disponible o no existe"));
+                accountingAccount.setDepretationRuleId(request.getDepretation_rule_id());
+            } else {
+                accountingAccount.setDepretationRuleId(null);
+            }
+
             accountingAccountRepository.save(accountingAccount);
             auditPublisher.publishUpdate(AuditModule.CFG, "AccountingAccount", accountingAccount.getId(), "AccountingAccount actualizado id=" + accountingAccount.getId());
 
@@ -270,8 +296,9 @@ public class AccountingAccountService {
             // Validación: Motivo de eliminación requerido (mover ANTES de cualquier
             // operacion de borrado para no exponer al usuario a un soft delete sin
             // motivo en caso de race condition).
-            if (reason == null || reason.trim().isEmpty()) {
-                throw new IllegalArgumentException("Debe especificar el motivo de eliminación");
+            // HU-CFG-RF-08 E3: motivo obligatorio con minimo 10 caracteres
+            if (reason == null || reason.trim().length() < 10) {
+                throw new IllegalArgumentException("Debe especificar el motivo de eliminacion (minimo 10 caracteres).");
             }
 
             // Validación: La cuenta existe y no está eliminada

@@ -37,6 +37,23 @@ public interface InvoiceRepository extends JpaRepository<Invoices, Long>, JpaSpe
     boolean existsBySupplierInvoiceNumberAndThirdPartyAndYear(String supplierInvoiceNumber, Long thirdPartyId, Integer year);
 
     /**
+     * HU-AP-01 (Bloque AT): unicidad de supplierInvoiceNumber por empresa.
+     * QA reporto que en la misma empresa no se podian distinguir 2 facturas con
+     * el mismo numero. Esta query SI usa @Filter("tenantFilter") (JPQL),
+     * limitando la busqueda a la empresa actual.
+     */
+    @Query("SELECT COUNT(i) > 0 FROM Invoices i WHERE i.supplierInvoiceNumber = :supplierInvoiceNumber "
+         + "AND i.deletedAt IS NULL")
+    boolean existsBySupplierInvoiceNumberAndDeletedAtIsNull(String supplierInvoiceNumber);
+
+    /**
+     * HU-AP-01 (Bloque AT): unicidad de resolutionInvoice (resolucion DIAN) por empresa.
+     */
+    @Query("SELECT COUNT(i) > 0 FROM Invoices i WHERE i.resolutionInvoice = :resolutionInvoice "
+         + "AND i.deletedAt IS NULL")
+    boolean existsByResolutionInvoiceAndDeletedAtIsNull(String resolutionInvoice);
+
+    /**
      * QA-BLOQUE-AM (2026-04-29): obtiene el MAX(resolution) numerico para el tipo indicado,
      * ignorando seeds con valores no-parseables (ej. "FC-QA6-003" del seed V9-ZZC).
      * Usado por createInvoiceFromAaef para no romper con MAPPING_ERROR cuando llega un lote

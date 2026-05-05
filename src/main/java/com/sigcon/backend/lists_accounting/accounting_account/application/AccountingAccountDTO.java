@@ -45,6 +45,13 @@ public class AccountingAccountDTO {
     @Schema(description = "Reglas tributarias aplicadas a esta cuenta", nullable = true)
     private List<RuleTaxDTO> taxRules;
 
+    /** HU-CFG-RF-05 (Bloque AP, 2026-05-04): regla de depreciacion (opcional). */
+    @Schema(description = "ID de la regla de depreciacion asociada (opcional)", example = "1", nullable = true)
+    private Long depretationRuleId;
+
+    @Schema(description = "Nombre de la regla de depreciacion asociada (opcional)", example = "OFICINA QA1", nullable = true)
+    private String depretationRuleName;
+
     @Schema(description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", example = "DEBIT", allowableValues = {
             "DEBIT", "CREDIT" })
     private AccountNature nature;

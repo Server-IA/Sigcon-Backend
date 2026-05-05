@@ -166,6 +166,11 @@ public class FinancialMovementService {
             throw new IllegalArgumentException("El importe del movimiento debe ser distinto de cero.");
         }
 
+        // HU-034 E7 (Bloque AO): bloquear si cuenta bancaria no tiene cuenta PUC asociada.
+        if (account.getAccountingAccount() == null) {
+            throw new IllegalArgumentException("La cuenta bancaria no tiene cuenta contable configurada. Contacte al administrador.");
+        }
+
         // Vincular opcionalmente a una sesion de conciliacion (solo si esta en borrador)
         BankReconciliationSession session = resolveSessionForCreate(bankAccountId, user, request.getReconciliationSessionId());
 
@@ -187,9 +192,15 @@ public class FinancialMovementService {
         // Si falla (ej: cuenta sin cuenta contable, periodo cerrado), solo se logea warning.
         tryCreateJournalEntry(entity, account, user);
 
+        // HU-034 E5 (Bloque AO): advertir si se omitio la clasificacion de actividad NIC 7.
+        String successMessage = "Movimiento registrado correctamente.";
+        if (entity.getFlowActivity() == null) {
+            successMessage += " Advertencia: sin clasificacion de actividad, este movimiento no aparecera correctamente en el Estado de Flujo de Efectivo. Asigne la actividad: OPERATIVA, INVERSION o FINANCIACION (NIC 7 §6).";
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
-                        Optional.of("Movimiento registrado correctamente."),
+                        Optional.of(successMessage),
                         Optional.of(toDto(entity))));
     }
 
@@ -557,7 +568,17 @@ public class FinancialMovementService {
         FinancialMovement mov = financialMovementRepository.findByIdAndBankAccount_Id(movementId, bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Movimiento no encontrado."));
         if (mov.getMatchedCheckId() != null) {
-            throw new IllegalArgumentException("Movimiento conciliado con cheque: no se puede desemparejar desde aqui.");
+            throw new IllegalArgumentException("No se puede desvincular un cruce realizado por cheque. Use el módulo de cheques para gestionar este caso");
+        }
+        // HU-037 E3 (Bloque AO): bloquear si la sesion de conciliacion del movimiento esta CERRADA.
+        if (mov.getReconciliationSession() != null
+                && mov.getReconciliationSession().getStatus() != null
+                && "CLOSED".equalsIgnoreCase(mov.getReconciliationSession().getStatus().name())) {
+            String period = mov.getMovementDate() != null
+                    ? String.format("%04d-%02d", mov.getMovementDate().getYear(), mov.getMovementDate().getMonthValue())
+                    : "actual";
+            throw new IllegalArgumentException("La sesión de conciliación del período " + period
+                    + " está cerrada. Reabra la sesión con rol Supervisor para deshacer el cruce (Decreto 2649/1993 Art. 57)");
         }
         // QA-BLOQUE-AP (2026-04-29): unmatch limpia ambos campos. Si el movimiento
         // estaba emparejado con JE en lugar de Voucher, tambien lo libera.

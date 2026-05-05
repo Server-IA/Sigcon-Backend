@@ -42,7 +42,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o periodo duplicado"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> store(@Valid @RequestBody CreatePeriodRequest request) {
         try {
             AccountingPeriodDTO dto = periodService.createPeriod(request);
@@ -58,7 +58,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<List<AccountingPeriodDTO>> list() {
         return ResponseEntity.ok(periodService.getAllPeriods());
     }
@@ -69,7 +69,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<List<AccountingPeriodDTO>> listByYear(@PathVariable Integer year) {
         return ResponseEntity.ok(periodService.getPeriodsByYear(year));
     }
@@ -82,7 +82,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "403", description = "Sin permisos"),
         @ApiResponse(responseCode = "404", description = "Periodo no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> close(
             @PathVariable Long id,
             @RequestBody(required = false) ClosePeriodRequest request,
@@ -107,7 +107,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "403", description = "Sin permisos"),
         @ApiResponse(responseCode = "404", description = "Periodo no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> lock(@PathVariable Long id, Authentication authentication) {
         try {
             String lockedBy = authentication.getName();
@@ -128,7 +128,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "403", description = "Sin permisos"),
         @ApiResponse(responseCode = "404", description = "Periodo no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> reopen(@PathVariable Long id) {
         try {
             AccountingPeriodDTO dto = periodService.reopenPeriod(id);

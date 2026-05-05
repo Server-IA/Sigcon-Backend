@@ -51,7 +51,7 @@ public class AccountMappingController {
      * @return lista de {@link AccountMappingDTO} ordenada por codigo de concepto
      */
     @GetMapping
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
         summary = "Listar todos los mapeos contables",
         description = "Retorna la configuracion completa de mapeos concepto-cuenta. "
@@ -85,7 +85,7 @@ public class AccountMappingController {
      * @return mapeo con ID de cuenta y metadatos
      */
     @GetMapping("/{conceptCode}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
         summary = "Consultar un mapeo por codigo de concepto",
         description = "Retorna el mapeo especifico para un concepto. 404 si el concepto no esta mapeado."

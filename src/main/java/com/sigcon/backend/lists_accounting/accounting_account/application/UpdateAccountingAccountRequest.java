@@ -51,6 +51,10 @@ public class UpdateAccountingAccountRequest {
     @Schema(description = "ID de la regla tributaria aplicada a esta cuenta (opcional)", example = "1", nullable = true)
     private Long tax_rule_id;
 
+    /** HU-CFG-RF-07 E? (Bloque AP, 2026-05-04): regla de depreciacion opcional. */
+    @Schema(description = "ID de la regla de depreciacion aplicada a esta cuenta (opcional)", example = "1", nullable = true)
+    private Long depretation_rule_id;
+
     @Schema(description = "Naturaleza contable de la cuenta: define si aumenta por débito o crédito", example = "DEBIT", allowableValues = {
             "DEBIT", "CREDIT" }, nullable = false)
     @NotNull(message = "La naturaleza de la cuenta contable es obligatoria")

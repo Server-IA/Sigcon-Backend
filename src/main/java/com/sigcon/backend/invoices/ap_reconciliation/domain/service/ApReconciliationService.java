@@ -65,10 +65,26 @@ public class ApReconciliationService {
      * @return lista de pagos sin {@code bankMovementId}
      */
     public ResponseEntity<?> listUnreconciled() {
-        List<ApPayment> unreconciled = new ArrayList<>();
+        // QA 2026-05-05: Jackson serializaba las entidades ApPayment con sus
+        // relaciones LAZY (Invoice, ThirdParty), generando errores
+        // "Type definition error: ByteBuddyInterceptor". Mapear a un DTO plano
+        // con solo los campos necesarios para el listado de conciliacion.
+        List<java.util.Map<String, Object>> unreconciled = new ArrayList<>();
         for (ApPayment p : paymentRepository.findAll()) {
             if (p.getDeletedAt() == null && p.getBankMovementId() == null) {
-                unreconciled.add(p);
+                java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("id", p.getId());
+                row.put("invoiceId", p.getInvoice() != null ? p.getInvoice().getId() : null);
+                row.put("invoiceNumber", p.getInvoice() != null ? p.getInvoice().getResolutionInvoice() : null);
+                row.put("supplierName", p.getInvoice() != null && p.getInvoice().getThirdParty() != null
+                        ? p.getInvoice().getThirdParty().getBusinessName() : null);
+                row.put("amount", p.getAmount());
+                row.put("paymentDate", p.getPaymentDate());
+                row.put("paymentReference", p.getPaymentReference());
+                row.put("paymentMethod", p.getPaymentMethod());
+                row.put("bankAccountId", p.getBankAccountId());
+                row.put("notes", p.getNotes());
+                unreconciled.add(row);
             }
         }
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -169,6 +185,76 @@ public class ApReconciliationService {
         log.info("AP-09: Conciliacion de pago {} revertida", paymentId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Conciliacion revertida"), Optional.of(payment)));
+    }
+
+    /**
+     * HU-AP-08 (Bloque AS): conciliacion automatica masiva. Para cada pago AP
+     * sin conciliar de una cuenta bancaria, busca candidatos en BNK con score
+     * exacto (>=0.99: monto + fecha coinciden). Si hay UN unico candidato exacto
+     * y aun no esta tomado por otro pago, lo concilia automaticamente. Si hay
+     * cero o multiples (ambiguos), los deja para revision manual.
+     *
+     * @param bankAccountId ID de cuenta bancaria a procesar (opcional, null = todas las del tenant)
+     * @return resumen: evaluated/matched/skipped/matches[]
+     */
+    @Transactional
+    public ResponseEntity<?> autoReconcileBankAccount(Long bankAccountId) {
+        java.util.List<ApPayment> unreconciled = paymentRepository
+                .findByBankMovementIdIsNullAndDeletedAtIsNull();
+        if (bankAccountId != null) {
+            unreconciled = unreconciled.stream()
+                    .filter(p -> bankAccountId.equals(p.getBankAccountId()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        java.util.Set<Long> takenMovementIds = new java.util.HashSet<>();
+        int matched = 0;
+        java.util.List<java.util.Map<String, Object>> matches = new ArrayList<>();
+        java.util.List<java.util.Map<String, Object>> skipped = new ArrayList<>();
+
+        for (ApPayment payment : unreconciled) {
+            List<BankMovementCandidate> candidates = findCandidatesFor(payment).stream()
+                    .filter(c -> !takenMovementIds.contains(c.getMovementId()))
+                    .filter(c -> c.getMatchScore() >= 0.99)
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (candidates.size() == 1) {
+                BankMovementCandidate c = candidates.get(0);
+                payment.setBankMovementId(c.getMovementId());
+                payment.setReconciledAt(LocalDateTime.now());
+                paymentRepository.save(payment);
+                takenMovementIds.add(c.getMovementId());
+                matched++;
+                java.util.Map<String, Object> m = new java.util.HashMap<>();
+                m.put("paymentId", payment.getId());
+                m.put("movementId", c.getMovementId());
+                m.put("score", c.getMatchScore());
+                matches.add(m);
+                auditPublisher.publishUpdate(AuditModule.AP, "ApPaymentReconciliation", payment.getId(),
+                        "AUTO MATCH HU-AP-08: pago AP " + payment.getId() + " <-> mov BNK " + c.getMovementId() + " (score " + c.getMatchScore() + ")");
+            } else {
+                java.util.Map<String, Object> sk = new java.util.HashMap<>();
+                sk.put("paymentId", payment.getId());
+                sk.put("reason", candidates.isEmpty() ? "NO_CANDIDATES" : "AMBIGUOUS");
+                sk.put("candidatesCount", candidates.size());
+                skipped.add(sk);
+            }
+        }
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("evaluated", unreconciled.size());
+        result.put("matched", matched);
+        result.put("skippedCount", skipped.size());
+        result.put("matches", matches);
+        result.put("skipped", skipped);
+
+        log.info("HU-AP-08 auto-reconcile: evaluated={} matched={} skipped={}",
+                unreconciled.size(), matched, skipped.size());
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Conciliacion automatica ejecutada: " + matched + " emparejados, "
+                        + skipped.size() + " requieren revision manual"),
+                Optional.of(result)));
     }
 
     // ============ helpers privados ============

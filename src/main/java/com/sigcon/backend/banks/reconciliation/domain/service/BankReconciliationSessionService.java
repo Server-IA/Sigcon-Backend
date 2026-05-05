@@ -14,6 +14,8 @@ import com.sigcon.backend.general.accounting.journal.application.CreateJournalEn
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
+import com.sigcon.backend.general.accounting.AccountingPeriodRepository;
+import com.sigcon.backend.general.accounting.AccountingPeriod;
 import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -63,6 +65,8 @@ public class BankReconciliationSessionService {
     private final JournalEntryService journalEntryService;
     private final UserUtil userUtil;
     private final AuditPublisher auditPublisher;
+    /** HU-038 E5 (Bloque AO): validar estado del periodo contable al crear sesion. */
+    private final AccountingPeriodRepository accountingPeriodRepository;
 
     /**
      * Lista todas las sesiones de conciliacion de una cuenta bancaria, ordenadas por fecha de fin descendente.
@@ -115,6 +119,17 @@ public class BankReconciliationSessionService {
         // Solo una sesion en borrador por cuenta a la vez para evitar conflictos
         if (sessionRepository.existsByBankAccount_IdAndStatus(bankAccountId, ReconciliationSessionStatus.DRAFT)) {
             throw new IllegalArgumentException("Ya existe una sesion de conciliacion en borrador para esta cuenta; cierrela o continue con esa.");
+        }
+
+        // HU-038 E5 (Bloque AO): bloquear si el periodo contable correspondiente esta LOCKED.
+        // Si esta CLOSED solo registramos la sesion como historica (advertencia ya queda en notes).
+        AccountingPeriod period = accountingPeriodRepository
+                .findByYearAndMonth(request.getPeriodEnd().getYear(), request.getPeriodEnd().getMonthValue())
+                .orElse(null);
+        if (period != null && period.isLocked()) {
+            throw new IllegalArgumentException("El periodo contable "
+                    + request.getPeriodEnd().getYear() + "-" + String.format("%02d", request.getPeriodEnd().getMonthValue())
+                    + " esta bloqueado permanentemente. No se permiten nuevas sesiones de conciliacion.");
         }
 
         BankReconciliationSession entity = BankReconciliationSession.builder()

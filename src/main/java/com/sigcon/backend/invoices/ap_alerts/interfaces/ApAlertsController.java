@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,7 +45,7 @@ public class ApAlertsController {
      * @param daysAhead horizonte en dias (1-90). Opcional.
      */
     @GetMapping("/upcoming")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AP_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
         summary = "Listar facturas proximas a vencer",
         description = "Retorna facturas con estado abierto cuyo vencimiento ocurre en los proximos N dias. "
@@ -74,7 +75,7 @@ public class ApAlertsController {
      * Facturas vencidas (dias hasta vencimiento negativos).
      */
     @GetMapping("/overdue")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AP_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
         summary = "Listar facturas vencidas",
         description = "Retorna facturas con estado abierto cuya fecha de vencimiento ya paso. "
@@ -94,6 +95,30 @@ public class ApAlertsController {
             throw __tie;
         } catch (Exception e) {
             log.error("Error obteniendo facturas vencidas", e);
+            return ResponseEntity.internalServerError().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * HU-AP-10 E2 (Bloque AS): endpoint admin para disparar manualmente el
+     * scheduler de notificaciones a roles suscritos. Util para QA y para
+     * notificar inmediatamente cuando aparece una factura urgente sin esperar
+     * al cron diario 1:30 AM.
+     */
+    @PostMapping("/run-overdue-scheduler")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    @Operation(summary = "HU-AP-10 E2: dispara manualmente el job de notificaciones diario",
+        description = "Ejecuta el scheduler que publica notificaciones in-app a los usuarios "
+                    + "cuyos roles esten suscritos al evento AP_INVOICE_OVERDUE. Solo admin.")
+    public ResponseEntity<?> runOverdueScheduler() {
+        try {
+            apAlertsService.logDailyOverdueSummary();
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                    Optional.of("Scheduler ejecutado. Notificaciones publicadas a roles suscritos."),
+                    Optional.empty()));
+        } catch (Exception e) {
+            log.error("Error ejecutando scheduler manual", e);
             return ResponseEntity.internalServerError().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }

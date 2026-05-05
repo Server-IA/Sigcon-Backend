@@ -54,13 +54,13 @@ public class CurrencyTypeService {
             // Validar duplicado de código ISO
             if (currencyTypeRepository.existsByIsoCodeAndDeletedAtIsNull(request.getIsoCode())) {
                 return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El código ISO ingresado ya está registrado en el sistema")));
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Codigo ISO de moneda ya existe")));
             }
 
             // Validar duplicado de nombre
             if (currencyTypeRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(request.getName())) {
                 return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre de la moneda ya existe en el sistema")));
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Nombre de moneda ya registrado")));
             }
 
             CurrencyType currencyType = CurrencyType.builder()
@@ -73,7 +73,7 @@ public class CurrencyTypeService {
             auditPublisher.publishCreate(AuditModule.CFG, "CurrencyType", currencyType.getId(), "CurrencyType creado id=" + currencyType.getId());
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda creada exitosamente"), Optional.empty()));
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Moneda creada exitosamente"), Optional.empty()));
 
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
@@ -89,7 +89,7 @@ public class CurrencyTypeService {
         try{
 
             CurrencyType existing = currencyTypeRepository.findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("La moneda seleccionada no existe en el sistema"));
+                    .orElseThrow(() -> new IllegalArgumentException("La moneda no existe"));
     
             boolean isModified = false;
     
@@ -133,7 +133,7 @@ public class CurrencyTypeService {
             auditPublisher.publishUpdate(AuditModule.CFG, "CurrencyType", existing.getId(), "CurrencyType actualizado id=" + existing.getId());
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tipo de moneda actualizada exitosamente"), Optional.empty())
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Moneda actualizada exitosamente"), Optional.empty())
             );
     
         }catch (Exception e) {
@@ -143,9 +143,14 @@ public class CurrencyTypeService {
     }
 
     @Transactional
-    public CurrencyTypeDeleteResponseDTO deleteCurrencyType(Long id) {
+    public CurrencyTypeDeleteResponseDTO deleteCurrencyType(Long id, String reason) {
+        // HU-CFG-RF-24 E2/E3: motivo obligatorio + persistido en audit log
+        if (reason == null || reason.trim().length() < 10) {
+            throw new IllegalArgumentException(
+                    "Debe especificar el motivo de eliminacion (minimo 10 caracteres).");
+        }
         CurrencyType existing = currencyTypeRepository.findByIdAndDeletedAtIsNull(id)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Moneda no encontrada"));
+                .orElseThrow(() -> new java.util.NoSuchElementException("La moneda no existe"));
 
         String errorMessage = isCurrencyUsed(id);
         if (errorMessage != null && !errorMessage.isEmpty()) {
@@ -155,14 +160,16 @@ public class CurrencyTypeService {
         // Soft delete en vez de eliminación física para mantener trazabilidad
         existing.setDeletedAt(java.time.LocalDateTime.now());
         currencyTypeRepository.save(existing);
-        auditPublisher.publishDelete(AuditModule.CFG, "CurrencyType", existing.getId(), "CurrencyType eliminado id=" + existing.getId());
+        // HU-CFG-RF-24 E3: motivo en descripcion del audit log
+        auditPublisher.publishDelete(AuditModule.CFG, "CurrencyType", existing.getId(),
+                "CurrencyType eliminado id=" + existing.getId() + " | motivo=" + reason.trim());
 
         return CurrencyTypeDeleteResponseDTO.builder()
                 .id(existing.getId())
                 .isoCode(existing.getIsoCode())
                 .name(existing.getName())
                 .deletedAt(existing.getDeletedAt())
-                .message("El tipo de moneda ha sido eliminado exitosamente")
+                .message("Moneda eliminada exitosamente")
                 .build();
     }
 
@@ -208,15 +215,39 @@ public class CurrencyTypeService {
         }
     }
 
+    /**
+     * HU-CFG-RF-21 E5: exporta el listado de monedas en CSV o XLSX (multi-tenant).
+     */
+    public byte[] exportAll(String format) {
+        java.util.List<CurrencyType> all = currencyTypeRepository.findAll().stream()
+                .filter(c -> c.getDeletedAt() == null)
+                .collect(java.util.stream.Collectors.toList());
+        java.util.List<String> headers = java.util.List.of(
+                "Id", "Codigo ISO", "Nombre", "Estado", "Creado");
+        java.util.List<java.util.function.Function<CurrencyType, Object>> cols = java.util.List.of(
+                CurrencyType::getId,
+                CurrencyType::getIsoCode,
+                CurrencyType::getName,
+                c -> c.getStatus() != null ? c.getStatus().name() : "",
+                CurrencyType::getCreatedAt);
+        if ("xlsx".equalsIgnoreCase(format)) {
+            return com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx("Monedas", headers, cols, all);
+        }
+        return com.sigcon.backend.utils.export.SimpleTableExporter
+                .toCsv(headers, cols, all);
+    }
+
     private String isCurrencyUsed(Long currencyId) {
+        // HU-CFG-RF-24 E4: mensaje literal de la HU
         Optional<ExchangeRate> exchangeRate = exchangeRateRepository.findByCurrencyExchangeOrCurrencyExchanged(currencyId);
         if (exchangeRate.isPresent()) {
-            return "No se puede eliminar: moneda asociada a tasas de cambio.";
+            return "No se puede eliminar el Registro, porque esta vinculada a registros activos en otros modulos. Retire las dependencias e intente de nuevo.";
         }
-        
+
         Optional<AccountingAccount> accountingAccount = accountingAccountRepository.findByCurrencyType_Id(currencyId);
         if (accountingAccount.isPresent()) {
-            return "No se puede eliminar: moneda asociada a cuentas contables.";
+            return "No se puede eliminar el Registro, porque esta vinculada a registros activos en otros modulos. Retire las dependencias e intente de nuevo.";
         }
         return "";
     }

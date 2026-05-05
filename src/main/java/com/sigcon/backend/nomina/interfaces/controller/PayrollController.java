@@ -57,6 +57,7 @@ public class PayrollController {
                     description = "Liquidacion completada: totalReceipts + journalEntryId + receipts + excluded"),
             @ApiResponse(responseCode = "400", description = "Error: periodo cerrado, sin empleados, datos invalidos")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.CREAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/liquidar")
     public ResponseEntity<?> liquidate(@Valid @RequestBody LiquidatePayrollRequest req) {
         return ResponseEntity.ok(payrollService.liquidatePeriod(req));
@@ -66,6 +67,7 @@ public class PayrollController {
             description = "Sin parametros year/month devuelve lista vacia. Con year+month "
                     + "devuelve todos los recibos del periodo ordenados cronologicamente.")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Lista de recibos"))
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping
     public ResponseEntity<?> list(
             @Parameter(description = "Año del periodo", example = "2026")
@@ -81,6 +83,7 @@ public class PayrollController {
             description = "Para DataTableReference del frontend. Soporta filtros por columna "
                     + "(periodYear, periodMonth, status, employeeId) y paginacion.")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Pagina de recibos"))
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/search")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         if (request == null) request = new DataTableRequest();
@@ -102,6 +105,7 @@ public class PayrollController {
             @ApiResponse(responseCode = "200", description = "Recibo encontrado"),
             @ApiResponse(responseCode = "400", description = "Recibo no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(
             @Parameter(description = "ID del recibo", example = "1") @PathVariable Long id) {
@@ -119,6 +123,7 @@ public class PayrollController {
             @ApiResponse(responseCode = "400",
                     description = "Recibo no existe o esta en APPROVED/CLOSED (mensaje exacto HU-NOM-04 E2)")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(
             @Parameter(description = "ID del recibo", example = "1") @PathVariable Long id,
@@ -133,6 +138,7 @@ public class PayrollController {
             @ApiResponse(responseCode = "200", description = "Recibo aprobado"),
             @ApiResponse(responseCode = "400", description = "Recibo no existe o no esta en DRAFT")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.APROBAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/{id}/approve")
     public ResponseEntity<?> approve(
             @Parameter(description = "ID del recibo", example = "1") @PathVariable Long id) {
@@ -146,6 +152,7 @@ public class PayrollController {
             @ApiResponse(responseCode = "200", description = "Recibo cerrado"),
             @ApiResponse(responseCode = "400", description = "Recibo no existe o no esta en APPROVED")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.CERRAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/{id}/close")
     public ResponseEntity<?> close(
             @Parameter(description = "ID del recibo", example = "1") @PathVariable Long id) {
@@ -160,6 +167,7 @@ public class PayrollController {
             @ApiResponse(responseCode = "200", description = "Linea actualizada"),
             @ApiResponse(responseCode = "400", description = "Recibo no en DRAFT, linea inexistente o monto invalido")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/{id}/lineas/{lineId}")
     public ResponseEntity<?> updateLine(
             @PathVariable Long id, @PathVariable Long lineId,
@@ -177,6 +185,7 @@ public class PayrollController {
             @ApiResponse(responseCode = "200", description = "Linea eliminada"),
             @ApiResponse(responseCode = "400", description = "Recibo no en DRAFT o linea inexistente")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/{id}/lineas/{lineId}")
     public ResponseEntity<?> deleteLine(@PathVariable Long id, @PathVariable Long lineId) {
         return ResponseEntity.ok(payrollService.deleteLine(id, lineId));

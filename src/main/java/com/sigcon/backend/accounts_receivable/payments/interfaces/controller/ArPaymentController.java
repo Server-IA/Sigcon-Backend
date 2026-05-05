@@ -53,7 +53,7 @@ public class ArPaymentController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_CREATE_AR_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AR_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> registerPayment(@Valid @RequestBody CreateArPaymentRequest request,
                                              BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -78,7 +78,7 @@ public class ArPaymentController {
             @ApiResponse(responseCode = "200", description = "Listado de cobros")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_READ_AR_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AR_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchPayments(@RequestBody(required = false) DataTableRequest request) {
         return paymentService.getPayments(request);
     }
@@ -95,7 +95,7 @@ public class ArPaymentController {
             @ApiResponse(responseCode = "400", description = "Cobro no encontrado")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_AR_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AR_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
             return paymentService.getById(id);
@@ -116,7 +116,7 @@ public class ArPaymentController {
             @ApiResponse(responseCode = "200", description = "Lista de cobros de la factura")
     })
     @GetMapping("/invoice/{invoiceId}")
-    @PreAuthorize("hasAuthority('PERM_READ_AR_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AR_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getPaymentsByInvoice(@PathVariable Long invoiceId) {
         return paymentService.getPaymentsByInvoice(invoiceId);
     }

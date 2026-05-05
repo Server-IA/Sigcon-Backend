@@ -122,7 +122,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AssetsService {
 
-    private static final int MAX_BULK_ROWS = 10_000;
+    // HU-ACT-05 E4 (QA 2026-05-05): el limite oficial del Excel es 1000 registros.
+    private static final int MAX_BULK_ROWS = 1_000;
     private static final String ASSET_NAME_REGEX = "^[\\p{L}0-9\\-_/.,\\s]{3,150}$";
     private static final BigDecimal MIN_ACQUISITION_VALUE = new BigDecimal("0.01");
     private static final LocalDate EXCEL_EPOCH = LocalDate.of(1899, 12, 30);
@@ -154,9 +155,14 @@ public class AssetsService {
 
         User user = userUtil.getUser();
 
-        // ERR-MNT-ACT-01: Validar período contable abierto con mensaje descriptivo
+        // HU-ACT-01 E5 (QA 2026-05-05): mensaje literal del Excel.
         if (request.getAcquisitionDate() != null) {
-            accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
+            try {
+                accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
+            } catch (IllegalStateException ex) {
+                throw new IllegalArgumentException(
+                        "El periodo contable de esa fecha esta cerrado. Use una fecha en un periodo abierto.");
+            }
         }
 
         // ACT-01 E8: Validar que se haya seleccionado una forma de pago valida
@@ -346,7 +352,9 @@ public class AssetsService {
                     "BULK_001: Formato de archivo invalido: columnas obligatorias faltantes.");
         }
         if (rows.size() > MAX_BULK_ROWS) {
-            throw new IllegalArgumentException("BULK_003: Archivo excede limite maximo (10,000 registros).");
+            // HU-ACT-05 E4 (QA 2026-05-05): mensaje literal del Excel.
+            throw new IllegalArgumentException(
+                    "El archivo supera el limite permitido de 1.000 registros. Divida el archivo en partes mas pequenas.");
         }
 
         String currentUser = resolveCurrentUsername();
@@ -493,24 +501,34 @@ public class AssetsService {
                 + existingAsset.getStatus() + "' y no permite modificaciones.");
         }
 
-        // Validar período contable abierto SOLO si la fecha viene en el request
-        // (en update es opcional; si null se preserva la fecha existente).
+        // HU-ACT-06 E4 (QA 2026-05-05): mensaje literal libro contable cerrado.
         if (request.getAcquisitionDate() != null) {
-            accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
+            try {
+                accountingPeriodService.validatePeriodOpen(request.getAcquisitionDate());
+            } catch (IllegalStateException ex) {
+                throw new IllegalArgumentException(
+                        "No se puede editar el activo: el libro contable esta cerrado.");
+            }
         }
 
-        // Proveedor: si null se preserva el actual (HU-ACT-09 update parcial).
+        // HU-ACT-06 (QA 2026-05-05): cualquier campo no enviado se preserva
+        // con el valor actual del activo (update parcial). Solo campos no-null
+        // sobreescriben.
         ThirdParty supplier = request.getSupplierId() != null
                 ? resolveSupplier(request.getSupplierId())
                 : existingAsset.getSupplier();
-        AccountingAccount accountingAccount = resolveAccountingAccount(request.getAccountingAccountId());
+        AccountingAccount accountingAccount = request.getAccountingAccountId() != null
+                ? resolveAccountingAccount(request.getAccountingAccountId())
+                : existingAsset.getAccountingAccount();
 
-        // Regla de depreciacion: si null se preserva la actual. Si llega y la
-        // cuenta cambio, se busca con la nueva cuenta.
         DepretationRule depretationRule;
         if (request.getDepreciationRuleId() != null) {
+            Long aaId = request.getAccountingAccountId() != null
+                    ? request.getAccountingAccountId()
+                    : (existingAsset.getAccountingAccount() != null
+                            ? existingAsset.getAccountingAccount().getId() : null);
             depretationRule = depretationRuleRepository
-                    .findByIdAndAccountingAccountId(request.getDepreciationRuleId(), request.getAccountingAccountId());
+                    .findByIdAndAccountingAccountId(request.getDepreciationRuleId(), aaId);
             if (depretationRule == null) {
                 throw new IllegalArgumentException(
                     "El metodo de depreciacion no aplica para la cuenta contable seleccionada.");
@@ -519,23 +537,37 @@ public class AssetsService {
             depretationRule = existingAsset.getDepretationRule();
         }
 
-        validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
+        // Solo validar clasificacion si llegan ambos en el mismo request.
+        if (request.getClassification() != null && request.getUsefulLifeMonths() != null) {
+            validateAssetClassification(request.getClassification(), request.getUsefulLifeMonths());
+        }
 
         String normalizedDescription = normalizeOptionalText(request.getDescription());
         String normalizedObservations = normalizeOptionalText(request.getObservations());
         String currentUser = resolveCurrentUsername();
 
-        existingAsset.setAssetName(request.getName().trim());
-        existingAsset.setDescription(normalizedDescription);
-        existingAsset.setClassification(request.getClassification());
-        existingAsset.setAssetType(request.getType());
-        // existingAsset.setChartOfAccount(chartOfAccount);
+        if (request.getName() != null && !request.getName().trim().isEmpty()) {
+            existingAsset.setAssetName(request.getName().trim());
+        }
+        if (normalizedDescription != null) {
+            existingAsset.setDescription(normalizedDescription);
+        }
+        if (request.getClassification() != null) {
+            existingAsset.setClassification(request.getClassification());
+        }
+        if (request.getType() != null) {
+            existingAsset.setAssetType(request.getType());
+        }
         existingAsset.setSupplier(supplier);
-        existingAsset.setAcquisitionValue(request.getAcquisitionValue());
+        if (request.getAcquisitionValue() != null) {
+            existingAsset.setAcquisitionValue(request.getAcquisitionValue());
+        }
         if (request.getAcquisitionDate() != null) {
             existingAsset.setAcquisitionDate(request.getAcquisitionDate());
         }
-        existingAsset.setUsefulLifeMonths(request.getUsefulLifeMonths());
+        if (request.getUsefulLifeMonths() != null) {
+            existingAsset.setUsefulLifeMonths(request.getUsefulLifeMonths());
+        }
         existingAsset.setDepretationRule(depretationRule);
         existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
         existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
@@ -570,23 +602,29 @@ public class AssetsService {
     }
 
     private ThirdParty resolveSupplier(Long supplierId) {
+        // HU-ACT-01 E2 (QA 2026-05-05): mensaje literal del Excel.
         ThirdParty supplier = thirdPartyRepository.findByIdAndDeletedAtIsNull(supplierId)
-                .orElseThrow(() -> new IllegalArgumentException("Proveedor no registrado"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Proveedor no registrado: verifique el NIT del tercero en el modulo de Terceros."));
 
         if (!isActiveThirdParty(supplier) || !isSupplierRoleAssigned(supplier)) {
-            throw new IllegalArgumentException("Proveedor no registrado");
+            throw new IllegalArgumentException(
+                    "Proveedor no registrado: verifique el NIT del tercero en el modulo de Terceros.");
         }
 
         return supplier;
     }
 
     private AccountingAccount resolveAccountingAccount(Long accountingAccountId) {
+        // HU-ACT-01 E3 (QA 2026-05-05): mensaje literal del Excel.
         AccountingAccount accountingAccount = accountingAccountRepository
                 .findByIdAndDeletedAtIsNull(accountingAccountId)
-                .orElseThrow(() -> new IllegalArgumentException("Cuenta contable no existe"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El codigo contable no existe o esta inactivo. Use uno valido del catalogo."));
 
         if (accountingAccount.getStatus() != AccountStatus.ACTIVE) {
-            throw new IllegalArgumentException("Cuenta contable no existe");
+            throw new IllegalArgumentException(
+                    "El codigo contable no existe o esta inactivo. Use uno valido del catalogo.");
         }
 
         return accountingAccount;
@@ -1441,39 +1479,37 @@ public class AssetsService {
     }
 
     private void validateBulkRow(BulkAssetRow row) {
+        // HU-ACT-05 E2 (QA 2026-05-05): mensaje literal del Excel para
+        // campos obligatorios vacios. Se agrega el numero de linea para
+        // facilitar la correccion sin perder el wording de la HU.
+        String literalEmpty = "El archivo presenta campos obligatorios en blanco (linea " + row.line() + ").";
         if (row.name() == null || row.name().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": nombre es obligatorio.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (!row.name().trim().matches(ASSET_NAME_REGEX)) {
             throw new IllegalArgumentException(
                     "BULK_004: Error en linea " + row.line() + ": nombre de activo invalido.");
         }
         if (row.classification() == null || row.classification().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": clasificacion es obligatoria.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.type() == null || row.type().trim().isEmpty()) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + row.line() + ": tipo es obligatorio.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.accountingAccountId() == null || row.accountingAccountId().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": cuenta contable es obligatoria.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.supplierId() == null || row.supplierId().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": proveedor es obligatorio.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.acquisitionValue() == null || row.acquisitionValue().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": valor adquisicion es obligatorio.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.acquisitionDate() == null || row.acquisitionDate().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": fecha adquisicion es obligatoria.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.usefulLifeMonths() == null || row.usefulLifeMonths().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "BULK_004: Error en linea " + row.line() + ": vida util es obligatoria.");
+            throw new IllegalArgumentException(literalEmpty);
         }
         if (row.depreciationRuleId() == null || row.depreciationRuleId().trim().isEmpty()) {
             throw new IllegalArgumentException(

@@ -25,6 +25,10 @@ public class CommercialDataResponse {
     private PaymentTermsDTO paymentTerm;
     private BigDecimal limitCredit;
     private RiskSegmentation riskLevel;
+    /** HU-TER-11 E1.0/E5.0 (Bloque AN, 2026-05-04): porcentaje de provision ECL
+     *  asociado al riskLevel (NIIF 9). LOW=1, MEDIUM=5, HIGH=20.
+     *  El frontend lo muestra junto al riskLevel sin recalcular. */
+    private BigDecimal provisionPct;
     private Long currencyId;
     private String currencyIsoCode;
     private String currencyName;

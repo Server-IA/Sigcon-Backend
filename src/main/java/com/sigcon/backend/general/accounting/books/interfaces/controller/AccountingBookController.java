@@ -51,7 +51,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> libroDiario(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,
@@ -78,7 +78,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> libroMayor(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,
@@ -104,7 +104,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> balanceComprobacion(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month) {
@@ -126,7 +126,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "accountId es obligatorio o parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> auxiliaresCuentas(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,
@@ -157,7 +157,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<byte[]> libroDiarioPdf(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month) {
@@ -189,7 +189,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "Parametros invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<byte[]> libroMayorPdf(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,
@@ -220,7 +220,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<byte[]> balanceComprobacionPdf(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month) {
@@ -251,7 +251,7 @@ public class AccountingBookController {
             @ApiResponse(responseCode = "400", description = "accountId obligatorio o parametros invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<byte[]> auxiliaresCuentasPdf(
             @Parameter(description = "Anio del periodo contable") @RequestParam Integer year,
             @Parameter(description = "Mes del periodo contable (1-12)") @RequestParam Integer month,

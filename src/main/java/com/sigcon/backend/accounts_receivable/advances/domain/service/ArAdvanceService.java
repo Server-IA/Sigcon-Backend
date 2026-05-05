@@ -209,8 +209,9 @@ public class ArAdvanceService {
 
         BigDecimal balanceDue = invoice.getBalanceDue() != null ? invoice.getBalanceDue() : BigDecimal.ZERO;
         if (request.getAmount().compareTo(balanceDue) > 0) {
+            // HU-AR-09 E2: mensaje literal de la HU
             throw new IllegalArgumentException(
-                    "El monto a aplicar supera el saldo pendiente de la factura. Saldo: $" + balanceDue);
+                    "El anticipo supera el saldo pendiente. Saldo: $" + balanceDue);
         }
 
         // 5. Actualizar anticipo

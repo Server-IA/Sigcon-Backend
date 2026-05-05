@@ -49,7 +49,7 @@ public class BankAccountController {
     }
 
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.CREAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Crear cuenta bancaria", description = "Registra una nueva cuenta bancaria. Requiere bancos, monedas, PUC y empresas configurados.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cuenta creada correctamente"),
@@ -63,7 +63,7 @@ public class BankAccountController {
     }
 
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Consultar cuentas bancarias",
             description = "Consulta paginada tipo DataTable. Campos buscables en columns[].data: " +
                     "code, accountNumber, accountNumberMasked, accountName, accountType, " +
@@ -81,7 +81,7 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Detalle de cuenta bancaria", description = "Retorna el detalle completo. El número de cuenta se devuelve enmascarado (****1234).")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Detalle obtenido correctamente"),
@@ -94,7 +94,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar cuenta bancaria", description = "Actualiza campos permitidos. No se pueden modificar código, número, moneda ni cuenta contable si hay movimientos.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cuenta actualizada correctamente"),
@@ -109,7 +109,7 @@ public class BankAccountController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.ELIMINAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar cuenta bancaria", description = "Eliminación lógica. Si existen chequeras asociadas, retorna error sugiriendo desactivar.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cuenta eliminada correctamente"),
@@ -123,7 +123,7 @@ public class BankAccountController {
     }
 
     @PostMapping("/{id}/deactivate")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Desactivar cuenta bancaria", description = "Cambia el estado a INACTIVA cuando no se puede eliminar por dependencias.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cuenta desactivada correctamente"),
@@ -137,7 +137,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Cambiar estado de cuenta", description = "Transiciones: ACTIVA↔INACTIVA, SUSPENDIDA, CERRADA (irreversible). Motivo obligatorio para INACTIVA/SUSPENDIDA/CERRADA.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Estado actualizado correctamente"),
@@ -160,7 +160,7 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/financial-movements")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar movimientos financieros de la cuenta",
             description = "Movimientos registrados para conciliación. Use unmatchedOnly=true para pendientes de emparejar con cheques.")
     public ResponseEntity<?> listFinancialMovements(
@@ -170,7 +170,7 @@ public class BankAccountController {
     }
 
     @PostMapping("/{id}/financial-movements")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Registrar movimiento bancario manual",
             description = "Alta de línea de extracto u operación bancaria para conciliación (importe negativo = egreso).")
     public ResponseEntity<?> createFinancialMovement(
@@ -181,7 +181,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/last-reconciliation")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Registrar fecha de última conciliación",
             description = "Cierra el período de extracto hasta la fecha indicada.")
     public ResponseEntity<?> updateLastReconciliation(
@@ -192,14 +192,14 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/reconciliation-sessions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar sesiones de conciliación de la cuenta")
     public ResponseEntity<?> listReconciliationSessions(@PathVariable Long id) {
         return bankReconciliationSessionService.listByBankAccount(id);
     }
 
     @PostMapping("/{id}/reconciliation-sessions")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Crear sesión de conciliación (borrador)")
     public ResponseEntity<?> createReconciliationSession(
             @PathVariable Long id,
@@ -209,7 +209,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/reconciliation-sessions/{sessionId}/close")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Cerrar sesión de conciliación", description = "Marca la sesión como cerrada y actualiza la fecha de última conciliación de la cuenta.")
     public ResponseEntity<?> closeReconciliationSession(
             @PathVariable Long id,
@@ -218,7 +218,7 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/reconciliation-sessions/{sessionId}/summary")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Resumen numérico de conciliación",
             description = "Cuadre: aritmética del extracto (saldo inicial + movimientos del periodo vs saldo final) y comparación con saldo libro aproximado (saldo inicial cuenta + comprobantes hasta la fecha fin).")
     public ResponseEntity<?> getReconciliationSummary(
@@ -228,7 +228,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/reconciliation-sessions/{sessionId}/statement-balances")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar saldos del extracto en borrador",
             description = "Solo sesiones en estado borrador. Envíe los campos que desee cambiar.")
     public ResponseEntity<?> updateReconciliationStatementBalances(
@@ -240,7 +240,7 @@ public class BankAccountController {
     }
 
     @PostMapping(value = "/{id}/financial-movements/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Importar movimientos desde CSV",
             description = "Formato por línea: fecha;importe;descripcion;referencia (punto o coma decimal). Primera línea puede ser encabezado.")
     public ResponseEntity<?> importFinancialMovementsCsv(
@@ -251,7 +251,7 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/financial-movements/{movementId}/voucher-suggestions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Sugerencias de comprobantes para emparejar un movimiento")
     public ResponseEntity<?> voucherSuggestions(
             @PathVariable Long id,
@@ -260,7 +260,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/financial-movements/{movementId}/match-voucher")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Emparejar movimiento con comprobante (voucher)")
     public ResponseEntity<?> matchMovementToVoucher(
             @PathVariable Long id,
@@ -275,7 +275,7 @@ public class BankAccountController {
      * contables) para empresas que no usan Vouchers legacy.
      */
     @GetMapping("/{id}/financial-movements/{movementId}/journal-entry-suggestions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Sugerencias de asientos contables (JE) para emparejar movimiento")
     public ResponseEntity<?> journalEntrySuggestions(
             @PathVariable Long id,
@@ -284,7 +284,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/financial-movements/{movementId}/match-journal-entry")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Emparejar movimiento con asiento contable (JournalEntry)")
     public ResponseEntity<?> matchMovementToJournalEntry(
             @PathVariable Long id,
@@ -294,7 +294,7 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/financial-movements/{movementId}/unmatch")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_BANK_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Quitar emparejamiento con comprobante")
     public ResponseEntity<?> unmatchMovement(
             @PathVariable Long id,

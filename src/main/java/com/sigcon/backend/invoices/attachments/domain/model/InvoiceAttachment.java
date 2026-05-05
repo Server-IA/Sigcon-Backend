@@ -72,8 +72,12 @@ public class InvoiceAttachment {
     @Column(name = "file_size", nullable = false)
     private Long fileSize;
 
-    /** Contenido binario del archivo. */
-    @Lob
+    /**
+     * Contenido binario del archivo.
+     * Bloque X2 (CLAUDE.md leccion 1): omitir @Lob porque Hibernate 6 lo mapea
+     * a OID y choca contra columna BYTEA. SqlTypes.VARBINARY (default sin
+     * anotacion) si funciona contra bytea.
+     */
     @Basic(fetch = FetchType.LAZY)
     @Column(name = "file_content", nullable = false, columnDefinition = "BYTEA")
     private byte[] fileContent;
@@ -81,6 +85,31 @@ public class InvoiceAttachment {
     /** Descripcion opcional del documento (ej. numero OC, fecha acta, etc). */
     @Column(name = "description", length = 500)
     private String description;
+
+    /**
+     * HU-AP-12 E3 (Bloque AR): hash SHA-256 del contenido para detectar
+     * duplicados por contenido (no por nombre). Se calcula al cargar el
+     * archivo y se persiste como string hex de 64 caracteres.
+     */
+    @Column(name = "file_hash", length = 64)
+    private String fileHash;
+
+    /**
+     * HU-AP-12 E4 (Bloque AR): version del documento. Si el contador reemplaza
+     * un adjunto por una version actualizada, el adjunto previo se conserva
+     * como historico (replaced_by_id apunta al nuevo) y el nuevo arranca en
+     * version anterior + 1.
+     */
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Integer version = 1;
+
+    /**
+     * HU-AP-12 E4 (Bloque AR): si este adjunto fue reemplazado, apunta al id
+     * del adjunto nuevo. Permite navegar el historial de versiones.
+     */
+    @Column(name = "replaced_by_id")
+    private Long replacedById;
 
     /** Usuario que realizo la carga. */
     @Column(name = "uploaded_by", length = 150)

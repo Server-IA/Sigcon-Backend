@@ -32,34 +32,63 @@ WHERE NOT EXISTS (
 
 -- 2. Crear regla de depreciacion lineal por cada cuenta PPE promovida.
 --    Terrenos (1504) se excluye porque no es depreciable.
-INSERT INTO depretation_rules(name, depretation_type, depretation_rate, residual_value,
-        useful_life_years, description_structured, status, effective_date,
-        accounting_account_id, created_at, updated_at)
-SELECT
-    a.custom_name || ' - Lineal ' || x.life || ' anios',
-    'LINEAR',
-    (100.0 / x.life)::NUMERIC(5,2),
-    x.residual,
-    x.life,
-    'Depreciacion lineal para ' || a.custom_name || ' segun NIC 16. Vida util ' || x.life || ' anios.',
-    'ACTIVE',
-    '2020-01-01',
-    a.id,
-    NOW(), NOW()
-FROM (VALUES
-    ('1516', 20, 10),
-    ('1520', 10, 5),
-    ('1524', 10, 0),
-    ('1532', 10, 5),
-    ('1540', 5, 10),
-    ('1560', 10, 0)
-) AS x(code, life, residual)
-JOIN cfg_chart_of_accounts c ON c.account_code = x.code AND c.deleted_at IS NULL
-JOIN accounting_accounts a ON a.puc_id = c.id AND a.deleted_at IS NULL
-WHERE NOT EXISTS (
-    SELECT 1 FROM depretation_rules d
-    WHERE d.accounting_account_id = a.id
-      AND d.depretation_type = 'LINEAR'
-      AND d.effective_date = '2020-01-01'
-      AND d.deleted_at IS NULL
-);
+--
+-- HU-CFG-RF-13/15 (Bloque AQ, 2026-05-04): el UNIQUE INDEX parcial
+-- uk_depretation_rules_company_name_active (V9-ZZZI) exige nombre unico per
+-- company. Wrap del INSERT en DO $$ BEGIN ... EXCEPTION WHEN unique_violation
+-- THEN ... END $$ para que duplicados silenciosos no rompan el arranque.
+-- Cada fila se intenta insertar en su propio bloque; si choca con UNIQUE,
+-- se descarta y se sigue con la siguiente.
+DO $$
+DECLARE
+    rec RECORD;
+BEGIN
+    FOR rec IN
+        SELECT DISTINCT ON (a.company_id, LOWER(TRIM(a.custom_name || ' - Lineal ' || x.life || ' anios')))
+            a.company_id,
+            a.id AS accounting_account_id,
+            x.life,
+            x.residual,
+            a.custom_name || ' - Lineal ' || x.life || ' anios' AS gen_name
+        FROM (VALUES
+            ('1516', 20, 10),
+            ('1520', 10, 5),
+            ('1524', 10, 0),
+            ('1532', 10, 5),
+            ('1540', 5, 10),
+            ('1560', 10, 0)
+        ) AS x(code, life, residual)
+        JOIN cfg_chart_of_accounts c ON c.account_code = x.code AND c.deleted_at IS NULL
+        JOIN accounting_accounts a ON a.puc_id = c.id AND a.deleted_at IS NULL
+        ORDER BY a.company_id, LOWER(TRIM(a.custom_name || ' - Lineal ' || x.life || ' anios')), a.id
+    LOOP
+        BEGIN
+            INSERT INTO depretation_rules(name, depretation_type, depretation_rate, residual_value,
+                    useful_life_years, description_structured, status, effective_date,
+                    accounting_account_id, created_at, updated_at)
+            SELECT
+                rec.gen_name,
+                'LINEAR',
+                (100.0 / rec.life)::NUMERIC(5,2),
+                rec.residual,
+                rec.life,
+                'Depreciacion lineal para ' || rec.gen_name || ' segun NIC 16.',
+                'ACTIVE',
+                '2020-01-01',
+                rec.accounting_account_id,
+                NOW(), NOW()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM depretation_rules d
+                WHERE d.accounting_account_id = rec.accounting_account_id
+                  AND d.depretation_type = 'LINEAR'
+                  AND d.effective_date = '2020-01-01'
+                  AND d.deleted_at IS NULL
+            );
+        EXCEPTION
+            WHEN unique_violation THEN
+                -- Idempotencia defensiva: si ya existe regla con ese nombre per-tenant,
+                -- ignorar y continuar. No es un error de migracion, es un seed redundante.
+                NULL;
+        END;
+    END LOOP;
+END $$;

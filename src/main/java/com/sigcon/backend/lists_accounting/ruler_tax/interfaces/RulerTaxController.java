@@ -41,7 +41,7 @@ public class RulerTaxController {
     @ApiResponse(responseCode = "200", description = "Regla de impuesto creada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CreateRuleTaxDTO.class)))
     @ApiResponse(responseCode = "400", description = "Error al crear la regla de impuesto")
 
-    @PreAuthorize("hasAuthority('PERM_CREATE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_RULER_TAX') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createRulerTax(@Valid @RequestBody(required = false) CreateRuleTaxDTO createRuleTaxDTO,
             BindingResult bindingResult) {
         return ruleTaxService.create(createRuleTaxDTO, bindingResult);
@@ -53,7 +53,7 @@ public class RulerTaxController {
     @ApiResponse(responseCode = "401", description = "No autenticado")
     @ApiResponse(responseCode = "403", description = "Sin permiso PERM_VIEW_RULER_TAX")
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_RULER_TAX') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> findAllPagedRulerTax(@RequestBody(required = false) DataTableRequest request) {
         System.out.println("request ruler tax: " + request);
         return ruleTaxService.findAllPaged(request);
@@ -63,7 +63,7 @@ public class RulerTaxController {
     @Operation(summary = "Actualizar regla de impuesto", description = "Actualizar una regla de impuesto, requiere permisos de actualización (PERM_UPDATE_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Regla de impuesto actualizada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UpdateRuleTaxDTO.class)))
     @ApiResponse(responseCode = "400", description = "Error al actualizar la regla de impuesto")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_RULER_TAX') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateRulerTax(@PathVariable Long id,
             @Valid @RequestBody(required = false) UpdateRuleTaxDTO updateRuleTaxDTO, BindingResult bindingResult) {
         return ruleTaxService.updateRuleTax(id, updateRuleTaxDTO, bindingResult);
@@ -75,17 +75,36 @@ public class RulerTaxController {
             "Requiere permisos PERM_DELETE_RULER_TAX o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Regla de impuesto eliminada correctamente")
     @ApiResponse(responseCode = "400", description = "Error al eliminar la regla de impuesto (motivo faltante o dependencias activas)")
-    @PreAuthorize("hasAuthority('PERM_DELETE_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_RULER_TAX') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteRulerTax(@PathVariable Long id,
             @RequestParam(name = "reason", required = false) String reason) {
         return ruleTaxService.deleteRuleTax(id, reason);
+    }
+
+    /** HU-CFG-RF-09 E8: exporta el listado en CSV o XLSX. */
+    @org.springframework.web.bind.annotation.GetMapping("/export/{format}")
+    @Operation(summary = "Exportar reglas tributarias",
+               description = "HU-CFG-RF-09 E8: descarga listado en CSV o XLSX (multi-tenant)")
+    @PreAuthorize("hasAuthority('PERM_VIEW_RULER_TAX') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<byte[]> exportRulerTax(
+            @org.springframework.web.bind.annotation.PathVariable String format) {
+        byte[] data = ruleTaxService.exportAll(format);
+        String mime = "xlsx".equalsIgnoreCase(format)
+                ? com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME
+                : com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+        String fname = "reglas_tributarias." + ("xlsx".equalsIgnoreCase(format) ? "xlsx" : "csv");
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, mime)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + fname + "\"")
+                .body(data);
     }
 
     @PostMapping("/accounting-accounts")
     @Operation(summary = "Asignar cuenta contable a regla de impuesto", description = "Asignar una cuenta contable a una regla de impuesto, requiere permisos de asignación (PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX) o rol superadmin (ROLE_ADMIN)")
     @ApiResponse(responseCode = "200", description = "Cuenta contable asignada correctamente")
     @ApiResponse(responseCode = "400", description = "Error al asignar la cuenta contable")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_ACCOUNTING_ACCOUNT_TO_RULER_TAX') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> assignAccountingAccountToRulerTax(
             @Valid @RequestBody(required = false) AssignAccountingAccountToRulerTaxDTO assignAccountingAccountToRulerTaxDTO,
             BindingResult bindingResult) {

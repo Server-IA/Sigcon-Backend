@@ -30,7 +30,7 @@ public class VouchersController {
         @ApiResponse(responseCode = "200", description = "Vouchers encontrados"),
         @ApiResponse(responseCode = "400", description = "Error al buscar vouchers")
     })
-    @PreAuthorize("hasAuthority('PERM_SEARCH_VOUCHER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_SEARCH_VOUCHER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return voucherService.getVouchers(request);
     }

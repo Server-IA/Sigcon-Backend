@@ -36,7 +36,7 @@ public class ReportTypeController {
      * @return lista paginada de tipos de reporte
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_REPORT_TYPES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_REPORT_TYPES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar tipos de reporte", description = "Obtiene la lista paginada de tipos de reporte con filtros")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Lista de tipos de reporte obtenida exitosamente"),
@@ -56,7 +56,7 @@ public class ReportTypeController {
      * @return tipo de reporte creado o errores de validacion
      */
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_REPORT_TYPES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_REPORT_TYPES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Crear tipo de reporte", description = "Registra un nuevo tipo de reporte en el sistema")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Tipo de reporte creado exitosamente"),
@@ -83,7 +83,7 @@ public class ReportTypeController {
      * @return confirmacion de actualizacion o errores
      */
     @PutMapping("/update/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_REPORT_TYPES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_REPORT_TYPES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar tipo de reporte", description = "Actualiza un tipo de reporte existente")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Tipo de reporte actualizado exitosamente"),
@@ -109,7 +109,7 @@ public class ReportTypeController {
      * @return confirmacion de eliminacion o error de dependencia
      */
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_REPORT_TYPES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_REPORT_TYPES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar tipo de reporte", description = "Elimina un tipo de reporte si no tiene plantillas activas")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Tipo de reporte eliminado exitosamente"),

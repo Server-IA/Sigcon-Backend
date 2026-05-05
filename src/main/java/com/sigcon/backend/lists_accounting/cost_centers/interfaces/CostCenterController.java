@@ -45,7 +45,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_VIEW_COST_CENTERS", content = @Content)
         })
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_COST_CENTERS') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_COST_CENTERS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> searchCostCenters(@RequestBody(required = false) DataTableRequest request) {
                 if (request == null) {
                         request = new DataTableRequest();
@@ -67,7 +67,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_CREATE_COST_CENTER", content = @Content)
         })
         @PostMapping("/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_COST_CENTER') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_COST_CENTER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> storeCostCenter(@Valid @RequestBody CostCenterDTO costCenterDTO,
                         BindingResult bindingResult) {
                 return costCenterService.storeCostCenter(costCenterDTO, bindingResult);
@@ -88,7 +88,7 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "404", description = "Centro de costo no encontrado", content = @Content)
         })
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_COST_CENTER') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_COST_CENTER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> updateCostCenter(
                         @PathVariable Long id,
                         @Valid @RequestBody CostCenter costCenter,
@@ -114,10 +114,28 @@ public class CostCenterController {
                         @ApiResponse(responseCode = "403", description = "Sin permiso PERM_DELETE_COST_CENTER", content = @Content)
         })
         @DeleteMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_COST_CENTER') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_COST_CENTER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> deleteCostCenter(
                         @PathVariable Long id,
                         @RequestParam(required = false) String reason) {
                 return costCenterService.deleteCostCenter(id, reason);
+        }
+
+        /** HU-CFG-RF-17 E5: exporta centros de costo en CSV o XLSX. */
+        @org.springframework.web.bind.annotation.GetMapping("/export/{format}")
+        @Operation(summary = "Exportar centros de costo",
+                   description = "HU-CFG-RF-17 E5: descarga listado en CSV o XLSX (multi-tenant)")
+        @PreAuthorize("hasAuthority('PERM_VIEW_COST_CENTER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+        public ResponseEntity<byte[]> exportCostCenters(@PathVariable String format) {
+                byte[] data = costCenterService.exportAll(format);
+                String mime = "xlsx".equalsIgnoreCase(format)
+                                ? com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME
+                                : com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+                String fname = "centros_costo." + ("xlsx".equalsIgnoreCase(format) ? "xlsx" : "csv");
+                return ResponseEntity.ok()
+                                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, mime)
+                                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=\"" + fname + "\"")
+                                .body(data);
         }
 }

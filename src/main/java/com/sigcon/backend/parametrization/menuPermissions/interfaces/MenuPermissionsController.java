@@ -33,7 +33,7 @@ public class MenuPermissionsController {
     private final MenuPermissionsService menuPermissionsService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_MENU_PERMISSIONS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_MENU_PERMISSIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getMenuPermissions(
             @RequestBody(required = false) DataTableRequest dtRequest) {
         try {
@@ -47,7 +47,7 @@ public class MenuPermissionsController {
     }
 
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_MENU_PERMISSIONS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_MENU_PERMISSIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> storeMenuPermission(@Valid @RequestBody MenuPermissionsDTO request,
             BindingResult bindingResult) {
         try {
@@ -61,7 +61,7 @@ public class MenuPermissionsController {
     }
 
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_MENU_PERMISSIONS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_MENU_PERMISSIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateMenuPermission(@RequestBody MenuPermissionsDTO request,
             BindingResult bindingResult) {
         try {
@@ -75,7 +75,7 @@ public class MenuPermissionsController {
     }
 
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_MENU_PERMISSIONS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_MENU_PERMISSIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteMenuPermission(@PathVariable Long id) {
         try {
             return menuPermissionsService.deleteMenuPermission(id);

@@ -47,6 +47,7 @@ public class PlatformUserController {
 
     private final PlatformUserService service;
 
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @GetMapping
     @Operation(summary = "Listar usuarios cross-empresa",
                description = "Devuelve usuarios de todas las empresas con filtros opcionales. "
@@ -71,6 +72,7 @@ public class PlatformUserController {
         return ResponseEntity.ok(service.search(companyId, platform, status, pageable));
     }
 
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @PostMapping("/{id}/reset-password")
     @Operation(summary = "Resetear contrasenia de usuario",
                description = "Asigna una contrasenia temporal a un usuario de cualquier empresa. "

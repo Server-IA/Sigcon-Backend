@@ -40,7 +40,7 @@ public class NiifAlertsController {
      * RF-05 / ACT-13: Verificar cumplimiento NIIF (6 checks mejorados).
      */
     @PostMapping("/verify")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Verificar cumplimiento NIIF",
             description = "Analiza activos y genera alertas si se detectan incumplimientos según las reglas NIIF. "
@@ -63,6 +63,14 @@ public class NiifAlertsController {
             @RequestBody VerifyNiifRequest request
     ) {
 
+        // HU-ACT-09 E3 (QA 2026-05-05): mensaje literal del Excel cuando se
+        // ejecuta la verificacion sin haber seleccionado ningun activo.
+        if (request == null || request.getAssetIds() == null || request.getAssetIds().isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    com.sigcon.backend.utils.ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("Debe seleccionar al menos un activo para ejecutar la verificacion.")));
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Verificación NIIF realizada correctamente"),
@@ -76,7 +84,7 @@ public class NiifAlertsController {
      * Soporta: REVALUATION, USEFUL_LIFE_ADJUSTMENT, DEPRECIATION_METHOD_CHANGE, IMPAIRMENT_REVERSAL.
      */
     @PostMapping("/correction")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_ASSET') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Aplicar corrección NIIF",
             description = "Permite aplicar ajustes contables a un activo para cumplir con normas NIIF. "
@@ -119,7 +127,7 @@ public class NiifAlertsController {
      * @return lista de activos con depreciación mensual calculada
      */
     @GetMapping("/annual-review/assets")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Listar activos para revisión anual",
             description = "Retorna activos activos elegibles para revisión anual NIC 16, "
@@ -151,7 +159,7 @@ public class NiifAlertsController {
      * @return resultado de la revisión con datos anteriores y nuevos
      */
     @PostMapping("/annual-review")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Registrar revisión anual de activo",
             description = "Registra la revisión anual de un activo según NIC 16. "

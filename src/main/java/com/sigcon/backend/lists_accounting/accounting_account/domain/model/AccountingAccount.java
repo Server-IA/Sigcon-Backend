@@ -69,6 +69,13 @@ public class AccountingAccount {
     @Column(name = "tax_rule_id", nullable = true)
     private Long taxRuleId;
 
+    /** HU-CFG-RF-05/07 (Bloque AP, 2026-05-04): regla de depreciacion opcional asociada
+     *  a la cuenta contable. Permite vincular cuentas de activo fijo con su regla de
+     *  depreciacion preferida y exponerla en el listado/edicion. Nullable porque
+     *  no todas las cuentas (ingresos, gastos, etc.) requieren depreciacion. */
+    @Column(name = "depretation_rule_id", nullable = true)
+    private Long depretationRuleId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "nature", nullable = false)
     private AccountNature nature;

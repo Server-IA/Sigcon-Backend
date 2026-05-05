@@ -45,7 +45,7 @@ public class DianResolutionController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido correctamente")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN_RESOLUTION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN_RESOLUTION') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return service.search(request);
     }
@@ -57,7 +57,7 @@ public class DianResolutionController {
         @ApiResponse(responseCode = "400", description = "Resolucion no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN_RESOLUTION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN_RESOLUTION') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
             return service.getById(id);
@@ -74,7 +74,7 @@ public class DianResolutionController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_DIAN_RESOLUTION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_DIAN_RESOLUTION') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> store(@Valid @RequestBody DianResolutionRequest request,
                                    BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -95,7 +95,7 @@ public class DianResolutionController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PutMapping("/update/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_DIAN_RESOLUTION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_DIAN_RESOLUTION') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @Valid @RequestBody DianResolutionRequest request,
                                     BindingResult bindingResult) {
@@ -117,7 +117,7 @@ public class DianResolutionController {
         @ApiResponse(responseCode = "400", description = "Resolucion no encontrada")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_DIAN_RESOLUTION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_DIAN_RESOLUTION') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);
@@ -133,7 +133,7 @@ public class DianResolutionController {
         @ApiResponse(responseCode = "200", description = "Alertas retornadas")
     })
     @GetMapping("/alerts")
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN_RESOLUTION') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN_RESOLUTION') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> alerts() {
         return service.checkAlerts();
     }

@@ -17,7 +17,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class DeleteThirdPartyRequest {
 
-    @NotBlank(message = "La justificacion es obligatoria para eliminar un tercero.")
-    @Size(min = 50, max = 500, message = "La justificacion debe tener al menos 50 caracteres y maximo 500.")
+    // HU-TER-10 E6.0 (Bloque AN, 2026-05-04): mensaje literal del Excel.
+    @NotBlank(message = "La justificacion debe tener al menos 50 caracteres")
+    @Size(min = 50, max = 500, message = "La justificacion debe tener al menos 50 caracteres")
     private String justification;
 }

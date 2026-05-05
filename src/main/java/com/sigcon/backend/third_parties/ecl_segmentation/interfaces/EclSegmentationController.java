@@ -46,7 +46,7 @@ public class EclSegmentationController {
                         @ApiResponse(responseCode = "400", description = "ECL_003: Cliente no tiene rol CLIENTE activo")
         })
         @PostMapping("/calculate")
-        @PreAuthorize("hasAuthority('PERM_CALCULATE_ECL_SEGMENT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CALCULATE_ECL_SEGMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> calculateSegment(@Valid @RequestBody CalculateSegmentationRequest request,
                         BindingResult bindingResult) {
                 if (bindingResult.hasErrors()) {
@@ -72,7 +72,7 @@ public class EclSegmentationController {
                         @ApiResponse(responseCode = "404", description = "ECL_001: No existe segmento calculado previo para este cliente. ")
         })
         @PutMapping("/adjust/{clientId}")
-        @PreAuthorize("hasAuthority('PERM_ADJUST_ECL_SEGMENT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_ADJUST_ECL_SEGMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> applyManualAdjustment(
                         @PathVariable Long clientId,
                         @Valid @RequestBody ManualAdjustmentRequest request,
@@ -90,7 +90,7 @@ public class EclSegmentationController {
                         @ApiResponse(responseCode = "404", description = "ECL_001: No existe segmento calculado para este cliente")
         })
         @GetMapping("/{clientId}")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ECL_SEGMENT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ECL_SEGMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> getSegmentByClient(@PathVariable Long clientId) {
                 return eclSegmentationService.getSegmentByClient(clientId);
         }
@@ -107,7 +107,7 @@ public class EclSegmentationController {
                         @ApiResponse(responseCode = "200", description = "Lista de segmentos retornada exitosamente. "),
         })
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ECL_SEGMENT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ECL_SEGMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> getAllSegmentsForEcl(
                         @RequestBody(required = false) DataTableRequest dtRequest) {
                 return eclSegmentationService.getAllSegmentsForEcl(dtRequest);
@@ -122,7 +122,7 @@ public class EclSegmentationController {
                         @ApiResponse(responseCode = "200", description = "Histórico retornado exitosamente")
         })
         @GetMapping("/history/{clientId}")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ECL_SEGMENT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ECL_SEGMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> getSegmentHistory(@PathVariable Long clientId) {
                 return eclSegmentationService.getSegmentHistory(clientId);
         }

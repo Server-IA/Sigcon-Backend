@@ -68,7 +68,7 @@ public class IntegrationAdminController {
         @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
     })
     @GetMapping(value = "/jwt-config", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getCurrentConfig() {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("enabled", jwtConfigService.isEnabled());
@@ -91,7 +91,7 @@ public class IntegrationAdminController {
         @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
     })
     @PostMapping(value = "/jwt-config/reload", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> reloadJwtConfig() {
         log.info("IntegrationAdminController: reload de configuracion JWT solicitado por admin");
         jwtConfigService.reload();
@@ -120,7 +120,7 @@ public class IntegrationAdminController {
         @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
     })
     @PostMapping(value = "/jwt-config/reload-jwks", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> reloadJwks() {
         log.info("IntegrationAdminController: invalidacion de cache JWKS solicitada por admin");
         jwtValidator.invalidateJwksCache();
@@ -149,7 +149,7 @@ public class IntegrationAdminController {
         @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
     })
     @GetMapping(value = "/jwt-audit", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> jwtAuditSearch(
             @Parameter(description = "Filtrar por resultado", example = "VALID")
             @RequestParam(required = false) String result,
@@ -179,7 +179,7 @@ public class IntegrationAdminController {
         @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
     })
     @GetMapping(value = "/jwt-audit/summary", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> jwtAuditSummary() {
         return ResponseEntity.ok(jwtAuditService.summary());
     }
@@ -203,7 +203,7 @@ public class IntegrationAdminController {
     })
     @org.springframework.web.bind.annotation.PostMapping(value = "/retention/run",
             produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> runRetention() {
         return ResponseEntity.ok(retentionScheduler.runRetentionManually());
     }

@@ -40,7 +40,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "200", description = "Listado de politicas"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/policies")
     public ResponseEntity<?> listPolicies() { return service.listPolicies(); }
 
@@ -56,7 +56,7 @@ public class RetentionController {
                             + "Operacion cancelada.' (retentionDays invalido)"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.CREAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/policies")
     public ResponseEntity<?> createPolicy(@RequestBody AuditRetentionPolicy policy) {
         String createdBy = "admin";
@@ -75,7 +75,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "400", description = "Politica no encontrada o configuracion invalida"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/policies/{id}")
     public ResponseEntity<?> updatePolicy(
             @Parameter(description = "ID de la politica", example = "1") @PathVariable Long id,
@@ -86,7 +86,7 @@ public class RetentionController {
     @Operation(
         summary = "Eliminar politica (soft delete)",
         description = "Desactiva una politica. Los logs ya marcados con su retention_until la conservan.")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.ELIMINAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/policies/{id}")
     public ResponseEntity<?> deletePolicy(@PathVariable Long id) {
         return service.deletePolicy(id);
@@ -103,7 +103,7 @@ public class RetentionController {
                             + "retencion legal activa.' o log ya purgado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/legal-hold/{logId}")
     public ResponseEntity<?> setLegalHold(
             @Parameter(description = "ID del log", example = "1") @PathVariable Long logId,
@@ -125,7 +125,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "400", description = "Log no encontrado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/legal-hold/{logId}")
     public ResponseEntity<?> releaseLegalHold(@PathVariable Long logId) {
         return service.releaseLegalHold(logId);
@@ -141,7 +141,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "200", description = "Purga ejecutada (retorna AuditPurgeRecord o 'Sin candidatos')"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/purge/run")
     public ResponseEntity<?> runPurgeManual() {
         String executedBy = "admin";
@@ -156,7 +156,7 @@ public class RetentionController {
         description = "Historial de las ultimas 20 ejecuciones de purga con cantidad, rango "
                     + "temporal y batch_hash de evidencia.")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Listado"))
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/purge/records")
     public ResponseEntity<?> listPurgeRecords() {
         return service.listPurgeRecords();
@@ -167,7 +167,7 @@ public class RetentionController {
         description = "Resumen: total de logs, cantidad con legal hold activo, politicas activas, "
                     + "purgas recientes.")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Estado"))
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/status")
     public ResponseEntity<?> status() {
         return service.getStatus();
@@ -186,7 +186,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "200", description = "PDF generado"),
         @ApiResponse(responseCode = "404", description = "Registro de purga no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/purge/records/{id}/pdf")
     public ResponseEntity<?> downloadPurgePdf(@org.springframework.web.bind.annotation.PathVariable Long id) {
         try {

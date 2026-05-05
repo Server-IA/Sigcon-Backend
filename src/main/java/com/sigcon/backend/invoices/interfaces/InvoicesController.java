@@ -59,7 +59,7 @@ public class InvoicesController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/fc")
-    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_FC') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_FC') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createInvoiceFC(
         @jakarta.validation.Valid @RequestBody InvoiceFCRequestDTO invoiceFCRequestDTO,
         BindingResult bindingResult
@@ -95,7 +95,7 @@ public class InvoicesController {
         @ApiResponse(responseCode = "200", description = "Listado de facturas")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_READ_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getInvoices(@RequestBody(required = false) DataTableRequest request) {
         return invoicesService.getInvoices(request);
     }
@@ -112,7 +112,7 @@ public class InvoicesController {
         @ApiResponse(responseCode = "404", description = "Factura no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getInvoiceById(@PathVariable Long id) {
         try {
             return invoicesService.getInvoiceById(id);
@@ -138,7 +138,7 @@ public class InvoicesController {
         @ApiResponse(responseCode = "404", description = "Factura no encontrada")
     })
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateInvoice(@PathVariable Long id, @RequestBody InvoiceFCRequestDTO request) {
         try {
             return invoicesService.updateInvoice(id, request);
@@ -161,7 +161,7 @@ public class InvoicesController {
         @ApiResponse(responseCode = "400", description = "No se puede eliminar la factura")
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteInvoice(@PathVariable Long id) {
         try {
             return invoicesService.deleteInvoice(id);
@@ -183,10 +183,36 @@ public class InvoicesController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Factura no encontrada")
     })
     @PostMapping("/{id}/settle")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> settleInvoice(@PathVariable Long id) {
         try {
             return invoicesService.settleInvoice(id);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                .body(ErrorRespondJson.getErrorRespondMessage(java.util.Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * HU-AP-25 (Bloque AR): anula una factura de compra registrada.
+     * Body JSON: {"reason": "motivo min 10 chars"}.
+     */
+    @io.swagger.v3.oas.annotations.Operation(summary = "Anular factura de compra",
+        description = "HU-AP-25: anula la factura conservando trazabilidad. Bloquea: PAGADA, PARCIAL, "
+                    + "AAEF, periodo cerrado. Requiere motivo (min 10 chars).")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Factura anulada"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Estado no permite anulacion / motivo invalido"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Sin permiso"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Factura no encontrada")
+    })
+    @PostMapping("/{id}/void")
+    @PreAuthorize("hasAuthority('PERM_DELETE_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> voidInvoice(@PathVariable Long id,
+                                          @RequestBody java.util.Map<String, String> body) {
+        String reason = body != null ? body.get("reason") : null;
+        try {
+            return invoicesService.voidInvoice(id, reason);
         } catch (IllegalStateException | IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                 .body(ErrorRespondJson.getErrorRespondMessage(java.util.Optional.of(e.getMessage())));
@@ -206,7 +232,7 @@ public class InvoicesController {
         @ApiResponse(responseCode = "400", description = "Error en el archivo o formato invalido")
     })
     @PostMapping("/bulk/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_FC') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_FC') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> bulkImportInvoices(@RequestBody BulkImportRequest request) {
         try {
             return invoicesService.bulkImportInvoices(request.getFileBase64(), request.getDelimiter());

@@ -119,6 +119,14 @@ public class Company {
     @Column(name = "deleted_at", columnDefinition = "TIMESTAMP WITH TIME ZONE")
     private LocalDateTime deletedAt;
 
+    /** Sprint 2 BRAND-01: configuracion de identidad visual en JSON. */
+    @Column(name = "brand_config", columnDefinition = "TEXT")
+    private String brandConfig;
+
+    /** Sprint 2 NAV-01: orden personalizado de modulos en JSON. */
+    @Column(name = "module_order", columnDefinition = "TEXT")
+    private String moduleOrder;
+
     public enum CompanyStatus {
         ACTIVE,
         INACTIVE

@@ -137,33 +137,46 @@ public class AssetDisposalService {
                     ;
         }
 
-        // 2. Validar estado del activo
+        // HU-ACT-03 E3 (QA 2026-05-05): mensaje literal del Excel.
         if (asset.getStatus() != AssetStatus.ACTIVE && asset.getStatus() != AssetStatus.IN_REPAIR) {
             return ErrorRespondJson.getErrorRespondMessage(
-                    Optional.of("DSP_002: El activo no se puede dar de baja porque no esta activo."))
-                    ;
+                    Optional.of("Este activo no puede darse de baja en estado inactivo."));
         }
 
-        // ACT-03 E2: Validar que no tenga saldos pendientes (cuentas por pagar asociadas)
+        // HU-ACT-03 E2 (QA 2026-05-05): mensaje literal del Excel para saldos pendientes.
         if (asset.getAccountsPayableReferenceId() != null) {
             return ErrorRespondJson.getErrorRespondMessage(
-                    Optional.of("No es posible procesar la baja o transferencia: el activo tiene saldos pendientes."));
+                    Optional.of("No es posible dar de baja este activo: tiene saldos pendientes en Cuentas por Pagar o Cuentas por Cobrar."));
         }
 
-        // 3. Validar periodo contable abierto
+        // HU-ACT-03 E5: periodo contable cerrado, mensaje literal.
         try {
             accountingPeriodService.validatePeriodOpen(request.getDisposalDate());
         } catch (Exception e) {
             return ErrorRespondJson.getErrorRespondMessage(
-                    Optional.of("DSP_003: El periodo contable esta cerrado para la fecha indicada."))
-                    ;
+                    Optional.of("El periodo contable esta cerrado. No se puede registrar la baja en una fecha cerrada."));
         }
 
         // 4. Validar monto de enajenacion para BAJA
         if (request.getDisposalType() == DisposalType.BAJA && request.getDisposalAmount() == null) {
             return ErrorRespondJson.getErrorRespondMessage(
-                    Optional.of("DSP_004: Debe especificar el monto de enajenacion para bajas."))
-                    ;
+                    Optional.of("Debe especificar el monto de enajenacion para registrar la baja."));
+        }
+
+        // HU-ACT-03 E6 (QA 2026-05-05): el monto de venta no puede ser negativo
+        // ni superar 10x el valor en libros (rango razonable contra errores de tecleo).
+        if (request.getDisposalType() == DisposalType.BAJA && request.getDisposalAmount() != null) {
+            BigDecimal amount = request.getDisposalAmount();
+            BigDecimal bookValueRef = asset.getCurrentBookValue() != null
+                    ? asset.getCurrentBookValue()
+                    : asset.getAcquisitionValue();
+            BigDecimal upperBound = bookValueRef != null
+                    ? bookValueRef.multiply(new BigDecimal("10"))
+                    : null;
+            if (amount.signum() < 0 || (upperBound != null && amount.compareTo(upperBound) > 0)) {
+                return ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("El monto esta fuera del rango permitido. Verifique el valor ingresado."));
+            }
         }
 
         // 5. Calcular valor en libros y ganancia/perdida

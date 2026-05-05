@@ -26,26 +26,26 @@ public class ModuleController {
     private final ModuleService moduleService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_MODULES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_MODULES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getModules(
             @RequestBody(required = false) DataTableRequest dtRequest) {
         return moduleService.getModulesPaged(dtRequest);
     }
 
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_MODULES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_MODULES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> storeModule(@Valid @RequestBody ModuleDTO request, BindingResult bindingResult) {
         return moduleService.storeModule(request, bindingResult);
     }
 
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_MODULES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_MODULES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateModule(@Valid @RequestBody ModuleDTO request, BindingResult bindingResult) {
         return moduleService.updateModule(request, bindingResult);
     }
 
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_MODULES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_MODULES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteModule(@PathVariable Long id) {
         return moduleService.deleteModule(id);
     }

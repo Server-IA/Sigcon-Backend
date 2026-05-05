@@ -32,7 +32,7 @@ public class ApReconciliationController {
                description = "Retorna pagos AP cuyo bankMovementId es nulo.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Listado obtenido")})
     @GetMapping("/unreconciled")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> listUnreconciled() {
         return service.listUnreconciled();
     }
@@ -45,7 +45,7 @@ public class ApReconciliationController {
         @ApiResponse(responseCode = "400", description = "Pago no encontrado")
     })
     @GetMapping("/{paymentId}/candidates")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> suggestCandidates(@PathVariable Long paymentId) {
         try {
             return service.suggestCandidates(paymentId);
@@ -63,7 +63,7 @@ public class ApReconciliationController {
         @ApiResponse(responseCode = "400", description = "Pago o movimiento no encontrado, o ya conciliado")
     })
     @PostMapping("/{paymentId}/link/{movementId}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> linkPayment(@PathVariable Long paymentId,
                                           @PathVariable Long movementId) {
         try {
@@ -81,10 +81,28 @@ public class ApReconciliationController {
         @ApiResponse(responseCode = "400", description = "Pago no encontrado o no estaba conciliado")
     })
     @DeleteMapping("/{paymentId}/unlink")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> unlinkPayment(@PathVariable Long paymentId) {
         try {
             return service.unlinkPayment(paymentId);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * HU-AP-08 (Bloque AS): conciliacion automatica masiva con extracto bancario.
+     * Para cada pago AP sin conciliar, busca un movimiento BNK con score exacto
+     * (>=0.99) y los empareja automaticamente. Si hay 0 o varios candidatos,
+     * deja el pago para revision manual.
+     */
+    @org.springframework.security.access.prepost.PreAuthorize("hasAuthority('PERM_UPDATE_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PostMapping("/auto-match")
+    public ResponseEntity<?> autoReconcile(
+            @org.springframework.web.bind.annotation.RequestParam(value = "bankAccountId", required = false) Long bankAccountId) {
+        try {
+            return service.autoReconcileBankAccount(bankAccountId);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

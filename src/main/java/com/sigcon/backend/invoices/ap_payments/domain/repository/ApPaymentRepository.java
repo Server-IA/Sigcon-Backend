@@ -36,4 +36,10 @@ public interface ApPaymentRepository extends JpaRepository<ApPayment, Long>, Jpa
      */
     boolean existsByInvoice_IdAndAmountAndPaymentDateAndDeletedAtIsNull(
             Long invoiceId, java.math.BigDecimal amount, java.time.LocalDate paymentDate);
+
+    /**
+     * HU-AP-08 (Bloque AS): pagos sin conciliar para conciliacion automatica masiva.
+     * El @Filter("tenantFilter") de la entidad limita a la empresa actual.
+     */
+    List<ApPayment> findByBankMovementIdIsNullAndDeletedAtIsNull();
 }

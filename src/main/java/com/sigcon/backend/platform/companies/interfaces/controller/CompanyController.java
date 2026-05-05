@@ -73,6 +73,7 @@ public class CompanyController {
      * @param page 0-based, default 0
      * @param size 1-100 rows per page, default 20
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @GetMapping
     @Operation(summary = "HU-PLAT-01 E1: listar empresas paginadas",
                description = "Retorna Page<CompanyDTO> con todas las empresas (incluyendo INACTIVE). "
@@ -95,6 +96,7 @@ public class CompanyController {
     /**
      * Obtiene el detalle de una empresa por id. Cubre HU-PLAT-01 E2.
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @GetMapping("/{id}")
     @Operation(summary = "HU-PLAT-01 E2: obtener empresa por id",
                description = "Retorna la representacion completa de la empresa (detalle del admin dashboard).")
@@ -116,6 +118,7 @@ public class CompanyController {
      * <p>Side effect: auto-provision de 12 periodos + 18 mapeos PUC + 1 CC default
      * para el nuevo tenant (via {@code _tenant_auto_provision} PL/pgSQL).
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @PostMapping
     @Operation(summary = "HU-PLAT-01 E3: crear empresa (sin admin)",
                description = "Valida unicidad de NIT entre empresas activas. Tras crear, ejecuta "
@@ -141,6 +144,7 @@ public class CompanyController {
      * <p>Validaciones: NIT unico entre empresas activas, email del admin unico,
      * username del admin unico.
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @PostMapping("/with-admin")
     @Operation(summary = "HU-PLAT-02: crear empresa + primer admin atomicamente",
                description = "Transaccion unica que crea la Company y el User admin de esa empresa. "
@@ -165,6 +169,7 @@ public class CompanyController {
      * <p>Nota: el cambio de NIT NO se permite si la empresa ya tiene movimientos
      * contables registrados (riesgo fiscal) — validacion pendiente en el service.
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @PutMapping("/{id}")
     @Operation(summary = "HU-PLAT-01 E4: actualizar empresa",
                description = "Valida que el nuevo NIT no colisione con otra empresa activa.")
@@ -187,6 +192,7 @@ public class CompanyController {
      *
      * <p>No elimina datos contables — es reversible con {@link #activate}.
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @DeleteMapping("/{id}")
     @Operation(summary = "HU-PLAT-05 E1: desactivar empresa",
                description = "Soft disable: status=INACTIVE. Los usuarios tenant de esta empresa "
@@ -203,6 +209,7 @@ public class CompanyController {
     }
 
     /** HU-PLAT-05 E2: reactiva una empresa INACTIVE previamente. */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @PostMapping("/{id}/activate")
     @Operation(summary = "HU-PLAT-05 E2: reactivar empresa",
                description = "Vuelve el status a ACTIVE. Los usuarios tenant pueden loguearse de nuevo.")
@@ -233,6 +240,7 @@ public class CompanyController {
      * van con {@code WHERE NOT EXISTS}); se puede reejecutar sin duplicar
      * datos. Solo crea lo que falta.
      */
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @PostMapping("/{id}/re-provision")
     @Operation(summary = "Reparar provision de recursos base",
                description = "Vuelve a ejecutar _tenant_auto_provision para reparar "

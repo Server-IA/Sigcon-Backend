@@ -57,18 +57,18 @@ public class BankService {
                                         .body(ErrorRespondJson.getErrorRespondJson(bindingResult));
                 }
 
-                // QA HU-006 E3: validar codigo unico ANTES del NIT.
+                // HU-005 E3 (Bloque AO): mensaje literal del Excel para codigo duplicado.
                 if (bankRepository.existsByCodeAndDeletedAtIsNull(request.getCode().trim())) {
                         return ResponseEntity.badRequest()
                                         .body(ErrorRespondJson.getErrorRespondMessage(
-                                                        Optional.of("BNK-ERR-002: Ya existe un banco con el código '" + request.getCode().trim() + "'.")));
+                                                        Optional.of("Ya existe un banco registrado con ese código")));
                 }
 
-                // Validar NIT unico
+                // HU-005 E4 (Bloque AO): mensaje literal del Excel para NIT duplicado.
                 if (bankRepository.existsByNitAndDeletedAtIsNull(request.getNit().trim())) {
                         return ResponseEntity.badRequest()
                                         .body(ErrorRespondJson.getErrorRespondMessage(
-                                                        Optional.of("BNK-ERR-001: Ya existe un banco con el NIT proporcionado.")));
+                                                        Optional.of("Ya existe un banco registrado con ese NIT")));
                 }
 
                 Country country = resolveCountry(request.getCountryId());

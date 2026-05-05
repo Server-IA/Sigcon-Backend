@@ -93,7 +93,10 @@ public class PurchaseOrderService {
                 .createdBy(userUtil.getUser().getId())
                 .build();
 
-        // 4. Crear lineas y calcular total
+        // 4. Crear lineas y calcular total. HU-AP-15 E3 (Bloque AR): rechaza
+        // cantidades <= 0 o precios <= 0 con mensaje literal del Excel.
+        validateOrderLines(request.getLines());
+
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (CreatePurchaseOrderLineRequest lineReq : request.getLines()) {
             BigDecimal totalLine = lineReq.getQuantity().multiply(lineReq.getUnitPrice());
@@ -171,8 +174,21 @@ public class PurchaseOrderService {
         PurchaseOrder order = orderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("La orden de compra no fue encontrada"));
 
-        if (!"DRAFT".equals(order.getStatus())) {
-            throw new IllegalStateException("Solo se pueden modificar ordenes en estado borrador (DRAFT)");
+        // HU-AP-17 E2 (Bloque AT): OC en estado DRAFT o REJECTED puede editarse.
+        // QA reporto que tras rechazo, el solicitante debe poder corregir y
+        // re-enviar a aprobacion. Otros estados (PENDING/APPROVED/CLOSED) son
+        // inmutables.
+        if (!"DRAFT".equals(order.getStatus()) && !"REJECTED".equals(order.getStatus())) {
+            throw new IllegalStateException(
+                "Solo se pueden modificar ordenes en estado BORRADOR o RECHAZADA. "
+                + "Estado actual: " + order.getStatus());
+        }
+        // Si se edita una rechazada, vuelve a DRAFT para que pueda re-enviarse a aprobacion
+        boolean wasRejected = "REJECTED".equals(order.getStatus());
+        if (wasRejected) {
+            order.setStatus("DRAFT");
+            order.setRejectionReason(null);
+            log.info("HU-AP-17 E2 (Bloque AT): OC {} editada tras rechazo, vuelve a DRAFT", order.getId());
         }
 
         // Actualizar proveedor si cambio
@@ -192,6 +208,8 @@ public class PurchaseOrderService {
 
         // Reemplazar lineas
         if (request.getLines() != null && !request.getLines().isEmpty()) {
+            // HU-AP-15 E3 (Bloque AR): validacion tambien en update.
+            validateOrderLines(request.getLines());
             order.getLines().clear();
             BigDecimal totalAmount = BigDecimal.ZERO;
             for (CreatePurchaseOrderLineRequest lineReq : request.getLines()) {
@@ -434,5 +452,29 @@ public class PurchaseOrderService {
                 .unitPrice(line.getUnitPrice())
                 .totalLine(line.getTotalLine())
                 .build();
+    }
+
+    /**
+     * HU-AP-15 E3 (Bloque AR): bloquea creacion/edicion de OC con cantidades
+     * negativas o cero, o precios unitarios cero. Mensaje literal HU.
+     */
+    private void validateOrderLines(java.util.List<CreatePurchaseOrderLineRequest> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return;
+        }
+        int idx = 1;
+        for (CreatePurchaseOrderLineRequest l : lines) {
+            if (l.getQuantity() == null || l.getQuantity().signum() <= 0) {
+                throw new IllegalArgumentException(
+                        "Linea " + idx + ": la cantidad debe ser mayor a cero. "
+                        + "No se puede generar una orden de compra con cantidades invalidas.");
+            }
+            if (l.getUnitPrice() == null || l.getUnitPrice().signum() <= 0) {
+                throw new IllegalArgumentException(
+                        "Linea " + idx + ": el precio unitario debe ser mayor a cero. "
+                        + "No se puede generar una orden de compra con precios invalidos.");
+            }
+            idx++;
+        }
     }
 }

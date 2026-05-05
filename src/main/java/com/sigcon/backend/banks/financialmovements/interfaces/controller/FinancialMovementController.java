@@ -63,7 +63,7 @@ public class FinancialMovementController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado"),
         @ApiResponse(responseCode = "404", description = "Cuenta bancaria no encontrada")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> list(
             @RequestParam Long bankAccountId,
             @RequestParam(required = false, defaultValue = "false") boolean unmatchedOnly) {
@@ -86,7 +86,7 @@ public class FinancialMovementController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado"),
         @ApiResponse(responseCode = "404", description = "Cuenta bancaria no encontrada")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> store(
             @RequestParam Long bankAccountId,
             @Valid @RequestBody CreateBankFinancialMovementRequest request,
@@ -107,7 +107,7 @@ public class FinancialMovementController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado"),
         @ApiResponse(responseCode = "404", description = "Movimiento financiero no encontrado")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         return financialMovementService.listForBankAccount(id, false);
     }
@@ -126,7 +126,7 @@ public class FinancialMovementController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Matching ejecutado")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> autoMatch(
             @RequestParam(required = false) Long bankAccountId,
             @RequestParam(required = false, defaultValue = "3") Integer dateToleranceDays) {

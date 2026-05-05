@@ -42,7 +42,7 @@ public class RoleController {
     private final RoleService roleService;
 
     @PostMapping("/getRoles")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ROLES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ROLES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar roles con filtros y paginacion", description = "Obtiene la lista paginada de roles del sistema <br> Permiso requerido: VIEW_ROLES")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de roles obtenida exitosamente"),
@@ -92,7 +92,7 @@ public class RoleController {
     }
 
     @PostMapping("/assignRole")
-    @PreAuthorize("hasAuthority('PERM_ASSIGN_ROLE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_ROLE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Asignar rol a usuario", description = "Asigna un rol existente a un usuario del sistema <br> Permiso requerido: ASSIGN_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol asignado exitosamente al usuario"),
@@ -132,7 +132,7 @@ public class RoleController {
     }
 
     @PostMapping("/permissions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar permisos con filtros", description = "Obtiene la lista paginada de permisos del sistema <br> Permiso requerido: VIEW_PERMISSIONS")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de permisos obtenida exitosamente"),

@@ -97,6 +97,8 @@ public class ThirdPartyService {
     private final AssetsRepository assetsRepository;
     private final InvoiceRepository invoiceRepository;
     private final CommercialDataRepository commercialDataRepository;
+    /** HU-TER-01 E2.0 (Bloque AN, 2026-05-04): pestaña Bancaria. */
+    private final com.sigcon.backend.third_parties.bank_accounts.domain.repository.ThirdPartyBankAccountRepository thirdPartyBankAccountRepository;
     /** TER-10 x NOM: bloquea eliminacion si el tercero es empleado activo. */
     private final com.sigcon.backend.nomina.domain.repository.EmployeeRepository employeeRepository;
     /** HU-TER-10 E1/E3 (2026-04-27): bloquea eliminacion si tiene facturas AR. */
@@ -127,7 +129,8 @@ public class ThirdPartyService {
         // F-TER-005: Validar unicidad por NIT solamente (no NIT+DV)
         // El NIT es identificador tributario único por empresa/persona en Colombia
         if (thirdPartyRepository.existsByNitAndDeletedAtIsNull(request.getNit())) {
-            throw new IllegalArgumentException("TERC_011: El NIT ya existe en el sistema. El NIT es un identificador único por persona/empresa.");
+            // HU-TER-02 E3.0 (Bloque AN, 2026-05-04): mensaje literal del Excel.
+            throw new IllegalArgumentException("Ya existe un tercero registrado con ese NIT");
         }
 
         Set<ThirdPartyRoleCatalog> roles = resolveRoles(request.getRoleIds());
@@ -405,12 +408,43 @@ public class ThirdPartyService {
                         .paymentTerms(thirdParty.getPaymentTerms())
                         .marketSegment(thirdParty.getMarketSegment())
                         .build())
+                .banking(buildBankingTab(thirdParty.getId()))
                 .build();
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Informacion detallada del tercero obtenida correctamente."),
                         Optional.of(detail)));
+    }
+
+    /**
+     * HU-TER-01 E2.0 (Bloque AN, 2026-05-04): pestaña Bancaria. Lista las
+     * cuentas bancarias asociadas al tercero ordenadas con la principal
+     * primero. Si no tiene ninguna, devuelve count=0 y accounts=[] para que
+     * el frontend muestre el estado vacio.
+     */
+    private ThirdPartyDetailDTO.BankingTab buildBankingTab(Long thirdPartyId) {
+        var links = thirdPartyBankAccountRepository.findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId);
+        var accounts = links.stream()
+                .sorted((a, b) -> Boolean.compare(
+                        Boolean.TRUE.equals(b.getIsPrimary()),
+                        Boolean.TRUE.equals(a.getIsPrimary())))
+                .map(link -> {
+                    var ba = link.getBankAccount();
+                    return ThirdPartyDetailDTO.BankingAccount.builder()
+                            .linkId(link.getId())
+                            .bankAccountId(ba != null ? ba.getId() : null)
+                            .accountNumber(ba != null ? ba.getAccountNumber() : null)
+                            .accountType(ba != null && ba.getAccountType() != null ? ba.getAccountType().name() : null)
+                            .bankName(ba != null && ba.getBank() != null ? ba.getBank().getName() : null)
+                            .isPrimary(link.getIsPrimary())
+                            .build();
+                })
+                .toList();
+        return ThirdPartyDetailDTO.BankingTab.builder()
+                .count(accounts.size())
+                .accounts(accounts)
+                .build();
     }
 
     /**
@@ -1245,7 +1279,8 @@ public class ThirdPartyService {
         }
         if (blockingReason == null || blockingReason.trim().length() < 20) {
             throw new IllegalArgumentException(
-                    "TERC_031: El tercero no puede ser bloqueado sin motivo registrado (min. 20 caracteres).");
+                    // HU-TER-04 E3.0 (Bloque AN, 2026-05-04): mensaje literal Excel.
+                    "El tercero no puede ser bloqueado sin motivo registrado (minimo 20 caracteres)");
         }
     }
 

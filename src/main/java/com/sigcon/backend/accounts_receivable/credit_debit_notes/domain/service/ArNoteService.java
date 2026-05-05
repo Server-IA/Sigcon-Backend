@@ -58,6 +58,7 @@ public class ArNoteService {
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
     private final AuditPublisher auditPublisher;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private final DataTableSpecificationBuilder<ArCreditDebitNote> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -255,6 +256,16 @@ public class ArNoteService {
         } catch (RuntimeException e) {
             log.error("Error inesperado generando asiento para nota AR {}", note.getNoteNumber(), e);
             throw e;
+        }
+
+        // HU-AR-07 E3: publicar evento Spring para CG/INT/AU.
+        try {
+            eventPublisher.publishEvent(new com.sigcon.backend.accounts_receivable.events
+                    .ArNoteAppliedEvent(this, note.getId(), invoice.getId(),
+                    noteType, note.getAmount(), note.getJournalEntryId(),
+                    note.getReason()));
+        } catch (Exception ev) {
+            log.warn("No se pudo publicar ArNoteAppliedEvent: {}", ev.getMessage());
         }
 
         return ResponseEntity.ok(

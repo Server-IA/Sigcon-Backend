@@ -54,7 +54,7 @@ public class AssetReportController {
      * @return datos del reporte agrupados segun criterio seleccionado
      */
     @PostMapping("/generate")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Generar reporte de activos (JSON)",
                description = "ACT-04: Genera un reporte de activos filtrado por rango de fechas "
                        + "de adquisicion y agrupado por clasificacion, periodo o sin agrupar.")
@@ -79,18 +79,27 @@ public class AssetReportController {
                     request.getEndDate(),
                     request.getGroupBy());
 
+            // HU-ACT-04 E3 (QA 2026-05-05): si el reporte sale vacio devolver
+            // mensaje literal del Excel para que el frontend no genere archivo.
+            int totalRows = reportData == null ? 0 : reportData.values().stream()
+                    .mapToInt(list -> list == null ? 0 : list.size()).sum();
+            String okMsg = totalRows == 0
+                    ? "No hay activos registrados con los criterios seleccionados."
+                    : "Reporte de activos generado exitosamente.";
+
             return ResponseEntity.ok(
                     SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("Reporte de activos generado exitosamente."),
+                            Optional.of(okMsg),
                             Optional.of(reportData)));
 
         } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
             throw __tie;
         } catch (Exception e) {
             log.error("Error al generar reporte de activos: {}", e.getMessage(), e);
+            // HU-ACT-04 E6: mensaje literal del Excel para errores internos.
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorRespondJson.getErrorRespondMessage(
-                            Optional.of("Error al generar el reporte: " + e.getMessage())));
+                            Optional.of("Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intentelo nuevamente.")));
         }
     }
 
@@ -102,7 +111,7 @@ public class AssetReportController {
      * @return archivo PDF como bytes con Content-Type application/pdf
      */
     @PostMapping("/generate/pdf")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Generar reporte de activos (PDF)",
                description = "ACT-07: Genera y descarga un reporte de activos en formato PDF "
                        + "filtrado por rango de fechas y con agrupamiento opcional.")

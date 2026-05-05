@@ -3,6 +3,7 @@ package com.sigcon.backend.banks.checks.domain.service;
 import com.sigcon.backend.banks.checkbooks.domain.model.Checkbook;
 import com.sigcon.backend.banks.checkbooks.domain.repository.CheckbookRepository;
 import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
+import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.banks.financialmovements.domain.service.FinancialMovementService;
 import com.sigcon.backend.banks.checks.application.CheckDTO;
 import com.sigcon.backend.banks.checks.application.CheckbookDTO;
@@ -58,6 +59,7 @@ public class CheckService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final FinancialMovementService financialMovementService;
+    private final FinancialMovementRepository financialMovementRepository;
     private final AuditPublisher auditPublisher;
 
 
@@ -74,6 +76,20 @@ public class CheckService {
 
         if (checkRepository.existsByNumberCheckAndDeletedAtIsNull(request.getNumberCheck())) {
             throw new IllegalArgumentException("BNK-ERR-091: Numero de cheque ya ha sido emitido");
+        }
+
+        // HU-018 E4 (Bloque AO): validar fondos disponibles (saldo + sobregiro permitido).
+        if (checkbook.getBankAccount() != null) {
+            var account = checkbook.getBankAccount();
+            BigDecimal initial = account.getInitialBalance() != null ? account.getInitialBalance() : BigDecimal.ZERO;
+            BigDecimal moves = financialMovementRepository.sumAmountByBankAccountId(account.getId());
+            BigDecimal available = initial.add(moves != null ? moves : BigDecimal.ZERO);
+            if (Boolean.TRUE.equals(account.getAllowsOverdraft()) && account.getCreditLimit() != null) {
+                available = available.add(account.getCreditLimit());
+            }
+            if (available.compareTo(request.getValue()) < 0) {
+                throw new IllegalArgumentException("Fondos insuficientes. El saldo disponible es de $" + available);
+            }
         }
 
         String supportPath = null;
@@ -109,6 +125,16 @@ public class CheckService {
         auditPublisher.publishCreate(AuditModule.BNK, "Check", check.getId(),
                 "Cheque emitido #" + check.getNumberCheck() + " por $" + check.getValue()
                         + " a " + check.getBeneficiary());
+
+        // HU-015 E6 (Bloque AO): recalcular usados/disponibles y marcar AGOTADA si es el ultimo cheque.
+        int totalChecks = checkbook.getTotalChecks() != null ? checkbook.getTotalChecks() : 0;
+        int usedAfterEmit = (int) checkRepository.countByCheckbook_Id(checkbook.getId());
+        checkbook.setUsedChecks(usedAfterEmit);
+        checkbook.setAvailableChecks(totalChecks - usedAfterEmit);
+        if (totalChecks > 0 && (totalChecks - usedAfterEmit) <= 0) {
+            checkbook.setStatus(com.sigcon.backend.banks.checkbooks.domain.model.enums.CheckbookStatus.AGOTADA);
+        }
+        checkbookRepository.save(checkbook);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque emitido exitosamente - Numero: " + check.getNumberCheck()),

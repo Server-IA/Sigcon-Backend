@@ -105,6 +105,18 @@ public class InvoiceAttachmentService {
             throw new IllegalStateException("Error leyendo el archivo: " + e.getMessage());
         }
 
+        // HU-AP-12 E3 (Bloque AR): calcular hash SHA-256 del contenido y
+        // bloquear si ya existe el mismo archivo (mismo contenido) en la
+        // empresa, mensaje literal HU.
+        String fileHash = computeSha256(content);
+        var dups = attachmentRepository.findByFileHashAndReplacedByIdIsNullAndDeletedAtIsNull(fileHash);
+        if (!dups.isEmpty()) {
+            InvoiceAttachment existing = dups.get(0);
+            throw new IllegalArgumentException(
+                    "Este documento ya fue adjuntado a otra factura "
+                    + "(factura #" + existing.getInvoiceId() + ", archivo " + existing.getFileName() + ")");
+        }
+
         InvoiceAttachment attachment = InvoiceAttachment.builder()
                 .invoiceId(invoiceId)
                 .documentType(docType)
@@ -114,6 +126,8 @@ public class InvoiceAttachmentService {
                 .fileContent(content)
                 .description(description)
                 .uploadedBy(currentUsername())
+                .fileHash(fileHash)
+                .version(1)
                 .build();
 
         attachment = attachmentRepository.save(attachment);
@@ -127,6 +141,89 @@ public class InvoiceAttachmentService {
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Documento soporte adjuntado correctamente"),
                 Optional.of(toDto(attachment))));
+    }
+
+    /**
+     * HU-AP-12 E4 (Bloque AR): reemplaza un adjunto existente por una nueva
+     * version. El adjunto previo se marca como replaced_by_id apuntando al
+     * nuevo y queda como historico. El nuevo arranca en version anterior + 1.
+     *
+     * <p>Caso de uso tipico: el proveedor envia una version corregida del acta
+     * de recepcion y el contador necesita reemplazar el documento sin perder
+     * trazabilidad de la version original.
+     */
+    @Transactional
+    public ResponseEntity<?> replace(Long previousAttachmentId, MultipartFile file,
+                                      String description) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Debe proporcionar un archivo");
+        }
+        InvoiceAttachment previous = attachmentRepository.findById(previousAttachmentId)
+                .orElseThrow(() -> new IllegalArgumentException("El adjunto previo no fue encontrado"));
+        if (previous.getReplacedById() != null) {
+            throw new IllegalStateException(
+                    "Este adjunto ya fue reemplazado por la version #" + previous.getReplacedById());
+        }
+
+        String mime = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
+        if (!ALLOWED_MIME.contains(mime)) {
+            throw new IllegalArgumentException(
+                    "Tipo de archivo no permitido. Solo se aceptan PDF, JPG o PNG.");
+        }
+        if (file.getSize() > MAX_SIZE_BYTES) {
+            throw new IllegalArgumentException(
+                    "El archivo supera el tamaño maximo permitido (5MB).");
+        }
+
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("Error leyendo el archivo: " + e.getMessage());
+        }
+        String fileHash = computeSha256(content);
+
+        InvoiceAttachment newer = InvoiceAttachment.builder()
+                .invoiceId(previous.getInvoiceId())
+                .documentType(previous.getDocumentType())
+                .fileName(file.getOriginalFilename())
+                .mimeType(mime)
+                .fileSize(file.getSize())
+                .fileContent(content)
+                .description(description != null ? description : previous.getDescription())
+                .uploadedBy(currentUsername())
+                .fileHash(fileHash)
+                .version((previous.getVersion() != null ? previous.getVersion() : 1) + 1)
+                .build();
+        newer = attachmentRepository.save(newer);
+
+        previous.setReplacedById(newer.getId());
+        attachmentRepository.save(previous);
+
+        auditPublisher.publishUpdate(AuditModule.AP, "InvoiceAttachment", newer.getId(),
+                "Adjunto reemplazado: " + previous.getFileName() + " (v" + previous.getVersion()
+                + ") -> " + newer.getFileName() + " (v" + newer.getVersion() + ")");
+        log.info("HU-AP-12 E4: adjunto {} reemplazado por {} (v{})", previous.getId(),
+                newer.getId(), newer.getVersion());
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Documento reemplazado correctamente. Nueva version guardada."),
+                Optional.of(toDto(newer))));
+    }
+
+    /** HU-AP-12 E3 (Bloque AR): SHA-256 hex en lowercase del contenido. */
+    private String computeSha256(byte[] content) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(content);
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 no disponible", e);
+        }
     }
 
     /**

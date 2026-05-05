@@ -17,4 +17,13 @@ public interface InvoiceAttachmentRepository extends JpaRepository<InvoiceAttach
     /** Lista adjuntos vigentes de una factura filtrados por tipo de documento. */
     List<InvoiceAttachment> findByInvoiceIdAndDocumentTypeAndDeletedAtIsNull(
             Long invoiceId, String documentType);
+
+    /**
+     * HU-AP-12 E3 (Bloque AR): busca adjuntos con el mismo SHA-256 del
+     * contenido para detectar duplicados por contenido. El @Filter de tenant
+     * limita a la empresa actual (un mismo PDF puede convivir en empresas
+     * distintas). Solo activos (deleted_at IS NULL) y no reemplazados
+     * (replaced_by_id IS NULL).
+     */
+    List<InvoiceAttachment> findByFileHashAndReplacedByIdIsNullAndDeletedAtIsNull(String fileHash);
 }

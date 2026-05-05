@@ -58,8 +58,13 @@ public class SalesTaxEngine {
         for (Long ruleId : taxRuleIds) {
             TaxRulerEntity rule = ruleTaxRepository.findById(ruleId).orElse(null);
             if (rule == null) {
-                log.warn("Regla tributaria {} no encontrada; se omite", ruleId);
-                continue;
+                // HU-AR-13 E2: si falta una regla configurada, NO se silencia.
+                // Lanza error claro indicando la regla faltante para que el contador
+                // la configure antes de continuar.
+                log.error("Regla tributaria id={} no encontrada en cfg_ruler_tax", ruleId);
+                throw new IllegalStateException(
+                        "Falta una regla tributaria configurada (id=" + ruleId
+                        + "). Verifique las reglas en Listas Contables antes de calcular impuestos.");
             }
 
             BigDecimal percentage = rule.getPercentage() != null

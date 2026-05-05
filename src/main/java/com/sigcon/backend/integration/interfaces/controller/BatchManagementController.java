@@ -30,7 +30,7 @@ import java.util.Map;
  * auditar y reintentar documentos fallidos.
  */
 @Slf4j
-@PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
+@PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
 @RestController
 @RequestMapping("/api/contabilidad")
 @RequiredArgsConstructor
@@ -51,6 +51,7 @@ public class BatchManagementController {
         @ApiResponse(responseCode = "200", description = "Listado paginado (content + page + totalPages)"),
         @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_INT.LOTES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/lotes")
     public ResponseEntity<?> listBatches(
             @Parameter(description = "Sistema origen (Disriego, Sigma, AgroFusion)", example = "Disriego")
@@ -80,6 +81,7 @@ public class BatchManagementController {
         @ApiResponse(responseCode = "400", description = "Lote inexistente"),
         @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_INT.LOTES.VER_DETALLE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/lotes/{id}")
     public ResponseEntity<?> batchDetail(
             @Parameter(description = "ID interno del lote", example = "1")
@@ -95,6 +97,7 @@ public class BatchManagementController {
         @ApiResponse(responseCode = "400", description = "Lote inexistente"),
         @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_INT.LOTES.DESCARGAR_JSON') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping(value = "/lotes/{id}/payload", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> downloadPayload(
             @Parameter(description = "ID interno del lote", example = "1")
@@ -120,6 +123,7 @@ public class BatchManagementController {
                 description = "Transfer inexistente, retryAllowed=false (E2), o estado no FAILED"),
         @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_INT.LOTES.REINTENTAR_DOCUMENTO') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/transferencias/{id}/retry")
     public ResponseEntity<?> retry(
             @Parameter(description = "ID del transfer a reintentar", example = "1")
@@ -154,6 +158,7 @@ public class BatchManagementController {
                 description = "Lista cronologica de intentos (puede estar vacia para transfers nuevos)"),
         @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_INT.LOTES.VER_DETALLE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/transferencias/{id}/history")
     public ResponseEntity<?> getTransferHistory(
             @Parameter(description = "ID del transfer", example = "1")

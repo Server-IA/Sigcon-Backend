@@ -77,7 +77,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Error de validación (nombre duplicado, fechas inválidas, campos obligatorios)"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody(required = false) CreateCashFlowProjectionDTO request,
             BindingResult bindingResult) {
@@ -117,7 +117,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateCashFlowProjectionDTO request,
@@ -144,7 +144,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
 
         return cashFlowProjectionService.delete(id);
@@ -166,7 +166,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> inactivate(@PathVariable Long id) {
 
         return cashFlowProjectionService.inactivate(id);
@@ -186,7 +186,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Estado no permite aprobacion"),
         @ApiResponse(responseCode = "404", description = "No encontrada")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> approve(@PathVariable Long id) {
         return cashFlowProjectionService.approve(id);
     }
@@ -206,7 +206,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Solo proyecciones APROBADAS pueden marcarse como EJECUTADA"),
         @ApiResponse(responseCode = "404", description = "No encontrada")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> execute(@PathVariable Long id) {
         return cashFlowProjectionService.execute(id);
     }
@@ -245,7 +245,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "No se encontraron proyecciones o parámetros inválidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
 
         return cashFlowProjectionService.findAllPaged(request);
@@ -262,7 +262,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada o eliminada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> detail(@PathVariable Long id) {
 
         return cashFlowProjectionService.getDetail(id);

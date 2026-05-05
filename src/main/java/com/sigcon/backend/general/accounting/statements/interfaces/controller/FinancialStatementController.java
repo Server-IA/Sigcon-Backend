@@ -52,7 +52,7 @@ public class FinancialStatementController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> balanceGeneral(@Valid @RequestBody StatementRequest request) {
         try {
             return financialStatementService.getBalanceGeneral(request.getYear(), request.getMonth());
@@ -76,7 +76,7 @@ public class FinancialStatementController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> estadoResultados(@Valid @RequestBody StatementRequest request) {
         try {
             return financialStatementService.getEstadoResultados(request.getYear(), request.getMonth());
@@ -100,7 +100,7 @@ public class FinancialStatementController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> flujoEfectivo(@Valid @RequestBody StatementRequest request) {
         try {
             return financialStatementService.getFlujoEfectivo(request.getYear(), request.getMonth());
@@ -126,7 +126,7 @@ public class FinancialStatementController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodo invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> cambiosPatrimonio(@Valid @RequestBody StatementRequest request) {
         try {
             return financialStatementService.getEstadoCambiosPatrimonio(request.getYear(), request.getMonth());
@@ -150,7 +150,7 @@ public class FinancialStatementController {
             @ApiResponse(responseCode = "400", description = "Parametros de periodos invalidos"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> comparativo(@Valid @RequestBody ComparativeRequest request) {
         try {
             return financialStatementService.getComparativo(

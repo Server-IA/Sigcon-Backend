@@ -201,18 +201,59 @@ public class GoodsReceiptService {
             Long invoiceThirdPartyId = invoice.getThirdParty().getId();
             if (!poThirdPartyId.equals(invoiceThirdPartyId)) {
                 throw new IllegalArgumentException(
-                        "Proveedor de factura y recepción no coinciden.");
+                        "El proveedor de la factura no coincide con el de la recepción");
+            }
+        }
+
+        // HU-AP-19 E3 / E5 (Bloque AR): comparar monto factura vs total recepcion.
+        // E3 (bloqueo): factura > recepcion → no permitir vincular.
+        // E5 (alerta info): factura < recepcion → vincular pero avisar diferencia.
+        java.math.BigDecimal receiptTotal = java.math.BigDecimal.ZERO;
+        if (receipt.getLines() != null) {
+            for (var rl : receipt.getLines()) {
+                java.math.BigDecimal qty = rl.getQuantityReceived();
+                if (qty == null) continue;
+                java.math.BigDecimal price = java.math.BigDecimal.ZERO;
+                if (rl.getPurchaseOrderLine() != null && rl.getPurchaseOrderLine().getUnitPrice() != null) {
+                    price = rl.getPurchaseOrderLine().getUnitPrice();
+                }
+                receiptTotal = receiptTotal.add(qty.multiply(price));
+            }
+        }
+        java.math.BigDecimal invoiceTotal = invoice.getTotalAmount() != null
+                ? java.math.BigDecimal.valueOf(invoice.getTotalAmount())
+                : java.math.BigDecimal.ZERO;
+
+        String warning = null;
+        if (receiptTotal.signum() > 0) {
+            int cmp = invoiceTotal.compareTo(receiptTotal);
+            if (cmp > 0) {
+                throw new IllegalArgumentException(
+                        "El monto de la factura supera el valor de lo recibido. "
+                        + "Verifique las cantidades o solicite una nota crédito al proveedor.");
+            } else if (cmp < 0) {
+                java.math.BigDecimal diff = receiptTotal.subtract(invoiceTotal);
+                warning = "El monto facturado ($" + invoiceTotal + ") es inferior al monto recibido ($"
+                        + receiptTotal + "). Diferencia: $" + diff
+                        + ". Verifique si existe nota crédito del proveedor pendiente de registrar.";
+                log.warn("HU-AP-19 E5 receipt={} invoice={} diff={}", receipt.getId(), invoice.getId(), diff);
             }
         }
 
         receipt.setInvoiceId(invoice.getId());
         receipt = receiptRepository.save(receipt);
-        auditPublisher.publishCreate(AuditModule.AP, "GoodsReceipt", receipt.getId(), "GoodsReceipt creado id=" + receipt.getId());
+        auditPublisher.publishCreate(AuditModule.AP, "GoodsReceipt", receipt.getId(),
+                warning != null
+                    ? "GoodsReceipt vinculado a factura " + invoice.getId() + " con alerta: " + warning
+                    : "GoodsReceipt creado id=" + receipt.getId());
         log.info("Recepcion {} vinculada a factura {}", receipt.getReceiptNumber(), invoice.getId());
 
+        String successMsg = warning != null
+                ? ("Factura vinculada con alerta: " + warning)
+                : "Factura vinculada exitosamente a la recepcion";
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
-                        Optional.of("Factura vinculada exitosamente a la recepcion"), Optional.of(toDTO(receipt))));
+                        Optional.of(successMsg), Optional.of(toDTO(receipt))));
     }
 
     /**
@@ -245,10 +286,13 @@ public class GoodsReceiptService {
             throw new IllegalStateException("La recepcion ya esta rechazada");
         }
 
+        // HU-AP-21 E3 (Bloque AR): mensaje literal HU. Si la recepcion ya tiene
+        // factura asociada, la devolucion fisica de mercancia no procede aqui;
+        // debe solicitarse una nota credito al proveedor para ajustar saldos.
         if (receipt.getInvoiceId() != null) {
             throw new IllegalStateException(
-                    "No se puede rechazar una recepcion vinculada a factura (ID: "
-                            + receipt.getInvoiceId() + "). Desvinculela primero.");
+                    "No se puede devolver: los ítems seleccionados ya tienen una recepción "
+                    + "con factura de compra asociada. Solicite una nota crédito al proveedor.");
         }
 
         receipt.setStatus("REJECTED");

@@ -149,12 +149,18 @@ public class CashFlowProjectionService {
         }
 
         // BNK-RF-30: proyección APROBADA requiere motivo
+        // HU-043 E2/E3 (Bloque AO): motivo obligatorio + minimo 30 caracteres.
         if (projection.getStatus() == ProjectionStatus.APROBADA) {
-            if (request.getModificationReason() == null
-                    || request.getModificationReason().isBlank()) {
+            String reason = request.getModificationReason();
+            if (reason == null || reason.isBlank()) {
                 return ResponseEntity.badRequest()
                         .body(ErrorRespondJson.getErrorRespondMessage(
-                                Optional.of("El motivo de modificación es obligatorio para proyecciones en estado APROBADA.")));
+                                Optional.of("Debe ingresar el motivo de modificación para editar una proyección aprobada")));
+            }
+            if (reason.trim().length() < 30) {
+                return ResponseEntity.badRequest()
+                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                Optional.of("El motivo de modificación debe tener al menos 30 caracteres")));
             }
         }
 

@@ -151,6 +151,11 @@ public class BankAccountService {
             return error("BNK-ERR-008", "Fecha de apertura no puede ser futura");
         }
 
+        // HU-001 E3 (Bloque AO): unicidad de numero de cuenta por banco. Mensaje literal del Excel.
+        if (bankAccountRepository.existsByBankIdAndAccountNumberAndDeletedAtIsNull(request.getBankId(), request.getAccountNumber().trim())) {
+            return error("BNK-ERR-001", "Ya existe una cuenta registrada con ese número en ese banco");
+        }
+
         BankAccount entity = BankAccount.builder()
                 .code(request.getCode().trim())
                 .accountNumber(request.getAccountNumber().trim())
@@ -537,8 +542,8 @@ public class BankAccountService {
      * Incluye DTOs anidados para banco, sucursal, moneda, cuenta contable y centro de costo.
      */
     private BankAccountDTO toDto(BankAccount e) {
-        // Flag para controlar si se enmascara el numero de cuenta (deshabilitado temporalmente)
-        boolean used = false;
+        // HU-004 E4 (Bloque AO): mostrar siempre numero de cuenta enmascarado (****1234) en respuestas.
+        boolean used = true;
 
         return BankAccountDTO.builder()
                 .id(e.getId())

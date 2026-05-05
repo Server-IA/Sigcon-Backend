@@ -42,7 +42,7 @@ public class ThirdPartyBankAccountController {
             @ApiResponse(responseCode = "400", description = "TPBA_001: El tercero no existe")
     })
     @GetMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTIES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTIES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getByThirdParty(@PathVariable Long thirdPartyId) {
         return thirdPartyBankAccountService.getByThirdParty(thirdPartyId);
     }
@@ -59,7 +59,7 @@ public class ThirdPartyBankAccountController {
             @ApiResponse(responseCode = "409", description = "TPBA_003: Ya esta vinculada")
     })
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTIES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTIES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> linkBankAccount(
             @PathVariable Long thirdPartyId,
             @Valid @RequestBody LinkBankAccountRequest request) {
@@ -76,7 +76,7 @@ public class ThirdPartyBankAccountController {
             @ApiResponse(responseCode = "400", description = "TPBA_004: Vinculacion no existe")
     })
     @DeleteMapping("/{linkId}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_THIRD_PARTIES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_THIRD_PARTIES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> unlinkBankAccount(
             @PathVariable Long thirdPartyId,
             @PathVariable Long linkId) {

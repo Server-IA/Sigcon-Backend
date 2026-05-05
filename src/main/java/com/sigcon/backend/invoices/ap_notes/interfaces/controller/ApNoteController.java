@@ -47,7 +47,7 @@ public class ApNoteController {
             @ApiResponse(responseCode = "200", description = "Listado de notas")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchNotes(@RequestBody(required = false) DataTableRequest request) {
         return noteService.getNotes(request);
     }
@@ -65,7 +65,7 @@ public class ApNoteController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_AP_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AP_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createNote(@Valid @RequestBody CreateApNoteRequest request,
                                         BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -90,7 +90,7 @@ public class ApNoteController {
             @ApiResponse(responseCode = "200", description = "Lista de notas de la factura")
     })
     @GetMapping("/invoice/{invoiceId}")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getNotesByInvoice(@PathVariable Long invoiceId) {
         return noteService.getNotesByInvoice(invoiceId);
     }

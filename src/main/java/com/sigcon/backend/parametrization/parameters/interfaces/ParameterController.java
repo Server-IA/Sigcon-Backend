@@ -33,7 +33,7 @@ public class ParameterController {
      */
 
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PARAMETER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getSystemParameters(@RequestBody(required = false) DataTableRequest dtRequest) {
         return parameterService.getSystemParametersPaged(dtRequest);
     }
@@ -43,7 +43,7 @@ public class ParameterController {
      * POST /api/parameters/store
      */
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PARAMETER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PARAMETER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> storeSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
         return parameterService.storeSystemParameter(request, bindingResult);
     }
@@ -53,7 +53,7 @@ public class ParameterController {
      * PUT /api/parameters/update
      */
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_PARAMETER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PARAMETER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateSystemParameter(@Valid @RequestBody Parameter request, BindingResult bindingResult) {
         return parameterService.updateSystemParameter(request, bindingResult);
     }
@@ -63,7 +63,7 @@ public class ParameterController {
      * DELETE /api/parameters/delete/{id}
      */
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_PARAMETER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_PARAMETER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteSystemParameter(@PathVariable Long id) {
         return parameterService.deleteSystemParameter(id);
     }
@@ -72,6 +72,7 @@ public class ParameterController {
      * PA-RF-29: Visualización de parámetros por usuario
      * GET /api/parameters/user
      */
+    @PreAuthorize("hasAuthority('PERM_PAR.PARAMETROS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/user")
     public ResponseEntity<?> getUserParameters(@RequestBody(required = false) DataTableRequest dtRequest) {
         return parameterService.getUserParameters(dtRequest);
@@ -81,6 +82,7 @@ public class ParameterController {
      * PA-RF-30: Asignación / Creación de parámetros por usuario
      * POST /api/parameters/user
      */
+    @PreAuthorize("hasAuthority('PERM_PAR.PARAMETROS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/user/create")
     public ResponseEntity<?> createUserParameter(@RequestBody CreateParameterRequest request) {
         return parameterService.createUserParameter(request);
@@ -90,6 +92,7 @@ public class ParameterController {
      * PA-RF-31: Edición de parámetros por usuario
      * PUT /api/parameters/user/{parameterId}
      */
+    @PreAuthorize("hasAuthority('PERM_PAR.PARAMETROS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/user/{parameterId}")
     public ResponseEntity<?> updateUserParameter(
             @PathVariable Long parameterId,
@@ -101,6 +104,7 @@ public class ParameterController {
      * PA-RF-32: Eliminación de parámetros por usuario
      * DELETE /api/parameters/user/{parameterId}
      */
+    @PreAuthorize("hasAuthority('PERM_PAR.PARAMETROS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/user/{parameterId}")
     public ResponseEntity<?> deleteUserParameter(@PathVariable Long parameterId) {
         return parameterService.deleteUserParameter(parameterId);

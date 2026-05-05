@@ -59,7 +59,7 @@ public class DianReportController {
         @ApiResponse(responseCode = "400", description = "Formato o anio invalido"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> generate(@Valid @RequestBody DianReportRequest request) {
         try {
             DianReportResponse result = dispatch(request.getFormat(), request.getYear());
@@ -83,7 +83,7 @@ public class DianReportController {
         @ApiResponse(responseCode = "400", description = "Formato o anio invalido"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> downloadCsv(@PathVariable String format, @PathVariable Integer year) {
         try {
             DianReportResponse result = dispatch(format, year);

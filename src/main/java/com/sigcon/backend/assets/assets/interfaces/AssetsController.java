@@ -49,7 +49,7 @@ public class AssetsController {
         }
 
         @PostMapping("/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Registrar activo", description = "ACT-RF-01: crea un activo con validaciones contables y de terceros.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "201", description = "Activo registrado correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -71,7 +71,7 @@ public class AssetsController {
         }
 
         @PostMapping("/bulk/store")
-        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Carga masiva de activos", description = "Importa activos desde archivo CSV/XLSX enviado en base64. "
                         +
                         "Valida columnas, integridad y reglas contables antes de guardar.")
@@ -87,7 +87,7 @@ public class AssetsController {
         }
 
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Consultar activos", description = "Consulta activos en formato DataTable.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -107,7 +107,7 @@ public class AssetsController {
         }
 
         @GetMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Detalle de activo", description = "Obtiene la informacion de un activo especifico.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Detalle obtenido correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -122,7 +122,7 @@ public class AssetsController {
         }
 
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Editar activo", description = "ACT-RF-09: actualiza un activo existente.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Activo actualizado correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -145,7 +145,7 @@ public class AssetsController {
         }
 
         @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_ASSET') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_ASSET') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Eliminar activo", description = "Elimina lógicamente un activo.")
         public ResponseEntity<?> delete(@PathVariable Long id) {
                 try {

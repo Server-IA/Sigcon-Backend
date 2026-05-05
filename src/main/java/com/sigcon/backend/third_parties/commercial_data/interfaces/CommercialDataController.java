@@ -41,7 +41,7 @@ public class CommercialDataController {
             @ApiResponse(responseCode = "409", description = "CD_002: Ya existen datos comerciales vigentes para este tercero")
     })
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_CREATE_COMMERCIAL_DATA') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_COMMERCIAL_DATA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> create(
             @Valid @RequestBody CommercialDataRequest request,
             BindingResult bindingResult) {
@@ -60,7 +60,7 @@ public class CommercialDataController {
             @ApiResponse(responseCode = "404", description = "CD_003: No existen datos comerciales vigentes para este tercero")
     })
     @PutMapping("/{thirdPartyId}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_COMMERCIAL_DATA') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_COMMERCIAL_DATA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long thirdPartyId,
             @Valid @RequestBody CommercialDataRequest request,
@@ -77,7 +77,7 @@ public class CommercialDataController {
             @ApiResponse(responseCode = "404", description = "CD_003: No existen datos comerciales vigentes para este tercero")
     })
     @GetMapping("/{thirdPartyId}")
-    @PreAuthorize("hasAuthority('PERM_VIEW_COMMERCIAL_DATA') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_COMMERCIAL_DATA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getByThirdParty(@PathVariable Long thirdPartyId) {
         return commercialDataService.getByThirdParty(thirdPartyId);
     }
@@ -91,7 +91,7 @@ public class CommercialDataController {
             @ApiResponse(responseCode = "404", description = "CD_003: No existen datos comerciales vigentes para este tercero")
     })
     @DeleteMapping("/{thirdPartyId}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_COMMERCIAL_DATA') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_COMMERCIAL_DATA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long thirdPartyId) {
         return commercialDataService.delete(thirdPartyId);
     }
@@ -106,7 +106,7 @@ public class CommercialDataController {
             @ApiResponse(responseCode = "404", description = "CD_003: No existen datos comerciales vigentes para este tercero")
     })
     @GetMapping("/{thirdPartyId}/history")
-    @PreAuthorize("hasAuthority('PERM_VIEW_COMMERCIAL_DATA') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_COMMERCIAL_DATA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getHistory(@PathVariable Long thirdPartyId) {
         return commercialDataService.getHistory(thirdPartyId);
     }

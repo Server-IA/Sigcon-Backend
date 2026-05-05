@@ -55,7 +55,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "400", description = "Error de validacion"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> store(@Valid @RequestBody ThirdPartyDTO request, BindingResult bindingResult) {
                 return thirdPartyService.create(request, bindingResult);
         }
@@ -69,7 +69,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "400", description = "Archivo invalido o error en alguna fila"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_BULK_STORE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_BULK_STORE_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> bulkStore(@Valid @RequestBody BulkThirdPartyUploadRequest request,
                         BindingResult bindingResult) {
                 return thirdPartyService.bulkStore(request, bindingResult);
@@ -83,7 +83,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "403", description = "Sin permisos"),
                         @ApiResponse(responseCode = "404", description = "Sin resultados")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
                 return thirdPartyService.findAllPaged(request);
         }
@@ -95,7 +95,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> detail(@PathVariable Long id) {
                 return thirdPartyService.getDetail(id);
         }
@@ -106,7 +106,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "200", description = "Catalogo obtenido correctamente"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> rolesCatalog() {
                 return thirdPartyService.getRolesCatalog();
         }
@@ -117,7 +117,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "200", description = "Catalogo obtenido correctamente"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> statusesCatalog() {
                 return thirdPartyService.getStatusesCatalog();
         }
@@ -130,7 +130,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_UPDATE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> update(
                         @PathVariable Long id,
                         @Valid @RequestBody ThirdPartyDTO request,
@@ -148,7 +148,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_MANAGE_THIRD_PARTY_ROLES_STATUS') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_MANAGE_THIRD_PARTY_ROLES_STATUS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> updateRolesStatus(
                         @PathVariable Long id,
                         @Valid @RequestBody UpdateThirdPartyRolesStatusRequest request,
@@ -164,7 +164,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "404", description = "Tercero no encontrado"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_DELETE_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> delete(
                         @PathVariable Long id,
                         @Valid @RequestBody DeleteThirdPartyRequest request,
@@ -182,7 +182,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "200", description = "Historial obtenido correctamente"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> getHistory(@PathVariable Long id) {
                 return changeHistoryService.getHistory(id);
         }
@@ -193,7 +193,7 @@ public class ThirdPartyController {
                         @ApiResponse(responseCode = "200", description = "Asignaciones obtenidas correctamente"),
                         @ApiResponse(responseCode = "403", description = "Sin permisos")
         })
-        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<?> getRoleAssignments(@PathVariable Long id) {
                 List<RoleAssignmentDTO> assignments = roleAssignmentRepository
                                 .findByThirdPartyIdAndDeletedAtIsNull(id)
@@ -219,7 +219,7 @@ public class ThirdPartyController {
          * estado. Ej: GET /export/csv?role=Cliente&status=Activo
          */
         @GetMapping("/export/{format}")
-        @PreAuthorize("hasAuthority('PERM_EXPORT_THIRD_PARTY') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_EXPORT_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         public ResponseEntity<byte[]> export(
                         @PathVariable String format,
                         @org.springframework.web.bind.annotation.RequestParam(required = false) String role,

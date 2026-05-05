@@ -52,7 +52,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "200", description = "Listado de ordenes de compra")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_READ_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchOrders(@RequestBody(required = false) DataTableRequest request) {
         return orderService.getOrders(request);
     }
@@ -70,7 +70,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createOrder(@Valid @RequestBody CreatePurchaseOrderRequest request,
                                          BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -96,7 +96,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Orden no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getOrderById(@PathVariable Long id) {
         try {
             return orderService.getOrderById(id);
@@ -119,7 +119,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o estado invalido")
     })
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateOrder(@PathVariable Long id,
                                          @Valid @RequestBody CreatePurchaseOrderRequest request,
                                          BindingResult bindingResult) {
@@ -146,7 +146,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Estado invalido para esta operacion")
     })
     @PostMapping("/{id}/submit")
-    @PreAuthorize("hasAuthority('PERM_CREATE_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> submitForApproval(@PathVariable Long id) {
         try {
             return orderService.submitForApproval(id);
@@ -169,7 +169,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Estado invalido para esta operacion")
     })
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('PERM_APPROVE_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_APPROVE_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> approveOrder(@PathVariable Long id,
                                           @RequestBody(required = false) ApprovePurchaseOrderRequest request) {
         try {
@@ -193,7 +193,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Estado invalido o razon faltante")
     })
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAuthority('PERM_APPROVE_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_APPROVE_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> rejectOrder(@PathVariable Long id,
                                          @Valid @RequestBody RejectPurchaseOrderRequest request,
                                          BindingResult bindingResult) {
@@ -220,7 +220,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "No se puede eliminar la orden")
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_PURCHASE_ORDER') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_PURCHASE_ORDER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteOrder(@PathVariable Long id) {
         try {
             return orderService.deleteOrder(id);

@@ -102,6 +102,9 @@ public class ApAdvanceService {
         // 2. Validar periodo contable abierto
         accountingPeriodService.validatePeriodOpen(request.getAdvanceDate());
 
+        // HU-AP-05 E3 (Bloque AR): validar fondos suficientes en cuenta/caja.
+        validateSufficientFunds(request.getBankAccountId(), request.getCashId(), request.getAmount());
+
         // 3. Crear anticipo
         ApAdvance advance = ApAdvance.builder()
                 .thirdParty(thirdParty)
@@ -310,5 +313,51 @@ public class ApAdvanceService {
                 .appliedInvoiceId(advance.getAppliedInvoiceId())
                 .appliedAmount(advance.getAppliedAmount())
                 .build();
+    }
+
+    /**
+     * HU-AP-05 E3 (Bloque AR): valida que la cuenta bancaria o caja del
+     * anticipo tenga fondos suficientes. Replica la logica de
+     * ApPaymentService.validateSufficientFunds.
+     */
+    private void validateSufficientFunds(Long bankAccountId, Long cashId, BigDecimal amount) {
+        if (amount == null) {
+            return;
+        }
+        if (bankAccountId != null) {
+            BankAccount ba = bankAccountRepository.findById(bankAccountId).orElse(null);
+            if (ba == null) {
+                return;
+            }
+            BigDecimal initial = ba.getInitialBalance() != null ? ba.getInitialBalance() : BigDecimal.ZERO;
+            BigDecimal moved = financialMovementRepository.sumAmountByBankAccountId(bankAccountId);
+            if (moved == null) {
+                moved = BigDecimal.ZERO;
+            }
+            BigDecimal credit = (Boolean.TRUE.equals(ba.getAllowsOverdraft()) && ba.getCreditLimit() != null)
+                    ? ba.getCreditLimit() : BigDecimal.ZERO;
+            BigDecimal available = initial.add(moved).add(credit);
+            if (amount.compareTo(available) > 0) {
+                throw new IllegalArgumentException(
+                        "El saldo disponible en la cuenta seleccionada no es suficiente para este anticipo. "
+                        + "Saldo disponible: $" + available);
+            }
+        } else if (cashId != null) {
+            Cash cash = cashRepository.findById(cashId).orElse(null);
+            if (cash == null) {
+                return;
+            }
+            BigDecimal initial = cash.getInitialBalance() != null ? cash.getInitialBalance() : BigDecimal.ZERO;
+            BigDecimal moved = financialMovementRepository.sumAmountByCashId(cashId);
+            if (moved == null) {
+                moved = BigDecimal.ZERO;
+            }
+            BigDecimal available = initial.add(moved);
+            if (amount.compareTo(available) > 0) {
+                throw new IllegalArgumentException(
+                        "El saldo disponible en la caja seleccionada no es suficiente para este anticipo. "
+                        + "Saldo disponible: $" + available);
+            }
+        }
     }
 }

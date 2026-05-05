@@ -44,6 +44,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Listado de empleados"),
             @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping
     public ResponseEntity<?> list() {
         return service.list();
@@ -56,6 +57,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Pagina de empleados"),
             @ApiResponse(responseCode = "401", description = "No autenticado")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/search")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         if (request == null) request = new DataTableRequest();
@@ -67,6 +69,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Empleado encontrado"),
             @ApiResponse(responseCode = "400", description = "Empleado no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(
             @Parameter(description = "ID del empleado", example = "1") @PathVariable Long id) {
@@ -80,6 +83,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Historial salarial"),
             @ApiResponse(responseCode = "400", description = "Empleado no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/{id}/historial-salarial")
     public ResponseEntity<?> salaryHistory(
             @Parameter(description = "ID del empleado", example = "1") @PathVariable Long id) {
@@ -92,6 +96,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Empleado creado"),
             @ApiResponse(responseCode = "400", description = "Salario < SMLV, documento duplicado o datos invalidos")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.CREAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateEmployeeRequest req) {
         return service.create(req);
@@ -104,6 +109,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Empleado actualizado"),
             @ApiResponse(responseCode = "400", description = "Salario < SMLV, falta motivo o empleado inexistente")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(
             @Parameter(description = "ID del empleado", example = "1") @PathVariable Long id,
@@ -116,6 +122,7 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Empleado eliminado"),
             @ApiResponse(responseCode = "400", description = "Empleado no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.EMPLEADOS.ELIMINAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(
             @Parameter(description = "ID del empleado", example = "1") @PathVariable Long id) {

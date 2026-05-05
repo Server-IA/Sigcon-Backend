@@ -94,6 +94,34 @@ public class AuditEventListener {
                 null, null, null);
     }
 
+    // HU-AR-01A E4 / HU-AR-02 E4 / HU-AR-07 E3: listeners de eventos AR para
+    // que sean visibles end-to-end (ademas de la entrada que AuditPublisher ya
+    // genera). Asi cualquier modulo que necesite reaccionar tiene el patron
+    // disponible.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onSalesInvoiceCreated(
+            com.sigcon.backend.accounts_receivable.events.SalesInvoiceCreatedEvent event) {
+        log.info("[AuditEventListener] SalesInvoiceCreatedEvent invoice={} numero={} total={} source={}",
+                event.getSalesInvoiceId(), event.getInvoiceNumber(),
+                event.getTotalAmount(), event.getSource());
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onArPaymentProcessed(
+            com.sigcon.backend.accounts_receivable.events.ArPaymentProcessedEvent event) {
+        log.info("[AuditEventListener] ArPaymentProcessedEvent payment={} invoice={} amount={} partial={}",
+                event.getPaymentId(), event.getSalesInvoiceId(),
+                event.getAmount(), event.isPartial());
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onArNoteApplied(
+            com.sigcon.backend.accounts_receivable.events.ArNoteAppliedEvent event) {
+        log.info("[AuditEventListener] ArNoteAppliedEvent note={} invoice={} type={} amount={}",
+                event.getNoteId(), event.getSalesInvoiceId(),
+                event.getNoteType(), event.getAmount());
+    }
+
     // ─── Generico (cualquier modulo) ─────────────────
 
     /**

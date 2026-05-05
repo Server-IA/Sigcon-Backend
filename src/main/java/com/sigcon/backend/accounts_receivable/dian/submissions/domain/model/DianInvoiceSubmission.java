@@ -77,6 +77,17 @@ public class DianInvoiceSubmission {
     @Column(name = "track_id", length = 60)
     private String trackId;
 
+    /**
+     * HU-AR-16 E3: cache del PDF representacion grafica generado.
+     * Persiste tras la primera generacion exitosa para reenvios sin recomputar
+     * QR + iText. Sin @Lob (Hibernate 6 mapea byte[]+@Lob a OID y choca con BYTEA).
+     */
+    @Column(name = "cached_pdf", columnDefinition = "BYTEA")
+    private byte[] cachedPdf;
+
+    @Column(name = "cached_pdf_at")
+    private LocalDateTime cachedPdfAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

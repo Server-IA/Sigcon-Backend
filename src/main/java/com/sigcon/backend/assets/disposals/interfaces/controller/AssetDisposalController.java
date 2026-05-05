@@ -60,7 +60,7 @@ public class AssetDisposalController {
      * @return respuesta paginada con disposiciones
      */
     @PostMapping("")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar disposiciones de activos",
                description = "ACT-03: Obtiene listado paginado de bajas y transferencias con filtros dinamicos.")
     @ApiResponses(value = {
@@ -79,7 +79,7 @@ public class AssetDisposalController {
      * @return disposicion creada o errores de validacion
      */
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Registrar baja o transferencia de activo",
                description = "ACT-03: Crea una disposicion, actualiza estado del activo y genera asiento contable.")
     @ApiResponses(value = {
@@ -111,7 +111,7 @@ public class AssetDisposalController {
      * @return detalle de la disposicion o error
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener disposicion por ID",
                description = "ACT-03: Consulta el detalle de una baja o transferencia especifica.")
     @ApiResponses(value = {

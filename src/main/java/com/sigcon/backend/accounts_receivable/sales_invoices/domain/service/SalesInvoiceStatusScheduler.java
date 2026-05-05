@@ -40,4 +40,24 @@ public class SalesInvoiceStatusScheduler {
             com.sigcon.backend.platform.tenant.TenantContext.clear();
         }
     }
+
+    /**
+     * HU-AR-06 E1 + E3: pasada de RECONCILIACION integral, 1:30 AM.
+     * Corrige status de facturas que no coincidan con su balanceDue real
+     * (ej. PAID con saldo > 0, OVERDUE con saldo = 0, etc.).
+     * Complementa al job de OVERDUE: cubre los demas estados.
+     */
+    @Scheduled(cron = "0 30 1 * * *")
+    public void reconcileInvoiceStatusesJob() {
+        log.info("Iniciando reconciliacion de estados AR-06");
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
+        try {
+            int count = salesInvoiceService.reconcileInvoiceStatuses();
+            log.info("Reconciliacion AR-06 completada: {} facturas corregidas", count);
+        } catch (Exception e) {
+            log.error("Error en reconciliacion AR-06: {}", e.getMessage(), e);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
+        }
+    }
 }

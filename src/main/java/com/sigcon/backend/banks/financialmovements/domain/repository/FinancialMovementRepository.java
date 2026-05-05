@@ -53,6 +53,14 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
      */
     Optional<FinancialMovement> findByMatchedJournalEntryId(Long matchedJournalEntryId);
 
+    /** HU-018 E4 (Bloque AO): suma total de movimientos de la cuenta para validar fondos al emitir cheque. */
+    @Query("SELECT COALESCE(SUM(fm.amount), 0) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId")
+    BigDecimal sumAmountByBankAccountId(@Param("bankAccountId") Long bankAccountId);
+
+    /** HU-AP-04 E3 / HU-AP-05 E3 / HU-AP-07 E3 (Bloque AR): suma total de movimientos de una caja. */
+    @Query("SELECT COALESCE(SUM(fm.amount), 0) FROM FinancialMovement fm WHERE fm.cash.id = :cashId")
+    BigDecimal sumAmountByCashId(@Param("cashId") Long cashId);
+
     @Query("SELECT COALESCE(SUM(fm.amount), 0) FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
             + "AND fm.movementDate >= :from AND fm.movementDate <= :to")
     BigDecimal sumAmountByBankAccountAndPeriod(

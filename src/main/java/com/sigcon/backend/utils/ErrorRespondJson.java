@@ -106,7 +106,13 @@ public class ErrorRespondJson {
                 return err;
             })
             .toList();
-        return new ErrorRespondJson(false, 400, "Error en la operación", "Error de validación", errors, null);
+        // Bloque AN (2026-05-04): si solo hay 1 error de campo, exponer el mensaje
+        // literal del field error en `message`. Asi los clientes que solo leen
+        // `message` (no `errors[]`) ven el texto literal del HU en vez del
+        // generico "Error de validacion". Cuando hay multiples errores se
+        // mantiene el generico para no esconder informacion.
+        String topMsg = errors.size() == 1 ? errors.get(0).get("message") : "Error de validación";
+        return new ErrorRespondJson(false, 400, "Error en la operación", topMsg, errors, null);
     }
 
 }

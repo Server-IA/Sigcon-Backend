@@ -22,7 +22,8 @@ public class ManualAdjustmentRequest {
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
     private RiskSegmentation newSegmentation; //NUevo segmento de riesgo asignado manualmente al cliente
     @Schema(description = "Justificación del ajuste manual", example = "Cliente presenta mejora en su comportamiento de pago según reporte externo.", minLength = 50)
-    @NotBlank(message = "Debe diligenciar todos los campos obligatorios")
-    @Size(min = 50, message = "La justificacion debe de contar como minomo con 50 caracteres")
+    // HU-TER-08 E3.0 (Bloque AN, 2026-05-04): mensaje literal del Excel.
+    @NotBlank(message = "La justificacion debe tener al menos 50 caracteres")
+    @Size(min = 50, message = "La justificacion debe tener al menos 50 caracteres")
     private String justification; //Justificacion detallada del ajuste manual, explicando las razones y fundamentos para el cambio de segmento de riesgo.
 }

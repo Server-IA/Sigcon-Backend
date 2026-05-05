@@ -52,7 +52,7 @@ public class ArNoteController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_CREATE_AR_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AR_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createNote(@Valid @RequestBody CreateArNoteRequest request,
                                         BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -77,7 +77,7 @@ public class ArNoteController {
             @ApiResponse(responseCode = "200", description = "Listado de notas")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_READ_AR_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AR_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchNotes(@RequestBody(required = false) DataTableRequest request) {
         return noteService.getNotes(request);
     }
@@ -94,7 +94,7 @@ public class ArNoteController {
             @ApiResponse(responseCode = "400", description = "Nota no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_AR_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AR_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
             return noteService.getById(id);
@@ -115,7 +115,7 @@ public class ArNoteController {
             @ApiResponse(responseCode = "200", description = "Lista de notas de la factura")
     })
     @GetMapping("/invoice/{invoiceId}")
-    @PreAuthorize("hasAuthority('PERM_READ_AR_NOTE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AR_NOTE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getNotesByInvoice(@PathVariable Long invoiceId) {
         return noteService.getNotesByInvoice(invoiceId);
     }

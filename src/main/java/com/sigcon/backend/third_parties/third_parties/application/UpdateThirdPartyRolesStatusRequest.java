@@ -16,7 +16,9 @@ import java.util.List;
 @AllArgsConstructor
 public class UpdateThirdPartyRolesStatusRequest {
 
-    @NotEmpty(message = "Debe seleccionar al menos un rol.")
+    // HU-TER-04 E4.0 (Bloque AN, 2026-05-04): mensaje literal del Excel
+    // — cuando el usuario intenta dejar al tercero sin ningun rol activo.
+    @NotEmpty(message = "No se puede eliminar el unico rol activo del tercero")
     @Schema(description = "IDs de roles a asignar", example = "[1,2]")
     private List<Long> roleIds;
 

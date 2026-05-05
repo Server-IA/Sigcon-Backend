@@ -45,7 +45,7 @@ public class ApReportController {
             @ApiResponse(responseCode = "200", description = "Reporte de antiguedad generado")
     })
     @PostMapping("/aging")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getAgingReport() {
         return reportService.getAgingReport();
     }
@@ -61,7 +61,7 @@ public class ApReportController {
             @ApiResponse(responseCode = "500", description = "Error al generar el PDF")
     })
     @PostMapping("/aging/pdf")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getAgingReportPdf() {
         try {
             return reportService.generateAgingPdf();
@@ -84,7 +84,7 @@ public class ApReportController {
             @ApiResponse(responseCode = "400", description = "Proveedor no encontrado")
     })
     @PostMapping("/supplier/{thirdPartyId}")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getSupplierStatement(@PathVariable Long thirdPartyId) {
         try {
             return reportService.getSupplierStatement(thirdPartyId);
@@ -103,7 +103,7 @@ public class ApReportController {
         @ApiResponse(responseCode = "200", description = "Reporte generado")
     })
     @PostMapping("/purchase-orders")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getPurchaseOrdersReport(
             @RequestParam(required = false) Long thirdPartyId,
             @RequestParam(required = false) String status,

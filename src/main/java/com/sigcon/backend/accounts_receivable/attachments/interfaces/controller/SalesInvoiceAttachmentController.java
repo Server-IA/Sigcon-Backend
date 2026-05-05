@@ -49,7 +49,7 @@ public class SalesInvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Archivo no valido o factura no existe")
     })
     @PostMapping(value = "/invoices/{id}/attachments", consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> upload(@PathVariable Long id,
                                      @RequestParam("file") MultipartFile file) {
         try {
@@ -69,7 +69,7 @@ public class SalesInvoiceAttachmentController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido")
     })
     @GetMapping("/invoices/{id}/attachments")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> listByInvoice(@PathVariable Long id) {
         return service.listByInvoice(id);
     }
@@ -84,7 +84,7 @@ public class SalesInvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Adjunto no encontrado")
     })
     @GetMapping("/attachments/{id}/download")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> download(@PathVariable Long id) {
         try {
             SalesInvoiceAttachment a = service.getForDownload(id);
@@ -111,7 +111,7 @@ public class SalesInvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Adjunto no encontrado")
     })
     @DeleteMapping("/attachments/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);

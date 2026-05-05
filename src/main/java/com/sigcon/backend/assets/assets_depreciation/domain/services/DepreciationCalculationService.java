@@ -266,7 +266,14 @@ public class DepreciationCalculationService {
         int month = Integer.parseInt(parts[1]);
         // Usa una fecha del primer dia del mes como referencia para el periodo.
         java.time.LocalDate referenceDate = java.time.LocalDate.of(year, month, 1);
-        accountingPeriodService.validatePeriodOpen(referenceDate);
+        // HU-ACT-02 E5 (QA 2026-05-05): mensaje literal del Excel cuando el
+        // periodo de calculo de depreciacion esta cerrado.
+        try {
+            accountingPeriodService.validatePeriodOpen(referenceDate);
+        } catch (IllegalStateException ex) {
+            throw new IllegalArgumentException(
+                    "El periodo contable esta cerrado. No se puede registrar depreciacion en un periodo cerrado.");
+        }
     }
 
     /**
@@ -322,7 +329,26 @@ public class DepreciationCalculationService {
                 .assetCode(asset.getAssetCode())
                 .assetName(asset.getAssetName())
                 .reason(reason)
+                .message(skipMessage(reason))
                 .build();
+    }
+
+    /**
+     * HU-ACT-02 E2/E3 (QA 2026-05-05): wording literal del Excel por motivo
+     * para que el frontend muestre el mensaje exacto al contador.
+     */
+    private String skipMessage(SkipReason reason) {
+        return switch (reason) {
+            case ASSET_INACTIVE -> "El activo se encuentra inactivo y no puede depreciarse.";
+            case INVALID_USEFUL_LIFE ->
+                    "El activo no tiene vida util definida. Completela antes de ejecutar la depreciacion.";
+            case NO_DEPRECIATION_METHOD ->
+                    "El metodo de depreciacion configurado no es reconocido por el sistema. Verifique la configuracion del activo.";
+            case NO_ACTIVE_RULE ->
+                    "El metodo de depreciacion configurado no es reconocido por el sistema. Verifique la configuracion del activo.";
+            case OTHER_METHOD ->
+                    "El metodo de depreciacion configurado no aplica para calculo por periodo contable.";
+        };
     }
 
     /**

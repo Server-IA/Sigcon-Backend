@@ -142,8 +142,20 @@ public class ApPaymentService {
                     + "Si realmente es un pago separado, informe un paymentReference distinto.");
         }
 
-        // 5. Validar periodo contable abierto
-        accountingPeriodService.validatePeriodOpen(request.getPaymentDate());
+        // 5. Validar periodo contable abierto. HU-AP-07 E5 (Bloque AR): mensaje literal HU.
+        try {
+            accountingPeriodService.validatePeriodOpen(request.getPaymentDate());
+        } catch (RuntimeException ex) {
+            java.time.LocalDate d = request.getPaymentDate();
+            String yyyymm = d != null ? String.format("%04d-%02d", d.getYear(), d.getMonthValue()) : "indefinido";
+            throw new IllegalStateException(
+                "El período " + yyyymm + " está cerrado. Use una fecha en el período vigente.");
+        }
+
+        // HU-AP-04 E3 / HU-AP-07 E3 (Bloque AR): validar fondos suficientes en la
+        // cuenta bancaria o caja antes de crear el pago. Suma initialBalance +
+        // sum(financial_movements) + creditLimit (si overdraft permitido).
+        validateSufficientFunds(request.getBankAccountId(), request.getCashId(), request.getAmount());
 
         // 6. Crear el pago
         ApPayment payment = ApPayment.builder()
@@ -341,5 +353,56 @@ public class ApPaymentService {
                 .status(payment.getStatus())
                 .notes(payment.getNotes())
                 .build();
+    }
+
+    /**
+     * HU-AP-04 E3 / HU-AP-07 E3 (Bloque AR): valida que la cuenta bancaria o
+     * caja tenga fondos suficientes para el pago/abono. El saldo disponible
+     * es initial_balance + sum(financial_movements) (incluye sus signos), mas
+     * el credit_limit si la cuenta admite sobregiro.
+     *
+     * Si bankAccountId Y cashId son null, no valida (puede ser pago en cheque
+     * que ya consumio fondos al emitirse o forma de pago sin medio de
+     * salida directo).
+     */
+    private void validateSufficientFunds(Long bankAccountId, Long cashId, BigDecimal amount) {
+        if (amount == null) {
+            return;
+        }
+        if (bankAccountId != null) {
+            BankAccount ba = bankAccountRepository.findById(bankAccountId).orElse(null);
+            if (ba == null) {
+                return;
+            }
+            BigDecimal initial = ba.getInitialBalance() != null ? ba.getInitialBalance() : BigDecimal.ZERO;
+            BigDecimal moved = financialMovementRepository.sumAmountByBankAccountId(bankAccountId);
+            if (moved == null) {
+                moved = BigDecimal.ZERO;
+            }
+            BigDecimal credit = (Boolean.TRUE.equals(ba.getAllowsOverdraft()) && ba.getCreditLimit() != null)
+                    ? ba.getCreditLimit() : BigDecimal.ZERO;
+            BigDecimal available = initial.add(moved).add(credit);
+            if (amount.compareTo(available) > 0) {
+                throw new IllegalArgumentException(
+                        "El saldo disponible en la cuenta seleccionada no es suficiente "
+                        + "para registrar este abono. Saldo disponible: $" + available);
+            }
+        } else if (cashId != null) {
+            Cash cash = cashRepository.findById(cashId).orElse(null);
+            if (cash == null) {
+                return;
+            }
+            BigDecimal initial = cash.getInitialBalance() != null ? cash.getInitialBalance() : BigDecimal.ZERO;
+            BigDecimal moved = financialMovementRepository.sumAmountByCashId(cashId);
+            if (moved == null) {
+                moved = BigDecimal.ZERO;
+            }
+            BigDecimal available = initial.add(moved);
+            if (amount.compareTo(available) > 0) {
+                throw new IllegalArgumentException(
+                        "El saldo disponible en la caja seleccionada no es suficiente "
+                        + "para registrar este abono. Saldo disponible: $" + available);
+            }
+        }
     }
 }

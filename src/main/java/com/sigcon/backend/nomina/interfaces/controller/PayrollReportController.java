@@ -42,6 +42,7 @@ public class PayrollReportController {
             @ApiResponse(responseCode = "400",
                     description = "Recibo en DRAFT o no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.COMPROBANTES.EXPORTAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping(value = "/comprobante/{receiptId}", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> receiptPdf(
             @Parameter(description = "ID del recibo", required = true, example = "1")
@@ -62,6 +63,7 @@ public class PayrollReportController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "CSV UTF-8 con header PILA")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.PILA.GENERAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping(value = "/pila", produces = "text/csv")
     public ResponseEntity<byte[]> pila(
             @Parameter(description = "Año del periodo", required = true, example = "2026")
@@ -84,6 +86,7 @@ public class PayrollReportController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Resumen contable del periodo")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping(value = "/resumen-contable", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> summary(
             @Parameter(description = "Año del periodo", required = true, example = "2026")

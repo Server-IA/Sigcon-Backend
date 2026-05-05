@@ -55,7 +55,7 @@ public class ClosingController {
                     + "o ya existe un cierre previo"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> monthlyClosing(
             @Valid @RequestBody ClosingRequest request,
             Authentication authentication) {
@@ -83,7 +83,7 @@ public class ClosingController {
             @ApiResponse(responseCode = "400", description = "El periodo tiene asientos en borrador"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> monthlyClosingPreview(@Valid @RequestBody ClosingRequest request) {
         try {
             return closingService.previewMonthlyClosing(request.getYear(), request.getMonth());
@@ -109,7 +109,7 @@ public class ClosingController {
                     + "en algun mes del anio"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> annualClosing(
             @Valid @RequestBody AnnualClosingRequest request,
             Authentication authentication) {
@@ -137,7 +137,7 @@ public class ClosingController {
             @ApiResponse(responseCode = "400", description = "Ya existe asiento de apertura o no hay saldos del anio anterior"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> openingEntry(
             @Valid @RequestBody OpeningRequest request,
             Authentication authentication) {

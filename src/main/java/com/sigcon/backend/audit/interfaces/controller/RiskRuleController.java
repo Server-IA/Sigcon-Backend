@@ -38,7 +38,7 @@ public class RiskRuleController {
         @ApiResponse(responseCode = "200", description = "Listado de reglas"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping
     public ResponseEntity<?> list() { return service.list(); }
 
@@ -52,7 +52,7 @@ public class RiskRuleController {
         @ApiResponse(responseCode = "400", description = "Validacion fallida"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN (HU-AU-04 E4)")
     })
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping
     public ResponseEntity<?> create(@RequestBody AuditRiskRule rule) {
         String createdBy = "admin";
@@ -71,7 +71,7 @@ public class RiskRuleController {
         @ApiResponse(responseCode = "400", description = "Regla no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(
             @Parameter(description = "ID de la regla", example = "1") @PathVariable Long id,
@@ -86,7 +86,7 @@ public class RiskRuleController {
         @ApiResponse(responseCode = "200", description = "Regla con nuevo estado"),
         @ApiResponse(responseCode = "400", description = "Regla no encontrada")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/{id}/toggle")
     public ResponseEntity<?> toggle(
             @Parameter(description = "ID de la regla", example = "1") @PathVariable Long id) {
@@ -101,7 +101,7 @@ public class RiskRuleController {
         @ApiResponse(responseCode = "200", description = "Regla eliminada"),
         @ApiResponse(responseCode = "400", description = "Regla no encontrada")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(
             @Parameter(description = "ID de la regla", example = "1") @PathVariable Long id) {

@@ -61,6 +61,9 @@ import com.sigcon.backend.invoices.domain.events.ApInvoiceCreatedEvent;
 import com.sigcon.backend.invoices.domain.events.ApInvoiceUpdatedEvent;
 import com.sigcon.backend.invoices.domain.events.ApInvoiceDeletedEvent;
 import com.sigcon.backend.utils.UserUtil;
+// HU-AP-25 (Bloque AR): auditoria al anular factura.
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -97,6 +100,10 @@ public class InvoiceService {
     private final ApplicationEventPublisher eventPublisher;
     /** AP-03 E3: para validar conciliacion bancaria al liquidar. */
     private final com.sigcon.backend.invoices.ap_payments.domain.repository.ApPaymentRepository apPaymentRepository;
+    /** HU-AP-25 (Bloque AR): publicar audit log al anular factura. */
+    private final AuditPublisher auditPublisher;
+    /** HU-AP-22 (Bloque AU): aislar cada fila del bulk en su propio TX. */
+    private final org.springframework.transaction.PlatformTransactionManager txManager;
 
     private final DataTableSpecificationBuilder<Invoices> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -161,12 +168,12 @@ public class InvoiceService {
 
         ThirdParty thirdParty = thirdPartyRepository.findById(invoiceFCRequestDTO.getThirdPartyId())
         .orElseThrow(
-            () -> new IllegalArgumentException("Proveedor no válido o inactivo")
+            () -> new IllegalArgumentException("El proveedor no está activo o no existe en el sistema")
         );
         // HU-AP-01 E3: Proveedor inactivo o inexistente -> mensaje exacto del Excel
         if (thirdParty.getStatus() == null
                 || !"ACTIVO".equalsIgnoreCase(thirdParty.getStatus().getName())) {
-            throw new IllegalArgumentException("Proveedor no válido o inactivo");
+            throw new IllegalArgumentException("El proveedor no está activo o no existe en el sistema");
         }
         // HU-AP-06 E3: Validar que el proveedor tenga regimen tributario asignado
         // (necesario para el calculo correcto de retenciones por motor UVT).
@@ -226,6 +233,27 @@ public class InvoiceService {
                 throw new IllegalArgumentException(
                         "Factura ya registrada para este proveedor en el año actual.");
             }
+        }
+
+        // HU-AP-01 (Bloque AT): unicidad cross-proveedor en la empresa.
+        // QA reporto que la misma empresa no debe aceptar 2 facturas con mismo
+        // supplierInvoiceNumber ni mismo resolutionInvoice. Las queries usan
+        // @Filter("tenantFilter") - validan dentro de la empresa actual.
+        if (invoiceFCRequestDTO.getSupplierInvoiceNumber() != null
+                && !invoiceFCRequestDTO.getSupplierInvoiceNumber().isBlank()
+                && invoiceRepository.existsBySupplierInvoiceNumberAndDeletedAtIsNull(
+                        invoiceFCRequestDTO.getSupplierInvoiceNumber())) {
+            throw new IllegalArgumentException(
+                    "Ya existe una factura con el numero de proveedor '"
+                    + invoiceFCRequestDTO.getSupplierInvoiceNumber() + "' en esta empresa.");
+        }
+        if (invoiceFCRequestDTO.getResolutionInvoice() != null
+                && !invoiceFCRequestDTO.getResolutionInvoice().isBlank()
+                && invoiceRepository.existsByResolutionInvoiceAndDeletedAtIsNull(
+                        invoiceFCRequestDTO.getResolutionInvoice())) {
+            throw new IllegalArgumentException(
+                    "Ya existe una factura con la resolucion DIAN '"
+                    + invoiceFCRequestDTO.getResolutionInvoice() + "' en esta empresa.");
         }
 
         invoice = invoiceRepository.save(invoice);
@@ -569,9 +597,17 @@ public class InvoiceService {
                 "Las facturas originadas por AAEF solo pueden modificarse vía Pull+Diff desde AgroFusion");
         }
 
-        // No se puede modificar una factura anulada o liquidada
-        if (invoice.getStatus() == StatusesInvoices.VOIDED || invoice.getStatus() == StatusesInvoices.SETTLED) {
-            throw new IllegalStateException("No se puede modificar una factura anulada o liquidada.");
+        // HU-AP-02 (Bloque AT): facturas PAID/SETTLED/VOIDED son inmutables.
+        // QA reporto: factura totalmente pagada NO debe permitir edicion.
+        // Pago parcial si permite editar campos no contables (notas, fecha venc).
+        if (invoice.getStatus() == StatusesInvoices.VOIDED
+                || invoice.getStatus() == StatusesInvoices.SETTLED
+                || invoice.getStatus() == StatusesInvoices.PAID) {
+            throw new IllegalStateException(
+                "No se puede modificar una factura " +
+                (invoice.getStatus() == StatusesInvoices.PAID ? "totalmente pagada" :
+                 invoice.getStatus() == StatusesInvoices.VOIDED ? "anulada" : "liquidada") +
+                ". El estado actual no permite ediciones.");
         }
 
         // HU-AP-02 E3: chequeo manual de version optimista. Hibernate solo
@@ -612,7 +648,78 @@ public class InvoiceService {
             invoice.setResolutionInvoice(request.getResolutionInvoice());
         }
 
+        // HU-AP-02 (Bloque AT): permitir editar lineas/monto SOLO en PENDING
+        // sin pagos. Si la factura tiene pagos parciales, los montos quedan
+        // bloqueados (la conciliacion contable se rompe). El frontend valida
+        // tambien pero el backend es la fuente de verdad.
+        boolean linesProvided = request.getLineInvoices() != null
+                && !request.getLineInvoices().isEmpty();
+        boolean canEditLines = invoice.getStatus() == StatusesInvoices.PENDING
+                && (invoice.getBalanceDue() == null
+                    || invoice.getBalanceDue().equals(invoice.getTotalPayment()));
+
+        if (linesProvided && !canEditLines) {
+            throw new IllegalStateException(
+                "No se pueden modificar las lineas/monto de una factura con pagos aplicados. "
+                + "Anule la factura y cree una nueva, o use Notas Credito/Debito.");
+        }
+
+        if (linesProvided && canEditLines) {
+            // Eliminar lineas anteriores y reversar JE viejo si DRAFT
+            List<LinesInvoice> oldLines = linesInvoiceRepository.findAllByInvoiceId(invoice.getId());
+            for (LinesInvoice old : oldLines) {
+                linesInvoiceRepository.delete(old);
+            }
+            // Eliminar JE asociado si DRAFT, para regenerar luego
+            if (invoice.getJournalEntryId() != null) {
+                JournalEntry oldJe = journalEntryRepository.findById(invoice.getJournalEntryId()).orElse(null);
+                if (oldJe != null && oldJe.getStatus() == JournalEntryStatus.DRAFT) {
+                    journalEntryService.deleteEntry(oldJe.getId());
+                    invoice.setJournalEntryId(null);
+                }
+            }
+
+            // Recalcular y crear nuevas lineas
+            Double totalAmount = 0.0;
+            Double totalDiscount = 0.0;
+            Double totalTax = 0.0;
+            for (LineInvoiceRequestDTO lineReq : request.getLineInvoices()) {
+                AccountingAccount aa = accountingAccountRepository.findById(lineReq.getAccountingAccountId())
+                    .orElseThrow(() -> new IllegalArgumentException("La cuenta contable no existe"));
+                LinesInvoice newLine = LinesInvoice.builder()
+                    .invoice(invoice)
+                    .accountingAccount(aa)
+                    .description(lineReq.getDescription())
+                    .quantity(lineReq.getQuantity())
+                    .price(lineReq.getPrice())
+                    .discount(0.0)
+                    .tax(0.0)
+                    .total(lineReq.getQuantity() * lineReq.getPrice())
+                    .build();
+                linesInvoiceRepository.save(newLine);
+                totalAmount += lineReq.getQuantity() * lineReq.getPrice();
+            }
+            invoice.setTotalAmount(totalAmount);
+            invoice.setTotalDiscount(totalDiscount);
+            invoice.setTotalTax(totalTax);
+            invoice.setTotalPayment(totalAmount + totalTax - totalDiscount);
+            invoice.setBalanceDue(totalAmount + totalTax - totalDiscount);
+
+            log.info("HU-AP-02 (Bloque AT): factura {} editada con nuevas lineas. Total recalculado: {}",
+                    invoice.getId(), invoice.getTotalPayment());
+        }
+
         invoice = invoiceRepository.save(invoice);
+
+        // Si se reemplazaron lineas, regenerar JE
+        if (linesProvided && canEditLines) {
+            try {
+                generateJournalEntry(invoice, invoice.getThirdParty());
+                log.info("HU-AP-02 (Bloque AT): JE regenerado tras editar lineas factura {}", invoice.getId());
+            } catch (Exception genEx) {
+                log.warn("HU-AP-02 (Bloque AT): no se pudo regenerar JE tras editar lineas: {}", genEx.getMessage());
+            }
+        }
 
         // HU-AP-02 E1: sincronizar JE asociado en CG cuando esta en DRAFT.
         // Reglas:
@@ -647,11 +754,40 @@ public class InvoiceService {
                         jeSynced = true;
                         log.info("HU-AP-02 E1: JE {} sincronizado (DRAFT) tras update factura {}",
                                 je.getId(), invoice.getId());
+                    } else if (je.getStatus() == JournalEntryStatus.POSTED) {
+                        // HU-AP-13 E2 (Bloque AS): JE POSTED es inmutable. Si la
+                        // factura cambio en datos contables (fecha o resolucion),
+                        // diferimos la generacion del asiento de correccion DRAFT
+                        // a un evento AFTER_COMMIT publicado por el bean. Esto
+                        // evita rollback-only de la TX padre cuando createCorrection
+                        // lanza alguna IllegalStateException.
+                        boolean dateChanged = request.getInvoiceDate() != null
+                                && !request.getInvoiceDate().equals(je.getEntryDate());
+                        boolean resolutionChanged = request.getResolutionInvoice() != null
+                                && !request.getResolutionInvoice().equals(invoice.getResolutionInvoice());
+                        if (dateChanged || resolutionChanged) {
+                            // Marcar para que el listener AFTER_COMMIT lo procese
+                            jeSynced = true;
+                            try {
+                                eventPublisher.publishEvent(new com.sigcon.backend.invoices.domain.events.ApInvoicePostedEditedEvent(
+                                        this, invoice.getId(), je.getId(), invoice.getResolutionInvoice(),
+                                        invoice.getInvoiceDate()));
+                            } catch (Exception evtEx) {
+                                log.warn("HU-AP-13 E2: no se pudo encolar evento de ajuste contable: {}",
+                                        evtEx.getMessage());
+                            }
+                            log.info("HU-AP-13 E2: factura {} con JE {} POSTED editada en datos contables. "
+                                    + "Ajuste DRAFT se generara post-commit.", invoice.getId(), je.getId());
+                        } else {
+                            // Cambio no contable, no requiere ajuste
+                            jePostedSkipped = true;
+                            log.info("HU-AP-13 E2: factura {} editada en campos no contables. JE {} POSTED preservado.",
+                                    invoice.getId(), je.getId());
+                        }
                     } else {
-                        // JE POSTED o REVERSED: no tocar.
+                        // REVERSED: no tocar
                         jePostedSkipped = true;
-                        log.warn("HU-AP-02 E1: JE {} en estado {} no se sincroniza tras update "
-                                + "factura {}. Use correccion via comprobante de ajuste.",
+                        log.info("HU-AP-13 E2: JE {} en estado {} no requiere accion tras update factura {}",
                                 je.getId(), je.getStatus(), invoice.getId());
                     }
                 }
@@ -770,9 +906,151 @@ public class InvoiceService {
         invoice.setStatus(StatusesInvoices.SETTLED);
         invoiceRepository.save(invoice);
 
+        // Bloque AS: payload minimo para evitar serializar proxies JPA.
+        java.util.Map<String, Object> minimal = new java.util.HashMap<>();
+        minimal.put("id", invoice.getId());
+        minimal.put("status", "SETTLED");
         return ResponseEntity.ok(
             SuccessRespondJson.getSuccessRespondMessage(
-                Optional.of("Factura liquidada exitosamente."), Optional.of(toDto(invoice))));
+                Optional.of("Factura liquidada exitosamente."), Optional.of(minimal)));
+    }
+
+    /**
+     * HU-AP-25 (Bloque AR): anula una factura de compra registrada.
+     *
+     * <p>Reglas de negocio (escenarios E1..E9):
+     * <ul>
+     *   <li>E1: PENDIENTE sin pagos puede anularse correctamente</li>
+     *   <li>E2: motivo obligatorio (validado en DTO con @NotBlank @Size min=10)</li>
+     *   <li>E3: PAGADA bloqueada → mensaje literal HU</li>
+     *   <li>E4: PARCIALMENTE_PAGADA bloqueada → debe reversar pagos primero</li>
+     *   <li>E5: periodo cerrado bloqueada → ajuste en periodo vigente</li>
+     *   <li>E6: source=AAEF bloqueada → solo se anula via Pull+Diff</li>
+     *   <li>E7: ya VOIDED → idempotente con mensaje informativo</li>
+     *   <li>E8: permisos en controller (@PreAuthorize)</li>
+     *   <li>E9: conserva adjuntos, historial, JE vinculado y motivo de anulacion</li>
+     * </ul>
+     *
+     * <p>Comportamiento contable: si la factura tiene JE vinculado, se intenta
+     * reverse para mantener inmutabilidad. El estado pasa a VOIDED (no se
+     * elimina fisicamente para preservar trazabilidad fiscal).
+     *
+     * @param id      ID de la factura a anular
+     * @param reason  motivo de la anulacion (min 10 chars)
+     */
+    @Transactional
+    public ResponseEntity<?> voidInvoice(Long id, String reason) {
+        Invoices invoice = invoiceRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("La factura no fue encontrada."));
+
+        // E2: motivo obligatorio (defensa adicional al @Size del DTO)
+        if (reason == null || reason.trim().length() < 10) {
+            throw new IllegalArgumentException(
+                "Debe ingresar el motivo de anulación para continuar (mínimo 10 caracteres)");
+        }
+
+        // E7: idempotencia (payload minimo para evitar serializar proxies JPA)
+        if (invoice.getStatus() == StatusesInvoices.VOIDED) {
+            java.util.Map<String, Object> idem = new java.util.HashMap<>();
+            idem.put("id", invoice.getId());
+            idem.put("status", "VOIDED");
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("La factura ya se encuentra anulada"), Optional.of(idem)));
+        }
+
+        // E6: AAEF bloqueada
+        if (invoice.getIntegrationSource() != null
+                && invoice.getIntegrationSource().getSource() != null
+                && "AAEF".equals(invoice.getIntegrationSource().getSource().name())) {
+            throw new IllegalStateException(
+                "Las facturas originadas por integración AAEF solo pueden anularse o corregirse "
+                + "mediante el proceso de corrección de AgroFusion");
+        }
+
+        // E3: PAGADA bloqueada
+        if (invoice.getStatus() == StatusesInvoices.PAID
+                || invoice.getStatus() == StatusesInvoices.SETTLED) {
+            throw new IllegalStateException(
+                "Esta factura ya fue pagada y no puede anularse directamente. "
+                + "Primero debe realizarse el proceso de reversión o ajuste contable");
+        }
+
+        // E4: PARCIALMENTE_PAGADA bloqueada
+        if (invoice.getStatus() == StatusesInvoices.PARTIALLY_PAID) {
+            throw new IllegalStateException(
+                "Esta factura tiene pagos aplicados. Para anularla, primero debe reversar "
+                + "el asiento de pago parcial correspondiente");
+        }
+
+        // E5: periodo cerrado bloqueado (mensaje literal HU)
+        if (invoice.getInvoiceDate() != null) {
+            try {
+                accountingPeriodService.validatePeriodOpen(invoice.getInvoiceDate());
+            } catch (RuntimeException ex) {
+                throw new IllegalStateException(
+                    "El período contable de esta factura está cerrado. "
+                    + "La anulación debe realizarse mediante un ajuste en un período vigente");
+            }
+        }
+
+        // E9: si tiene JE vinculado, decidir DRAFT->delete vs POSTED->reverse.
+        // Chequeo estado ANTES de llamar para evitar excepciones que marquen la
+        // TX como rollback-only y aborten la anulacion misma.
+        Long journalEntryId = invoice.getJournalEntryId();
+        if (journalEntryId != null) {
+            try {
+                JournalEntry je = journalEntryRepository.findById(journalEntryId).orElse(null);
+                if (je != null) {
+                    if (je.getStatus() == JournalEntryStatus.DRAFT) {
+                        journalEntryService.deleteEntry(journalEntryId);
+                        log.info("HU-AP-25: JE {} eliminado (DRAFT) por anulacion factura {}", journalEntryId, id);
+                    } else if (je.getStatus() == JournalEntryStatus.POSTED) {
+                        journalEntryService.reverseEntry(journalEntryId,
+                            "Anulacion factura " + id + ": " + reason, "sistema");
+                        log.info("HU-AP-25: JE {} reversado (POSTED) por anulacion factura {}", journalEntryId, id);
+                    }
+                    // si es REVERSED no hace falta tocar
+                }
+            } catch (Exception e) {
+                log.warn("HU-AP-25: no se pudo procesar JE {} para anulacion factura {}: {}",
+                        journalEntryId, id, e.getMessage());
+            }
+        }
+
+        // Anulacion: cambia status, conserva motivo en notas
+        StatusesInvoices previous = invoice.getStatus();
+        invoice.setStatus(StatusesInvoices.VOIDED);
+        String existingNotes = invoice.getNotes() != null ? invoice.getNotes() : "";
+        invoice.setNotes((existingNotes.isBlank() ? "" : existingNotes + "\n")
+                + "[ANULADA " + java.time.LocalDateTime.now() + "] " + reason);
+        invoiceRepository.save(invoice);
+
+        // E9 trazabilidad: audit + evento
+        auditPublisher.publishUpdate(AuditModule.AP, "Invoice", id,
+            "Factura " + invoice.getResolutionInvoice() + " ANULADA. Estado previo: "
+            + previous + ". Motivo: " + reason);
+        try {
+            eventPublisher.publishEvent(new ApInvoiceUpdatedEvent(this, id,
+                invoice.getTotalAmount() != null ? java.math.BigDecimal.valueOf(invoice.getTotalAmount()) : null,
+                invoice.getThirdParty() != null ? invoice.getThirdParty().getId() : null));
+        } catch (Exception e) {
+            log.warn("No se pudo publicar evento ApInvoiceUpdatedEvent para anulacion {}: {}",
+                    id, e.getMessage());
+        }
+
+        log.info("HU-AP-25: factura {} ANULADA. Estado previo: {}. Motivo: {}",
+                id, previous, reason);
+
+        // Payload minimo para evitar serializar proxies JPA (mismo patron de
+        // createInvoiceAndReturnDto que documenta este issue de Jackson +
+        // ByteBuddy). El cliente puede hacer GET /{id} si requiere DTO completo.
+        java.util.Map<String, Object> minimal = new java.util.HashMap<>();
+        minimal.put("id", invoice.getId());
+        minimal.put("status", invoice.getStatus().name());
+        minimal.put("previousStatus", previous.name());
+        minimal.put("voidedReason", reason);
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+            Optional.of("Factura anulada exitosamente"), Optional.of(minimal)));
     }
 
     // ========================= Helpers
@@ -889,7 +1167,11 @@ public class InvoiceService {
      * @param delimiter  separador de campos (por defecto coma)
      * @return ResponseEntity con el resumen de importacion
      */
-    @Transactional
+    /**
+     * HU-AP-22 (Bloque AU): NO se usa @Transactional aqui. Cada fila se inserta
+     * en su propia TX via TransactionTemplate. Si una fila falla, su TX se
+     * rollbackea pero las demas continuan. El metodo padre solo orquesta.
+     */
     public ResponseEntity<?> bulkImportInvoices(String fileBase64, String delimiter) {
         byte[] decoded;
         try {
@@ -898,77 +1180,163 @@ public class InvoiceService {
             throw new IllegalArgumentException("El contenido del archivo no es Base64 valido");
         }
 
-        String content = new String(decoded, java.nio.charset.StandardCharsets.UTF_8);
-        String[] rows = content.split("\\r?\\n");
+        // HU-AP-22 (Bloque AS): detectar XLSX por magic bytes (PK\003\004 = ZIP signature)
+        // y delegar al parser de Apache POI. Si no es XLSX, asumir CSV.
+        boolean isXlsx = decoded.length >= 4
+                && decoded[0] == 0x50 && decoded[1] == 0x4B
+                && decoded[2] == 0x03 && decoded[3] == 0x04;
 
-        if (rows.length < 2) {
+        List<String[]> rows;
+        if (isXlsx) {
+            rows = parseXlsxRows(decoded);
+        } else {
+            String content = new String(decoded, java.nio.charset.StandardCharsets.UTF_8);
+            String[] lines = content.split("\\r?\\n");
+            String sep = delimiter != null ? delimiter : ",";
+            rows = new ArrayList<>();
+            for (String line : lines) {
+                rows.add(line.split(sep, -1));
+            }
+        }
+
+        if (rows.size() < 2) {
             throw new IllegalArgumentException("El archivo debe contener al menos un encabezado y una fila de datos");
         }
 
-        String sep = delimiter != null ? delimiter : ",";
-        int totalRows = rows.length - 1; // Excluir encabezado
-        int successCount = 0;
+        int totalRows = rows.size() - 1; // Excluir encabezado
+        int[] successCount = { 0 };
         List<com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError> errors = new ArrayList<>();
 
-        for (int i = 1; i < rows.length; i++) {
-            String row = rows[i].trim();
-            if (row.isEmpty()) continue;
+        // HU-AP-22 (Bloque AU): TransactionTemplate por fila. Cada fila tiene
+        // su propio TX REQUIRES_NEW. Si una falla, su TX se rollbackea SOLO,
+        // sin contaminar las demas.
+        org.springframework.transaction.support.TransactionTemplate tt =
+                new org.springframework.transaction.support.TransactionTemplate(txManager);
+        tt.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        // Capturar el tenant actual ANTES del loop. Cada TX nueva debe
+        // re-establecer el TenantContext porque corre en una sesion JPA
+        // distinta (el filter de tenant lee del TenantContext en cada query).
+        Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        boolean wasPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
 
+        for (int i = 1; i < rows.size(); i++) {
+            String[] fields = rows.get(i);
+            if (fields == null || fields.length == 0) continue;
+            boolean allEmpty = true;
+            for (String f : fields) {
+                if (f != null && !f.trim().isEmpty()) { allEmpty = false; break; }
+            }
+            if (allEmpty) continue;
+
+            final int rowNum = i + 1;
+            final String[] f = fields;
             try {
-                String[] fields = row.split(sep);
-                if (fields.length < 5) {
-                    errors.add(com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError.builder()
-                            .row(i + 1).message("Numero insuficiente de campos (minimo 5)").build());
-                    continue;
-                }
+                tt.executeWithoutResult(status -> {
+                    // Reasegurar tenant en la TX nueva
+                    if (wasPlatform) com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
+                    if (tenantId != null) com.sigcon.backend.platform.tenant.TenantContext.setCompanyId(tenantId);
 
-                Long thirdPartyId = Long.parseLong(fields[0].trim());
-                Long paymentFormId = Long.parseLong(fields[1].trim());
-                String resolutionInvoice = fields[2].trim();
-                java.time.LocalDate invoiceDate = java.time.LocalDate.parse(fields[3].trim());
-                Integer invoiceDueDay = Integer.parseInt(fields[4].trim());
-                String supplierInvoiceNumber = fields.length > 5 ? fields[5].trim() : null;
-                String notes = fields.length > 6 ? fields[6].trim() : null;
+                    if (f.length < 5) {
+                        throw new IllegalArgumentException("Numero insuficiente de campos (minimo 5)");
+                    }
+                    Long thirdPartyId = Long.parseLong(f[0].trim());
+                    Long paymentFormId = Long.parseLong(f[1].trim());
+                    String resolutionInvoice = f[2].trim();
+                    java.time.LocalDate invoiceDate = java.time.LocalDate.parse(f[3].trim());
+                    Integer invoiceDueDay = Integer.parseInt(f[4].trim());
+                    String supplierInvoiceNumber = f.length > 5 ? f[5].trim() : null;
+                    String notes = f.length > 6 ? f[6].trim() : null;
 
-                InvoiceFCRequestDTO request = InvoiceFCRequestDTO.builder()
-                        .thirdPartyId(thirdPartyId)
-                        .paymentFormId(paymentFormId)
-                        .resolutionInvoice(resolutionInvoice)
-                        .invoiceDate(invoiceDate)
-                        .invoiceDueDay(invoiceDueDay)
-                        .supplierInvoiceNumber(supplierInvoiceNumber)
-                        .notes(notes)
-                        .lineInvoices(new ArrayList<>())
-                        .build();
+                    InvoiceFCRequestDTO request = InvoiceFCRequestDTO.builder()
+                            .thirdPartyId(thirdPartyId)
+                            .paymentFormId(paymentFormId)
+                            .resolutionInvoice(resolutionInvoice)
+                            .invoiceDate(invoiceDate)
+                            .invoiceDueDay(invoiceDueDay)
+                            .supplierInvoiceNumber(supplierInvoiceNumber)
+                            .notes(notes)
+                            .lineInvoices(new ArrayList<>())
+                            .build();
 
-                // Bulk import es siempre factura de compra (FC). Resolver por codigo para
-                // ser robusto ante cambios en el orden de seed de types_invoices.
-                Long fcTypeId = typeInvoiceRepository.findByCodeAndDeletedAtIsNull("FC")
-                        .orElseThrow(() -> new RuntimeException(
-                                "Tipo de factura 'FC' no encontrado en types_invoices"))
-                        .getId();
-                createInvoice(request, fcTypeId);
-                successCount++;
+                    Long fcTypeId = typeInvoiceRepository.findByCodeAndDeletedAtIsNull("FC")
+                            .orElseThrow(() -> new RuntimeException(
+                                    "Tipo de factura 'FC' no encontrado en types_invoices"))
+                            .getId();
+                    createInvoice(request, fcTypeId);
+                    successCount[0]++;
+                });
             } catch (Exception e) {
+                String msg = e.getCause() != null && e.getCause().getMessage() != null
+                        ? e.getCause().getMessage() : e.getMessage();
+                if (msg == null) msg = e.toString();
                 errors.add(com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError.builder()
-                        .row(i + 1).message(e.getMessage()).build());
+                        .row(rowNum).message(msg).build());
+                log.warn("HU-AP-22 fila {} fallo: {}", rowNum, msg);
             }
         }
 
         com.sigcon.backend.invoices.application.BulkImportResultDTO result =
                 com.sigcon.backend.invoices.application.BulkImportResultDTO.builder()
                         .totalRows(totalRows)
-                        .successCount(successCount)
+                        .successCount(successCount[0])
                         .errorCount(errors.size())
                         .errors(errors)
                         .build();
 
         log.info("Importacion masiva completada: {}/{} exitosas, {} errores",
-                successCount, totalRows, errors.size());
+                successCount[0], totalRows, errors.size());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Importacion masiva completada"), Optional.of(result)));
+    }
+
+    /**
+     * HU-AP-22 (Bloque AS): parsea un archivo XLSX usando Apache POI.
+     * Convierte cada fila en un String[] aplicando formateo numerico/fecha.
+     */
+    private List<String[]> parseXlsxRows(byte[] xlsxBytes) {
+        List<String[]> result = new ArrayList<>();
+        try (java.io.InputStream is = new java.io.ByteArrayInputStream(xlsxBytes);
+             org.apache.poi.xssf.usermodel.XSSFWorkbook wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(is)) {
+            org.apache.poi.ss.usermodel.Sheet sheet = wb.getSheetAt(0);
+            org.apache.poi.ss.usermodel.DataFormatter formatter = new org.apache.poi.ss.usermodel.DataFormatter();
+            for (int r = 0; r <= sheet.getLastRowNum(); r++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.getRow(r);
+                if (row == null) {
+                    result.add(new String[0]);
+                    continue;
+                }
+                int last = row.getLastCellNum();
+                String[] cells = new String[Math.max(0, last)];
+                for (int c = 0; c < last; c++) {
+                    org.apache.poi.ss.usermodel.Cell cell = row.getCell(c);
+                    String val;
+                    if (cell == null) {
+                        val = "";
+                    } else if (cell.getCellType() == org.apache.poi.ss.usermodel.CellType.NUMERIC) {
+                        if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
+                            val = cell.getLocalDateTimeCellValue().toLocalDate().toString();
+                        } else {
+                            double d = cell.getNumericCellValue();
+                            if (d == Math.floor(d)) {
+                                val = String.valueOf((long) d);
+                            } else {
+                                val = String.valueOf(d);
+                            }
+                        }
+                    } else {
+                        val = formatter.formatCellValue(cell);
+                    }
+                    cells[c] = val == null ? "" : val.trim();
+                }
+                result.add(cells);
+            }
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("No se pudo leer el archivo XLSX: " + e.getMessage());
+        }
+        return result;
     }
 
     // ========================= Helpers

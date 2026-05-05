@@ -51,7 +51,7 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado")
     })
     @PostMapping("/fv")
-    @PreAuthorize("hasAuthority('PERM_CREATE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createSalesInvoice(
             @Valid @RequestBody CreateSalesInvoiceRequest request,
             BindingResult bindingResult) {
@@ -76,7 +76,7 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido correctamente")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return service.search(request);
     }
@@ -91,7 +91,7 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "400", description = "Factura no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
             return service.getById(id);
@@ -111,7 +111,7 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @RequestBody CreateSalesInvoiceRequest request) {
         try {
@@ -132,7 +132,7 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "400", description = "No se puede anular (tiene pagos o ya esta anulada)")
     })
     @PostMapping("/{id}/void")
-    @PreAuthorize("hasAuthority('PERM_DELETE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> voidInvoice(@PathVariable Long id) {
         try {
             return service.voidInvoice(id);
@@ -151,12 +151,32 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "200", description = "Actualizacion ejecutada")
     })
     @PostMapping("/update-overdue")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateOverdue() {
         int count = service.updateOverdueInvoices();
         return ResponseEntity.ok(
                 com.sigcon.backend.utils.SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Se actualizaron " + count + " facturas a OVERDUE"),
+                        Optional.of(count)));
+    }
+
+    /**
+     * HU-AR-06 E1 + E3: dispara la reconciliacion integral de estados de facturas
+     * de venta (ejecucion manual del scheduler 1:30 AM). Corrige status segun
+     * balanceDue real (PAID si saldo=0, OVERDUE si vencida con saldo, etc.).
+     */
+    @Operation(summary = "Reconciliar estados de facturas (manual)",
+               description = "HU-AR-06: ejecuta la reconciliacion integral de estados (PAID/PARTIALLY_PAID/OVERDUE/ISSUED) segun balanceDue real")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Reconciliacion ejecutada")
+    })
+    @PostMapping("/reconcile-statuses")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> reconcileStatuses() {
+        int count = service.reconcileInvoiceStatuses();
+        return ResponseEntity.ok(
+                com.sigcon.backend.utils.SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Reconciliacion ejecutada: " + count + " facturas con status corregido"),
                         Optional.of(count)));
     }
 
@@ -170,7 +190,7 @@ public class SalesInvoicesController {
         @ApiResponse(responseCode = "400", description = "Regla de negocio incumplida")
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);

@@ -126,7 +126,10 @@ END $$;
 -- modificaciones manuales.
 DO $$
 BEGIN
-    IF NOT EXISTS (
+    -- HU-ACT-01 E1 (QA 2026-05-05): constraint bloqueaba compras a credito.
+    -- La validacion equivalente esta en VoucherService.createVoucher (solo
+    -- exige origen cuando paymentForm.isContado=true). NO recrear el CHECK.
+    IF FALSE AND NOT EXISTS (
         SELECT 1 FROM pg_constraint
          WHERE conname = 'chk_origin_payment_not_null'
            AND conrelid = 'vouchers'::regclass

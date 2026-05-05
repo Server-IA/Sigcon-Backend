@@ -43,7 +43,7 @@ public class AuditFindingController {
         @ApiResponse(responseCode = "400", description = "Datos invalidos o log inexistente"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateAuditFindingRequest req) {
         return ResponseEntity.ok(service.create(req));
@@ -51,7 +51,7 @@ public class AuditFindingController {
 
     @Operation(summary = "Listar hallazgos paginados",
                description = "Filtros opcionales por status (ABIERTO/EN_REVISION/CERRADO).")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping
     public ResponseEntity<?> list(
             @Parameter(description = "Pagina (0-indexed)") @RequestParam(defaultValue = "0") int page,
@@ -68,7 +68,7 @@ public class AuditFindingController {
     }
 
     @Operation(summary = "Detalle de un hallazgo")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         return ResponseEntity.ok(service.findById(id));
@@ -76,7 +76,7 @@ public class AuditFindingController {
 
     @Operation(summary = "Hallazgos vinculados a un log",
                description = "Lista los hallazgos asociados a un audit log especifico.")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/by-log/{auditLogId}")
     public ResponseEntity<List<AuditFindingDTO>> byLog(@PathVariable Long auditLogId) {
         return ResponseEntity.ok(service.findByAuditLogId(auditLogId));
@@ -88,7 +88,7 @@ public class AuditFindingController {
         @ApiResponse(responseCode = "200", description = "Estado actualizado"),
         @ApiResponse(responseCode = "400", description = "Transicion no permitida")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/{id}/start-review")
     public ResponseEntity<?> startReview(@PathVariable Long id,
                                           @RequestBody(required = false) StartReviewRequest req) {
@@ -102,7 +102,7 @@ public class AuditFindingController {
         @ApiResponse(responseCode = "200", description = "Hallazgo cerrado"),
         @ApiResponse(responseCode = "400", description = "Resolucion faltante o ya cerrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/{id}/close")
     public ResponseEntity<?> close(@PathVariable Long id,
                                     @RequestBody CloseRequest req) {
@@ -112,7 +112,7 @@ public class AuditFindingController {
 
     @Operation(summary = "Eliminar hallazgo",
                description = "Soft delete. Solo permitido en estado ABIERTO.")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         service.delete(id);

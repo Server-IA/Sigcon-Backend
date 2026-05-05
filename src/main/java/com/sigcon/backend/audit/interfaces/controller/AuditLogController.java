@@ -53,7 +53,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "401", description = "No autenticado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/logs")
     public ResponseEntity<?> list(
             @Parameter(description = "Pagina (0-indexed)", example = "0")
@@ -82,7 +82,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "400", description = "Evento inexistente"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/logs/{id}")
     public ResponseEntity<?> getById(
             @Parameter(description = "ID del log", example = "1") @PathVariable Long id) {
@@ -97,7 +97,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "200", description = "Pagina de logs filtrados"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/logs/search")
     public ResponseEntity<?> search(
             @RequestBody AuditLogFilterRequest filter,
@@ -126,7 +126,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "200", description = "Eventos de la entidad"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/logs/entity/{entityType}/{entityId}")
     public ResponseEntity<?> findByEntity(
             @Parameter(description = "Tipo de entidad", example = "ThirdParty")
@@ -145,7 +145,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "200", description = "Eventos vinculados al JE"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/logs/journal-entry/{journalEntryId}")
     public ResponseEntity<?> findByJournalEntry(
             @Parameter(description = "ID del asiento contable", example = "1")
@@ -161,7 +161,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "200", description = "Datos del dashboard"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/dashboard")
     public ResponseEntity<AuditDashboardDTO> dashboard() {
         return ResponseEntity.ok(auditLogService.getDashboardData());
@@ -174,7 +174,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "200", description = "Listado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/logs/latest")
     public ResponseEntity<?> latest() {
         return ResponseEntity.ok(auditLogService.findLatest(10));
@@ -190,7 +190,7 @@ public class AuditLogController {
         @ApiResponse(responseCode = "400", description = "Formato no soportado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/export/{format}")
     public ResponseEntity<?> exportFiltered(
             @Parameter(description = "Formato (csv | xlsx | pdf)", example = "csv")
@@ -199,7 +199,7 @@ public class AuditLogController {
         return doExport(format, filter != null ? filter : new AuditLogFilterRequest());
     }
 
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/export/{format}")
     public ResponseEntity<?> exportSimple(@PathVariable String format) {
         return doExport(format, new AuditLogFilterRequest());
@@ -283,7 +283,7 @@ public class AuditLogController {
 
     @Operation(summary = "Exportar dashboard como PDF (HU-AU-07 E6)",
                description = "Genera un PDF con los KPIs y conteos del dashboard, no la lista de logs individuales.")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/dashboard/export/pdf")
     public ResponseEntity<?> exportDashboardPdf() {
         try {

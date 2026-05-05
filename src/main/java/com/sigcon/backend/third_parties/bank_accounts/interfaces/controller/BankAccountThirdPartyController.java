@@ -48,7 +48,7 @@ public class BankAccountThirdPartyController {
             @ApiResponse(responseCode = "400", description = "TPBA_002: La cuenta bancaria no existe")
     })
     @GetMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTIES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTIES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getByBankAccount(@PathVariable Long bankAccountId) {
         return thirdPartyBankAccountService.getByBankAccount(bankAccountId);
     }
@@ -63,7 +63,7 @@ public class BankAccountThirdPartyController {
             @ApiResponse(responseCode = "409", description = "TPBA_003: vinculacion ya existe")
     })
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTIES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_THIRD_PARTIES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> linkThirdParty(
             @PathVariable Long bankAccountId,
             @Valid @RequestBody LinkThirdPartyRequest request) {

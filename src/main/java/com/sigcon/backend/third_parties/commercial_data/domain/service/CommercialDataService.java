@@ -1,5 +1,6 @@
 package com.sigcon.backend.third_parties.commercial_data.domain.service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import com.sigcon.backend.third_parties.ecl_segmentation.domain.model.enums.RiskSegmentation;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.model.CurrencyType;
 import com.sigcon.backend.lists_accounting.types_of_currency.domain.repository.CurrencyTypeRepository;
 import com.sigcon.backend.parametrization.resources.application.PaymentTermsDTO;
@@ -138,7 +140,8 @@ public class CommercialDataService {
         CommercialData current = commercialDataRepository
                 .findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "CD_003: No existen datos comerciales vigentes para este tercero."));
+                        // HU-TER-12 E3.0 (Bloque AN, 2026-05-04): mensaje literal Excel.
+                        "Este tercero aun no tiene condiciones comerciales registradas"));
 
         // 5. Resolver moneda (opcional)
         CurrencyType currency = resolveCurrency(request.getCurrencyId());
@@ -179,7 +182,8 @@ public class CommercialDataService {
         CommercialData commercialData = commercialDataRepository
                 .findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "CD_003: No existen datos comerciales vigentes para este tercero."));
+                        // HU-TER-12 E3.0 (Bloque AN, 2026-05-04): mensaje literal Excel.
+                        "Este tercero aun no tiene condiciones comerciales registradas"));
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -195,7 +199,8 @@ public class CommercialDataService {
         CommercialData commercialData = commercialDataRepository
                 .findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "CD_003: No existen datos comerciales vigentes para este tercero."));
+                        // HU-TER-12 E3.0 (Bloque AN, 2026-05-04): mensaje literal Excel.
+                        "Este tercero aun no tiene condiciones comerciales registradas"));
 
         // HU-TER-12 E4 (2026-04-27): bloquear si el cliente tiene cartera AR
         // activa. Antes se permitia eliminar las condiciones aunque hubiera
@@ -229,7 +234,8 @@ public class CommercialDataService {
         CommercialData commercialData = commercialDataRepository
                 .findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "CD_003: No existen datos comerciales vigentes para este tercero."));
+                        // HU-TER-12 E3.0 (Bloque AN, 2026-05-04): mensaje literal Excel.
+                        "Este tercero aun no tiene condiciones comerciales registradas"));
 
         List<CommercialDataHistoryDTO> history = commercialDataHistoryRepository
                 .findByCommercialDataIdOrderByChangedAtDesc(commercialData.getId())
@@ -267,6 +273,21 @@ public class CommercialDataService {
                 .build();
     }
 
+    /**
+     * HU-TER-11 E1.0/E5.0 (Bloque AN, 2026-05-04): porcentaje de provision
+     * ECL segun nivel de riesgo (NIIF 9). LOW=1%, MEDIUM=5%, HIGH=20%.
+     * Si riskLevel es null retorna null para que el frontend lo oculte.
+     */
+    private BigDecimal provisionPctFor(RiskSegmentation riskLevel) {
+        if (riskLevel == null) return null;
+        switch (riskLevel) {
+            case LOW: return new BigDecimal("1.00");
+            case MEDIUM: return new BigDecimal("5.00");
+            case HIGH: return new BigDecimal("20.00");
+            default: return null;
+        }
+    }
+
     private CommercialData mapToEntity(CommercialDataDTO dto, ThirdParty thirdParty, PaymentTerms paymentTerm) {
         return CommercialData.builder()
                 .thirdParty(thirdParty)
@@ -300,6 +321,10 @@ public class CommercialDataService {
                         .build())
                 .limitCredit(entity.getLimitCredit())
                 .riskLevel(entity.getRiskLevel())
+                // HU-TER-11 E1.0/E5.0 (Bloque AN, 2026-05-04): % provision ECL
+                // automatico segun riskLevel para que el frontend lo muestre
+                // junto al nivel de riesgo sin tener que recalcularlo.
+                .provisionPct(provisionPctFor(entity.getRiskLevel()))
                 .validityFrom(entity.getValidityFrom())
                 .validityTo(entity.getValidityTo())
                 .createdAt(entity.getCreatedAt())

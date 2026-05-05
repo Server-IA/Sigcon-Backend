@@ -48,12 +48,33 @@ public class ArReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos")
     })
     @PostMapping("/reports/by-customer")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> byCustomer(@RequestBody ArReportRequest request) {
         try {
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                     Optional.of("Reporte generado"),
                     Optional.of(service.reportByCustomer(request))));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /** HU-AR-05 E2: solo facturas con saldo pendiente real (excluye PAID/VOIDED/SETTLED/DRAFT). */
+    @Operation(summary = "Reporte CxC solo pendientes",
+               description = "HU-AR-05 E2: lista facturas con balanceDue > 0 sin necesidad de elegir status especifico. Filtra opcionalmente por cliente y/o rango de fechas")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Reporte generado"),
+        @ApiResponse(responseCode = "400", description = "Parametros invalidos")
+    })
+    @PostMapping("/reports/only-pending")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> onlyPending(@RequestBody(required = false) ArReportRequest request) {
+        try {
+            if (request == null) request = new ArReportRequest();
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                    Optional.of("Reporte de facturas pendientes generado"),
+                    Optional.of(service.reportOnlyPending(request))));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
@@ -68,7 +89,7 @@ public class ArReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos")
     })
     @PostMapping("/reports/by-status")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> byStatus(@RequestBody ArReportRequest request) {
         try {
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -88,7 +109,7 @@ public class ArReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos")
     })
     @PostMapping("/reports/by-period")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> byPeriod(@RequestBody ArReportRequest request) {
         try {
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -108,7 +129,7 @@ public class ArReportController {
         @ApiResponse(responseCode = "400", description = "Tipo o parametros invalidos")
     })
     @PostMapping("/reports/{type}/pdf")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> generatePdf(@PathVariable String type,
                                           @RequestBody(required = false) ArReportRequest request) {
         try {
@@ -136,7 +157,7 @@ public class ArReportController {
         @ApiResponse(responseCode = "200", description = "Aging generado")
     })
     @GetMapping("/reports/aging")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> aging() {
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Aging generado"), Optional.of(service.aging())));

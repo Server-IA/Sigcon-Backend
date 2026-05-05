@@ -55,7 +55,7 @@ public class AssetDepreciationHistoryController {
      * ordenado por fecha de cálculo descendente.
      */
     @GetMapping("/history/{assetId}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Histórico de depreciaciones por activo",
             description = "Retorna todos los registros históricos de depreciación de un activo " +
@@ -100,7 +100,7 @@ public class AssetDepreciationHistoryController {
      * Retorna todos los registros históricos de depreciación de un período contable.
      */
     @GetMapping("/history")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Histórico de depreciaciones por período",
             description = "Retorna todos los registros históricos de depreciación correspondientes al " +

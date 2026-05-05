@@ -74,7 +74,7 @@ public class CostCenterService {
                 if (costCenterRepository.existsByCodeAndDeletedAtIsNull(request.getCode())) {
                         return ResponseEntity.badRequest().body(
                                 ErrorRespondJson.getErrorRespondMessage(
-                                        Optional.of("Ya existe un centro de costo con el codigo: " + request.getCode())));
+                                        Optional.of("El codigo ya existe, ingrese uno diferente")));
                 }
 
                 // CFG-RF-17: validar unicidad de nombre
@@ -115,14 +115,14 @@ public class CostCenterService {
                 if (costCenterRepository.existsByCodeAndIdNotAndDeletedAtIsNull(request.getCode(), id)) {
                         return ResponseEntity.badRequest().body(
                                 ErrorRespondJson.getErrorRespondMessage(
-                                        Optional.of("Ya existe otro centro de costo con el codigo: " + request.getCode())));
+                                        Optional.of("Codigo o nombre duplicado para la empresa, ingrese uno diferente")));
                 }
 
                 // CFG-RF-19: validar unicidad de nombre (excluyendo registro actual)
                 if (costCenterRepository.existsByNameAndIdNotAndDeletedAtIsNull(request.getName(), id)) {
                         return ResponseEntity.badRequest().body(
                                 ErrorRespondJson.getErrorRespondMessage(
-                                        Optional.of("Ya existe otro centro de costo con el nombre: " + request.getName())));
+                                        Optional.of("Codigo o nombre duplicado para la empresa, ingrese uno diferente")));
                 }
 
                 costCenter.setCode(request.getCode());
@@ -178,6 +178,31 @@ public class CostCenterService {
                         return ResponseEntity.badRequest().body(
                                         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
                 }
+        }
+
+        /**
+         * HU-CFG-RF-17 E5: exporta el listado completo en CSV o XLSX (multi-tenant).
+         */
+        public byte[] exportAll(String format) {
+                java.util.List<CostCenter> all = costCenterRepository.findAll().stream()
+                                .filter(c -> c.getDeletedAt() == null)
+                                .collect(java.util.stream.Collectors.toList());
+                java.util.List<String> headers = java.util.List.of(
+                                "Id", "Codigo", "Nombre", "Descripcion", "Estado", "Creado", "Actualizado");
+                java.util.List<java.util.function.Function<CostCenter, Object>> cols = java.util.List.of(
+                                CostCenter::getId,
+                                CostCenter::getCode,
+                                CostCenter::getName,
+                                CostCenter::getDescription,
+                                c -> c.getStatus() != null ? c.getStatus().name() : "",
+                                CostCenter::getCreatedAt,
+                                CostCenter::getUpdatedAt);
+                if ("xlsx".equalsIgnoreCase(format)) {
+                        return com.sigcon.backend.utils.export.SimpleTableExporter
+                                        .toXlsx("Centros de costo", headers, cols, all);
+                }
+                return com.sigcon.backend.utils.export.SimpleTableExporter
+                                .toCsv(headers, cols, all);
         }
 
         private CostCenterDTO convertToDTO(CostCenter costCenter) {

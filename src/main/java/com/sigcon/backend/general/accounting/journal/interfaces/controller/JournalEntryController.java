@@ -69,7 +69,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "Error en los parametros de busqueda"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> search(@RequestBody DataTableRequest request) {
         try {
             return journalEntryService.searchEntries(request);
@@ -96,7 +96,7 @@ public class JournalEntryController {
     // HU-CG-03A E1: el rol CONTADOR debe poder crear comprobantes contables.
     // Antes solo aceptaba ROLE_ADMIN -> 403 al CONTADOR. V9-ZZM agrega
     // PERM_CREATE_JOURNAL_ENTRY al rol CONTADOR.
-    @PreAuthorize("hasAuthority('PERM_CREATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.CREAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody CreateJournalEntryRequest request,
             Authentication authentication) {
@@ -126,7 +126,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "404", description = "Asiento no encontrado"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> detail(@PathVariable Long id) {
         try {
             JournalEntryDTO result = journalEntryService.getEntry(id);
@@ -164,7 +164,7 @@ public class JournalEntryController {
     })
     // HU-CG-02B: contabilizar requiere permiso APPROVE (no solo VIEW).
     // Segregacion de funciones: el operador VIEW solo lee, contabilizar es accion.
-    @PreAuthorize("hasAuthority('PERM_APPROVE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.CONTABILIZAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> post(@PathVariable Long id) {
         try {
             JournalEntryDTO result = journalEntryService.postEntry(id);
@@ -193,7 +193,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
     // HU-CG-07B: reversar requiere permiso REVERSE explicito.
-    @PreAuthorize("hasAuthority('PERM_REVERSE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.REVERSAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> reverse(
             @PathVariable Long id,
             @Valid @RequestBody ReverseEntryRequest request,
@@ -248,7 +248,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
     // HU-CG-07A: editar borrador requiere permiso UPDATE.
-    @PreAuthorize("hasAuthority('PERM_UPDATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @Valid @RequestBody CreateJournalEntryRequest request) {
         try {
@@ -277,7 +277,7 @@ public class JournalEntryController {
     })
     // HU-CG-07B: crear correccion sobre POSTED requiere permiso UPDATE
     // (genera un DRAFT nuevo, no toca el original).
-    @PreAuthorize("hasAuthority('PERM_UPDATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> correct(@PathVariable Long id,
                                       @Valid @RequestBody CreateJournalEntryRequest request) {
         try {
@@ -306,7 +306,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
     // Eliminar (soft) requiere permiso DELETE explicito.
-    @PreAuthorize("hasAuthority('PERM_DELETE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.ELIMINAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             journalEntryService.deleteEntry(id);
@@ -338,7 +338,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "200", description = "Historial de versiones obtenido"),
             @ApiResponse(responseCode = "404", description = "Comprobante no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> versionHistory(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(Map.of(
@@ -365,7 +365,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "200", description = "Trazabilidad obtenida"),
             @ApiResponse(responseCode = "400", description = "Asiento no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT') or hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> auditTrail(@PathVariable Long id) {
         try {
             var je = journalEntryService.getEntry(id);
@@ -398,7 +398,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "200", description = "Lista de documentos relacionados"),
             @ApiResponse(responseCode = "404", description = "Comprobante no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> relatedDocs(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(Map.of(
@@ -424,7 +424,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "Comprobante no encontrado o error de generacion"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> exportPdf(@PathVariable Long id) {
         try {
             byte[] body = journalEntryExportService.generatePdf(id);
@@ -448,7 +448,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "400", description = "Comprobante no encontrado"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> exportXlsx(@PathVariable Long id) {
         try {
             byte[] body = journalEntryExportService.generateXlsx(id);
@@ -476,7 +476,7 @@ public class JournalEntryController {
             @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> byPeriod(
             @PathVariable Integer year,
             @PathVariable Integer month) {

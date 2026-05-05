@@ -47,10 +47,13 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@lombok.extern.slf4j.Slf4j
 public class DepretationRuleService {
 
     private final DepretationRuleRepository depretationRuleRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+    private final com.sigcon.backend.assets.assets.domain.repository.AssetsRepository assetsRepository;
+    private final com.sigcon.backend.general.accounting.closing.domain.service.ClosingLockService closingLockService;
     private final AuditPublisher auditPublisher;
 
     private final UserRepository userRepository;
@@ -62,7 +65,7 @@ public class DepretationRuleService {
             CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
 
-        // try {
+        try {
             // 1. Validar errores de bean validation
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest()
@@ -83,6 +86,18 @@ public class DepretationRuleService {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(
                         "Regla duplicada, ya existe una regla de depreciación con esos parámetros "
                         + "(método, cuenta contable y fecha de vigencia)")));
+            }
+
+            // HU-CFG-RF-13 E? (Bloque AP, 2026-05-04): nombre unico per-tenant.
+            // Antes el seed V9-Z6 + creaciones manuales generaban filas con el mismo
+            // nombre (ej. "OFICINA QA1" duplicada). El listado quedaba con multiples
+            // filas con identico nombre, confundiendo al usuario y dificultando
+            // la trazabilidad legal.
+            if (request.getName() != null
+                    && depretationRuleRepository.existsByNameAndDeletedAtIsNull(request.getName().trim())) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "Ya existe una regla de depreciación con ese nombre. Ingrese uno diferente.")));
             }
 
             // 3. Validar vida útil según tipo de depreciación
@@ -134,16 +149,18 @@ public class DepretationRuleService {
                             Optional.of(response)
                     ));
 
-        // } catch (DuplicateDepretationRuleException e) {
-        //     return ResponseEntity.status(HttpStatus.CONFLICT)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // } catch (IllegalArgumentException e) {
-        //     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // } catch (Exception e) {
-        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar la regla. Intente nuevamente")));
-        // }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            throw tie;
+        } catch (Exception e) {
+            // HU-CFG-RF-13 E8: error tecnico no controlado → mensaje contextual.
+            log.error("Error tecnico al crear regla de depreciacion", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intente nuevamente.")));
+        }
     }
 
     /**
@@ -290,8 +307,7 @@ public class DepretationRuleService {
      * CFG-RF-14: Consultar reglas de depreciación existentes (HU-14)
      */
     public ResponseEntity<?> getDepretationRulesPaged(com.sigcon.backend.utils.DataTableRequest request) {
-        // try {
-                
+        try {
             if(request == null) {
                 request = new com.sigcon.backend.utils.DataTableRequest();
             }
@@ -325,12 +341,16 @@ public class DepretationRuleService {
                             rules.map(this::mapToResponse),
                             request.getDraw()
                     )
-            ); 
-
-        // } catch (Exception e) {
-        //     return ResponseEntity.badRequest()
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // }
+            );
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            throw tie;
+        } catch (Exception e) {
+            // HU-CFG-RF-14 E6: error tecnico al cargar datos
+            log.error("Error tecnico al consultar reglas de depreciacion", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intente nuevamente.")));
+        }
     }
 
     /**
@@ -340,7 +360,7 @@ public class DepretationRuleService {
             UpdateDepretationRuleRequest request,
             BindingResult bindingResult) {
 
-        // try {
+        try {
             // 1. Validar errores de bean validation
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest()
@@ -358,8 +378,38 @@ public class DepretationRuleService {
                         );
                     }
 
+            // HU-CFG-RF-15 E5: bloqueo si existe cierre contable EN CURSO sobre la
+            // cuenta contable asociada a la regla. ClosingLockService es un puente
+            // hacia CG: hoy retorna siempre false (CG no tiene IN_PROGRESS aun).
+            // Cuando CG implemente cierre por etapas, esta validacion se activa
+            // automaticamente sin tocar este service. PENDIENTE A REVISAR en sprint CG.
+            if (closingLockService.isClosingInProgressFor(
+                    rule.getAccountingAccount() != null ? rule.getAccountingAccount().getId() : null,
+                    rule.getEffectiveDate())) {
+                throw new IllegalStateException(
+                        "No se puede modificar una regla vinculada a un cierre contable en curso.");
+            }
+
             // 3. Validar vida útil compatible con tipo
             validateUsefulLifeByType(request.getDepretationType(), request.getUsefulLifeYears());
+
+            // HU-CFG-RF-15 E3: validar duplicidad post-update.
+            // Si el usuario cambia el tipo de depreciacion a uno que ya existe
+            // para la misma cuenta+vigencia, bloquear con mensaje literal HU.
+            // accountingAccountId y effectiveDate son inmutables → comparar con los actuales.
+            if (request.getDepretationType() != rule.getDepretationType()) {
+                boolean dup = depretationRuleRepository
+                        .existsByDepretationTypeAndAccountingAccountIdAndEffectiveDateAndIdNotAndDeletedAtIsNull(
+                                request.getDepretationType(),
+                                rule.getAccountingAccount().getId(),
+                                rule.getEffectiveDate(),
+                                rule.getId());
+                if (dup) {
+                    throw new IllegalArgumentException(
+                            "Regla duplicada, ya existe una regla de depreciación con esos parámetros (método, cuenta contable y fecha de vigencia)."
+                    );
+                }
+            }
 
             // 4. Validar que la tasa esté en rango (adicional)
             if (request.getDepretationRate().compareTo(java.math.BigDecimal.ZERO) < 0 ||
@@ -367,6 +417,16 @@ public class DepretationRuleService {
                 throw new IllegalArgumentException(
                         "La tasa de depreciación está fuera del rango permitido."
                 );
+            }
+
+            // HU-CFG-RF-15 E? (Bloque AP, 2026-05-04): nombre unico al editar
+            // (excluyendo el id actual). Antes el listado podia quedar con
+            // multiples reglas con el mismo nombre.
+            if (request.getName() != null
+                    && depretationRuleRepository.existsByNameAndIdNotAndDeletedAtIsNull(
+                            request.getName().trim(), rule.getId())) {
+                throw new IllegalArgumentException(
+                        "Ya existe una regla de depreciación con ese nombre. Ingrese uno diferente.");
             }
 
             // 5. Actualizar campos editables
@@ -401,21 +461,25 @@ public class DepretationRuleService {
                             Optional.of(response)
                     )
             );
-
-        // } catch (IllegalArgumentException e) {
-        //     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // } catch (Exception e) {
-        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al guardar los cambios. Intente nuevamente")));
-        // }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            throw tie;
+        } catch (Exception e) {
+            // HU-CFG-RF-15 E8: error tecnico al guardar cambios
+            log.error("Error tecnico al actualizar regla de depreciacion id={}", request.getId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intente nuevamente.")));
+        }
     }
 
     /**
      * CFG-RF-16: Eliminar regla de depreciación (eliminación lógica) (HU-16)
      */
     public ResponseEntity<?> deleteDepretationRule(Long id, String reason) {
-        // try {
+        try {
             // 1. Verificar que la regla existe
             DepretationRule rule = depretationRuleRepository.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException(
@@ -436,18 +500,19 @@ public class DepretationRuleService {
                 );
             }
 
-            String dependency = hasActiveDependencies(rule.getAccountingAccount().getId());
+            // HU-CFG-RF-16 E3: validar dependencias - activos en uso por la regla
+            String dependency = hasActiveDependencies(rule.getId());
             if (dependency != null) {
                 throw new IllegalArgumentException(dependency);
             }
 
-
-
-            // 4. Marcarlo como eliminado 
+            // 4. Marcarlo como eliminado
             rule.setDeletedAt(LocalDateTime.now());
-            rule.setStatus(DepretationStatus.INACTIVE); // Opcional: marcar como inactiva también
+            rule.setStatus(DepretationStatus.INACTIVE);
             depretationRuleRepository.save(rule);
-            auditPublisher.publishDelete(AuditModule.CFG, "DepretationRule", rule.getId(), "DepretationRule eliminado id=" + rule.getId());
+            // HU-CFG-RF-16 E4: persistir motivo en descripcion del audit log
+            auditPublisher.publishDelete(AuditModule.CFG, "DepretationRule", rule.getId(),
+                    "DepretationRule eliminado id=" + rule.getId() + " | motivo=" + reason.trim());
 
             // 5. Registrar en auditoría (comentado por el momento)
             /*
@@ -467,21 +532,63 @@ public class DepretationRuleService {
                             Optional.empty()
                     )
             );
-
-        // } catch (IllegalArgumentException e) {
-        //     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
-        // } catch (Exception e) {
-        //     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        //             .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al eliminar la regla. Intente nuevamente")));
-        // }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            throw tie;
+        } catch (Exception e) {
+            // HU-CFG-RF-16 E6: error tecnico al eliminar
+            log.error("Error tecnico al eliminar regla de depreciacion id={}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intente nuevamente.")));
+        }
     }
 
-    private String hasActiveDependencies(Long accountingAccountId) {
-        // List<DepretationRule> depretationRules = depretationRuleRepository.findByAccountingAccount_Id(accountingAccountId);
-        // if (!depretationRules.isEmpty()) {
-        //     return "No se puede eliminar la regla de depreciación, porque está vinculada a registros. Retire las dependencias e intente de nuevo";
-        // }
+    /**
+     * HU-CFG-RF-13 E7: exporta el listado completo (no paginado) de reglas
+     * de depreciacion en CSV o XLSX. Respeta tenant filter.
+     */
+    public byte[] exportAll(String format) {
+        java.util.List<DepretationRule> all = depretationRuleRepository.findAll().stream()
+                .filter(r -> r.getDeletedAt() == null)
+                .collect(java.util.stream.Collectors.toList());
+        java.util.List<String> headers = java.util.List.of(
+                "Id", "Nombre", "Tipo depreciacion", "Cuenta contable",
+                "Tasa %", "Vida util (anios)", "Valor residual",
+                "Vigencia desde", "Estado");
+        java.util.List<java.util.function.Function<DepretationRule, Object>> cols = java.util.List.of(
+                DepretationRule::getId,
+                DepretationRule::getName,
+                r -> r.getDepretationType() != null ? r.getDepretationType().name() : "",
+                r -> r.getAccountingAccount() != null ? r.getAccountingAccount().getCustomName() : "",
+                DepretationRule::getDepretationRate,
+                DepretationRule::getUsefulLifeYears,
+                DepretationRule::getResidualValue,
+                DepretationRule::getEffectiveDate,
+                r -> r.getStatus() != null ? r.getStatus().name() : "");
+        if ("xlsx".equalsIgnoreCase(format)) {
+            return com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx("Reglas depreciacion", headers, cols, all);
+        }
+        return com.sigcon.backend.utils.export.SimpleTableExporter
+                .toCsv(headers, cols, all);
+    }
+
+    /**
+     * HU-CFG-RF-16 E3: valida que la regla de depreciacion NO tenga activos
+     * en uso. Retorna null si esta libre, o el mensaje literal de la HU si
+     * tiene activos asociados.
+     *
+     * @param depretationRuleId id de la regla a validar
+     * @return null si no hay dependencias, mensaje de error si las hay
+     */
+    private String hasActiveDependencies(Long depretationRuleId) {
+        long count = assetsRepository.countByDepretationRuleIdAndDeletedAtIsNull(depretationRuleId);
+        if (count > 0) {
+            return "No se puede eliminar una regla asociada a activos en uso.";
+        }
         return null;
     }
 }

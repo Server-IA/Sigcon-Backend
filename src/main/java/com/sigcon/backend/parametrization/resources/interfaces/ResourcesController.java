@@ -34,7 +34,7 @@ public class ResourcesController {
     private final SystemWithholdingAssignmentService systemWithholdingAssignmentService;
 
     @PostMapping("/countries")
-    @PreAuthorize("hasAuthority('PERM_VIEW_COUNTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_COUNTRY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener países", description = "Obtener países del sistema <br> Permiso requerido: VIEW_COUNTRY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de paises obtenida exitosamente"),
@@ -46,7 +46,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/municipalities")
-    @PreAuthorize("hasAuthority('PERM_VIEW_MUNICIPALITY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_MUNICIPALITY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener municipios", description = "Obtener municipios del sistema <br> Permiso requerido: VIEW_MUNICIPALITY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de municipios obtenida exitosamente"),
@@ -59,7 +59,7 @@ public class ResourcesController {
 
     // ===== CRUD PAÍSES =====
     @PostMapping("/countries/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_COUNTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_COUNTRY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Crear un nuevo pais", description = "Registra un pais en el catalogo de recursos <br> Permiso requerido: CREATE_COUNTRY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Pais creado exitosamente"),
@@ -70,7 +70,7 @@ public class ResourcesController {
     public ResponseEntity<?> createCountry(@org.springframework.web.bind.annotation.RequestBody CountryDTO request) { return resourceService.createCountry(request); }
 
     @PutMapping("/countries/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_COUNTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_COUNTRY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar un pais existente", description = "Actualiza los datos de un pais del catalogo <br> Permiso requerido: UPDATE_COUNTRY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Pais actualizado exitosamente"),
@@ -81,7 +81,7 @@ public class ResourcesController {
     public ResponseEntity<?> updateCountry(@PathVariable Long id, @org.springframework.web.bind.annotation.RequestBody CountryDTO request) { return resourceService.updateCountry(id, request); }
 
     @DeleteMapping("/countries/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_COUNTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_COUNTRY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar un pais (soft delete)", description = "Elimina logicamente un pais del catalogo <br> Permiso requerido: DELETE_COUNTRY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Pais eliminado exitosamente"),
@@ -92,7 +92,7 @@ public class ResourcesController {
 
     // ===== CRUD MUNICIPIOS =====
     @PostMapping("/municipalities/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_MUNICIPALITY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_MUNICIPALITY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Crear un nuevo municipio", description = "Registra un municipio en el catalogo de recursos <br> Permiso requerido: CREATE_MUNICIPALITY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Municipio creado exitosamente"),
@@ -103,7 +103,7 @@ public class ResourcesController {
     public ResponseEntity<?> createMunicipality(@org.springframework.web.bind.annotation.RequestBody MunicipalityDTO request) { return resourceService.createMunicipality(request); }
 
     @PutMapping("/municipalities/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_MUNICIPALITY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_MUNICIPALITY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Actualizar un municipio existente", description = "Actualiza los datos de un municipio del catalogo <br> Permiso requerido: UPDATE_MUNICIPALITY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Municipio actualizado exitosamente"),
@@ -114,7 +114,7 @@ public class ResourcesController {
     public ResponseEntity<?> updateMunicipality(@PathVariable Long id, @org.springframework.web.bind.annotation.RequestBody MunicipalityDTO request) { return resourceService.updateMunicipality(id, request); }
 
     @DeleteMapping("/municipalities/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_MUNICIPALITY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_MUNICIPALITY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar un municipio (soft delete)", description = "Elimina logicamente un municipio del catalogo <br> Permiso requerido: DELETE_MUNICIPALITY")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Municipio eliminado exitosamente"),
@@ -124,7 +124,7 @@ public class ResourcesController {
     public ResponseEntity<?> deleteMunicipality(@PathVariable Long id) { return resourceService.deleteMunicipality(id); }
 
     @PostMapping("/payment-terms")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_TERM') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_TERM') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener términos de pago", description = "Obtener términos de pago del sistema <br> Permiso requerido: VIEW_PAYMENT_TERM")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de terminos de pago obtenida exitosamente"),
@@ -136,7 +136,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/types-regimes")
-    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_REGIMES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_REGIMES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener tipos de regímenes", description = "Obtener tipos de regímenes del sistema <br> Permiso requerido: VIEW_TYPES_REGIMES")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de tipos de regimenes obtenida exitosamente"),
@@ -148,7 +148,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/types-organizations")
-    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_ORGANIZATIONS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_ORGANIZATIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener tipos de organizaciones", description = "Obtener tipos de organizaciones del sistema <br> Permiso requerido: VIEW_TYPES_ORGANIZATIONS")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de tipos de organizaciones obtenida exitosamente"),
@@ -160,7 +160,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/withholdings")
-    @PreAuthorize("hasAuthority('PERM_VIEW_WITHHOLDINGS') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_WITHHOLDINGS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener retenciones", description = "Obtener retenciones del sistema <br> Permiso requerido: VIEW_WITHHOLDINGS")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de retenciones obtenida exitosamente"),
@@ -172,7 +172,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/payment-forms")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_FORM') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_FORM') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Obtener formas de pago", description = "Obtener formas de pago del sistema <br> Permiso requerido: VIEW_PAYMENT_FORM")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de formas de pago obtenida exitosamente"),
@@ -186,7 +186,7 @@ public class ResourcesController {
     // ===== ASIGNACIONES DE RETENCIONES DEL SISTEMA =====
 
     @PostMapping("/system-withholdings")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar asignaciones de retenciones", description = "Obtiene la lista paginada de retenciones asignadas al sistema <br> Permiso requerido: ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de asignaciones de retenciones obtenida exitosamente"),
@@ -198,7 +198,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/system-withholdings/assign")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Asignar retencion al sistema", description = "Asigna una retencion existente al sistema con fecha de vigencia <br> Permiso requerido: ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Retencion asignada exitosamente al sistema"),
@@ -211,7 +211,7 @@ public class ResourcesController {
     }
 
     @DeleteMapping("/system-withholdings/{id}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Desasignar retencion del sistema", description = "Elimina (soft delete) una asignacion de retencion del sistema <br> Permiso requerido: ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Asignacion de retencion eliminada exitosamente"),

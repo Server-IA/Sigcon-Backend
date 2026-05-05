@@ -46,7 +46,7 @@ public class DianInvoiceController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o factura no encontrada")
     })
     @PostMapping("/{id}/generate-xml")
-    @PreAuthorize("hasAuthority('PERM_CREATE_DIAN_XML') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_DIAN_XML') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> generateXml(@PathVariable Long id) {
         try {
             return xmlService.generateXml(id);
@@ -63,7 +63,7 @@ public class DianInvoiceController {
         @ApiResponse(responseCode = "400", description = "Factura sin XML o ya enviada")
     })
     @PostMapping("/{id}/submit")
-    @PreAuthorize("hasAuthority('PERM_SUBMIT_DIAN') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_SUBMIT_DIAN') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> submit(@PathVariable Long id) {
         try {
             return submissionService.submit(id);
@@ -80,7 +80,7 @@ public class DianInvoiceController {
         @ApiResponse(responseCode = "400", description = "No existe envio")
     })
     @GetMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> status(@PathVariable Long id) {
         try {
             return submissionService.getStatus(id);
@@ -98,7 +98,7 @@ public class DianInvoiceController {
         @ApiResponse(responseCode = "400", description = "Factura no encontrada")
     })
     @GetMapping("/{id}/pdf")
-    @PreAuthorize("hasAuthority('PERM_READ_DIAN') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> pdf(@PathVariable Long id) {
         try {
             byte[] pdf = pdfService.generatePdf(id);

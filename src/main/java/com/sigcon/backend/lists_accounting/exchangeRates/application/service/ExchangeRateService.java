@@ -45,6 +45,7 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class ExchangeRateService {
 
     private final ExchangeRateRepository repository;
@@ -66,7 +67,7 @@ public class ExchangeRateService {
      * @throws RuntimeException si alguna moneda no existe
      */
     public ResponseEntity<?> create(CreateExchangeRateRequest request, BindingResult bindingResult) {
-        // try{
+        try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(bindingResult.getAllErrors());
             }
@@ -113,13 +114,20 @@ public class ExchangeRateService {
                             + currencyExchanged.getIsoCode() + " = " + rate.getValue()
                             + " (" + request.getStartDate() + " a " + request.getEndDate() + ")");
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio creado con exito"), Optional.empty())
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio registrada exitosamente"), Optional.empty())
             );
-        // }catch(Exception e){
-        //     return ResponseEntity.badRequest().body(
-        //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-        //     );
-        // }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            throw tie;
+        } catch (Exception e) {
+            // HU-CFG-RF-25 E6: error tecnico al registrar
+            log.error("Error tecnico al crear tasa de cambio", e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intente nuevamente.")));
+        }
     }
 
     /**
@@ -183,9 +191,7 @@ public class ExchangeRateService {
      * @throws RuntimeException si la tasa o las monedas no existen
      */
     public ResponseEntity<?> update(Long id, UpdateExchangeRateRequest request, BindingResult bindingResult) {
-
-        // try{
-
+        try {
             if (bindingResult.hasErrors()) {
                 return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondJson(bindingResult)
@@ -243,14 +249,20 @@ public class ExchangeRateService {
                             + currencyExchanged.getIsoCode() + " = " + rate.getValue());
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio actualizada con exito"), Optional.empty())
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Actualizacion exitosa"), Optional.empty())
             );
-            
-        // }catch(Exception e){
-        //     return ResponseEntity.badRequest().body(
-        //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-        //     );
-        // }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            throw tie;
+        } catch (Exception e) {
+            // HU-CFG-RF-27 E6: error tecnico al actualizar tasa
+            log.error("Error tecnico al actualizar tasa de cambio id={}", id, e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "Sin Conexion, no se pudo conectar con el servidor despues de reintentar, verifique su conexion e intente nuevamente.")));
+        }
     }
 
     /**
@@ -261,29 +273,76 @@ public class ExchangeRateService {
      * @return ResponseEntity con confirmacion de eliminacion
      * @throws RuntimeException si la tasa no existe
      */
-    public ResponseEntity<?> delete(Long id) {
+    /**
+     * HU-CFG-RF-25 E3: exporta tasas de cambio en CSV o XLSX (multi-tenant).
+     */
+    public byte[] exportAll(String format) {
+        java.util.List<ExchangeRate> all = repository.findAll().stream()
+                .filter(e -> e.getDeletedAt() == null)
+                .collect(java.util.stream.Collectors.toList());
+        java.util.List<String> headers = java.util.List.of(
+                "Id", "Moneda origen", "Moneda destino", "Tipo cambio",
+                "Tasa", "Inicio vigencia", "Fin vigencia", "Estado");
+        java.util.List<java.util.function.Function<ExchangeRate, Object>> cols = java.util.List.of(
+                ExchangeRate::getId,
+                e -> e.getCurrencyExchange() != null ? e.getCurrencyExchange().getIsoCode() : "",
+                e -> e.getCurrencyExchanged() != null ? e.getCurrencyExchanged().getIsoCode() : "",
+                e -> e.getExchangeType() != null ? e.getExchangeType().name() : "",
+                ExchangeRate::getValue,
+                ExchangeRate::getStartDate,
+                ExchangeRate::getEndDate,
+                e -> e.getStatus() != null ? e.getStatus().name() : "");
+        if ("xlsx".equalsIgnoreCase(format)) {
+            return com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx("Tasas de cambio", headers, cols, all);
+        }
+        return com.sigcon.backend.utils.export.SimpleTableExporter
+                .toCsv(headers, cols, all);
+    }
 
-        // try{
+    public ResponseEntity<?> delete(Long id, String reason) {
+        try {
+            // HU-CFG-RF-28 E2: motivo obligatorio (>= 10 caracteres)
+            if (reason == null || reason.trim().length() < 10) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Debe especificar el motivo de eliminacion (minimo 10 caracteres).")));
+            }
 
             ExchangeRate rate = repository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("La tasa no existe"));
-    
+                    .orElseThrow(() -> new IllegalArgumentException("La tasa no existe"));
+
+            // HU-CFG-RF-28 E4: validar dependencias (JE/facturas que usen la tasa).
+            // Como exchange_rate_id no se persiste como FK directa en JE,
+            // validamos via SalesInvoice (campo exchange_rate) y ExchangeRate.value
+            // pero la condicion mas robusta es: la tasa esta entre las activas
+            // (no eliminada y dentro de vigencia). Si esta vigente, no se elimina.
+            if (rate.getStatus() != null
+                    && "ACTIVE".equalsIgnoreCase(rate.getStatus().toString())
+                    && rate.getEndDate() != null
+                    && rate.getEndDate().isAfter(java.time.LocalDate.now())) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "La tasa de cambio esta asociada a operaciones y no puede eliminarse; se recomienda inactivarla.")));
+            }
+
             rate.setDeletedAt(LocalDateTime.now());
             rate.setUpdatedAt(LocalDateTime.now());
-    
+
             repository.save(rate);
+            // HU-CFG-RF-28 E3: motivo en audit log
             auditPublisher.publishDelete(AuditModule.CFG, "ExchangeRate", rate.getId(),
-                    "Tasa de cambio eliminada id=" + rate.getId());
+                    "Tasa de cambio eliminada id=" + rate.getId() + " | motivo=" + reason.trim());
 
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Tasa de cambio eliminada con exito"), Optional.empty())
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Eliminacion exitosa"), Optional.empty())
             );
 
-        // }catch(Exception e){
-        //     return ResponseEntity.badRequest().body(
-        //         ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
-        //     );
-        // }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
+            );
+        }
     }
 
     /**

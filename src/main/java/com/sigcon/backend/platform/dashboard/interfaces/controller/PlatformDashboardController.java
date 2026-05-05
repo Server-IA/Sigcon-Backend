@@ -30,6 +30,7 @@ public class PlatformDashboardController {
 
     private final PlatformDashboardService service;
 
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
     @GetMapping
     @Operation(summary = "Obtener KPIs globales de la plataforma",
                description = "Devuelve conteos agregados de empresas, usuarios, JE ultimos 6 meses, "

@@ -50,7 +50,7 @@ public class ChartOfAccountController {
         }
 
         @PostMapping
-        @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_CHART_OF_ACCOUNT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Crear una cuenta en el PUC", description = "Crea una nueva cuenta dentro del catalogo PUC con sus datos base.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "201", description = "Cuenta creada correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -67,12 +67,12 @@ public class ChartOfAccountController {
                 chartOfAccountService.createChartOfAccount(request);
                 return ResponseEntity.status(HttpStatus.CREATED).body(
                                 SuccessRespondJson.getSuccessRespondMessage(
-                                                Optional.of("La cuenta ha sido creada exitosamente en el catalogo PUC"),
+                                                Optional.of("La Creacion ha sido exitosa"),
                                                 Optional.empty()));
         }
 
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_CHART_OF_ACCOUNT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Buscar cuentas en el PUC (DataTable)", description = "Consulta cuentas en el PUC usando el formato de request de DataTables.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Consulta DataTable realizada correctamente", content = @Content(schema = @Schema(implementation = DataTableResponse.class))),
@@ -98,7 +98,7 @@ public class ChartOfAccountController {
         }
 
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_CHART_OF_ACCOUNT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Actualizar una cuenta del PUC", description = "Actualiza los datos principales de una cuenta existente en el catalogo PUC.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Cuenta actualizada correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -117,7 +117,7 @@ public class ChartOfAccountController {
                 chartOfAccountService.updateChartOfAccount(request, id);
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
-                                                Optional.of("La cuenta fue actualizada exitosamente"),
+                                                Optional.of("Registro actualizado correctamente"),
                                                 Optional.empty()));
                 /*
                  * } catch (IllegalArgumentException | IllegalStateException e) {
@@ -136,7 +136,7 @@ public class ChartOfAccountController {
         }
 
         @DeleteMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_CHART_OF_ACCOUNT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Eliminacion logica de una cuenta", description = "Registra la eliminacion logica de una cuenta con su motivo.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Cuenta eliminada/inactivada correctamente", content = @Content(schema = @Schema(implementation = Object.class))),
@@ -155,7 +155,7 @@ public class ChartOfAccountController {
                 chartOfAccountService.deleteChartOfAccount(id, request);
                 return ResponseEntity.ok(
                                 SuccessRespondJson.getSuccessRespondMessage(
-                                                Optional.of("La cuenta ha sido eliminada exitosamente"),
+                                                Optional.of("La lista contable fue eliminada exitosamente"),
                                                 Optional.empty()));
                 /*
                  * } catch (IllegalArgumentException | IllegalStateException e) {

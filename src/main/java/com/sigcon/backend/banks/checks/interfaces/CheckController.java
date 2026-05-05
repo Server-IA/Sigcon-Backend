@@ -38,7 +38,7 @@ public class CheckController {
     private final CheckService checkService;
 
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CHEQUES.EMITIR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Emitir cheque", description = "BNK-RF-20: emite cheque fisico o virtual desde chequera activa.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cheque emitido correctamente"),
@@ -50,21 +50,21 @@ public class CheckController {
     }
 
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CHEQUES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Consultar cheques", description = "BNK-RF-21: consulta paginada de cheques con filtros DataTable.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = false, content = @Content(mediaType = "application/json", schema = @Schema(implementation = DataTableRequest.class), examples = @ExampleObject(value = "{\n  \"draw\": 1,\n  \"start\": 0,\n  \"length\": 20,\n  \"search\": { \"value\": \"1001\", \"regex\": true },\n  \"columns\": [],\n  \"order\": []\n}"))))
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return checkService.findAllPaged(request);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_VIEW_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_BNK.CHEQUES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Detalle de cheque", description = "Consulta el detalle de un cheque por id.")
     public ResponseEntity<?> detail(@PathVariable Long id) {
         return checkService.getDetail(id);
     }
 
     @PutMapping("/{id}/void")
-    @PreAuthorize("hasAuthority('PERM_VOID_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VOID_BANK_CHECK') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Anular cheque", description = "BNK-RF-22: anula un cheque con motivo y confirmacion por contrasena.")
     public ResponseEntity<?> voidCheck(
             @PathVariable Long id,
@@ -74,7 +74,7 @@ public class CheckController {
     }
 
     @PutMapping("/{id}/report-lost")
-    @PreAuthorize("hasAuthority('PERM_REPORT_LOST_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_REPORT_LOST_BANK_CHECK') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Reportar cheque extraviado", description = "BNK-RF-23: reporta incidente y bloquea pago del cheque.")
     public ResponseEntity<?> reportLost(
             @PathVariable Long id,
@@ -84,7 +84,7 @@ public class CheckController {
     }
 
     @PutMapping("/{id}/reconcile")
-    @PreAuthorize("hasAuthority('PERM_RECONCILE_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_RECONCILE_BANK_CHECK') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Conciliar cheque cobrado", description = "BNK-RF-24: concilia cheque cobrado con metodo manual/automatica/banco.")
     public ResponseEntity<?> reconcile(
             @PathVariable Long id,
@@ -94,7 +94,7 @@ public class CheckController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_BANK_CHECK') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_BANK_CHECK') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar cheque", description = "Eliminacion logica de cheque.")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         return checkService.delete(id);

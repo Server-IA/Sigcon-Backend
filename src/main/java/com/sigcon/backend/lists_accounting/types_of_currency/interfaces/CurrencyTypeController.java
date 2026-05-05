@@ -40,7 +40,7 @@ public class CurrencyTypeController {
         private final CurrencyTypeService currencyTypeService;
 
         @PostMapping("/search")
-        @PreAuthorize("hasAuthority('PERM_VIEW_CURRENCY_TYPE') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_VIEW_CURRENCY_TYPE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Consultar monedas para DataTable", description = "Retorna una lista paginada de monedas compatible con DataTables, permitiendo filtros y ordenamiento.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Búsqueda realizada exitosamente", content = @Content(mediaType = "application/json")),
@@ -53,7 +53,7 @@ public class CurrencyTypeController {
         }
 
         @PostMapping
-        @PreAuthorize("hasAuthority('PERM_CREATE_CURRENCY_TYPE') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_CREATE_CURRENCY_TYPE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Registrar nueva moneda", description = "Permite crear un nuevo tipo de moneda validando que el código ISO no esté duplicado.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "201", description = "Moneda creada exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CurrencyTypeResponseDTO.class))),
@@ -66,7 +66,7 @@ public class CurrencyTypeController {
         }
 
         @PutMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_UPDATE_CURRENCY_TYPE') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_UPDATE_CURRENCY_TYPE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Actualizar moneda existente", description = "Modifica los datos de una moneda identificada por su ID.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Moneda actualizada correctamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CurrencyTypeResponseDTO.class))),
@@ -80,7 +80,7 @@ public class CurrencyTypeController {
         }
 
         @DeleteMapping("/{id}")
-        @PreAuthorize("hasAuthority('PERM_DELETE_CURRENCY_TYPE') or hasAuthority('ROLE_ADMIN')")
+        @PreAuthorize("hasAuthority('PERM_DELETE_CURRENCY_TYPE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
         @Operation(summary = "Eliminar moneda (Soft Delete)", description = "Realiza una eliminación lógica de la moneda, permitiendo su posterior reutilización del código ISO.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Moneda eliminada exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = CurrencyTypeDeleteResponseDTO.class))),
@@ -88,9 +88,11 @@ public class CurrencyTypeController {
                         @ApiResponse(responseCode = "409", description = "Conflicto al intentar eliminar la moneda", content = @Content)
         })
         public ResponseEntity<?> deleteCurrencyType(
-                        @Parameter(description = "ID de la moneda a eliminar", example = "2") @PathVariable Long id) {
+                        @Parameter(description = "ID de la moneda a eliminar", example = "2") @PathVariable Long id,
+                        @Parameter(description = "Motivo de eliminacion (minimo 10 caracteres) - HU-CFG-RF-24")
+                        @org.springframework.web.bind.annotation.RequestParam(value = "reason", required = false) String reason) {
                 try {
-                        CurrencyTypeDeleteResponseDTO response = currencyTypeService.deleteCurrencyType(id);
+                        CurrencyTypeDeleteResponseDTO response = currencyTypeService.deleteCurrencyType(id, reason);
                         return ResponseEntity.ok(
                                         SuccessRespondJson.getSuccessRespondMessage(Optional.of(response.getMessage()),
                                                         Optional.of(response)));
@@ -123,5 +125,23 @@ public class CurrencyTypeController {
 
                 return ResponseEntity.badRequest().body(
                                 ErrorRespondJson.getErrorRespondMessage(Optional.of(message)));
+        }
+
+        /** HU-CFG-RF-21 E5: exporta monedas en CSV o XLSX. */
+        @org.springframework.web.bind.annotation.GetMapping("/export/{format}")
+        @Operation(summary = "Exportar monedas",
+                   description = "HU-CFG-RF-21 E5: descarga listado en CSV o XLSX")
+        @PreAuthorize("hasAuthority('PERM_VIEW_CURRENCY_TYPE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+        public ResponseEntity<byte[]> exportCurrencies(@PathVariable String format) {
+                byte[] data = currencyTypeService.exportAll(format);
+                String mime = "xlsx".equalsIgnoreCase(format)
+                                ? com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME
+                                : com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+                String fname = "monedas." + ("xlsx".equalsIgnoreCase(format) ? "xlsx" : "csv");
+                return ResponseEntity.ok()
+                                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, mime)
+                                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=\"" + fname + "\"")
+                                .body(data);
         }
 }

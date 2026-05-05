@@ -43,4 +43,12 @@ public class SalesInvoiceDTO {
     private Boolean xmlSent;
     private Long journalEntryId;
     private List<SalesInvoiceLineDTO> lines;
+    /** HU-AR-01A E6: estado fiscal DIAN (PENDING/SENT/ACCEPTED/REJECTED/VOIDED). */
+    private String dianStatus;
+    /** HU-AR-01A E6: motivo de rechazo o mensaje DIAN si aplica. */
+    private String dianMessage;
+    /** HU-AR-01B E5: origen de la factura (MANUAL o AAEF). */
+    private String source;
+    /** HU-AR-01B E5: identificador externo de AgroFusion (cuando source=AAEF). */
+    private String externalId;
 }

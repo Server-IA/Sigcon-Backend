@@ -42,7 +42,7 @@ public class ReportTemplateController {
      * HU-PA-RF-38: Lista paginada de plantillas de reporte con filtros.
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_REPORT_TEMPLATES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_REPORT_TEMPLATES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Listar plantillas de reporte", description = "Obtiene la lista paginada de plantillas con filtros")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Lista de plantillas obtenida exitosamente"),
@@ -59,7 +59,7 @@ public class ReportTemplateController {
      * flag por defecto y archivo adjunto opcional (multipart/form-data).
      */
     @PostMapping(value = "/store", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAuthority('PERM_CREATE_REPORT_TEMPLATES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_REPORT_TEMPLATES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(
             summary = "Crear plantilla de reporte",
             description = "Registra una nueva plantilla con version auto-incrementada, vigencia y archivo adjunto"
@@ -99,7 +99,7 @@ public class ReportTemplateController {
      * HU-PA-RF-38: Descarga el archivo binario de una plantilla.
      */
     @GetMapping("/{id}/download")
-    @PreAuthorize("hasAuthority('PERM_VIEW_REPORT_TEMPLATES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_REPORT_TEMPLATES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Descargar archivo de plantilla")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Archivo descargado exitosamente"),
@@ -130,7 +130,7 @@ public class ReportTemplateController {
      * HU-PA-RF-40: Elimina (soft delete) una plantilla de reporte.
      */
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_REPORT_TEMPLATES') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_REPORT_TEMPLATES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Eliminar plantilla de reporte", description = "Elimina una plantilla de reporte (soft delete)")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Plantilla eliminada exitosamente"),

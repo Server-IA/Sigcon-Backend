@@ -42,7 +42,7 @@ public class ArOverdueController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido")
     })
     @GetMapping("/invoices/overdue")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> overdue(@RequestParam(required = false) Integer days) {
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Facturas vencidas"), Optional.of(service.listOverdue(days))));
@@ -55,7 +55,7 @@ public class ArOverdueController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido")
     })
     @GetMapping("/invoices/upcoming")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> upcoming(@RequestParam(required = false, defaultValue = "7") Integer days) {
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Facturas proximas a vencer"), Optional.of(service.listUpcoming(days))));
@@ -69,7 +69,7 @@ public class ArOverdueController {
         @ApiResponse(responseCode = "400", description = "Cliente no encontrado")
     })
     @GetMapping("/customers/{thirdPartyId}/balance")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> customerBalance(@PathVariable Long thirdPartyId,
                                               @RequestParam(required = false) Integer year,
                                               @RequestParam(required = false) Integer month) {
@@ -91,7 +91,7 @@ public class ArOverdueController {
         @ApiResponse(responseCode = "400", description = "Cliente o parametros invalidos")
     })
     @GetMapping("/customers/{thirdPartyId}/statement")
-    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> customerStatement(@PathVariable Long thirdPartyId,
                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {

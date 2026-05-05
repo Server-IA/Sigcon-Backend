@@ -34,6 +34,7 @@ public class PayrollConceptController {
             description = "Sin filtros devuelve todos. Acepta status (ACTIVE/INACTIVE) y "
                     + "type (EARNING/DEDUCTION/EMPLOYER_CONTRIBUTION).")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Listado de conceptos"))
+    @PreAuthorize("hasAuthority('PERM_NOM.CONCEPTOS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping
     public ResponseEntity<?> list(
             @Parameter(description = "Estado", example = "ACTIVE")
@@ -48,6 +49,7 @@ public class PayrollConceptController {
             @ApiResponse(responseCode = "200", description = "Concepto encontrado"),
             @ApiResponse(responseCode = "400", description = "Concepto no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.CONCEPTOS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(
             @Parameter(description = "ID del concepto", example = "1") @PathVariable Long id) {
@@ -62,6 +64,7 @@ public class PayrollConceptController {
             @ApiResponse(responseCode = "200", description = "Concepto creado"),
             @ApiResponse(responseCode = "400", description = "Cuenta PUC inactiva, code duplicado o datos invalidos")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.CONCEPTOS.CREAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreatePayrollConceptRequest req) {
         return service.create(req);
@@ -72,6 +75,7 @@ public class PayrollConceptController {
             @ApiResponse(responseCode = "200", description = "Concepto actualizado"),
             @ApiResponse(responseCode = "400", description = "Cuenta PUC inactiva o concepto inexistente")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.CONCEPTOS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(
             @Parameter(description = "ID del concepto", example = "1") @PathVariable Long id,
@@ -84,6 +88,7 @@ public class PayrollConceptController {
             @ApiResponse(responseCode = "200", description = "Concepto eliminado"),
             @ApiResponse(responseCode = "400", description = "Concepto no existe")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.CONCEPTOS.ELIMINAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(
             @Parameter(description = "ID del concepto", example = "1") @PathVariable Long id) {

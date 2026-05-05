@@ -41,6 +41,7 @@ public class BenefitLiquidationController {
             @ApiResponse(responseCode = "200", description = "Liquidacion exitosa"),
             @ApiResponse(responseCode = "400", description = "Empleado no encontrado o sin salario base")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.PRESTACIONES.CALCULAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/cesantias")
     public ResponseEntity<?> severance(
             @Parameter(description = "ID del empleado", required = true, example = "1")
@@ -57,6 +58,7 @@ public class BenefitLiquidationController {
             @ApiResponse(responseCode = "200", description = "Prima liquidada"),
             @ApiResponse(responseCode = "400", description = "Empleado no encontrado o semester invalido")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.PRESTACIONES.CALCULAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/prima")
     public ResponseEntity<?> bonus(
             @Parameter(description = "ID del empleado", required = true, example = "1")
@@ -76,6 +78,7 @@ public class BenefitLiquidationController {
             @ApiResponse(responseCode = "200", description = "Liquidacion definitiva calculada"),
             @ApiResponse(responseCode = "400", description = "Empleado no encontrado o datos invalidos")
     })
+    @PreAuthorize("hasAuthority('PERM_NOM.PRESTACIONES.CALCULAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @PostMapping("/liquidacion-definitiva")
     public ResponseEntity<?> termination(
             @Parameter(description = "ID del empleado", required = true, example = "1")

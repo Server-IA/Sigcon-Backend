@@ -58,7 +58,7 @@ public class JournalEntrySupportController {
         @ApiResponse(responseCode = "400", description = "Archivo no valido, tipo MIME no permitido o tamaño excedido")
     })
     @PostMapping(value = "/{id}/supports", consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> upload(@PathVariable Long id,
                                      @RequestParam("file") MultipartFile file,
                                      @Parameter(description = "Categoria libre del soporte: FACTURA, RECIBO, CONTRATO, OTRO")
@@ -81,7 +81,7 @@ public class JournalEntrySupportController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido")
     })
     @GetMapping("/{id}/supports")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> listByJournalEntry(@PathVariable Long id) {
         return service.listByJournalEntry(id);
     }
@@ -95,7 +95,7 @@ public class JournalEntrySupportController {
         @ApiResponse(responseCode = "400", description = "Soporte no encontrado")
     })
     @GetMapping("/supports/{id}/download")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> download(@PathVariable Long id) {
         try {
             JournalEntrySupport a = service.getForDownload(id);
@@ -121,7 +121,7 @@ public class JournalEntrySupportController {
         @ApiResponse(responseCode = "400", description = "Soporte no encontrado")
     })
     @DeleteMapping("/supports/{id}")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_JOURNAL_ENTRY') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CG.COMPROBANTES.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);

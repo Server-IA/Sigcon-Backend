@@ -78,6 +78,7 @@ public class SalesInvoiceService {
     private final AccountMappingService accountMappingService;
     private final UserUtil userUtil;
     private final AuditPublisher auditPublisher;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private final DataTableSpecificationBuilder<SalesInvoice> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -132,6 +133,13 @@ public class SalesInvoiceService {
         if (request.getCurrencyId() != null) {
             currency = currencyTypeRepository.findByIdAndDeletedAtIsNull(request.getCurrencyId())
                     .orElseThrow(() -> new IllegalArgumentException("La moneda no existe"));
+            // HU-AR-11 E1: validar moneda activa
+            if (currency.getStatus() != null
+                    && !"ACTIVE".equalsIgnoreCase(currency.getStatus().name())) {
+                throw new IllegalArgumentException(
+                        "La moneda " + currency.getIsoCode()
+                        + " no esta habilitada en Listas Contables. Active la moneda antes de usarla.");
+            }
             if (!LOCAL_ISO.equalsIgnoreCase(currency.getIsoCode())) {
                 if (request.getExchangeRate() == null
                         || request.getExchangeRate().compareTo(BigDecimal.ZERO) <= 0) {
@@ -243,6 +251,22 @@ public class SalesInvoiceService {
         auditPublisher.publishCreate(AuditModule.AR, "SalesInvoice", invoice.getId(),
                 "Factura de venta creada: " + invoiceNumber + " total $" + totalAmount);
 
+        // HU-AR-01A E4: publicar evento Spring para que CG/INT/AU puedan
+        // reaccionar (auditoria forensica adicional, integraciones futuras).
+        // El JE ya quedo persistido sincronicamente arriba; el evento es
+        // post-commit (TransactionalEventListener AFTER_COMMIT lo respeta).
+        try {
+            String origin = invoice.getIntegrationSource() != null
+                    && invoice.getIntegrationSource().getSource() != null
+                    ? invoice.getIntegrationSource().getSource().name() : "MANUAL";
+            eventPublisher.publishEvent(new com.sigcon.backend.accounts_receivable.events
+                    .SalesInvoiceCreatedEvent(this, invoice.getId(), invoiceNumber,
+                    thirdParty != null ? thirdParty.getId() : null,
+                    totalAmount, invoice.getJournalEntryId(), origin));
+        } catch (Exception ev) {
+            log.warn("No se pudo publicar SalesInvoiceCreatedEvent: {}", ev.getMessage());
+        }
+
         log.info("Factura de venta {} creada: total {}", invoiceNumber, totalAmount);
         return invoice;
     }
@@ -331,24 +355,21 @@ public class SalesInvoiceService {
             Long idCxcClientes = accountMappingService.resolveOrThrow(AccountingConcept.AR_CLIENTES);
             Long idRetPracticadas = accountMappingService.resolveOrThrow(
                     AccountingConcept.AR_RET_PRACTICADAS_CLIENTE);
-            Long idIngresos = accountMappingService.resolveOrThrow(AccountingConcept.AR_INGRESOS);
+            Long idIngresosDefault = accountMappingService.resolveOrThrow(AccountingConcept.AR_INGRESOS);
             Long idIvaGenerado = accountMappingService.resolveOrThrow(AccountingConcept.AR_IVA_GENERADO);
 
-            // AAEF v1.1 (2026-04-28): si CUALQUIER linea de la factura trae override
-            // de cuentas (accounting_account), respetarlas. Si solo algunas lineas las
-            // traen, se usan los defaults para el resto. Nota: para multi-cuenta por
-            // factura habria que emitir N lineas de ingreso al JE; aqui simplificamos
-            // tomando el primer override no-null encontrado.
-            if (invoice.getLines() != null) {
-                for (SalesInvoiceLine sline : invoice.getLines()) {
+            // HU-AR-04 E3 fix: cargar lineas reales desde el repo. Las lineas se
+            // guardan via salesInvoiceLineRepository.save() en createSalesInvoice
+            // sin asignarse al invoice.lines (que se construye con builder vacio),
+            // asi que invoice.getLines() retorna empty si dependemos solo del entity.
+            List<SalesInvoiceLine> lines = salesInvoiceLineRepository
+                    .findAllByInvoiceId(invoice.getId());
+
+            // AAEF v1.1: override de la cuenta de CxC si alguna linea trae uno
+            if (lines != null) {
+                for (SalesInvoiceLine sline : lines) {
                     if (sline.getAccountDebitOverride() != null) {
                         idCxcClientes = sline.getAccountDebitOverride();
-                        break;
-                    }
-                }
-                for (SalesInvoiceLine sline : invoice.getLines()) {
-                    if (sline.getAccountCreditOverride() != null) {
-                        idIngresos = sline.getAccountCreditOverride();
                         break;
                     }
                 }
@@ -381,14 +402,41 @@ public class SalesInvoiceService {
                         .build());
             }
 
-            // 3. Credito: ingresos operacionales por venta (PUC 4135)
-            jeLines.add(CreateJournalEntryLineRequest.builder()
-                    .accountingAccountId(idIngresos)
-                    .debitAmount(BigDecimal.ZERO)
-                    .creditAmount(subtotal)
-                    .description("Ingresos venta " + invoice.getInvoiceNumber())
-                    .thirdPartyNit(thirdParty.getNit())
-                    .build());
+            // 3. Credito: ingresos operacionales por venta (PUC 4135).
+            // HU-AR-04 E3: detalle por linea. Cuando la factura tiene varias lineas
+            // (productos/servicios distintos), se generan multiples lineas de ingreso
+            // agrupadas por (cuenta, descripcion). Si todas comparten cuenta, se
+            // consolida en una sola linea para no inflar el JE innecesariamente.
+            java.util.Map<Long, BigDecimal> revenueByAccount = new java.util.LinkedHashMap<>();
+            java.util.Map<Long, String> revenueDescriptions = new java.util.LinkedHashMap<>();
+            if (lines != null && !lines.isEmpty()) {
+                for (SalesInvoiceLine sline : lines) {
+                    Long acct = sline.getAccountCreditOverride() != null
+                            ? sline.getAccountCreditOverride() : idIngresosDefault;
+                    BigDecimal lineSubtotal = nonNull(sline.getSubtotal());
+                    revenueByAccount.merge(acct, lineSubtotal, BigDecimal::add);
+                    String desc = sline.getDescription() != null && !sline.getDescription().isBlank()
+                            ? sline.getDescription() : ("Linea " + sline.getId());
+                    revenueDescriptions.merge(acct, desc, (a, b) -> a + " | " + b);
+                }
+            } else {
+                revenueByAccount.put(idIngresosDefault, subtotal);
+                revenueDescriptions.put(idIngresosDefault,
+                        "Ingresos venta " + invoice.getInvoiceNumber());
+            }
+            for (java.util.Map.Entry<Long, BigDecimal> e : revenueByAccount.entrySet()) {
+                String descAgg = revenueDescriptions.get(e.getKey());
+                String desc = descAgg != null && descAgg.length() <= 240
+                        ? "Ingresos " + invoice.getInvoiceNumber() + ": " + descAgg
+                        : "Ingresos venta " + invoice.getInvoiceNumber();
+                jeLines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(e.getKey())
+                        .debitAmount(BigDecimal.ZERO)
+                        .creditAmount(e.getValue())
+                        .description(desc)
+                        .thirdPartyNit(thirdParty.getNit())
+                        .build());
+            }
 
             // 4. Credito: IVA generado (PUC 2408) si aplica
             if (totalTax.compareTo(BigDecimal.ZERO) > 0) {
@@ -581,6 +629,59 @@ public class SalesInvoiceService {
     }
 
     /**
+     * HU-AR-06 E1 + E3: pasada nocturna de RECONCILIACION integral. Recorre
+     * todas las facturas no eliminadas y corrige el status segun el saldo real:
+     *   - balanceDue == 0 + status != PAID/SETTLED/VOIDED → set PAID
+     *   - balanceDue > 0 + status == PAID → set PARTIALLY_PAID
+     *   - balanceDue > 0 + dueDate < today + status != OVERDUE → set OVERDUE
+     *   - balanceDue > 0 + dueDate >= today + status == OVERDUE → set ISSUED/PARTIALLY_PAID
+     * Garantiza HU-AR-06 E3: el estado siempre coincide con el saldo real.
+     */
+    @Transactional
+    public int reconcileInvoiceStatuses() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        // findAll respeta @Filter del tenant si esta activo. El scheduler entra
+        // como PLATFORM_ADMIN, por lo cual recorre TODAS las empresas.
+        int updated = 0;
+        for (SalesInvoice inv : salesInvoiceRepository.findAll()) {
+            if (inv.getStatus() == SalesInvoiceStatus.DRAFT
+             || inv.getStatus() == SalesInvoiceStatus.VOIDED) continue;
+            BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue() : BigDecimal.ZERO;
+            SalesInvoiceStatus prev = inv.getStatus();
+            SalesInvoiceStatus target = prev;
+            BigDecimal total = inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO;
+            if (bal.compareTo(BigDecimal.ZERO) <= 0) {
+                if (prev != SalesInvoiceStatus.PAID && prev != SalesInvoiceStatus.SETTLED) {
+                    target = SalesInvoiceStatus.PAID;
+                }
+            } else if (bal.compareTo(total) < 0) {
+                if (inv.getDueDate() != null && inv.getDueDate().isBefore(today)) {
+                    target = SalesInvoiceStatus.OVERDUE;
+                } else if (prev == SalesInvoiceStatus.PAID || prev == SalesInvoiceStatus.OVERDUE) {
+                    target = SalesInvoiceStatus.PARTIALLY_PAID;
+                }
+            } else { // bal == total → no se ha pagado nada
+                if (inv.getDueDate() != null && inv.getDueDate().isBefore(today)) {
+                    target = SalesInvoiceStatus.OVERDUE;
+                } else if (prev == SalesInvoiceStatus.PAID
+                        || prev == SalesInvoiceStatus.PARTIALLY_PAID) {
+                    target = SalesInvoiceStatus.ISSUED;
+                }
+            }
+            if (target != prev) {
+                inv.setStatus(target);
+                salesInvoiceRepository.save(inv);
+                auditPublisher.publishUpdate(AuditModule.AR, "SalesInvoice", inv.getId(),
+                        "Reconciliacion AR-06: status " + prev + " -> " + target
+                                + " (saldo=" + bal + ")");
+                updated++;
+            }
+        }
+        log.info("Reconciliacion AR-06: {} facturas con status corregido", updated);
+        return updated;
+    }
+
+    /**
      * Elimina logicamente una factura (soft delete). Solo permite eliminar DRAFT o ISSUED sin abonos.
      */
     @Transactional
@@ -652,6 +753,15 @@ public class SalesInvoiceService {
                 .xmlSent(invoice.getXmlSent())
                 .journalEntryId(invoice.getJournalEntryId())
                 .lines(lines)
+                // HU-AR-01A E6: estado fiscal DIAN visible
+                .dianStatus(invoice.getDianStatus() != null ? invoice.getDianStatus().name() : null)
+                .dianMessage(invoice.getDianMessage())
+                // HU-AR-01B E5: origen de la factura
+                .source(invoice.getIntegrationSource() != null
+                        && invoice.getIntegrationSource().getSource() != null
+                        ? invoice.getIntegrationSource().getSource().name() : "MANUAL")
+                .externalId(invoice.getIntegrationSource() != null
+                        ? invoice.getIntegrationSource().getExternalId() : null)
                 .build();
     }
 

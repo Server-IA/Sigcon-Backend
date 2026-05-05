@@ -46,4 +46,13 @@ public class AssetSkippedDTO {
             "OTHER_METHOD"
     })
     private SkipReason reason;
+
+    /**
+     * Mensaje descriptivo segun la HU. Se llena al construir el DTO con
+     * el texto literal del Excel para que el frontend lo muestre tal cual
+     * (HU-ACT-02 E2/E3).
+     */
+    @Schema(description = "Mensaje descriptivo para el usuario",
+            example = "El activo no tiene vida util definida. Completela antes de ejecutar la depreciacion.")
+    private String message;
 }

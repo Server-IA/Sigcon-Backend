@@ -47,7 +47,7 @@ public class ApPaymentController {
             @ApiResponse(responseCode = "200", description = "Listado de pagos")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchPayments(@RequestBody(required = false) DataTableRequest request) {
         return paymentService.getPayments(request);
     }
@@ -65,7 +65,7 @@ public class ApPaymentController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> registerPayment(@Valid @RequestBody CreateApPaymentRequest request,
                                              BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -90,7 +90,7 @@ public class ApPaymentController {
             @ApiResponse(responseCode = "200", description = "Lista de pagos de la factura")
     })
     @GetMapping("/invoice/{invoiceId}")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getPaymentsByInvoice(@PathVariable Long invoiceId) {
         return paymentService.getPaymentsByInvoice(invoiceId);
     }

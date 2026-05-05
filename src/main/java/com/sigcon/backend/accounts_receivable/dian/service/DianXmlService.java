@@ -80,8 +80,35 @@ public class DianXmlService {
             throw new IllegalStateException("La factura ya fue enviada a la DIAN");
         }
 
+        // HU-AR-14 E3: validar NIT cliente antes de armar XML
+        if (invoice.getThirdParty() == null
+                || invoice.getThirdParty().getNit() == null
+                || invoice.getThirdParty().getNit().isBlank()) {
+            throw new IllegalArgumentException(
+                    "El cliente no tiene NIT o cedula validos. Complete los datos del cliente "
+                    + "en el modulo de Terceros antes de generar la factura electronica.");
+        }
+
         DianResolution resolution = findResolutionForInvoice(invoice);
-        String technicalKey = resolution != null ? resolution.getTechnicalKey() : "";
+        // HU-AR-14 E2: validar resolucion vigente y con rango disponible antes de generar XML
+        if (resolution == null) {
+            throw new IllegalStateException(
+                    "No hay una resolucion de facturacion vigente para esta factura. "
+                    + "Registre y active una resolucion DIAN antes de emitir.");
+        }
+        // Validacion de vigencia/rango replicando consumeNumber sin consumir todavia el numero
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (resolution.getEndDate() != null && resolution.getEndDate().isBefore(today)) {
+            throw new IllegalStateException(
+                    "La resolucion de facturacion ha vencido. Registre una nueva resolucion DIAN.");
+        }
+        if (resolution.getCurrentNumber() != null && resolution.getEndNumber() != null
+                && resolution.getCurrentNumber() >= resolution.getEndNumber()) {
+            throw new IllegalStateException(
+                    "La resolucion de facturacion agoto su rango. Registre una nueva resolucion DIAN.");
+        }
+
+        String technicalKey = resolution.getTechnicalKey() != null ? resolution.getTechnicalKey() : "";
 
         String nitEmisor = Optional.ofNullable(systemInfoService.getCompanyNit()).orElse("900000000");
         String tipoAmb = CufeCalculator.TIPO_AMB_PRUEBAS;
@@ -236,6 +263,12 @@ public class DianXmlService {
      * un resolutionNumber asignado se prioriza esa; en caso contrario se busca
      * por prefijo "FV" y fecha.
      */
+    /**
+     * HU-AR-14 E2: si la factura tiene resolutionNumber, busca exacta.
+     * Si no, busca la activa+vigente para FV. Si no hay vigente, retorna la
+     * mas reciente del prefix (aunque vencida/agotada) para que la validacion
+     * de generateXml pueda emitir el mensaje literal de la HU.
+     */
     private DianResolution findResolutionForInvoice(SalesInvoice invoice) {
         if (invoice.getResolutionNumber() != null && !invoice.getResolutionNumber().isBlank()) {
             return resolutionRepository.findAll().stream()
@@ -243,9 +276,16 @@ public class DianXmlService {
                             && invoice.getResolutionNumber().equals(r.getResolutionNumber()))
                     .findFirst().orElse(null);
         }
-        return resolutionRepository
+        DianResolution active = resolutionRepository
                 .findActiveByPrefixAndDate("FV", invoice.getInvoiceDate())
                 .stream().findFirst().orElse(null);
+        if (active != null) return active;
+        // Fallback: ultima resolucion del prefix (aunque vencida) para que la
+        // validacion siguiente devuelva el mensaje literal correcto.
+        return resolutionRepository.findAll().stream()
+                .filter(r -> r.getDeletedAt() == null && "FV".equals(r.getPrefix()))
+                .sorted((a, b) -> b.getId().compareTo(a.getId()))
+                .findFirst().orElse(null);
     }
 
     private void appendCbc(Document doc, Element parent, String localName, String value) {

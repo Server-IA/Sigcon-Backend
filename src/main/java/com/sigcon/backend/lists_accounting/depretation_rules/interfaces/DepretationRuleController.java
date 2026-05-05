@@ -41,7 +41,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "400", description = "Error en los parametros de busqueda")
     })
     @PostMapping("/search")
-    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_DEPRECIATION_RULE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getDepretationRules(
             @RequestBody(required = false) DataTableRequest dtRequest) {
         // try {
@@ -65,7 +65,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "500", description = "Error interno al guardar la regla")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_DEPRECIATION_RULE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> createDepretationRule(
             @Valid @RequestBody CreateDepretationRuleRequest request,
             BindingResult bindingResult) {
@@ -89,7 +89,7 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "500", description = "Error interno al guardar los cambios")
     })
     @PutMapping("/update")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_DEPRECIATION_RULE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> updateDepretationRule(
             @Valid @RequestBody UpdateDepretationRuleRequest request,
             BindingResult bindingResult) {
@@ -113,11 +113,29 @@ public class DepretationRuleController {
             @ApiResponse(responseCode = "500", description = "Error interno al eliminar la regla")
     })
     @DeleteMapping("/delete/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_DEPRECIATION_RULE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> deleteDepretationRule(
             @PathVariable Long id,
             @RequestParam(name = "reason", required = true) String reason) {
 
         return depretationRuleService.deleteDepretationRule(id, reason);
+    }
+
+    /** HU-CFG-RF-13 E7: exporta reglas de depreciacion en CSV o XLSX. */
+    @org.springframework.web.bind.annotation.GetMapping("/export/{format}")
+    @Operation(summary = "Exportar reglas de depreciacion",
+               description = "HU-CFG-RF-13 E7: descarga listado en CSV o XLSX (multi-tenant)")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<byte[]> exportDepretationRules(@PathVariable String format) {
+        byte[] data = depretationRuleService.exportAll(format);
+        String mime = "xlsx".equalsIgnoreCase(format)
+                ? com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME
+                : com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+        String fname = "reglas_depreciacion." + ("xlsx".equalsIgnoreCase(format) ? "xlsx" : "csv");
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, mime)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + fname + "\"")
+                .body(data);
     }
 }

@@ -125,6 +125,49 @@ public class ArReportService {
     /**
      * AR-05: Reporte filtrado por estado y rango de fechas.
      */
+    /**
+     * HU-AR-05 E2: lista facturas con saldo pendiente real (balanceDue > 0)
+     * sin necesidad de elegir un status especifico. Excluye PAID/VOIDED/SETTLED
+     * y respeta filtros opcionales por cliente y rango de fechas.
+     */
+    public List<ArInvoiceReportRow> reportOnlyPending(ArReportRequest request) {
+        // HU-AR-05 E2: rango de fechas OPCIONAL (a diferencia de los otros reportes).
+        // El usuario puede consultar todas sus facturas pendientes sin filtros.
+        if (request != null && request.getStartDate() != null && request.getEndDate() != null
+                && request.getEndDate().isBefore(request.getStartDate())) {
+            throw new IllegalArgumentException("La fecha final no puede ser anterior a la inicial.");
+        }
+        java.time.LocalDate from = request != null && request.getStartDate() != null
+                ? request.getStartDate() : java.time.LocalDate.of(1900, 1, 1);
+        java.time.LocalDate to = request != null && request.getEndDate() != null
+                ? request.getEndDate() : java.time.LocalDate.of(2999, 12, 31);
+        List<SalesInvoice> invoices = salesInvoiceRepository
+                .findByInvoiceDateBetween(from, to);
+        return invoices.stream()
+                .filter(i -> i.getStatus() != SalesInvoiceStatus.PAID
+                          && i.getStatus() != SalesInvoiceStatus.VOIDED
+                          && i.getStatus() != SalesInvoiceStatus.SETTLED
+                          && i.getStatus() != SalesInvoiceStatus.DRAFT
+                          && nz(i.getBalanceDue()).compareTo(BigDecimal.ZERO) > 0)
+                .filter(i -> request.getThirdPartyId() == null
+                          || (i.getThirdParty() != null
+                              && request.getThirdPartyId().equals(i.getThirdParty().getId())))
+                .map(this::toRow)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * HU-AR-12 E3: filas para estado de cuenta del cliente (todas las
+     * facturas no anuladas/draft del cliente, en orden por fecha).
+     */
+    public List<ArInvoiceReportRow> getCustomerStatementRows(Long thirdPartyId) {
+        return salesInvoiceRepository.findOpenInvoicesByThirdParty(thirdPartyId).stream()
+                .filter(i -> i.getStatus() != SalesInvoiceStatus.DRAFT
+                          && i.getStatus() != SalesInvoiceStatus.VOIDED)
+                .map(this::toRow)
+                .collect(Collectors.toList());
+    }
+
     public List<ArInvoiceReportRow> reportByStatus(ArReportRequest request) {
         validateDates(request);
         if (request.getStatus() == null || request.getStatus().isBlank()) {
@@ -438,6 +481,20 @@ public class ArReportService {
             case "upcoming":
                 title = "Facturas Proximas a Vencer";
                 body = buildInvoiceTableBody(listUpcoming(7), bold, regular);
+                break;
+            case "only-pending":
+                // HU-AR-05 E2: PDF de solo facturas con saldo pendiente
+                title = "Facturas con Saldo Pendiente";
+                body = buildInvoiceTableBody(reportOnlyPending(request), bold, regular);
+                break;
+            case "customer-statement":
+                // HU-AR-12 E3: PDF de estado de cuenta del cliente
+                if (request.getThirdPartyId() == null) {
+                    throw new IllegalArgumentException("Debe especificar el cliente.");
+                }
+                title = "Estado de Cuenta - Cliente " + request.getThirdPartyId();
+                body = buildInvoiceTableBody(getCustomerStatementRows(request.getThirdPartyId()),
+                        bold, regular);
                 break;
             default:
                 throw new IllegalArgumentException("Tipo de reporte no valido: " + type);

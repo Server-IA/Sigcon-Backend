@@ -4,8 +4,14 @@ import com.sigcon.backend.invoices.ap_alerts.application.ApAlertDTO;
 import com.sigcon.backend.invoices.domain.model.Invoices;
 import com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices;
 import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
+// HU-AP-10 E2 (Bloque AS): publicar notificaciones in-app a roles suscritos.
+import com.sigcon.backend.parametrization.notifications.application.PublishEventRequest;
+import com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity;
+import com.sigcon.backend.parametrization.notifications.domain.service.NotificationService;
+import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +47,12 @@ import java.util.List;
 public class ApAlertsService {
 
     private final InvoiceRepository invoiceRepository;
+    /** HU-AP-10 E2 (Bloque AS): inyeccion opcional para no acoplar el modulo si
+     * NotificationService no esta cargado. */
+    @Autowired(required = false)
+    private NotificationService notificationService;
+    @Autowired(required = false)
+    private CompanyRepository companyRepository;
 
     /** Dias por defecto de vencimiento si la factura no especifica invoiceDueDay. */
     private static final int DEFAULT_DUE_DAYS = 30;
@@ -100,10 +112,60 @@ public class ApAlertsService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             log.warn("AP-11 scheduler: {} factura(s) de compra vencidas. Total pendiente: {}",
                     overdue.size(), total);
+
+            // HU-AP-10 E2 (Bloque AS): notificar a roles suscritos al evento
+            // AP_INVOICE_OVERDUE en cada empresa que tenga alertas. Por cada
+            // factura vencida, publica una notificacion in-app que aparecera
+            // en el bell de los usuarios cuyo rol tenga la suscripcion.
+            publishOverdueNotifications(overdue);
         } catch (Exception e) {
             log.error("AP-11 scheduler: fallo al calcular resumen de facturas vencidas", e);
         } finally {
             com.sigcon.backend.platform.tenant.TenantContext.clear();
+        }
+    }
+
+    /**
+     * HU-AP-10 E2 (Bloque AS): publica notificaciones para facturas vencidas a
+     * cada empresa via su rol suscrito al evento AP_INVOICE_OVERDUE. Hace dedup
+     * por sourceId (invoiceId) ya manejado por NotificationService.
+     */
+    private void publishOverdueNotifications(List<ApAlertDTO> overdue) {
+        if (notificationService == null) {
+            log.debug("HU-AP-10 E2: NotificationService no disponible, saltando publish");
+            return;
+        }
+        // Agrupar por empresa via la factura
+        java.util.Map<Long, List<ApAlertDTO>> byCompany = new java.util.HashMap<>();
+        for (ApAlertDTO a : overdue) {
+            try {
+                Invoices inv = invoiceRepository.findById(a.getInvoiceId()).orElse(null);
+                if (inv == null || inv.getCompanyId() == null) continue;
+                byCompany.computeIfAbsent(inv.getCompanyId(), k -> new ArrayList<>()).add(a);
+            } catch (Exception ignored) { }
+        }
+        for (java.util.Map.Entry<Long, List<ApAlertDTO>> entry : byCompany.entrySet()) {
+            Long companyId = entry.getKey();
+            for (ApAlertDTO alert : entry.getValue()) {
+                try {
+                    PublishEventRequest req = PublishEventRequest.builder()
+                            .eventKey("AP_INVOICE_OVERDUE")
+                            .companyId(companyId)
+                            .sourceId(alert.getInvoiceId())
+                            .sourceType("Invoice")
+                            .severity(Severity.WARNING)
+                            .title("Factura de compra vencida")
+                            .body("Factura " + alert.getInvoiceNumber() + " de "
+                                    + (alert.getSupplierName() != null ? alert.getSupplierName() : "proveedor")
+                                    + " esta vencida. Saldo: $" + alert.getBalanceDue())
+                            .actionUrl("/accounts-payable/invoices?id=" + alert.getInvoiceId())
+                            .build();
+                    notificationService.publishByRoleSubscription(req);
+                } catch (Exception ex) {
+                    log.warn("HU-AP-10 E2: no se pudo notificar factura {} compania {}: {}",
+                            alert.getInvoiceId(), companyId, ex.getMessage());
+                }
+            }
         }
     }
 

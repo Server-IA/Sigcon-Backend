@@ -57,7 +57,7 @@ public class TaxReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getEclProvision(@RequestParam Integer year) {
         try {
             EclProvisionReportDTO result = taxReportService.generateEclProvision(year);
@@ -83,7 +83,7 @@ public class TaxReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getIvaBimestral(@RequestParam Integer year,
                                              @RequestParam Integer bimester) {
         try {
@@ -110,7 +110,7 @@ public class TaxReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getExchangeDifferences(@RequestParam Integer year,
                                                     @RequestParam Integer month) {
         try {
@@ -137,7 +137,7 @@ public class TaxReportController {
         @ApiResponse(responseCode = "400", description = "Parametros invalidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getTaxesSummary(@RequestParam Integer year) {
         try {
             TaxesSummaryDTO result = taxReportService.generateTaxesSummary(year);

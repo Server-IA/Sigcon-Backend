@@ -61,13 +61,34 @@ public class DianPdfService {
      * @param invoiceId id de la factura de venta
      * @return arreglo de bytes con el PDF
      */
+    @org.springframework.transaction.annotation.Transactional
     public byte[] generatePdf(Long invoiceId) {
         SalesInvoice invoice = salesInvoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("La factura de venta no fue encontrada"));
 
+        // HU-AR-16 E2: bloqueo si la factura aun no fue ACEPTADA por la DIAN.
+        // Sin aceptacion no hay validez fiscal y la representacion grafica no puede emitirse.
+        var lastSubmission = submissionRepository
+                .findFirstBySalesInvoiceIdAndDeletedAtIsNullOrderByIdDesc(invoiceId)
+                .orElse(null);
+        boolean accepted = lastSubmission != null
+                && lastSubmission.getSubmissionStatus() != null
+                && "ACCEPTED".equalsIgnoreCase(lastSubmission.getSubmissionStatus().name());
+        if (!accepted) {
+            throw new IllegalStateException(
+                    "La representacion grafica solo esta disponible una vez la factura sea aceptada por la DIAN.");
+        }
+
+        // HU-AR-16 E3: cache. Si ya fue generado antes, devolverlo sin recomputar.
+        // Evita recalcular QR + iText en cada reenvio.
+        if (lastSubmission.getCachedPdf() != null && lastSubmission.getCachedPdf().length > 0) {
+            log.info("Sirviendo PDF cacheado de la factura {} (generado {})",
+                    invoiceId, lastSubmission.getCachedPdfAt());
+            return lastSubmission.getCachedPdf();
+        }
+
         String cufe = Optional.ofNullable(invoice.getCufe()).orElseGet(() ->
-                submissionRepository.findFirstBySalesInvoiceIdAndDeletedAtIsNullOrderByIdDesc(invoiceId)
-                        .map(DianInvoiceSubmission::getCufe).orElse(""));
+                lastSubmission != null ? Optional.ofNullable(lastSubmission.getCufe()).orElse("") : "");
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             PdfWriter writer = new PdfWriter(baos);
@@ -150,7 +171,19 @@ public class DianPdfService {
             }
 
             doc.close();
-            return baos.toByteArray();
+            byte[] pdfBytes = baos.toByteArray();
+
+            // HU-AR-16 E3: persistir cache para reenvios futuros.
+            try {
+                lastSubmission.setCachedPdf(pdfBytes);
+                lastSubmission.setCachedPdfAt(java.time.LocalDateTime.now());
+                submissionRepository.save(lastSubmission);
+            } catch (Exception cacheEx) {
+                log.warn("No se pudo cachear el PDF de la factura {}: {}",
+                        invoiceId, cacheEx.getMessage());
+            }
+
+            return pdfBytes;
         } catch (Exception e) {
             log.error("Error generando PDF para factura {}", invoiceId, e);
             throw new IllegalStateException("Error generando la representacion grafica PDF");

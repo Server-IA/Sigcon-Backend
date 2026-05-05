@@ -43,7 +43,7 @@ public class VoucherSeriesController {
                            + "de uso y flag de alerta para que la UI muestre barras de progreso.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Listado obtenido")})
     @GetMapping
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> findAll() {
         return service.findAll();
     }
@@ -54,7 +54,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Serie no encontrada")
     })
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> findById(@PathVariable Long id) {
         try {
             return service.findById(id);
@@ -72,7 +72,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Validacion fallida (rango invalido, tipo duplicado)")
     })
     @PostMapping
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateVoucherSeriesRequest req) {
         try {
             return service.create(req);
@@ -90,7 +90,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Validacion fallida")
     })
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @Valid @RequestBody CreateVoucherSeriesRequest req) {
         try {
@@ -109,7 +109,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Serie no encontrada")
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);

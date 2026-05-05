@@ -195,7 +195,8 @@ public class ChartOfAccountService {
         }
 
         if (chartOfAccountRepository.existsAnyByNameAndIdNot(targetName, id)) {
-            throw new IllegalArgumentException("Duplicidad del nombre de la cuenta");
+            // HU-CFG-RF-03 E4: literal HU
+            throw new IllegalArgumentException("Nombre ya registrado");
         }
 
         account.setCode(targetCode);
@@ -332,9 +333,10 @@ public class ChartOfAccountService {
         }
 
         if (expectedLevelByCode != level) {
-            throw new IllegalArgumentException("Jerarquia de cuenta invalida: el codigo " + code
-                    + " (" + codeLength + " digitos) corresponde al nivel " + levelToDisplay(expectedLevelByCode)
-                    + " pero se recibio nivel " + levelToDisplay(level) + ".");
+            // HU-CFG-RF-01 E4: literal HU "Jerarquia no valida" + contexto debug
+            throw new IllegalArgumentException("Jerarquia no valida (codigo " + code
+                    + " de " + codeLength + " digitos corresponde al nivel " + levelToDisplay(expectedLevelByCode)
+                    + " pero se recibio nivel " + levelToDisplay(level) + ")");
         }
     }
 
@@ -392,7 +394,8 @@ public class ChartOfAccountService {
                 || request.getLevel() == null
                 || request.getNature() == null
                 || request.getStatus() == null) {
-            throw new IllegalArgumentException("No se puede actualizar la informacion. Por favor complete todos los campos obligatorios antes de continuar.");
+            // HU-CFG-RF-03 E3: literal HU
+            throw new IllegalArgumentException("Por favor complete todos los campos obligatorios");
         }
     }
 

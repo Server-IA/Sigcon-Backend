@@ -48,7 +48,7 @@ public class PucValidationController {
      * @return reporte consolidado con totales y lista detallada de inconsistencias
      */
     @GetMapping("/validation-report")
-    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING_ACCOUNT') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING_ACCOUNT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Reporte de validacion masiva del PUC (HU-CG-09D)",
             description = "Ejecuta la validacion integral del Plan Unico de Cuentas: detecta "
                     + "cuentas huerfanas (ORPHAN), naturaleza incoherente con la clase "

@@ -35,6 +35,8 @@ import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
+import com.sigcon.backend.parametrization.settings.domain.service.NavSettingsService;
+import com.sigcon.backend.platform.tenant.TenantContext;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +49,7 @@ public class ModuleService {
     private final MenuService menuService;
     private final SpringDataMenuRepository menuRepository;
     private final AuditPublisher auditPublisher;
+    private final NavSettingsService navSettingsService;
     private final DataTableSpecificationBuilder<ModuleEntity> moduleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
@@ -128,10 +131,21 @@ public class ModuleService {
 
             // Bloque F: el modulo "Plataforma" solo se muestra a PLATFORM_ADMIN.
             // Los admins de empresa (con ROLE_ADMIN pero sin PLATFORM_ADMIN) NO lo ven.
+            // Bloque AM (2026-05-03): un PLATFORM_ADMIN ademas debe ver el modulo
+            // "Parametrizacion" porque dentro vive la configuracion GLOBAL del
+            // sistema (Modulos, Menus, Permisos, Paises, Municipios, Navegacion,
+            // Notificaciones por rol). Sin acceso a Parametrizacion la cuenta de
+            // plataforma no podia administrar la plataforma misma; ademas las
+            // rutas /parametrizacion/* devolvian 403 al CatchAllRoute por no
+            // estar en los modulos del menu.
             java.util.function.Predicate<ModuleEntity> platformVisibility = m -> {
                 boolean isPlatformModule = "Plataforma".equalsIgnoreCase(m.getName())
                         || "platform".equalsIgnoreCase(m.getUrl());
-                return isPlatformAdmin ? isPlatformModule : !isPlatformModule;
+                boolean isParametrizacion = m.getId() != null && m.getId().equals(1L);
+                if (isPlatformAdmin) {
+                    return isPlatformModule || isParametrizacion;
+                }
+                return !isPlatformModule;
             };
             modules = modules.stream().filter(platformVisibility).toList();
 
@@ -157,7 +171,13 @@ public class ModuleService {
                         .toList();
             }
 
-            List<ModuleDTO> moduleDTOs = visibleModules.stream()
+            // Bloque AM (2026-05-03): aplicar orden persistido en companies.module_order
+            // si el tenant lo configuro via /parametrizacion/navegacion (HU-PA-NAV-01).
+            // Si no hay orden persistido, los modulos quedan en su orden natural por DB.
+            // Modulos que no esten en el orden persistido (ej. nuevos) se agregan al final.
+            final List<ModuleEntity> orderedModules = applyTenantModuleOrder(visibleModules);
+
+            List<ModuleDTO> moduleDTOs = orderedModules.stream()
                     .map(module -> ModuleDTO.builder()
                             .id(module.getId())
                             .name(module.getName())
@@ -351,5 +371,48 @@ public class ModuleService {
 
     private String parseStatus(ModelStatus status) {
         return status.name();
+    }
+
+    /**
+     * Bloque AM (2026-05-03): aplica el orden persistido en
+     * {@code companies.module_order} (HU-PA-NAV-01) a la lista de modulos
+     * visibles del menu lateral. Lo hace por tenant: cada empresa configura
+     * el orden de sus modulos.
+     *
+     * <p>Comportamiento:
+     * <ul>
+     *   <li>Si NO hay tenant activo (PLATFORM_ADMIN): retorna sin reordenar.</li>
+     *   <li>Si la lista persistida esta vacia: retorna sin reordenar (default DB).</li>
+     *   <li>Modulos no listados en el orden persistido (ej. agregados nuevos)
+     *       quedan al final, en su orden natural.</li>
+     * </ul>
+     */
+    private List<ModuleEntity> applyTenantModuleOrder(List<ModuleEntity> modules) {
+        Long tenantId = TenantContext.getCompanyId();
+        if (tenantId == null) {
+            return modules; // platform admin u operacion sin tenant
+        }
+        try {
+            List<Long> persistedOrder = navSettingsService.getOrder(tenantId);
+            if (persistedOrder == null || persistedOrder.isEmpty()) {
+                return modules;
+            }
+            Map<Long, ModuleEntity> byId = new HashMap<>();
+            for (ModuleEntity m : modules) byId.put(m.getId(), m);
+            List<ModuleEntity> ordered = new ArrayList<>();
+            // 1) los que estan en el orden persistido, en ese orden
+            for (Long id : persistedOrder) {
+                ModuleEntity m = byId.remove(id);
+                if (m != null) ordered.add(m);
+            }
+            // 2) los que no estaban en el orden persistido, en orden natural al final
+            for (ModuleEntity m : modules) {
+                if (byId.containsKey(m.getId())) ordered.add(m);
+            }
+            return ordered;
+        } catch (Exception ex) {
+            // si algo falla, no romper el menu: devolver orden original
+            return modules;
+        }
     }
 }

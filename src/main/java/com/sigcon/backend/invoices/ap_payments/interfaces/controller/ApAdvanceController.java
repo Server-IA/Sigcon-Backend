@@ -47,7 +47,7 @@ public class ApAdvanceController {
             @ApiResponse(responseCode = "200", description = "Listado de anticipos")
     })
     @PostMapping("")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_ADVANCE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_ADVANCE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> searchAdvances(@RequestBody(required = false) DataTableRequest request) {
         return advanceService.getAdvances(request);
     }
@@ -65,7 +65,7 @@ public class ApAdvanceController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/store")
-    @PreAuthorize("hasAuthority('PERM_CREATE_AP_ADVANCE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AP_ADVANCE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> registerAdvance(@Valid @RequestBody CreateApAdvanceRequest request,
                                              BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
@@ -93,7 +93,7 @@ public class ApAdvanceController {
             @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
     })
     @PostMapping("/{id}/apply")
-    @PreAuthorize("hasAuthority('PERM_CREATE_AP_ADVANCE') or hasAuthority('ROLE_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AP_ADVANCE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> applyAdvance(@PathVariable Long id,
                                           @Valid @RequestBody ApplyAdvanceRequest request,
                                           BindingResult bindingResult) {
