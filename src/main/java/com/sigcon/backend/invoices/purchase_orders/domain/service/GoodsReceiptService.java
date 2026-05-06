@@ -59,6 +59,13 @@ public class GoodsReceiptService {
     private final UserUtil userUtil;
     private final AuditPublisher auditPublisher;
 
+    /**
+     * QA-BLOQUE-AY HU-AP-21 (2026-05-05): repositorio de devoluciones para
+     * generar consecutivo unico por empresa (DV-{año}{6dig}).
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.invoices.purchase_orders.domain.repository.GoodsReturnRepository goodsReturnRepository;
+
     private final DataTableSpecificationBuilder<GoodsReceipt> specBuilder = new DataTableSpecificationBuilder<>();
 
     /**
@@ -129,9 +136,53 @@ public class GoodsReceiptService {
         auditPublisher.publishCreate(AuditModule.AP, "GoodsReceipt", receipt.getId(), "GoodsReceipt creado id=" + receipt.getId());
         log.info("Recepcion {} creada para OC {}", receiptNumber, order.getOrderNumber());
 
+        // QA-BLOQUE-AY HU-AP-18 E2 (2026-05-05): cuando lo recibido es menor a lo
+        // pedido, marcar la OC como "PARTIALLY_RECEIVED" para que el front
+        // muestre el estado correcto. Si todas las cantidades se completaron
+        // (total recibido == total pedido por linea), la OC pasa a "RECEIVED".
+        try {
+            updatePurchaseOrderReceptionStatus(order);
+        } catch (Exception ex) {
+            log.warn("HU-AP-18 E2: no se pudo actualizar status de recepcion de OC {}: {}",
+                    order.getOrderNumber(), ex.getMessage());
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Recepcion registrada exitosamente"), Optional.of(toDTO(receipt))));
+    }
+
+    /**
+     * QA-BLOQUE-AY HU-AP-18 E2: recalcula y persiste el estado de recepcion
+     * de la OC en funcion de las recepciones registradas (no anuladas).
+     *   - Sin recepciones aun -> APPROVED (sin cambio)
+     *   - Recibido total < pedido total -> PARTIALLY_RECEIVED
+     *   - Recibido total == pedido total -> RECEIVED
+     */
+    private void updatePurchaseOrderReceptionStatus(PurchaseOrder order) {
+        List<PurchaseOrderLine> lines = orderLineRepository.findByPurchaseOrderId(order.getId());
+        if (lines == null || lines.isEmpty()) return;
+        BigDecimal totalOrdered = BigDecimal.ZERO;
+        BigDecimal totalReceived = BigDecimal.ZERO;
+        for (PurchaseOrderLine line : lines) {
+            BigDecimal qty = line.getQuantity() != null ? line.getQuantity() : BigDecimal.ZERO;
+            totalOrdered = totalOrdered.add(qty);
+            totalReceived = totalReceived.add(calculateTotalReceived(line.getId()));
+        }
+        String newStatus;
+        if (totalReceived.compareTo(BigDecimal.ZERO) <= 0) {
+            return; // sin recepciones, no tocar
+        } else if (totalReceived.compareTo(totalOrdered) >= 0) {
+            newStatus = "RECEIVED";
+        } else {
+            newStatus = "PARTIALLY_RECEIVED";
+        }
+        if (!newStatus.equals(order.getStatus())) {
+            order.setStatus(newStatus);
+            orderRepository.save(order);
+            log.info("HU-AP-18 E2: OC {} status -> {} (recibido {} de {})",
+                    order.getOrderNumber(), newStatus, totalReceived, totalOrdered);
+        }
     }
 
     /**
@@ -317,6 +368,286 @@ public class GoodsReceiptService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Recepcion rechazada exitosamente"), Optional.of(toDTO(receipt))));
+    }
+
+    /**
+     * QA-BLOQUE-AY HU-AP-21 (2026-05-05): registra una devolucion (parcial o
+     * total) sobre una recepcion existente. Cumple los escenarios:
+     *
+     * <ul>
+     *   <li>E1: genera codigo unico DV-{año}{6dig}, actualiza saldos y audita.</li>
+     *   <li>E2: si la cantidad devuelta &lt; total recibido en cualquier linea, la
+     *       recepcion queda "PARTIALLY_RETURNED" y se mantiene el saldo
+     *       disponible para futuras devoluciones.</li>
+     *   <li>E3: bloqueada cuando la recepcion ya tiene factura asociada
+     *       (mensaje literal HU).</li>
+     *   <li>E4: si la cantidad a devolver supera lo recibido (menos lo ya
+     *       devuelto), rechaza con mensaje literal HU.</li>
+     * </ul>
+     */
+    @Transactional
+    public ResponseEntity<?> createReturn(Long receiptId,
+            com.sigcon.backend.invoices.purchase_orders.application.CreateGoodsReturnRequest request) {
+
+        GoodsReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new IllegalArgumentException("La recepcion no fue encontrada"));
+
+        if (receipt.getInvoiceId() != null) {
+            throw new IllegalStateException(
+                    "No se puede devolver: los ítems seleccionados ya tienen una recepción "
+                    + "con factura de compra asociada. Solicite una nota crédito al proveedor.");
+        }
+        if ("REJECTED".equalsIgnoreCase(receipt.getStatus())) {
+            throw new IllegalStateException("La recepcion ya esta rechazada.");
+        }
+
+        // Validar y computar cantidades por linea
+        List<GoodsReceiptLine> updatedLines = new java.util.ArrayList<>();
+        BigDecimal totalReturnedThis = BigDecimal.ZERO;
+        for (com.sigcon.backend.invoices.purchase_orders.application.CreateGoodsReturnRequest.Line ln : request.getLines()) {
+            if (ln.getQuantityReturned() == null
+                    || ln.getQuantityReturned().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("La cantidad a devolver debe ser mayor a cero.");
+            }
+            GoodsReceiptLine grLine = receiptLineRepository.findById(ln.getGoodsReceiptLineId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "La linea de recepcion " + ln.getGoodsReceiptLineId() + " no fue encontrada."));
+            if (grLine.getGoodsReceipt() == null
+                    || !grLine.getGoodsReceipt().getId().equals(receipt.getId())) {
+                throw new IllegalArgumentException(
+                        "La linea " + grLine.getId() + " no pertenece a la recepcion " + receipt.getReceiptNumber());
+            }
+            BigDecimal received  = grLine.getQuantityReceived() != null ? grLine.getQuantityReceived() : BigDecimal.ZERO;
+            BigDecimal already   = grLine.getQuantityReturned() != null ? grLine.getQuantityReturned() : BigDecimal.ZERO;
+            BigDecimal available = received.subtract(already);
+            if (ln.getQuantityReturned().compareTo(available) > 0) {
+                throw new IllegalArgumentException(
+                        "La cantidad a devolver supera la cantidad recibida disponible "
+                        + "(linea " + grLine.getId() + ": disponible " + available + ").");
+            }
+            grLine.setQuantityReturned(already.add(ln.getQuantityReturned()));
+            updatedLines.add(grLine);
+            totalReturnedThis = totalReturnedThis.add(ln.getQuantityReturned());
+        }
+
+        // Persistir actualizacion de cantidades por linea
+        for (GoodsReceiptLine line : updatedLines) {
+            receiptLineRepository.save(line);
+        }
+
+        // Generar codigo de devolucion DV-{año}{6dig}
+        long count = goodsReturnRepository != null ? goodsReturnRepository.count() : 0L;
+        String returnNumber = String.format("DV-%d%06d", java.time.Year.now().getValue(), count + 1);
+
+        com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn gr =
+                com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn.builder()
+                        .returnNumber(returnNumber)
+                        .receipt(receipt)
+                        .returnDate(request.getReturnDate())
+                        .reason(request.getReason())
+                        .createdBy(safeUserId())
+                        .build();
+
+        for (com.sigcon.backend.invoices.purchase_orders.application.CreateGoodsReturnRequest.Line ln : request.getLines()) {
+            GoodsReceiptLine grLine = receiptLineRepository.findById(ln.getGoodsReceiptLineId()).orElseThrow();
+            com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturnLine returnLine =
+                    com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturnLine.builder()
+                            .goodsReturn(gr)
+                            .goodsReceiptLine(grLine)
+                            .quantityReturned(ln.getQuantityReturned())
+                            .notes(ln.getNotes())
+                            .build();
+            gr.getLines().add(returnLine);
+        }
+
+        gr = goodsReturnRepository.save(gr);
+
+        // Recalcular status de la recepcion: si TODAS las lineas tienen
+        // returned == received -> RETURNED (total). Si alguna tiene parcial,
+        // PARTIALLY_RETURNED. Si todo sigue 0 -> RECEIVED (no deberia).
+        boolean allFullyReturned = true;
+        boolean anyReturned = false;
+        for (GoodsReceiptLine line : receiptLineRepository.findAll()) {
+            if (line.getGoodsReceipt() == null || !line.getGoodsReceipt().getId().equals(receipt.getId())) continue;
+            BigDecimal received = line.getQuantityReceived() != null ? line.getQuantityReceived() : BigDecimal.ZERO;
+            BigDecimal returned = line.getQuantityReturned() != null ? line.getQuantityReturned() : BigDecimal.ZERO;
+            if (returned.compareTo(BigDecimal.ZERO) > 0) anyReturned = true;
+            if (returned.compareTo(received) < 0) allFullyReturned = false;
+        }
+        String newStatus = allFullyReturned ? "RETURNED" : (anyReturned ? "PARTIALLY_RETURNED" : "RECEIVED");
+        receipt.setStatus(newStatus);
+        receiptRepository.save(receipt);
+
+        auditPublisher.publishCreate(AuditModule.AP, "GoodsReturn", gr.getId(),
+                "Devolucion " + returnNumber + " sobre recepcion " + receipt.getReceiptNumber()
+                        + " - Cantidad total devuelta: " + totalReturnedThis + " - Motivo: " + request.getReason());
+
+        log.info("HU-AP-21: devolucion {} creada sobre recepcion {} -> status {}",
+                returnNumber, receipt.getReceiptNumber(), newStatus);
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Devolucion registrada exitosamente"),
+                Optional.of(buildReturnDTO(gr, receipt))));
+    }
+
+    private Long safeUserId() {
+        try { return userUtil.getUser().getId(); } catch (Exception e) { return null; }
+    }
+
+    private com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO buildReturnDTO(
+            com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn gr,
+            GoodsReceipt receipt) {
+        return com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO.builder()
+                .id(gr.getId())
+                .returnNumber(gr.getReturnNumber())
+                .receiptId(receipt.getId())
+                .receiptNumber(receipt.getReceiptNumber())
+                .returnDate(gr.getReturnDate())
+                .reason(gr.getReason())
+                .createdAt(gr.getCreatedAt())
+                .lines(gr.getLines().stream().map(l ->
+                        com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO.Line.builder()
+                                .goodsReceiptLineId(l.getGoodsReceiptLine().getId())
+                                .quantityReturned(l.getQuantityReturned())
+                                .notes(l.getNotes())
+                                .build())
+                        .collect(Collectors.toList()))
+                .build();
+    }
+
+    /**
+     * QA-BLOQUE-AY HU-AP-19 E1 (2026-05-06): vincula una factura a MULTIPLES
+     * recepciones de la misma OC. Patron tipico cuando el proveedor entrega
+     * en varios despachos parciales pero emite una sola factura por todo.
+     *
+     * <ul>
+     *   <li>Todas las recepciones deben pertenecer a la misma OC.</li>
+     *   <li>Ninguna recepcion debe tener ya factura asociada (HU-AP-19 E4).</li>
+     *   <li>Proveedor de la factura == proveedor de la OC (HU-AP-19 E2).</li>
+     *   <li>Monto factura &gt; suma recibido = bloqueo (HU-AP-19 E3).</li>
+     *   <li>Monto factura &lt; suma recibido = vincula con warning (HU-AP-19 E5).</li>
+     * </ul>
+     */
+    @Transactional
+    public ResponseEntity<?> linkToInvoiceMultiple(
+            com.sigcon.backend.invoices.purchase_orders.application.LinkInvoiceMultipleRequest request) {
+
+        if (request.getReceiptIds() == null || request.getReceiptIds().isEmpty()) {
+            throw new IllegalArgumentException("Debe especificar al menos una recepcion");
+        }
+
+        // Cargar y validar todas las recepciones
+        List<GoodsReceipt> receipts = new java.util.ArrayList<>();
+        Long sharedOrderId = null;
+        for (Long rid : request.getReceiptIds()) {
+            GoodsReceipt r = receiptRepository.findById(rid)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "La recepcion " + rid + " no fue encontrada"));
+            if (r.getInvoiceId() != null) {
+                throw new IllegalStateException(
+                        "La recepcion " + r.getReceiptNumber() + " ya tiene una factura vinculada (ID: "
+                        + r.getInvoiceId() + ")");
+            }
+            if ("REJECTED".equalsIgnoreCase(r.getStatus())
+                    || "RETURNED".equalsIgnoreCase(r.getStatus())) {
+                throw new IllegalStateException(
+                        "La recepcion " + r.getReceiptNumber() + " esta en estado "
+                        + r.getStatus() + " y no puede vincularse a una factura.");
+            }
+            if (r.getPurchaseOrder() == null) {
+                throw new IllegalArgumentException(
+                        "La recepcion " + r.getReceiptNumber() + " no tiene OC asociada.");
+            }
+            Long orderId = r.getPurchaseOrder().getId();
+            if (sharedOrderId == null) {
+                sharedOrderId = orderId;
+            } else if (!sharedOrderId.equals(orderId)) {
+                throw new IllegalArgumentException(
+                        "Todas las recepciones deben pertenecer a la misma orden de compra. "
+                        + "OC primera: " + sharedOrderId + ", recepcion " + r.getReceiptNumber()
+                        + " pertenece a OC " + orderId + ".");
+            }
+            receipts.add(r);
+        }
+
+        // Cargar factura
+        Invoices invoice = invoiceRepository.findById(request.getInvoiceId())
+                .orElseThrow(() -> new IllegalArgumentException("La factura no fue encontrada"));
+
+        // HU-AP-19 E2: proveedor coincide
+        Long invoiceThirdPartyId = invoice.getThirdParty() != null ? invoice.getThirdParty().getId() : null;
+        Long orderThirdPartyId = receipts.get(0).getPurchaseOrder().getThirdParty() != null
+                ? receipts.get(0).getPurchaseOrder().getThirdParty().getId() : null;
+        if (invoiceThirdPartyId != null && orderThirdPartyId != null
+                && !orderThirdPartyId.equals(invoiceThirdPartyId)) {
+            throw new IllegalArgumentException(
+                    "El proveedor de la factura no coincide con el de la recepción");
+        }
+
+        // HU-AP-19 E3/E5: comparar montos
+        java.math.BigDecimal totalReceived = java.math.BigDecimal.ZERO;
+        for (GoodsReceipt r : receipts) {
+            if (r.getLines() == null) continue;
+            for (var rl : r.getLines()) {
+                java.math.BigDecimal qty = rl.getQuantityReceived();
+                if (qty == null) continue;
+                java.math.BigDecimal price = java.math.BigDecimal.ZERO;
+                if (rl.getPurchaseOrderLine() != null
+                        && rl.getPurchaseOrderLine().getUnitPrice() != null) {
+                    price = rl.getPurchaseOrderLine().getUnitPrice();
+                }
+                totalReceived = totalReceived.add(qty.multiply(price));
+            }
+        }
+        java.math.BigDecimal invoiceTotal = invoice.getTotalAmount() != null
+                ? java.math.BigDecimal.valueOf(invoice.getTotalAmount())
+                : java.math.BigDecimal.ZERO;
+
+        String warning = null;
+        if (totalReceived.signum() > 0) {
+            int cmp = invoiceTotal.compareTo(totalReceived);
+            if (cmp > 0) {
+                throw new IllegalArgumentException(
+                        "El monto de la factura ($" + invoiceTotal + ") supera el total recibido en las "
+                        + receipts.size() + " recepcion(es) seleccionadas ($" + totalReceived + "). "
+                        + "Verifique las cantidades o solicite una nota credito al proveedor.");
+            } else if (cmp < 0) {
+                java.math.BigDecimal diff = totalReceived.subtract(invoiceTotal);
+                warning = "El monto facturado ($" + invoiceTotal + ") es inferior al total recibido ($"
+                        + totalReceived + "). Diferencia: $" + diff
+                        + ". Verifique si existe nota credito del proveedor pendiente de registrar.";
+                log.warn("HU-AP-19 E5: factura {} multi-recepcion diff={}", invoice.getId(), diff);
+            }
+        }
+
+        // Persistir vinculacion
+        List<String> linkedNumbers = new java.util.ArrayList<>();
+        for (GoodsReceipt r : receipts) {
+            r.setInvoiceId(invoice.getId());
+            receiptRepository.save(r);
+            linkedNumbers.add(r.getReceiptNumber());
+            auditPublisher.publishUpdate(AuditModule.AP, "GoodsReceipt", r.getId(),
+                    "Recepcion " + r.getReceiptNumber() + " vinculada a factura "
+                    + invoice.getResolutionInvoice() + " (multi-recepcion)"
+                    + (warning != null ? " [WARN: " + warning + "]" : ""));
+        }
+
+        log.info("HU-AP-19 E1: factura {} vinculada a {} recepciones: {}",
+                invoice.getResolutionInvoice(), receipts.size(), linkedNumbers);
+
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("invoiceId", invoice.getId());
+        payload.put("invoiceNumber", invoice.getResolutionInvoice());
+        payload.put("linkedReceipts", linkedNumbers);
+        payload.put("totalReceived", totalReceived);
+        payload.put("invoiceTotal", invoiceTotal);
+        if (warning != null) payload.put("warning", warning);
+
+        String successMsg = warning != null
+                ? ("Factura vinculada a " + receipts.size() + " recepciones con alerta: " + warning)
+                : "Factura vinculada exitosamente a " + receipts.size() + " recepcion(es)";
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of(successMsg), Optional.of(payload)));
     }
 
     // ========================= Helpers privados =========================

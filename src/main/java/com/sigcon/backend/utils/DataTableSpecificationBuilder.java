@@ -167,9 +167,12 @@ public class DataTableSpecificationBuilder<T> {
                     // matchear letras/numeros de cualquier idioma sin depender del
                     // encoding del literal compilado.
                     // Cuando regex=true, permitir ademas `|` como separador OR.
+                    // QA-BLOQUE-AY (2026-05-05): permitir '|' tambien sin regex
+                    // (filtros multi-select de assets/supplier.id envian ids
+                    // numericos unidos por '|' con regex=false).
                     String allowedPattern = regex
                             ? "(?U)^[\\p{L}\\p{N} ()_\\-%,.|]+$"
-                            : "(?U)^[\\p{L}\\p{N} ()_\\-%,.]+$";
+                            : "(?U)^[\\p{L}\\p{N} ()_\\-%,.|]+$";
                     if (!searchValue.matches(allowedPattern)) {
                         throw new IllegalArgumentException("Entrada de busqueda inválida");
                     }
@@ -183,32 +186,68 @@ public class DataTableSpecificationBuilder<T> {
                     }
                     Class<?> type = path.getJavaType();
     
-                    /* -------- IN (multi-select) -------- */
-                    if (searchValue.contains(",")) {
+                    /* -------- IN (multi-select) --------
+                     * QA-BLOQUE-AY (2026-05-05): aceptar tambien '|' como separador
+                     * (varios filtros del frontend - assets, AR, AP - lo usan al
+                     * hacer value.join('|')). Antes el split solo entendia ',' y
+                     * el filtro se ignoraba silenciosamente cuando llegaban
+                     * varias opciones unidas por '|'.
+                     * Tambien soporta enums y numericos en la rama IN (antes solo
+                     * strings con LIKE), critico para filtrar por classification,
+                     * type, status (enums) o supplier.id (Long).
+                     */
+                    if (searchValue.contains(",") || searchValue.contains("|")) {
 
                         List<String> values = Arrays
-                        .stream(searchValue.split(","))
+                        .stream(searchValue.split("[,|]"))
                                 .map(String::trim)
                                 .filter(v -> !v.isBlank())
                                 .toList();
-                    
+
                         if (!values.isEmpty()) {
-                    
-                            if (regex) {
-                                List<Predicate> likePredicates = values.stream()
-                                        .map(v -> cb.like(cb.lower(path.as(String.class)),  verifyValue(v)))
+
+                            if (type.isEnum()) {
+                                @SuppressWarnings({"unchecked","rawtypes"})
+                                List<Object> enumValues = values.stream()
+                                        .map(v -> {
+                                            try {
+                                                return (Object) Enum.valueOf((Class<Enum>) type, v.toUpperCase());
+                                            } catch (IllegalArgumentException ex) {
+                                                return null;
+                                            }
+                                        })
+                                        .filter(v -> v != null)
                                         .toList();
-                    
-                                predicate = cb.and(predicate, cb.or(likePredicates.toArray(new Predicate[0])));
+                                if (!enumValues.isEmpty()) {
+                                    predicate = cb.and(predicate, path.in(enumValues));
+                                }
+                            } else if (String.class.equals(type)) {
+                                if (regex) {
+                                    List<Predicate> likePredicates = values.stream()
+                                            .map(v -> cb.like(cb.lower(path.as(String.class)), verifyValue(v)))
+                                            .toList();
+                                    predicate = cb.and(predicate, cb.or(likePredicates.toArray(new Predicate[0])));
+                                } else {
+                                    predicate = cb.and(predicate, path.in(values));
+                                }
                             } else {
+                                // Numericos y otros: convertir y usar IN
                                 List<Object> convertedValues = values.stream()
-                                        .map(v -> convertValue(v, type))
+                                        .map(v -> {
+                                            try {
+                                                return convertValue(v, type);
+                                            } catch (Exception ex) {
+                                                return null;
+                                            }
+                                        })
+                                        .filter(v -> v != null)
                                         .toList();
-                    
-                                predicate = cb.and(predicate, path.in(convertedValues));
+                                if (!convertedValues.isEmpty()) {
+                                    predicate = cb.and(predicate, path.in(convertedValues));
+                                }
                             }
                         }
-                    
+
                         continue;
                     }
     
@@ -232,26 +271,25 @@ public class DataTableSpecificationBuilder<T> {
                         }
                     }
     
-                    /* -------- ENUM -------- */
+                    /* -------- ENUM --------
+                     * QA-BLOQUE-AY (2026-05-05): match exacto siempre, ignorar
+                     * regex flag. Antes con regex=true se hacia
+                     * `enumName.contains(searchValue)` que matcheaba enum
+                     * pares con substring comun (ej. CURRENT esta dentro de
+                     * NON_CURRENT, asi que filtrar por CURRENT devolvia TODOS
+                     * los activos). El frontend siempre envia el nombre
+                     * exacto del enum como value, asi que el match exacto es
+                     * el comportamiento correcto.
+                     */
                     else if (type.isEnum()) {
-
                         Object[] enumConstants = type.getEnumConstants();
-                        Predicate enumPredicate = cb.disjunction(); // OR
-
+                        Predicate enumPredicate = cb.disjunction();
                         for (Object constant : enumConstants) {
-                            String enumName = constant.toString();
-
-                            if (regex) {
-                                if (enumName.toLowerCase().contains(searchValue.toLowerCase())) {
-                                    enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
-                                }
-                            } else {
-                                if (enumName.equalsIgnoreCase(searchValue)) {
-                                    enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
-                                }
+                            if (constant.toString().equalsIgnoreCase(searchValue)) {
+                                enumPredicate = cb.or(enumPredicate, cb.equal(path, constant));
+                                break;
                             }
                         }
-
                         predicate = cb.and(predicate, enumPredicate);
                     }
 

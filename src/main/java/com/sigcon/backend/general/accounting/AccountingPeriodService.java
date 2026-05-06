@@ -46,8 +46,18 @@ public class AccountingPeriodService {
         AccountingPeriod period = repository.findByYearAndMonth(date.getYear(), date.getMonthValue())
                 .orElse(null);
 
-        // Si no existe el periodo, se considera abierto (aun no se ha gestionado)
-        if (period == null) return true;
+        // QA-2026-05-05: si NO existe registro pero existe un periodo CLOSED/LOCKED
+        // posterior, considerar este periodo como cerrado por antiguedad. Regla
+        // contable estandar: no se modifican periodos previos a un cierre fiscal.
+        if (period == null) {
+            if (hasClosedPeriodAfter(date)) {
+                throw new IllegalStateException(
+                        "No es posible realizar esta operacion. El periodo contable "
+                        + date.getYear() + "-" + String.format("%02d", date.getMonthValue())
+                        + " esta cerrado por antiguedad (existe un cierre posterior).");
+            }
+            return true;
+        }
 
         if (period.isLocked()) {
             throw new IllegalStateException(
@@ -72,6 +82,26 @@ public class AccountingPeriodService {
     public boolean isPeriodOpen(int year, int month) {
         AccountingPeriod period = repository.findByYearAndMonth(year, month).orElse(null);
         return period == null || period.isOpen();
+    }
+
+    /**
+     * QA-2026-05-05: indica si existe algun periodo CLOSED o LOCKED cuya fecha
+     * de inicio sea posterior a la fecha indicada. Util para inferir que un
+     * periodo previo (sin registro propio) esta cerrado por antiguedad.
+     */
+    public boolean hasClosedPeriodAfter(LocalDate date) {
+        if (date == null) return false;
+        try {
+            return repository.findAll().stream()
+                    .filter(p -> !p.isOpen())
+                    .anyMatch(p -> {
+                        int yearCmp = Integer.compare(p.getYear(), date.getYear());
+                        if (yearCmp != 0) return yearCmp > 0;
+                        return p.getMonth() > date.getMonthValue();
+                    });
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // ───────────────────────────────────────────────────────────────

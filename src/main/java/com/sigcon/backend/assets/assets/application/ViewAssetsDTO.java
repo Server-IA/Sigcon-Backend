@@ -79,6 +79,16 @@ public class ViewAssetsDTO {
     @Schema(description = "Referencia de Bancos/Cajas (pendiente de integrar)", example = "5001")
     private Long bankCashReferenceId;
 
+    // QA-2026-05-05: exponer la forma/metodo de pago ACTUAL del activo, no la
+    // del voucher original. Sin estos campos, el frontend al editar leia el
+    // valor desde el voucher (que se crea solo una vez al registrar el activo)
+    // y veia siempre el valor inicial aunque el contador hubiera editado.
+    @Schema(description = "ID de forma de pago actual (1=Contado, 2=Credito)", example = "2")
+    private Long paymentFormId;
+
+    @Schema(description = "ID de metodo de pago actual (1=Efectivo, 2=Cheque, 3=Transferencia)", example = "1")
+    private Long paymentMethodId;
+
     @Schema(description = "Estado del activo", example = "ACTIVE")
     private AssetStatus status;
 

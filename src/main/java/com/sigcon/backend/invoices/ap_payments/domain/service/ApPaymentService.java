@@ -244,6 +244,14 @@ public class ApPaymentService {
                                 .externalReference(request.getPaymentReference())
                                 .sourceType(FinancialMovementSourceType.MANUAL)
                                 .flowActivity("OPERATIVA")
+                                // QA-BLOQUE-AY (2026-05-06): vincular el FM al JE
+                                // del pago para que la columna "Conciliacion" de
+                                // /financial-movements muestre "Conciliado" y el
+                                // emparejado en /bank-reconciliation muestre el
+                                // numero del comprobante. El JE ya esta en CG
+                                // como sourceModule=AP, asi que el FM hereda esa
+                                // referencia automaticamente.
+                                .matchedJournalEntryId(je.getId())
                                 .build();
                     }
                 } else if (request.getCashId() != null) {
@@ -259,12 +267,24 @@ public class ApPaymentService {
                                 .externalReference(request.getPaymentReference())
                                 .sourceType(FinancialMovementSourceType.MANUAL)
                                 .flowActivity("OPERATIVA")
+                                .matchedJournalEntryId(je.getId())
                                 .build();
                     }
                 }
                 if (fm != null) {
-                    financialMovementRepository.save(fm);
-                    log.info("Movimiento financiero generado para pago {}", payment.getId());
+                    fm = financialMovementRepository.save(fm);
+                    // QA-BLOQUE-AY HU-AP-08 / HU-AP-03 (2026-05-06): auto-conciliar el
+                    // pago con el FM recien creado. El sistema sabe que ese
+                    // movimiento corresponde 1:1 al pago, asi que no tiene sentido
+                    // que el contador lo concilie manualmente. Sin esto, el pago
+                    // queda bankMovementId=null y el endpoint /settle rechaza con
+                    // "pagos no conciliados en BNK" aunque el flujo se completo
+                    // automaticamente.
+                    payment.setBankMovementId(fm.getId());
+                    payment.setReconciledAt(java.time.LocalDateTime.now());
+                    paymentRepository.save(payment);
+                    log.info("Movimiento financiero {} (matchedJE={}) generado para pago {} (auto-conciliado)",
+                            fm.getId(), je.getId(), payment.getId());
                 }
             } catch (RuntimeException e) {
                 // Si falla el FM, NO rompemos el pago (ya esta guardado el JE).

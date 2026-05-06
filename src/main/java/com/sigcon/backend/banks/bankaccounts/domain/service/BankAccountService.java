@@ -538,6 +538,20 @@ public class BankAccountService {
     }
 
     /**
+     * QA-BLOQUE-AY (2026-05-06): saldo actual de la cuenta bancaria.
+     * Suma initialBalance + sum(financial_movements.amount). Los movimientos
+     * de egreso (pagos AP/anticipos) ya van con amount negativo, asi que la
+     * suma directa da el saldo correcto.
+     */
+    private java.math.BigDecimal computeCurrentBalance(BankAccount e) {
+        java.math.BigDecimal initial = e.getInitialBalance() != null
+                ? e.getInitialBalance() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal moved = financialMovementRepository.sumAmountByBankAccountId(e.getId());
+        if (moved == null) moved = java.math.BigDecimal.ZERO;
+        return initial.add(moved);
+    }
+
+    /**
      * Convierte una entidad BankAccount a su DTO de respuesta.
      * Incluye DTOs anidados para banco, sucursal, moneda, cuenta contable y centro de costo.
      */
@@ -567,6 +581,8 @@ public class BankAccountService {
                     .build()
                     : null)
                 .initialBalance(e.getInitialBalance())
+                // QA-BLOQUE-AY (2026-05-06): saldo actual = initial + sum FM
+                .currentBalance(computeCurrentBalance(e))
                 .accountingAccountDTO(e.getAccountingAccount() != null ? AccountingAccountDTO.builder()
                     .id(e.getAccountingAccount().getId())
                     .customName(e.getAccountingAccount().getCustomName())

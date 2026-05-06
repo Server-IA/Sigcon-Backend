@@ -119,6 +119,20 @@ public class VoucherService {
             BigDecimal signedAmount;
             switch (voucherTypeEntity.getCode()) {
                 case "PC":
+                    // QA-2026-05-05: validar fondos disponibles ANTES de restar
+                    // (saldo + linea de credito si la cuenta acepta sobregiro).
+                    {
+                        BigDecimal saldo = bankAccount.getInitialBalance() != null ? bankAccount.getInitialBalance() : BigDecimal.ZERO;
+                        BigDecimal linea = Boolean.TRUE.equals(bankAccount.getAllowsOverdraft()) && bankAccount.getCreditLimit() != null
+                                ? bankAccount.getCreditLimit() : BigDecimal.ZERO;
+                        BigDecimal disponible = saldo.add(linea);
+                        if (voucherDTO.getAmount().compareTo(disponible) > 0) {
+                            throw new IllegalArgumentException(
+                                "Fondos insuficientes en la cuenta bancaria seleccionada. Saldo disponible: $"
+                                + saldo + (linea.signum() > 0 ? " + linea de credito $" + linea : "")
+                                + ". Valor solicitado: $" + voucherDTO.getAmount());
+                        }
+                    }
                     bankAccount.setInitialBalance(bankAccount.getInitialBalance().subtract(voucherDTO.getAmount()));
                     signedAmount = voucherDTO.getAmount().negate();
                     break;
@@ -147,6 +161,17 @@ public class VoucherService {
             Cash cashEntity = cashRepository.findById(voucherDTO.getCashAccountId())
             .orElseThrow(() -> new RuntimeException("La cuenta de efectivo no existe"));
 
+            // QA-2026-05-05: validar saldo disponible en la caja ANTES de restar.
+            // Sin esta validacion, el JPA bean validator lanzaba un mensaje feo
+            // tecnico ("Validation failed for classes [Cash]... saldo no negativo").
+            if (isAssetCashPayment) {
+                BigDecimal saldoCaja = cashEntity.getInitialBalance() != null ? cashEntity.getInitialBalance() : BigDecimal.ZERO;
+                if (voucherDTO.getAmount().compareTo(saldoCaja) > 0) {
+                    throw new IllegalArgumentException(
+                        "Fondos insuficientes en la caja seleccionada. Saldo disponible: $"
+                        + saldoCaja + ". Valor solicitado: $" + voucherDTO.getAmount());
+                }
+            }
             cashEntity.setInitialBalance(cashEntity.getInitialBalance().subtract(voucherDTO.getAmount()));
             cashRepository.saveAndFlush(cashEntity);
 
@@ -175,6 +200,27 @@ public class VoucherService {
             BankAccount bankAccount = bankAccountRepository
                 .findByIdAndDeletedAtIsNull(checkEntity.getCheckbook().getBankAccount().getId())
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
+
+            // QA-2026-05-05: el monto del cheque debe alcanzar el valor solicitado
+            // y la cuenta bancaria debe tener fondos.
+            if (isAssetCashPayment) {
+                BigDecimal valorCheque = checkEntity.getValue() != null ? checkEntity.getValue() : BigDecimal.ZERO;
+                if (valorCheque.compareTo(voucherDTO.getAmount()) < 0) {
+                    throw new IllegalArgumentException(
+                        "El valor del cheque seleccionado ($" + valorCheque + ") es inferior al valor del activo ($"
+                        + voucherDTO.getAmount() + "). Use otro cheque de mayor valor.");
+                }
+                BigDecimal saldoBanco = bankAccount.getInitialBalance() != null ? bankAccount.getInitialBalance() : BigDecimal.ZERO;
+                BigDecimal lineaBanco = Boolean.TRUE.equals(bankAccount.getAllowsOverdraft()) && bankAccount.getCreditLimit() != null
+                        ? bankAccount.getCreditLimit() : BigDecimal.ZERO;
+                BigDecimal disponibleBanco = saldoBanco.add(lineaBanco);
+                if (voucherDTO.getAmount().compareTo(disponibleBanco) > 0) {
+                    throw new IllegalArgumentException(
+                        "Fondos insuficientes en la cuenta bancaria del cheque. Saldo disponible: $"
+                        + saldoBanco + (lineaBanco.signum() > 0 ? " + linea de credito $" + lineaBanco : "")
+                        + ". Valor solicitado: $" + voucherDTO.getAmount());
+                }
+            }
 
             bankAccount.setInitialBalance(bankAccount.getInitialBalance().subtract(voucherDTO.getAmount()));
             bankAccountRepository.saveAndFlush(bankAccount);

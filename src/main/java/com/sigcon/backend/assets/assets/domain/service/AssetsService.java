@@ -78,6 +78,14 @@ import com.sigcon.backend.vouchers.domain.repository.VoucherRepository;
 import com.sigcon.backend.vouchers.domain.service.VoucherService;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
+import com.sigcon.backend.invoices.application.InvoiceFCRequestDTO;
+import com.sigcon.backend.invoices.application.LineInvoiceRequestDTO;
+import com.sigcon.backend.invoices.domain.model.Invoices;
+import com.sigcon.backend.invoices.domain.model.PaymentForms;
+import com.sigcon.backend.invoices.domain.model.TypesInvoices;
+import com.sigcon.backend.invoices.domain.repository.TypeInvoiceRepository;
+import com.sigcon.backend.invoices.domain.service.InvoiceService;
+import com.sigcon.backend.parametrization.resources.domain.repository.PaymentFormRepository;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -145,6 +153,14 @@ public class AssetsService {
 
     private final RuleTaxRepository taxRuleRepository;
 
+    // HU-ACT-01 E1/E5 + HU-ACT-06 E5 (QA 2026-05-05): cuando paymentForm.code='CREDIT'
+    // se crea automaticamente la factura de compra en AP usando los campos
+    // resolutionInvoice e invoiceDueDay del request.
+    private final InvoiceService invoiceService;
+    private final com.sigcon.backend.invoices.domain.repository.InvoiceRepository invoiceRepository;
+    private final TypeInvoiceRepository typeInvoiceRepository;
+    private final PaymentFormRepository paymentFormRepository;
+
     // private final AssetChartOfAccountBridgeRepository chartOfAccountRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final com.sigcon.backend.general.accounting.AccountingPeriodService accountingPeriodService;
@@ -168,6 +184,28 @@ public class AssetsService {
         // ACT-01 E8: Validar que se haya seleccionado una forma de pago valida
         if (request.getPaymentFormId() == null) {
             throw new IllegalArgumentException("Debe seleccionar una forma de pago válida (contado o crédito).");
+        }
+
+        // QA-2026-05-05: paymentMethodId obligatorio SOLO si CONTADO (paymentFormId=1).
+        // Para CREDITO no aplica metodo de pago. Antes el DTO tenia @NotNull global
+        // y bloqueaba la creacion al credito con "El metodo de pago es requerido".
+        if (request.getPaymentFormId() != null && request.getPaymentFormId() == 1L
+                && request.getPaymentMethodId() == null) {
+            throw new IllegalArgumentException("El metodo de pago es requerido cuando la forma de pago es CONTADO.");
+        }
+
+        // QA-2026-05-05: pre-validar typeRegimen del proveedor cuando es CREDITO
+        // ANTES de crear el activo. Si no se valida aqui, generateApInvoiceIfCredit
+        // lanza IllegalStateException dentro de un @Transactional que marca la TX
+        // como rollback-only y el usuario ve el mensaje opaco.
+        if (request.getPaymentFormId() != null && request.getPaymentFormId() == 2L
+                && request.getSupplierId() != null) {
+            ThirdParty preCheckSupplier = thirdPartyRepository.findById(request.getSupplierId()).orElse(null);
+            if (preCheckSupplier != null && preCheckSupplier.getTypeRegimen() == null) {
+                throw new IllegalArgumentException(
+                    "El proveedor no tiene clasificacion tributaria configurada. "
+                    + "Edite el tercero en el modulo de Terceros y asigne el tipo de regimen antes de crear el activo a credito.");
+            }
         }
 
         ThirdParty supplier = resolveSupplier(request.getSupplierId());
@@ -323,7 +361,78 @@ public class AssetsService {
 
         voucherService.createVoucher(voucherDTO);
 
+        // HU-ACT-01 E1/E5 (QA 2026-05-05): si la forma de pago es CREDITO,
+        // generar automaticamente la factura de compra en AP que respalda la
+        // adquisicion del activo. Sin esta factura, el contador no podria
+        // registrar el pago al proveedor desde Cuentas por Pagar.
+        try {
+            generateApInvoiceIfCredit(request, savedAsset, totalAmount);
+        } catch (RuntimeException ex) {
+            // No abortar la creacion del activo por un fallo en la factura AP.
+            // El contador puede registrarla manualmente. Auditamos la falla.
+            org.slf4j.LoggerFactory.getLogger(AssetsService.class)
+                    .warn("HU-ACT-01 E5: no se pudo generar factura AP automatica para activo {}: {}",
+                            savedAsset.getId(), ex.getMessage());
+        }
+
         return toViewDTO(savedAsset);
+    }
+
+    /**
+     * HU-ACT-01 E1/E5 + HU-ACT-06 E5: genera la factura de compra en AP cuando
+     * la forma de pago del activo es CREDITO. Reutiliza InvoiceService.createInvoice
+     * para que la factura quede registrada en el modulo Cuentas por Pagar
+     * con el JE contable correspondiente (D Activo / C Cuentas por pagar).
+     */
+    private void generateApInvoiceIfCredit(CreateAssetsDTO request, Assets savedAsset, BigDecimal totalAmount) {
+        if (request.getPaymentFormId() == null) return;
+        PaymentForms paymentForm = paymentFormRepository.findById(request.getPaymentFormId()).orElse(null);
+        if (paymentForm == null) return;
+        boolean isCredit = !Boolean.TRUE.equals(paymentForm.getIsContado());
+        if (!isCredit) return;
+
+        // Resolucion factura: usar la enviada o generar fallback
+        String resolution = request.getResolutionInvoice();
+        if (resolution == null || resolution.isBlank()) {
+            resolution = "ACT-" + savedAsset.getAssetCode();
+        }
+
+        // Dia de vencimiento: usar el del request o default al ultimo dia del mes
+        Integer dueDay = request.getInvoiceDueDay();
+        if (dueDay == null || dueDay < 1 || dueDay > 31) {
+            dueDay = 30;
+        }
+
+        // Resolver tipo de factura FC
+        TypesInvoices fcType = typeInvoiceRepository.findByCodeAndDeletedAtIsNull("FC")
+                .orElseThrow(() -> new IllegalStateException(
+                        "Tipo de factura FC no esta configurado en el sistema."));
+
+        LineInvoiceRequestDTO line = LineInvoiceRequestDTO.builder()
+                .accountingAccountId(savedAsset.getAccountingAccount().getId())
+                .description("Compra de activo: " + savedAsset.getAssetName())
+                .quantity(1.0)
+                .price(savedAsset.getAcquisitionValue().doubleValue())
+                .taxRulesIds(java.util.Collections.emptyList())
+                .build();
+
+        InvoiceFCRequestDTO invoiceRequest = InvoiceFCRequestDTO.builder()
+                .paymentFormId(request.getPaymentFormId())
+                .thirdPartyId(request.getSupplierId())
+                .resolutionInvoice(resolution)
+                .invoiceDate(request.getAcquisitionDate())
+                .invoiceDueDay(dueDay)
+                .supplierInvoiceNumber(resolution)
+                .notes("Factura generada automaticamente desde Activos: " + savedAsset.getAssetCode())
+                .lineInvoices(java.util.List.of(line))
+                .build();
+
+        Invoices invoice = invoiceService.createInvoice(invoiceRequest, fcType.getId());
+        savedAsset.setAccountsPayableReferenceId(invoice.getId());
+        assetsRepository.save(savedAsset);
+        org.slf4j.LoggerFactory.getLogger(AssetsService.class)
+                .info("HU-ACT-01 E5: factura AP {} creada automaticamente para activo {}",
+                        invoice.getId(), savedAsset.getId());
     }
 
     @Transactional
@@ -569,8 +678,33 @@ public class AssetsService {
             existingAsset.setUsefulLifeMonths(request.getUsefulLifeMonths());
         }
         existingAsset.setDepretationRule(depretationRule);
-        existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
-        existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
+        // ACT-06.3 (QA 2026-05-05): preservar referencias si el cliente no las envia.
+        if (request.getAccountsPayableReferenceId() != null) {
+            existingAsset.setAccountsPayableReferenceId(request.getAccountsPayableReferenceId());
+        }
+        if (request.getBankCashReferenceId() != null) {
+            existingAsset.setBankCashReferenceId(request.getBankCashReferenceId());
+        }
+
+        // ACT-06.5 (QA 2026-05-05): detectar si la forma de pago cambia
+        // a credito en este update y aun NO existe factura AP asociada.
+        Long previousPaymentFormId = existingAsset.getPaymentFormId();
+        Long previousApInvoiceId = existingAsset.getAccountsPayableReferenceId();
+
+        // QA-2026-05-05: detectar transicion CREDITO -> CONTADO para eliminar
+        // la factura AP previa (si existe). Calculamos el flag isCreditNow ANTES
+        // de sobreescribir paymentFormId.
+        boolean previousWasCredit = false;
+        if (previousPaymentFormId != null) {
+            PaymentForms prevPf = paymentFormRepository.findById(previousPaymentFormId).orElse(null);
+            if (prevPf != null) previousWasCredit = !Boolean.TRUE.equals(prevPf.getIsContado());
+        }
+        boolean newIsContado = false;
+        if (request.getPaymentFormId() != null) {
+            PaymentForms newPf = paymentFormRepository.findById(request.getPaymentFormId()).orElse(null);
+            if (newPf != null) newIsContado = Boolean.TRUE.equals(newPf.getIsContado());
+        }
+
         // Preservar valores existentes si el cliente no los envia (update parcial).
         if (request.getPaymentFormId() != null) {
             existingAsset.setPaymentFormId(request.getPaymentFormId());
@@ -583,12 +717,119 @@ public class AssetsService {
         if (request.getStatus() != null) {
             existingAsset.setStatus(request.getStatus());
         }
-        existingAsset.setObservations(normalizedObservations);
+        if (normalizedObservations != null) {
+            existingAsset.setObservations(normalizedObservations);
+        }
         existingAsset.setUpdatedBy(currentUser);
 
         Assets savedAsset = assetsRepository.save(existingAsset);
+
+        // QA-2026-05-05: transicion CREDITO -> CONTADO. Eliminar la factura AP
+        // previa (soft delete) porque el activo ya no tiene cuenta por pagar
+        // pendiente. Usamos invoiceRepository.deleteById directamente — el
+        // `@SQLDelete` de la entidad se encarga del soft delete sin disparar
+        // los eventos del service que pueden romper la TX padre.
+        if (previousWasCredit && newIsContado && previousApInvoiceId != null) {
+            try {
+                Invoices apInvoice = invoiceRepository.findById(previousApInvoiceId).orElse(null);
+                if (apInvoice != null) {
+                    // Solo se permite limpiar si NO tiene pagos aplicados (status PENDING).
+                    if (apInvoice.getStatus() != null
+                            && !"PENDING".equals(apInvoice.getStatus().name())
+                            && !"DRAFT".equals(apInvoice.getStatus().name())) {
+                        throw new IllegalStateException(
+                            "No se puede cambiar la forma de pago a CONTADO porque la factura AP asociada ya tiene pagos o movimientos. "
+                            + "Anule manualmente la factura desde Cuentas por Pagar antes de modificar el activo.");
+                    }
+                }
+                // Liberar la FK del activo PRIMERO para que el delete pueda fluir.
+                savedAsset.setAccountsPayableReferenceId(null);
+                savedAsset = assetsRepository.save(savedAsset);
+                // QA-2026-05-05: soft-delete con UPDATE nativo. NO usar deleteById
+                // porque @SQLDelete + @Version genera SQL malformado con 2 params
+                // sobre WHERE id=? (1 placeholder).
+                invoiceRepository.softDeleteById(previousApInvoiceId);
+                org.slf4j.LoggerFactory.getLogger(AssetsService.class)
+                        .info("QA HU-ACT-06: factura AP {} eliminada al cambiar activo {} a contado",
+                                previousApInvoiceId, savedAsset.getId());
+            } catch (IllegalStateException illegal) {
+                throw illegal; // mensaje claro al usuario, ya estaba bien formateado.
+            } catch (RuntimeException ex) {
+                org.slf4j.LoggerFactory.getLogger(AssetsService.class)
+                        .warn("No se pudo eliminar factura AP {} al cambiar activo {} a contado: {}",
+                                previousApInvoiceId, savedAsset.getId(), ex.getMessage());
+                throw new IllegalStateException(
+                    "No se pudo eliminar la factura AP asociada al activo. "
+                    + "Anule manualmente la factura desde Cuentas por Pagar y reintente.");
+            }
+        }
+
+        // HU-ACT-06 E5: si paymentForm cambio a credito y NO hay factura AP previa,
+        // generar la factura automaticamente.
+        try {
+            generateApInvoiceOnEditIfNeeded(request, savedAsset, previousPaymentFormId);
+        } catch (RuntimeException ex) {
+            org.slf4j.LoggerFactory.getLogger(AssetsService.class)
+                    .warn("HU-ACT-06 E5: no se pudo generar factura AP automatica al editar activo {}: {}",
+                            savedAsset.getId(), ex.getMessage());
+        }
+
         auditPublisher.publishUpdate(AuditModule.ACT, "Asset", existingAsset.getId(), "Asset actualizado id=" + existingAsset.getId());
         return toViewDTO(savedAsset);
+    }
+
+    /**
+     * HU-ACT-06 E5 (QA 2026-05-05): cuando el contador edita un activo y cambia
+     * la forma de pago de CONTADO a CREDITO, debe generarse automaticamente la
+     * factura de compra en AP. Solo se ejecuta si:
+     *   1) el paymentForm nuevo es CREDITO (is_contado != true);
+     *   2) el activo NO tenia factura AP asociada (accountsPayableReferenceId NULL);
+     *   3) el cliente envio resolutionInvoice (numero de factura).
+     */
+    private void generateApInvoiceOnEditIfNeeded(UpdateAssetsDTO request, Assets savedAsset, Long previousPaymentFormId) {
+        if (request.getPaymentFormId() == null) return;
+        if (savedAsset.getAccountsPayableReferenceId() != null) return;
+        PaymentForms paymentForm = paymentFormRepository.findById(request.getPaymentFormId()).orElse(null);
+        if (paymentForm == null) return;
+        boolean isCredit = !Boolean.TRUE.equals(paymentForm.getIsContado());
+        if (!isCredit) return;
+
+        String resolution = request.getResolutionInvoice();
+        if (resolution == null || resolution.isBlank()) {
+            // No bloquea: el contador puede editarla manualmente despues.
+            return;
+        }
+        Integer dueDay = request.getInvoiceDueDay();
+        if (dueDay == null || dueDay < 1 || dueDay > 31) dueDay = 30;
+
+        TypesInvoices fcType = typeInvoiceRepository.findByCodeAndDeletedAtIsNull("FC")
+                .orElseThrow(() -> new IllegalStateException("Tipo de factura FC no esta configurado."));
+
+        LineInvoiceRequestDTO line = LineInvoiceRequestDTO.builder()
+                .accountingAccountId(savedAsset.getAccountingAccount().getId())
+                .description("Compra de activo: " + savedAsset.getAssetName())
+                .quantity(1.0)
+                .price(savedAsset.getAcquisitionValue().doubleValue())
+                .taxRulesIds(java.util.Collections.emptyList())
+                .build();
+
+        InvoiceFCRequestDTO invoiceRequest = InvoiceFCRequestDTO.builder()
+                .paymentFormId(request.getPaymentFormId())
+                .thirdPartyId(savedAsset.getSupplier().getId())
+                .resolutionInvoice(resolution)
+                .invoiceDate(savedAsset.getAcquisitionDate())
+                .invoiceDueDay(dueDay)
+                .supplierInvoiceNumber(resolution)
+                .notes("Factura generada automaticamente al editar Activo: " + savedAsset.getAssetCode())
+                .lineInvoices(java.util.List.of(line))
+                .build();
+
+        Invoices invoice = invoiceService.createInvoice(invoiceRequest, fcType.getId());
+        savedAsset.setAccountsPayableReferenceId(invoice.getId());
+        assetsRepository.save(savedAsset);
+        org.slf4j.LoggerFactory.getLogger(AssetsService.class)
+                .info("HU-ACT-06 E5: factura AP {} creada al cambiar activo {} a credito",
+                        invoice.getId(), savedAsset.getId());
     }
 
     private void validateAssetClassification(AssetClassification classification, Integer usefulLifeMonths) {
@@ -708,6 +949,11 @@ public class AssetsService {
 
                 .accountsPayableReferenceId(asset.getAccountsPayableReferenceId())
                 .bankCashReferenceId(asset.getBankCashReferenceId())
+                // QA-2026-05-05: exponer paymentForm/paymentMethod ACTUAL del activo
+                // (no del voucher original) para que el frontend pueda mostrar el
+                // valor correcto al re-editar tras cambiar la forma de pago.
+                .paymentFormId(asset.getPaymentFormId())
+                .paymentMethodId(asset.getPaymentMethodId())
                 .status(asset.getStatus())
                 .observations(asset.getObservations())
                 .createdBy(asset.getCreatedBy())

@@ -78,8 +78,14 @@ public class InvoiceAttachmentService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Debe proporcionar un archivo");
         }
-        if (!invoiceRepository.existsById(invoiceId)) {
-            throw new IllegalArgumentException("La factura de compra no fue encontrada");
+        com.sigcon.backend.invoices.domain.model.Invoices invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new IllegalArgumentException("La factura de compra no fue encontrada"));
+        // QA-BLOQUE-AY HU-AP-25 E9 (2026-05-05): facturas anuladas son inmutables.
+        // No se permite agregar/reemplazar/eliminar adjuntos pero el historial
+        // existente sigue siendo consultable y descargable (E7).
+        if (invoice.getStatus() == com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices.VOIDED) {
+            throw new IllegalStateException(
+                "La factura esta anulada. La trazabilidad documental se conserva pero no se permiten nuevos adjuntos.");
         }
 
         String docType = documentType == null ? "OTHER" : documentType.toUpperCase();
@@ -163,6 +169,15 @@ public class InvoiceAttachmentService {
         if (previous.getReplacedById() != null) {
             throw new IllegalStateException(
                     "Este adjunto ya fue reemplazado por la version #" + previous.getReplacedById());
+        }
+        // QA-BLOQUE-AY HU-AP-25 E9 (2026-05-05): no se permite reemplazar
+        // adjuntos cuando la factura esta VOIDED.
+        com.sigcon.backend.invoices.domain.model.Invoices invoiceForReplace = invoiceRepository.findById(previous.getInvoiceId())
+                .orElse(null);
+        if (invoiceForReplace != null
+                && invoiceForReplace.getStatus() == com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices.VOIDED) {
+            throw new IllegalStateException(
+                "La factura esta anulada. La trazabilidad documental se conserva pero no se permiten reemplazos.");
         }
 
         String mime = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
@@ -251,8 +266,14 @@ public class InvoiceAttachmentService {
     /** AP-13: Elimina logicamente un adjunto. */
     @Transactional
     public ResponseEntity<?> delete(Long attachmentId) {
-        if (!attachmentRepository.existsById(attachmentId)) {
-            throw new IllegalArgumentException("El adjunto no fue encontrado");
+        InvoiceAttachment att = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new IllegalArgumentException("El adjunto no fue encontrado"));
+        // QA-BLOQUE-AY HU-AP-25 E9 (2026-05-05): factura VOIDED -> bloquear delete.
+        com.sigcon.backend.invoices.domain.model.Invoices inv = invoiceRepository.findById(att.getInvoiceId())
+                .orElse(null);
+        if (inv != null && inv.getStatus() == com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices.VOIDED) {
+            throw new IllegalStateException(
+                "La factura esta anulada. La trazabilidad documental se conserva: no se pueden eliminar adjuntos.");
         }
         attachmentRepository.deleteById(attachmentId);
         auditPublisher.publishDelete(AuditModule.AP, "InvoiceAttachment", attachmentId,

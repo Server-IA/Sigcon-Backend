@@ -59,8 +59,13 @@ public class SalesInvoiceAttachment {
     @Column(name = "file_size", nullable = false)
     private Long fileSize;
 
-    /** Contenido binario del archivo (BYTEA en PostgreSQL). */
-    @Lob
+    /**
+     * Contenido binario del archivo. En Postgres es BYTEA. NO usar @Lob
+     * porque Hibernate 6 lo mapea a OID por defecto y choca con la columna
+     * bytea ("ERROR: column 'file_content' is of type bytea but expression
+     * is of type bigint"). Sin @Lob, Hibernate cae a SqlTypes.VARBINARY que
+     * si es compatible. Igual al fix de JournalEntrySupport.
+     */
     @Basic(fetch = FetchType.LAZY)
     @Column(name = "file_content", nullable = false, columnDefinition = "BYTEA")
     private byte[] fileContent;

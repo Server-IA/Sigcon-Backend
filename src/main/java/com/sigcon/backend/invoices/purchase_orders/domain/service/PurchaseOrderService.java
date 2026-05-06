@@ -54,7 +54,41 @@ public class PurchaseOrderService {
     private final UserUtil userUtil;
     private final AuditPublisher auditPublisher;
 
+    /**
+     * QA-BLOQUE-AY HU-AP-17 E1+E5+E6 (2026-05-05): inyeccion opcional para no
+     * acoplar el modulo si Notifications no esta cargado. Se usa para
+     * publicar PO_APPROVED / PO_REJECTED / PO_PENDING_APPROVAL.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.parametrization.notifications.domain.service.NotificationService notificationService;
+
     private final DataTableSpecificationBuilder<PurchaseOrder> specBuilder = new DataTableSpecificationBuilder<>();
+
+    /**
+     * Helper para publicar notificacion de cambio de estado de OC.
+     * Falla silencioso (warn log) para no bloquear el flujo de negocio.
+     */
+    private void publishPoNotification(PurchaseOrder order, String eventKey, String title, String body,
+            com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity severity) {
+        if (notificationService == null) return;
+        try {
+            com.sigcon.backend.parametrization.notifications.application.PublishEventRequest req =
+                com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                    .eventKey(eventKey)
+                    .companyId(order.getCompanyId())
+                    .sourceId(order.getId())
+                    .sourceType("PurchaseOrder")
+                    .severity(severity)
+                    .title(title)
+                    .body(body)
+                    .actionUrl("/accounts-payable/purchase-orders?id=" + order.getId())
+                    .build();
+            notificationService.publishByRoleSubscription(req);
+        } catch (Exception ex) {
+            log.warn("HU-AP-17: no se pudo publicar notificacion {} para OC {}: {}",
+                    eventKey, order.getOrderNumber(), ex.getMessage());
+        }
+    }
 
     /**
      * Crea una nueva orden de compra en estado DRAFT.
@@ -258,6 +292,16 @@ public class PurchaseOrderService {
         order = orderRepository.save(order);
         log.info("Orden de compra {} enviada a aprobacion", order.getOrderNumber());
 
+        // QA-BLOQUE-AY HU-AP-17 E5: notificar a roles aprobadores (ADMIN/CONTADOR)
+        // que hay una OC esperando decision.
+        publishPoNotification(order, "PO_PENDING_APPROVAL",
+                "Orden de compra pendiente de aprobacion",
+                "OC " + order.getOrderNumber() + " del proveedor "
+                        + (order.getThirdParty() != null && order.getThirdParty().getBusinessName() != null
+                                ? order.getThirdParty().getBusinessName() : "(sin nombre)")
+                        + " por $" + order.getTotalAmount() + " esta pendiente de aprobacion.",
+                com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.INFO);
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Orden de compra enviada a aprobacion"), Optional.of(toDTO(order))));
@@ -325,6 +369,15 @@ public class PurchaseOrderService {
                 "OC " + order.getOrderNumber() + " APROBADA por user " + order.getApprovedBy()
                         + " (monto $" + order.getTotalAmount() + ")");
 
+        // QA-BLOQUE-AY HU-AP-17 E1: notificar al solicitante que su OC fue aprobada.
+        publishPoNotification(order, "PO_APPROVED",
+                "Orden de compra aprobada",
+                "Su OC " + order.getOrderNumber() + " del proveedor "
+                        + (order.getThirdParty() != null && order.getThirdParty().getBusinessName() != null
+                                ? order.getThirdParty().getBusinessName() : "(sin nombre)")
+                        + " por $" + order.getTotalAmount() + " fue aprobada.",
+                com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.INFO);
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Orden de compra aprobada exitosamente"), Optional.of(toDTO(order))));
@@ -357,6 +410,15 @@ public class PurchaseOrderService {
         // HU-AP-18 E2 (2026-04-28): registrar el rechazo en auditoria con motivo.
         auditPublisher.publishUpdate(AuditModule.AP, "PurchaseOrder", order.getId(),
                 "OC " + order.getOrderNumber() + " RECHAZADA - motivo: " + request.getRejectionReason());
+
+        // QA-BLOQUE-AY HU-AP-17 E6: notificar al solicitante con motivo del rechazo.
+        publishPoNotification(order, "PO_REJECTED",
+                "Orden de compra rechazada",
+                "Su OC " + order.getOrderNumber() + " del proveedor "
+                        + (order.getThirdParty() != null && order.getThirdParty().getBusinessName() != null
+                                ? order.getThirdParty().getBusinessName() : "(sin nombre)")
+                        + " fue rechazada. Motivo: " + request.getRejectionReason(),
+                com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.WARNING);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

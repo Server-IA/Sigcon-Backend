@@ -67,4 +67,15 @@ public interface InvoiceRepository extends JpaRepository<Invoices, Long>, JpaSpe
                  + "AND deleted_at IS NULL "
                  + "AND resolution ~ '^[0-9]+$'", nativeQuery = true)
     Integer findMaxNumericResolution(Long typeInvoiceId, Long companyId);
+
+    /**
+     * QA-2026-05-05: soft-delete via UPDATE nativo. Usar este metodo cuando
+     * `deleteById` choca con la combinacion `@SQLDelete + @Version` (Hibernate
+     * intenta pasar 2 parametros al SQL custom de 1 placeholder y falla con
+     * "column index out of range: 2").
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value = "UPDATE invoices SET deleted_at = NOW() WHERE id = :id", nativeQuery = true)
+    void softDeleteById(Long id);
 }

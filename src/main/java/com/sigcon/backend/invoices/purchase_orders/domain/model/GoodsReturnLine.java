@@ -22,52 +22,41 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Linea de detalle de una recepcion de bienes.
- * Registra la cantidad recibida para una linea especifica de la orden de compra.
- *
- * @see GoodsReceipt
- * @see PurchaseOrderLine
+ * QA-BLOQUE-AY HU-AP-21 (2026-05-05): linea de detalle de una devolucion.
+ * Cada linea referencia una linea de la recepcion original y la cantidad
+ * que se devuelve. Permite devolver una fraccion de lo recibido.
  */
 @Entity
-@Table(name = "goods_receipt_lines")
-@SQLDelete(sql = "UPDATE goods_receipt_lines SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "goods_return_lines")
+@SQLDelete(sql = "UPDATE goods_return_lines SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class GoodsReceiptLine {
+public class GoodsReturnLine {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
-    /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
     @jakarta.persistence.Column(name = "company_id", nullable = false)
     private Long companyId;
-    /** Recepcion a la que pertenece esta linea. */
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "goods_receipt_id", nullable = false)
-    private GoodsReceipt goodsReceipt;
+    @JoinColumn(name = "goods_return_id", nullable = false)
+    private GoodsReturn goodsReturn;
 
-    /** Linea de la orden de compra que se esta recibiendo. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "purchase_order_line_id", nullable = false)
-    private PurchaseOrderLine purchaseOrderLine;
+    @JoinColumn(name = "goods_receipt_line_id", nullable = false)
+    private GoodsReceiptLine goodsReceiptLine;
 
-    /** Cantidad efectivamente recibida. */
-    @Column(name = "quantity_received", nullable = false, precision = 19, scale = 2)
-    private BigDecimal quantityReceived;
-
-    /**
-     * QA-BLOQUE-AY HU-AP-21 E2/E4 (2026-05-05): cantidad acumulada devuelta al
-     * proveedor desde esta linea. Permite devoluciones parciales por cantidad
-     * (no solo rechazo total). Se actualiza con cada GoodsReturn aplicado.
-     */
-    @Column(name = "quantity_returned", precision = 19, scale = 2)
+    @Column(name = "quantity_returned", nullable = false, precision = 19, scale = 2)
     private BigDecimal quantityReturned;
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
 
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp
@@ -79,8 +68,8 @@ public class GoodsReceiptLine {
     @jakarta.persistence.PrePersist
     protected void __onCreateTenant() {
         if (this.companyId == null) {
-            if (this.goodsReceipt != null && this.goodsReceipt.getCompanyId() != null) {
-                this.companyId = this.goodsReceipt.getCompanyId();
+            if (this.goodsReturn != null && this.goodsReturn.getCompanyId() != null) {
+                this.companyId = this.goodsReturn.getCompanyId();
             } else {
                 this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
             }

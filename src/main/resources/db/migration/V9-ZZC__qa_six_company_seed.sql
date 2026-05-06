@@ -30,12 +30,25 @@
 -- PASO 0 — Soft-delete empresas QA legadas (id 2-6) y sus usuarios.
 -- Mantenemos id=1 SIGCON DEMO. Datos viejos quedan preservados (deleted_at)
 -- pero nadie podrá loguearse en ellos (AuthService bloquea empresa INACTIVE).
+--
+-- IDEMPOTENCIA (2026-05-06): este script se re-ejecuta en cada arranque del
+-- backend (DataInitializer corre todos los scripts en orden). Si soft-deleta
+-- las empresas 2-6 SIEMPRE, mata las empresas QA que el mismo script crea
+-- en el PASO 2 (que reciben ids 12-14 al re-correr porque las anteriores
+-- quedaron deleted). Resultado: empresas duplicadas con sufijos repetidos.
+--
+-- Fix: solo marcar como deleted las legadas con NITs DIFERENTES a los que
+-- usa este script para sus 6 empresas QA (90X1100000, 90X1211111, etc.).
+-- Asi las QA creadas con NIT '90...' sobreviven re-runs.
 -- =============================================================================
 UPDATE companies SET deleted_at = NOW(), status = 'INACTIVE'
-WHERE id BETWEEN 2 AND 6 AND deleted_at IS NULL;
+WHERE id BETWEEN 2 AND 6
+  AND deleted_at IS NULL
+  AND nit NOT LIKE '901%';
 
 UPDATE users SET deleted_at = NOW(), status = 'INACTIVE'
-WHERE company_id BETWEEN 2 AND 6 AND deleted_at IS NULL;
+WHERE company_id IN (SELECT id FROM companies WHERE deleted_at IS NOT NULL AND status = 'INACTIVE')
+  AND deleted_at IS NULL;
 
 -- =============================================================================
 -- PASO 1 — Función de seed reutilizable.

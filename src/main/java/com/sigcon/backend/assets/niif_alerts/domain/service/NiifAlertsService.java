@@ -73,13 +73,21 @@ public class NiifAlertsService {
         for (Assets asset : assets) {
 
             List<String> alerts = new ArrayList<>();
+            // HU-ACT-09 E1+E2: tabla de criterios con cumple/no cumple por activo.
+            List<NiifVerificationResultDTO.CriterionResult> criteria = new ArrayList<>();
             NiifResult result = NiifResult.COMPLIANT;
 
             // Check 1: Vida util valida
-            if (asset.getUsefulLifeMonths() == null || asset.getUsefulLifeMonths() <= 0) {
+            boolean ckUtilLife = asset.getUsefulLifeMonths() != null && asset.getUsefulLifeMonths() > 0;
+            if (!ckUtilLife) {
                 alerts.add("El activo no tiene vida útil válida");
                 result = NiifResult.NON_COMPLIANT;
             }
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("UTIL_LIFE").name("Vida util valida (NIC 16 §50)")
+                    .status(ckUtilLife ? "CUMPLE" : "NO_CUMPLE")
+                    .message(ckUtilLife ? null : "El activo no tiene vida util valida")
+                    .build());
 
             // Check 2: Valor en libros no supera valor de adquisicion
             if (asset.getCurrentBookValue() != null
@@ -229,12 +237,114 @@ public class NiifAlertsService {
                 );
             }
 
+            // HU-ACT-09 E1+E2: criterios complementarios al final (los demas
+            // checks ya fueron capturados en alerts). Marcar como CUMPLE los
+            // que no generaron mensaje de alerta para que el front renderice
+            // visualmente cumple/no-cumple por cada criterio.
+            // Check 2 - valor en libros vs adquisicion
+            boolean ckBookValue = asset.getCurrentBookValue() == null
+                    || asset.getCurrentBookValue().compareTo(asset.getAcquisitionValue()) <= 0;
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("BOOK_VALUE").name("Valor en libros <= valor adquisicion")
+                    .status(ckBookValue ? "CUMPLE" : "ADVERTENCIA")
+                    .message(ckBookValue ? null : "El valor en libros supera el valor de adquisicion")
+                    .build());
+
+            // Check 3 - depreciacion actualizada (ultimos 12 meses)
+            boolean ckDeprecActual = asset.getLastDepreciationDate() == null
+                    || !asset.getLastDepreciationDate().isBefore(LocalDate.now().minusMonths(12));
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("DEPRECIATION_RECENT").name("Depreciacion en los ultimos 12 meses")
+                    .status(ckDeprecActual ? "CUMPLE" : "ADVERTENCIA")
+                    .message(ckDeprecActual ? null : "El activo no ha sido depreciado en mas de 12 meses")
+                    .build());
+
+            // Check 4 - valor residual no negativo
+            boolean ckResidual = asset.getDepretationRule() == null
+                    || asset.getDepretationRule().getResidualValue() == null
+                    || asset.getDepretationRule().getResidualValue().compareTo(BigDecimal.ZERO) >= 0;
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("RESIDUAL_VALUE").name("Valor residual no negativo (NIC 16)")
+                    .status(ckResidual ? "CUMPLE" : "NO_CUMPLE")
+                    .message(ckResidual ? null : "El valor residual es negativo")
+                    .build());
+
+            // Check 7 - cuenta contable clase 1 (activos)
+            String pucCode = asset.getAccountingAccount() != null
+                    && asset.getAccountingAccount().getPucAccount() != null
+                    && asset.getAccountingAccount().getPucAccount().getCode() != null
+                    ? asset.getAccountingAccount().getPucAccount().getCode() : null;
+            String accStatus;
+            String accMsg;
+            if (pucCode == null) {
+                accStatus = "NO_CUMPLE"; accMsg = "El activo no tiene cuenta contable asignada";
+            } else if (pucCode.startsWith("5") || pucCode.startsWith("6") || pucCode.startsWith("7")) {
+                accStatus = "NO_CUMPLE"; accMsg = "Cuenta PUC " + pucCode + " corresponde a gastos/costos (NIC 38)";
+            } else if (!pucCode.startsWith("1")) {
+                accStatus = "ADVERTENCIA"; accMsg = "La cuenta PUC " + pucCode + " no es clase 1";
+            } else {
+                accStatus = "CUMPLE"; accMsg = null;
+            }
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("ACCOUNTING_ACCOUNT").name("Cuenta contable clase 1 (activo)")
+                    .status(accStatus).message(accMsg).build());
+
+            // Check 9 - proveedor asignado
+            boolean ckSupplier = asset.getSupplier() != null;
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("SUPPLIER").name("Proveedor asignado")
+                    .status(ckSupplier ? "CUMPLE" : "ADVERTENCIA")
+                    .message(ckSupplier ? null : "El activo no tiene proveedor asociado")
+                    .build());
+
+            // Check 9b - regla depreciacion para tangibles
+            boolean ckRule = !"TANGIBLE".equals(asset.getAssetType() != null ? asset.getAssetType().name() : null)
+                    || asset.getDepretationRule() != null;
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("DEPRECIATION_RULE").name("Regla de depreciacion (tangibles)")
+                    .status(ckRule ? "CUMPLE" : "NO_CUMPLE")
+                    .message(ckRule ? null : "Activo tangible sin regla de depreciacion (NIC 16 §50)")
+                    .build());
+
+            // QA-BLOQUE-AY (2026-05-05) HU-ACT-09 E1: enriquecer respuesta con
+            // norma aplicable + conteo de criterios + timestamp para que el
+            // listado de la UI muestre la trazabilidad NIIF completa, no solo
+            // un estado global "Cumple/Advertencia/Incumple".
+            int compliantCriteria    = (int) criteria.stream().filter(c -> "CUMPLE".equals(c.getStatus())).count();
+            int warningCriteria      = (int) criteria.stream().filter(c -> "ADVERTENCIA".equals(c.getStatus())).count();
+            int nonCompliantCriteria = (int) criteria.stream().filter(c -> "NO_CUMPLE".equals(c.getStatus())).count();
+
+            // Norma aplicable: derivada de los criterios involucrados.
+            // HU-ACT-09 menciona NIC 16 (§50, §51), NIC 36 (deterioro) y NIC 38 (intangibles).
+            java.util.Set<String> norms = new java.util.LinkedHashSet<>();
+            norms.add("NIC 16 §50");
+            if (criteria.stream().anyMatch(c -> "ACCOUNTING_ACCOUNT".equals(c.getCode()) && !"CUMPLE".equals(c.getStatus()))) {
+                norms.add("NIC 38 §69");
+            }
+            if (asset.getAssetType() != null && "INTANGIBLE".equals(asset.getAssetType().name())) {
+                norms.add("NIC 38");
+            }
+            if (criteria.stream().anyMatch(c -> "BOOK_VALUE".equals(c.getCode()) && !"CUMPLE".equals(c.getStatus()))) {
+                norms.add("NIC 36 (deterioro)");
+            }
+            String applicableNorm = String.join(", ", norms);
+
             results.add(
                     NiifVerificationResultDTO.builder()
                             .assetId(asset.getId())
+                            .assetCode(asset.getAssetCode())
                             .assetName(asset.getAssetName())
                             .result(result.name())
                             .alerts(alerts)
+                            .criteria(criteria)
+                            .applicableNorm(applicableNorm)
+                            .totalCriteria(criteria.size())
+                            .compliantCount(compliantCriteria)
+                            .warningCount(warningCriteria)
+                            .nonCompliantCount(nonCompliantCriteria)
+                            .verifiedAt(verification.getCreatedAt() != null
+                                    ? verification.getCreatedAt().toString()
+                                    : LocalDate.now().toString())
                             .build()
             );
 

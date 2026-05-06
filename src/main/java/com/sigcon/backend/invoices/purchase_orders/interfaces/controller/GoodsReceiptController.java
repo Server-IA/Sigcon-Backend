@@ -133,6 +133,38 @@ public class GoodsReceiptController {
     }
 
     /**
+     * QA-BLOQUE-AY HU-AP-19 E1 (2026-05-06): vincula UNA factura a MULTIPLES
+     * recepciones (caso: una OC se recibio por partes y la factura cubre todo).
+     * Todas las recepciones deben pertenecer a la misma OC y no estar ya
+     * vinculadas a otra factura.
+     */
+    @Operation(
+        summary = "Vincular factura a multiples recepciones",
+        description = "HU-AP-19 E1: cuando una OC fue recibida en varios despachos parciales y el "
+                    + "proveedor emite una sola factura por todo, este endpoint asocia la factura a "
+                    + "todas las recepciones en una sola operacion atomica."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Factura vinculada exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Recepciones de OCs distintas, ya vinculadas, o monto factura > recibido")
+    })
+    @PostMapping("/link-invoice-multiple")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> linkInvoiceMultiple(
+            @Valid @RequestBody com.sigcon.backend.invoices.purchase_orders.application.LinkInvoiceMultipleRequest request,
+            BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+        try {
+            return receiptService.linkToInvoiceMultiple(request);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
      * AP-22: Rechaza o registra devolucion de una recepcion con motivo obligatorio.
      *
      * @param id      identificador de la recepcion a rechazar
@@ -159,6 +191,38 @@ public class GoodsReceiptController {
         }
         try {
             return receiptService.rejectReceipt(id, request);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * QA-BLOQUE-AY HU-AP-21 (2026-05-05): registra una devolucion parcial o
+     * total de mercancia sobre una recepcion. Genera codigo DV-año-secuencial
+     * y actualiza el estado de la recepcion (RETURNED / PARTIALLY_RETURNED).
+     */
+    @Operation(
+        summary = "Registrar devolucion (parcial o total) de mercancia",
+        description = "HU-AP-21: permite devolver al proveedor cantidades especificas por linea. "
+                    + "Bloquea si la recepcion tiene factura asociada (E3) o si la cantidad "
+                    + "supera lo recibido disponible (E4)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Devolucion registrada exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Cantidad invalida, recepcion no encontrada o factura asociada"),
+            @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PostMapping("/{id}/return")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_GOODS_RECEIPT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> createReturn(@PathVariable Long id,
+                                          @Valid @RequestBody com.sigcon.backend.invoices.purchase_orders.application.CreateGoodsReturnRequest request,
+                                          BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+        try {
+            return receiptService.createReturn(id, request);
         } catch (IllegalStateException | IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

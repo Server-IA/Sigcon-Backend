@@ -105,10 +105,16 @@ public class UpdateAssetsDTO {
         // })
         // private AssetStatus status;
 
-        @Size(max = 500, message = "Faltan datos requeridos")
+        @Size(max = 500, message = "Las observaciones no pueden superar 500 caracteres.")
         @Schema(description = "Observaciones administrativas", example = "Pendiente de placa interna")
         private String observations;
 
         @Schema(description = "Impuestos o retenciones")
         private List<CreateAssetTaxesRetention> taxesRetention;
+
+        @Schema(description = "Numero de factura (si se cambia a credito y aun no existe FC)", example = "FC-001-12345")
+        private String resolutionInvoice;
+
+        @Schema(description = "Dia de vencimiento factura credito (1-31)", example = "15")
+        private Integer invoiceDueDay;
 }

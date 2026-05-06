@@ -100,8 +100,16 @@ public class AssetDisposalController {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(
-                assetDisposalService.createDisposal(request));
+        // QA-2026-05-05: el service retorna ErrorRespondJson cuando hay error de
+        // negocio (periodo cerrado, fecha anterior a adq, saldos pendientes, etc.).
+        // Antes el controller envolvia TODO en HTTP 201, dejando que el frontend
+        // viera "exito" aunque el body dijera code:400. Ahora detectamos el tipo
+        // y devolvemos HTTP 400 cuando aplica.
+        Object result = assetDisposalService.createDisposal(request);
+        if (result instanceof ErrorRespondJson) {
+            return ResponseEntity.badRequest().body(result);
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     /**

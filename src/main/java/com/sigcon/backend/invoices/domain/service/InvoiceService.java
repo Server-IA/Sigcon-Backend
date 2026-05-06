@@ -626,8 +626,68 @@ public class InvoiceService {
         accountingPeriodService.validatePeriodOpen(
             request.getInvoiceDate() != null ? request.getInvoiceDate() : invoice.getInvoiceDate());
 
+        // QA-BLOQUE-AY HU-AP-02 E2 (2026-05-05): si la factura ya tiene asiento
+        // contable POSTED, NO permitir modificar fecha de emision ni resolucion
+        // (ambos cambian datos contables del JE). El usuario debe usar
+        // correccion via comprobante de ajuste (HU-CG-07B). Mensajes literales HU.
+        boolean jePosted = false;
+        if (invoice.getJournalEntryId() != null) {
+            JournalEntry je0 = journalEntryRepository.findById(invoice.getJournalEntryId()).orElse(null);
+            if (je0 != null && je0.getStatus() == JournalEntryStatus.POSTED) {
+                jePosted = true;
+            }
+        }
+        if (jePosted) {
+            if (request.getInvoiceDate() != null
+                    && !request.getInvoiceDate().equals(invoice.getInvoiceDate())) {
+                throw new IllegalStateException(
+                    "No se puede modificar la fecha de emision porque la factura ya fue contabilizada en Contabilidad General. "
+                    + "Use una correccion contable (ajuste) en lugar de editar la factura.");
+            }
+            if (request.getResolutionInvoice() != null
+                    && !request.getResolutionInvoice().equals(invoice.getResolutionInvoice())) {
+                throw new IllegalStateException(
+                    "No se puede modificar la resolucion DIAN porque la factura ya fue contabilizada. "
+                    + "Use una correccion contable (ajuste) en lugar de editar la factura.");
+            }
+        }
+
+        // QA-BLOQUE-AY HU-AP-02 E3 (2026-05-05): si la factura esta en
+        // PARTIALLY_PAID, solo se permiten editar campos no contables:
+        //   - invoiceDueDay (dias de credito)
+        //   - paymentFormId (forma de pago)
+        //   - notes (observaciones)
+        // Bloquear cualquier intento de cambiar monto, lineas, impuestos,
+        // proveedor, numero factura, fecha emision o resolucion.
+        boolean partial = invoice.getStatus() == StatusesInvoices.PARTIALLY_PAID;
+        if (partial) {
+            if (request.getSupplierInvoiceNumber() != null
+                    && !request.getSupplierInvoiceNumber().equals(invoice.getSupplierInvoiceNumber())) {
+                throw new IllegalStateException(
+                    "Una factura parcialmente pagada solo permite modificar dias/fecha de vencimiento y forma de pago. "
+                    + "El numero de factura no puede cambiarse.");
+            }
+            if (request.getInvoiceDate() != null
+                    && !request.getInvoiceDate().equals(invoice.getInvoiceDate())) {
+                throw new IllegalStateException(
+                    "Una factura parcialmente pagada solo permite modificar dias/fecha de vencimiento y forma de pago. "
+                    + "La fecha de emision no puede cambiarse.");
+            }
+            if (request.getResolutionInvoice() != null
+                    && !request.getResolutionInvoice().equals(invoice.getResolutionInvoice())) {
+                throw new IllegalStateException(
+                    "Una factura parcialmente pagada solo permite modificar dias/fecha de vencimiento y forma de pago. "
+                    + "La resolucion DIAN no puede cambiarse.");
+            }
+            if (request.getLineInvoices() != null && !request.getLineInvoices().isEmpty()) {
+                throw new IllegalStateException(
+                    "Una factura parcialmente pagada solo permite modificar dias/fecha de vencimiento y forma de pago. "
+                    + "Las lineas/monto/impuestos no pueden cambiarse.");
+            }
+        }
+
         // Actualizar campos editables
-        if (request.getSupplierInvoiceNumber() != null) {
+        if (request.getSupplierInvoiceNumber() != null && !partial) {
             invoice.setSupplierInvoiceNumber(request.getSupplierInvoiceNumber());
         }
         if (request.getNotes() != null) {
@@ -638,13 +698,13 @@ public class InvoiceService {
                 .orElseThrow(() -> new IllegalArgumentException("La forma de pago no existe"));
             invoice.setPaymentForms(paymentForm);
         }
-        if (request.getInvoiceDate() != null) {
+        if (request.getInvoiceDate() != null && !partial && !jePosted) {
             invoice.setInvoiceDate(request.getInvoiceDate());
         }
         if (request.getInvoiceDueDay() != null) {
             invoice.setInvoiceDueDay(request.getInvoiceDueDay());
         }
-        if (request.getResolutionInvoice() != null) {
+        if (request.getResolutionInvoice() != null && !partial && !jePosted) {
             invoice.setResolutionInvoice(request.getResolutionInvoice());
         }
 
@@ -679,25 +739,24 @@ public class InvoiceService {
                 }
             }
 
-            // Recalcular y crear nuevas lineas
+            // QA-BLOQUE-AY HU-AP-02 E1 (2026-05-05): re-crear lineas usando
+            // `createLineInvoice` para que aplique correctamente las reglas
+            // tributarias (TAX/WITHHOLDING) provistas en cada linea, en lugar
+            // de descartarlas. Antes el update reescribia con discount=0/tax=0
+            // perdiendo la configuracion fiscal.
             Double totalAmount = 0.0;
             Double totalDiscount = 0.0;
             Double totalTax = 0.0;
             for (LineInvoiceRequestDTO lineReq : request.getLineInvoices()) {
-                AccountingAccount aa = accountingAccountRepository.findById(lineReq.getAccountingAccountId())
-                    .orElseThrow(() -> new IllegalArgumentException("La cuenta contable no existe"));
-                LinesInvoice newLine = LinesInvoice.builder()
-                    .invoice(invoice)
-                    .accountingAccount(aa)
-                    .description(lineReq.getDescription())
-                    .quantity(lineReq.getQuantity())
-                    .price(lineReq.getPrice())
-                    .discount(0.0)
-                    .tax(0.0)
-                    .total(lineReq.getQuantity() * lineReq.getPrice())
-                    .build();
-                linesInvoiceRepository.save(newLine);
-                totalAmount += lineReq.getQuantity() * lineReq.getPrice();
+                if (lineReq.getTaxRulesIds() == null) {
+                    lineReq.setTaxRulesIds(java.util.Collections.emptyList());
+                }
+                LinesInvoice savedLine = createLineInvoice(lineReq, invoice);
+                Double subtotal = (savedLine.getPrice() != null ? savedLine.getPrice() : 0.0)
+                        * (savedLine.getQuantity() != null ? savedLine.getQuantity() : 0.0);
+                totalAmount += subtotal;
+                totalDiscount += savedLine.getDiscount() != null ? savedLine.getDiscount() : 0.0;
+                totalTax += savedLine.getTax() != null ? savedLine.getTax() : 0.0;
             }
             invoice.setTotalAmount(totalAmount);
             invoice.setTotalDiscount(totalDiscount);
@@ -705,8 +764,9 @@ public class InvoiceService {
             invoice.setTotalPayment(totalAmount + totalTax - totalDiscount);
             invoice.setBalanceDue(totalAmount + totalTax - totalDiscount);
 
-            log.info("HU-AP-02 (Bloque AT): factura {} editada con nuevas lineas. Total recalculado: {}",
-                    invoice.getId(), invoice.getTotalPayment());
+            log.info("HU-AP-02 E1 (Bloque AY): factura {} editada con nuevas lineas + taxRulesIds. "
+                    + "Total recalculado: subtotal={} tax={} ret={} payment={}",
+                    invoice.getId(), totalAmount, totalTax, totalDiscount, invoice.getTotalPayment());
         }
 
         invoice = invoiceRepository.save(invoice);
@@ -975,11 +1035,24 @@ public class InvoiceService {
                 + "Primero debe realizarse el proceso de reversión o ajuste contable");
         }
 
-        // E4: PARCIALMENTE_PAGADA bloqueada
+        // E4: PARCIALMENTE_PAGADA bloqueada SOLO si todavia hay pagos efectivos.
+        // QA-BLOQUE-AY HU-AP-25 E4 (2026-05-05): si el contador ya reverso/anulo
+        // los pagos parciales, la factura debe poder anularse aunque su status
+        // diga PARTIALLY_PAID. Detectamos pagos efectivos comparando balanceDue
+        // contra totalPayment: si son iguales, no hay pagos vivos.
         if (invoice.getStatus() == StatusesInvoices.PARTIALLY_PAID) {
-            throw new IllegalStateException(
-                "Esta factura tiene pagos aplicados. Para anularla, primero debe reversar "
-                + "el asiento de pago parcial correspondiente");
+            double balance = invoice.getBalanceDue() != null ? invoice.getBalanceDue() : 0d;
+            double total   = invoice.getTotalPayment() != null ? invoice.getTotalPayment() : 0d;
+            boolean hasEffectivePayments = Math.abs(total - balance) > 0.001d;
+            if (hasEffectivePayments) {
+                throw new IllegalStateException(
+                    "Esta factura tiene pagos aplicados. Para anularla, primero debe reversar "
+                    + "el asiento de pago parcial correspondiente");
+            }
+            // Sin pagos efectivos: permitir anulacion. Restaurar status a
+            // PENDING para coherencia antes de pasar a VOIDED.
+            invoice.setStatus(StatusesInvoices.PENDING);
+            log.info("HU-AP-25 E4: factura {} estaba PARTIALLY_PAID sin pagos efectivos; se restaura a PENDING para anulacion", id);
         }
 
         // E5: periodo cerrado bloqueado (mensaje literal HU)

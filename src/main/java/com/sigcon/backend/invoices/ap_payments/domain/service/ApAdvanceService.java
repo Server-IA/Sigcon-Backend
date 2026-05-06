@@ -170,6 +170,9 @@ public class ApAdvanceService {
                                 .description("Anticipo a proveedor " + thirdParty.getBusinessName())
                                 .sourceType(FinancialMovementSourceType.MANUAL)
                                 .flowActivity("OPERATIVA")
+                                // QA-BLOQUE-AY (2026-05-06): vincular FM al JE
+                                // del anticipo para que aparezca conciliado.
+                                .matchedJournalEntryId(je.getId())
                                 .build();
                     }
                 } else if (request.getCashId() != null) {
@@ -182,12 +185,14 @@ public class ApAdvanceService {
                                 .description("Anticipo a proveedor " + thirdParty.getBusinessName())
                                 .sourceType(FinancialMovementSourceType.MANUAL)
                                 .flowActivity("OPERATIVA")
+                                .matchedJournalEntryId(je.getId())
                                 .build();
                     }
                 }
                 if (fm != null) {
                     financialMovementRepository.save(fm);
-                    log.info("Movimiento financiero generado para anticipo {}", advance.getId());
+                    log.info("Movimiento financiero generado para anticipo {} (matchedJE={})",
+                            advance.getId(), je.getId());
                 }
             } catch (RuntimeException e) {
                 log.warn("No se pudo registrar movimiento financiero para anticipo {}: {}",

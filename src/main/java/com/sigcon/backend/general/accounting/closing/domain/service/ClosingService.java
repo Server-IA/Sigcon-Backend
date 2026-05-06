@@ -117,9 +117,14 @@ public class ClosingService {
                             "No se encontraron movimientos en cuentas de resultado para el periodo.")));
         }
 
+        // ACT-08 (QA 2026-05-05): no permitir entryDate futura.
+        LocalDate todayMonthly = LocalDate.now();
+        LocalDate monthEnd = LocalDate.of(year, month, getLastDayOfMonth(year, month));
+        LocalDate monthlyClosingDate = monthEnd.isAfter(todayMonthly) ? todayMonthly : monthEnd;
+
         // 5. Crear asiento de cierre via JournalEntryService
         CreateJournalEntryRequest entryRequest = CreateJournalEntryRequest.builder()
-                .entryDate(LocalDate.of(year, month, getLastDayOfMonth(year, month)))
+                .entryDate(monthlyClosingDate)
                 .description("Cierre mensual " + year + "-" + String.format("%02d", month))
                 .sourceModule(JournalSourceModule.CG)
                 .lines(calc.lines)
@@ -270,9 +275,16 @@ public class ClosingService {
                             "No se encontraron movimientos en cuentas de resultado para el anio " + year)));
         }
 
+        // ACT-08 (QA 2026-05-05): si el anio del cierre es el anio en curso,
+        // usar la fecha de hoy para evitar el rechazo "fecha futura" del JE.
+        // Si el anio ya termino, usar 31-dic como fecha contable correcta.
+        LocalDate today = LocalDate.now();
+        LocalDate yearEnd = LocalDate.of(year, 12, 31);
+        LocalDate closingDate = yearEnd.isAfter(today) ? today : yearEnd;
+
         // Crear asiento de cierre anual
         CreateJournalEntryRequest entryRequest = CreateJournalEntryRequest.builder()
-                .entryDate(LocalDate.of(year, 12, 31))
+                .entryDate(closingDate)
                 .description("Cierre anual " + year)
                 .sourceModule(JournalSourceModule.CG)
                 .lines(calc.lines)

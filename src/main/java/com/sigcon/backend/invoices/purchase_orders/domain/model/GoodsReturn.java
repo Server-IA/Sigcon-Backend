@@ -1,12 +1,16 @@
 package com.sigcon.backend.invoices.purchase_orders.domain.model;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -15,6 +19,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,52 +27,46 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Linea de detalle de una recepcion de bienes.
- * Registra la cantidad recibida para una linea especifica de la orden de compra.
- *
- * @see GoodsReceipt
- * @see PurchaseOrderLine
+ * QA-BLOQUE-AY HU-AP-21 (2026-05-05): cabecera de devolucion de mercancia.
+ * Se asocia a una recepcion previa y permite detallar cantidades devueltas
+ * por linea, soportando devoluciones parciales (no solo rechazo total).
  */
 @Entity
-@Table(name = "goods_receipt_lines")
-@SQLDelete(sql = "UPDATE goods_receipt_lines SET deleted_at = NOW() WHERE id = ?")
+@Table(name = "goods_returns")
+@SQLDelete(sql = "UPDATE goods_returns SET deleted_at = NOW() WHERE id = ?")
 @Where(clause = "deleted_at IS NULL")
 @org.hibernate.annotations.Filter(name = "tenantFilter", condition = "company_id = :tenantId")
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class GoodsReceiptLine {
+public class GoodsReturn {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
     /** Multi-tenant (V10-C). Auto-inyectado en @PrePersist. */
     @jakarta.persistence.Column(name = "company_id", nullable = false)
     private Long companyId;
-    /** Recepcion a la que pertenece esta linea. */
+
+    /** Codigo unico DV-{año}{secuencial-6}. */
+    @Column(name = "return_number", nullable = false, length = 30)
+    private String returnNumber;
+
+    /** Recepcion sobre la cual se devuelven items. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "goods_receipt_id", nullable = false)
-    private GoodsReceipt goodsReceipt;
+    @JoinColumn(name = "receipt_id", nullable = false)
+    private GoodsReceipt receipt;
 
-    /** Linea de la orden de compra que se esta recibiendo. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "purchase_order_line_id", nullable = false)
-    private PurchaseOrderLine purchaseOrderLine;
+    @Column(name = "return_date", nullable = false)
+    private LocalDate returnDate;
 
-    /** Cantidad efectivamente recibida. */
-    @Column(name = "quantity_received", nullable = false, precision = 19, scale = 2)
-    private BigDecimal quantityReceived;
+    @Column(name = "reason", nullable = false, columnDefinition = "TEXT")
+    private String reason;
 
-    /**
-     * QA-BLOQUE-AY HU-AP-21 E2/E4 (2026-05-05): cantidad acumulada devuelta al
-     * proveedor desde esta linea. Permite devoluciones parciales por cantidad
-     * (no solo rechazo total). Se actualiza con cada GoodsReturn aplicado.
-     */
-    @Column(name = "quantity_returned", precision = 19, scale = 2)
-    private BigDecimal quantityReturned;
+    @Column(name = "created_by")
+    private Long createdBy;
 
     @Column(name = "created_at", nullable = false)
     @CreationTimestamp
@@ -76,14 +75,14 @@ public class GoodsReceiptLine {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @OneToMany(mappedBy = "goodsReturn", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<GoodsReturnLine> lines = new ArrayList<>();
+
     @jakarta.persistence.PrePersist
     protected void __onCreateTenant() {
         if (this.companyId == null) {
-            if (this.goodsReceipt != null && this.goodsReceipt.getCompanyId() != null) {
-                this.companyId = this.goodsReceipt.getCompanyId();
-            } else {
-                this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
-            }
+            this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
         }
     }
 

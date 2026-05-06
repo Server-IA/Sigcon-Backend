@@ -157,25 +157,66 @@ public class AssetDisposalService {
                     Optional.of("El periodo contable esta cerrado. No se puede registrar la baja en una fecha cerrada."));
         }
 
+        // QA-2026-05-05: validacion defensiva — la fecha de la operacion NO puede
+        // ser anterior a la fecha de adquisicion del activo. Caso reportado por QA:
+        // intentar dar de baja con fecha 05/02/2026 un activo adquirido el 15/04/2026.
+        // Tampoco se permite registrar operaciones en periodos cerrados ni en
+        // periodos anteriores a un periodo cerrado posterior (regla contable
+        // estandar: si abril esta cerrado, febrero tambien debe estar cerrado).
+        if (asset.getAcquisitionDate() != null && request.getDisposalDate() != null
+                && request.getDisposalDate().isBefore(asset.getAcquisitionDate())) {
+            return ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("La fecha de operacion (" + request.getDisposalDate()
+                    + ") no puede ser anterior a la fecha de adquisicion del activo ("
+                    + asset.getAcquisitionDate() + ")."));
+        }
+        // QA-2026-05-05: si existe un periodo CLOSED/LOCKED posterior a la fecha
+        // de operacion, todos los periodos anteriores se consideran cerrados por
+        // antiguedad. Esta regla replica la contabilidad estandar y cubre el caso
+        // donde el contador no creo registro para febrero pero ya cerro abril.
+        try {
+            if (request.getDisposalDate() != null
+                    && accountingPeriodService.hasClosedPeriodAfter(request.getDisposalDate())) {
+                return ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("No se puede registrar la operacion en " + request.getDisposalDate()
+                                + ": existe un periodo contable posterior cerrado. "
+                                + "Use una fecha del periodo abierto vigente."));
+            }
+        } catch (Exception ignore) {
+            // metodo opcional - si no esta disponible, omitir.
+        }
+
         // 4. Validar monto de enajenacion para BAJA
         if (request.getDisposalType() == DisposalType.BAJA && request.getDisposalAmount() == null) {
             return ErrorRespondJson.getErrorRespondMessage(
                     Optional.of("Debe especificar el monto de enajenacion para registrar la baja."));
         }
 
-        // HU-ACT-03 E6 (QA 2026-05-05): el monto de venta no puede ser negativo
-        // ni superar 10x el valor en libros (rango razonable contra errores de tecleo).
+        // HU-ACT-03 E6 (QA 2026-05-05): el monto de venta debe ser > 0 y razonable.
+        // Rango 0.1x..3x del valor en libros para detectar errores de tecleo
+        // (antes era 10x, demasiado laxo - el QA reporto que aceptaba "anormalmente alto").
         if (request.getDisposalType() == DisposalType.BAJA && request.getDisposalAmount() != null) {
             BigDecimal amount = request.getDisposalAmount();
             BigDecimal bookValueRef = asset.getCurrentBookValue() != null
                     ? asset.getCurrentBookValue()
                     : asset.getAcquisitionValue();
-            BigDecimal upperBound = bookValueRef != null
-                    ? bookValueRef.multiply(new BigDecimal("10"))
-                    : null;
-            if (amount.signum() < 0 || (upperBound != null && amount.compareTo(upperBound) > 0)) {
+            if (amount.signum() <= 0) {
                 return ErrorRespondJson.getErrorRespondMessage(
-                        Optional.of("El monto esta fuera del rango permitido. Verifique el valor ingresado."));
+                        Optional.of("El monto de venta debe ser mayor que cero."));
+            }
+            if (bookValueRef != null && bookValueRef.signum() > 0) {
+                BigDecimal upperBound = bookValueRef.multiply(new BigDecimal("3"));
+                BigDecimal lowerBound = bookValueRef.multiply(new BigDecimal("0.10"));
+                if (amount.compareTo(upperBound) > 0) {
+                    return ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("El monto de venta es anormalmente alto (mayor a 3 veces el valor en libros: "
+                                    + bookValueRef + "). Verifique el valor ingresado."));
+                }
+                if (amount.compareTo(lowerBound) < 0) {
+                    return ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("El monto de venta es anormalmente bajo (menor al 10% del valor en libros: "
+                                    + bookValueRef + "). Verifique el valor ingresado."));
+                }
             }
         }
 

@@ -149,6 +149,22 @@ public class ApReconciliationService {
                     "La cuenta bancaria del pago AP no coincide con la del movimiento BNK.");
         }
 
+        // QA-BLOQUE-AY HU-AP-08 E3 (2026-05-05): bloquear conciliacion cuando
+        // el monto del pago AP NO coincide con el monto del movimiento BNK
+        // (tolerancia $0.01 por redondeo). Antes el sistema permitia vincular
+        // valores totalmente distintos, rompiendo la conciliacion.
+        java.math.BigDecimal paymentAbs  = payment.getAmount() != null
+                ? payment.getAmount().abs() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal movementAbs = movement.getAmount() != null
+                ? movement.getAmount().abs() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal delta       = paymentAbs.subtract(movementAbs).abs();
+        if (delta.compareTo(new java.math.BigDecimal("0.01")) > 0) {
+            throw new IllegalArgumentException(
+                    "El monto registrado en AP no coincide con el extracto bancario. "
+                    + "AP: $" + paymentAbs + " - Extracto: $" + movementAbs
+                    + " (diferencia: $" + delta + ")");
+        }
+
         payment.setBankMovementId(movementId);
         payment.setReconciledAt(LocalDateTime.now());
         paymentRepository.save(payment);
@@ -156,9 +172,16 @@ public class ApReconciliationService {
         auditPublisher.publishUpdate(AuditModule.AP, "ApPaymentReconciliation", paymentId,
                 "Pago AP #" + paymentId + " conciliado con movimiento BNK #" + movementId);
         log.info("AP-09: Pago {} conciliado con movimiento BNK {}", paymentId, movementId);
+
+        // QA-BLOQUE-AY (2026-05-05): payload minimo para evitar Jackson + Hibernate
+        // ByteBuddyInterceptor al serializar la entidad managed con relaciones LAZY.
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("paymentId", payment.getId());
+        payload.put("bankMovementId", payment.getBankMovementId());
+        payload.put("reconciledAt", payment.getReconciledAt() != null ? payment.getReconciledAt().toString() : null);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Pago conciliado correctamente con movimiento bancario"),
-                Optional.of(payment)));
+                Optional.of(payload)));
     }
 
     /**

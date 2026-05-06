@@ -53,6 +53,15 @@ public class BankAccountDTO {
     @Schema(description = "Saldo inicial")
     private BigDecimal initialBalance;
 
+    /**
+     * QA-BLOQUE-AY (2026-05-06): saldo actual calculado como
+     * initialBalance + sum(financial_movements.amount). Antes la UI mostraba
+     * solo el saldo de apertura, sin reflejar pagos/depositos posteriores. El
+     * contador veia $25M perpetuamente aunque hubiera pagado facturas.
+     */
+    @Schema(description = "Saldo actual (initialBalance + sum movimientos)")
+    private BigDecimal currentBalance;
+
     @Schema(description = "Cuenta contable")
     private AccountingAccountDTO accountingAccountDTO;
 
