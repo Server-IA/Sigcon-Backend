@@ -1104,12 +1104,35 @@ public class InvoiceService {
         // E4: PARCIALMENTE_PAGADA bloqueada SOLO si todavia hay pagos efectivos.
         // QA-BLOQUE-AY HU-AP-25 E4 (2026-05-05): si el contador ya reverso/anulo
         // los pagos parciales, la factura debe poder anularse aunque su status
-        // diga PARTIALLY_PAID. Detectamos pagos efectivos comparando balanceDue
-        // contra totalPayment: si son iguales, no hay pagos vivos.
+        // diga PARTIALLY_PAID.
+        // QA Bloque AU+ (2026-05-06): la deteccion previa miraba balanceDue vs
+        // totalPayment, pero esos campos NO se actualizan cuando solo se reversa
+        // el JE del pago (apPayments queda intacto). Ahora chequeamos los pagos
+        // y consideramos "efectivos" SOLO los que tengan JE en POSTED. Si todos
+        // los pagos tienen JE REVERSED/eliminado, no hay impacto contable
+        // pendiente y la factura se puede anular.
         if (invoice.getStatus() == StatusesInvoices.PARTIALLY_PAID) {
-            double balance = invoice.getBalanceDue() != null ? invoice.getBalanceDue() : 0d;
-            double total   = invoice.getTotalPayment() != null ? invoice.getTotalPayment() : 0d;
-            boolean hasEffectivePayments = Math.abs(total - balance) > 0.001d;
+            java.util.List<com.sigcon.backend.invoices.ap_payments.domain.model.ApPayment> activePayments =
+                    apPaymentRepository.findByInvoiceIdAndDeletedAtIsNull(id);
+            boolean hasEffectivePayments = false;
+            for (var pay : activePayments) {
+                if (pay.getJournalEntryId() == null) {
+                    // Pago sin JE asociado: tratar como efectivo (no podemos
+                    // confirmar reversion sin JE).
+                    hasEffectivePayments = true;
+                    break;
+                }
+                JournalEntry payJe = journalEntryRepository.findById(pay.getJournalEntryId()).orElse(null);
+                // El pago se considera EFECTIVO si su JE existe y NO esta
+                // REVERSED. Tanto DRAFT como POSTED reflejan compromiso contable
+                // pendiente. Solo cuando el contador hace reverse (queda
+                // REVERSED) el pago deja de impactar y la factura se puede
+                // anular.
+                if (payJe != null && payJe.getStatus() != JournalEntryStatus.REVERSED) {
+                    hasEffectivePayments = true;
+                    break;
+                }
+            }
             if (hasEffectivePayments) {
                 throw new IllegalStateException(
                     "Esta factura tiene pagos aplicados. Para anularla, primero debe reversar "
@@ -1118,7 +1141,13 @@ public class InvoiceService {
             // Sin pagos efectivos: permitir anulacion. Restaurar status a
             // PENDING para coherencia antes de pasar a VOIDED.
             invoice.setStatus(StatusesInvoices.PENDING);
-            log.info("HU-AP-25 E4: factura {} estaba PARTIALLY_PAID sin pagos efectivos; se restaura a PENDING para anulacion", id);
+            // Si los JE de los pagos estan REVERSED, restaurar tambien
+            // balanceDue/totalPayment para que la factura quede consistente.
+            if (invoice.getTotalPayment() != null) {
+                invoice.setBalanceDue(invoice.getTotalPayment());
+            }
+            log.info("HU-AP-25 E4: factura {} estaba PARTIALLY_PAID con pagos REVERSED; "
+                    + "se restaura a PENDING + balanceDue=totalPayment para anulacion", id);
         }
 
         // E5: periodo cerrado bloqueado (mensaje literal HU)

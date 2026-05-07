@@ -124,7 +124,8 @@ public class ResourcesController {
     public ResponseEntity<?> deleteMunicipality(@PathVariable Long id) { return resourceService.deleteMunicipality(id); }
 
     @PostMapping("/payment-terms")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_TERM') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque AU+ HU-AP-23 E3: catalogo basico, lectura para todo autenticado
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener términos de pago", description = "Obtener términos de pago del sistema <br> Permiso requerido: VIEW_PAYMENT_TERM")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de terminos de pago obtenida exitosamente"),
@@ -136,7 +137,8 @@ public class ResourcesController {
     }
 
     @PostMapping("/types-regimes")
-    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_REGIMES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque AU+ HU-AP-23 E3: catalogo basico, lectura para todo autenticado
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener tipos de regímenes", description = "Obtener tipos de regímenes del sistema <br> Permiso requerido: VIEW_TYPES_REGIMES")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de tipos de regimenes obtenida exitosamente"),
@@ -148,7 +150,8 @@ public class ResourcesController {
     }
 
     @PostMapping("/types-organizations")
-    @PreAuthorize("hasAuthority('PERM_VIEW_TYPES_ORGANIZATIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque AU+ HU-AP-23 E3: catalogo basico, lectura para todo autenticado
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener tipos de organizaciones", description = "Obtener tipos de organizaciones del sistema <br> Permiso requerido: VIEW_TYPES_ORGANIZATIONS")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de tipos de organizaciones obtenida exitosamente"),
@@ -160,7 +163,8 @@ public class ResourcesController {
     }
 
     @PostMapping("/withholdings")
-    @PreAuthorize("hasAuthority('PERM_VIEW_WITHHOLDINGS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque AU+ HU-AP-23 E3: catalogo basico, lectura para todo autenticado
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener retenciones", description = "Obtener retenciones del sistema <br> Permiso requerido: VIEW_WITHHOLDINGS")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de retenciones obtenida exitosamente"),
@@ -172,7 +176,11 @@ public class ResourcesController {
     }
 
     @PostMapping("/payment-forms")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PAYMENT_FORM') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque AU+ HU-AP-23 E3 (2026-05-06): cualquier usuario autenticado
+    // puede leer el catalogo de formas de pago. Antes exigia
+    // PERM_VIEW_PAYMENT_FORM, lo que impedia que un usuario con CREATE_INVOICE_FC
+    // pero sin VIEW_PAYMENT_FORM cargara el dropdown del form de factura.
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Obtener formas de pago", description = "Obtener formas de pago del sistema <br> Permiso requerido: VIEW_PAYMENT_FORM")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de formas de pago obtenida exitosamente"),
