@@ -997,6 +997,79 @@ public class InvoiceService {
         invoice.setStatus(StatusesInvoices.SETTLED);
         invoiceRepository.save(invoice);
 
+        // QA Bloque AU+ HU-AP-03 E1 (2026-05-07): generar comprobante contable
+        // de cierre de la obligacion. Aclaracion del QA: la HU exige ver el
+        // asiento en /contabilidad/comprobantes, no solo audit + notification.
+        // Como contablemente la deuda ya fue saldada por los pagos individuales
+        // (D CxP / C Bancos), el JE de cierre es un asiento "memoria" que se
+        // auto-cancela en la misma cuenta CxP por el monto total facturado:
+        //   D 2205 (CxP) = totalPayment
+        //   C 2205 (CxP) = totalPayment
+        // Total D = Total C (partida doble OK), efecto contable neto = 0,
+        // pero queda un comprobante POSTED con descripcion clara del cierre.
+        Long settleJeId = null;
+        try {
+            BigDecimal totalPayment = invoice.getTotalPayment() != null
+                    ? BigDecimal.valueOf(invoice.getTotalPayment()) : BigDecimal.ZERO;
+            if (totalPayment.signum() > 0) {
+                Long idCxpProveedores = accountMappingService.resolveOrThrow(AccountingConcept.AP_PROVEEDORES);
+                String thirdPartyNit = invoice.getThirdParty() != null
+                        ? invoice.getThirdParty().getNit() : null;
+                String thirdPartyName = invoice.getThirdParty() != null
+                        ? invoice.getThirdParty().getBusinessName() : "?";
+
+                java.util.List<CreateJournalEntryLineRequest> closingLines = new java.util.ArrayList<>();
+                closingLines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(idCxpProveedores)
+                        .debitAmount(totalPayment)
+                        .creditAmount(BigDecimal.ZERO)
+                        .description("Cierre CxP " + invoice.getResolutionInvoice() + " - Deuda saldada")
+                        .thirdPartyNit(thirdPartyNit)
+                        .build());
+                closingLines.add(CreateJournalEntryLineRequest.builder()
+                        .accountingAccountId(idCxpProveedores)
+                        .debitAmount(BigDecimal.ZERO)
+                        .creditAmount(totalPayment)
+                        .description("Cierre CxP " + invoice.getResolutionInvoice() + " - Cancelacion")
+                        .thirdPartyNit(thirdPartyNit)
+                        .build());
+
+                CreateJournalEntryRequest closingReq = CreateJournalEntryRequest.builder()
+                        .entryDate(java.time.LocalDate.now())
+                        .description("LIQUIDACION factura " + invoice.getResolutionInvoice()
+                                + " - " + thirdPartyName + " - Deuda saldada $" + totalPayment)
+                        .sourceModule(JournalSourceModule.AP)
+                        .sourceId(invoice.getId())
+                        .lines(closingLines)
+                        .build();
+
+                var je = journalEntryService.createEntry(closingReq, "sistema");
+                settleJeId = je.getId();
+                // Contabilizar (DRAFT -> POSTED) para que aparezca como asiento
+                // formal en CG comprobantes.
+                try {
+                    journalEntryService.postEntry(settleJeId);
+                } catch (RuntimeException postEx) {
+                    log.warn("HU-AP-03 E1: JE {} de cierre quedo en DRAFT por: {}",
+                            settleJeId, postEx.getMessage());
+                }
+                log.info("HU-AP-03 E1: comprobante de cierre {} generado para factura {}",
+                        settleJeId, invoice.getId());
+            }
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            // No fallamos el settle si la generacion del comprobante de cierre
+            // falla (ej. periodo cerrado, mapeo faltante). El estado SETTLED ya
+            // se persistio. Loguamos para revision manual.
+            log.warn("HU-AP-03 E1: no se pudo generar comprobante de cierre para factura {}: {}",
+                    invoice.getId(), ex.getMessage());
+        } catch (RuntimeException ex) {
+            log.error("HU-AP-03 E1: error inesperado al generar comprobante de cierre para factura {}",
+                    invoice.getId(), ex);
+        }
+        // Capturar el ID del comprobante de cierre para devolverlo en la
+        // respuesta y para que la auditoria lo enlace.
+        final Long closingJeIdFinal = settleJeId;
+
         // QA-BLOQUE-AY HU-AP-03 E1 (2026-05-06): registrar en auditoria el cierre
         // de la obligacion y notificar a CG para que refleje el saldo cero del
         // proveedor. Los reportes QA de prod indicaron que el settle no
@@ -1036,6 +1109,11 @@ public class InvoiceService {
         java.util.Map<String, Object> minimal = new java.util.HashMap<>();
         minimal.put("id", invoice.getId());
         minimal.put("status", "SETTLED");
+        // HU-AP-03 E1: incluir id del comprobante de cierre para que el
+        // frontend pueda redirigir/destacar el JE en /contabilidad/comprobantes.
+        if (closingJeIdFinal != null) {
+            minimal.put("closingJournalEntryId", closingJeIdFinal);
+        }
         return ResponseEntity.ok(
             SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Factura liquidada exitosamente."), Optional.of(minimal)));
