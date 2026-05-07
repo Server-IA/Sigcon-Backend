@@ -208,6 +208,53 @@ public class DataTableSpecificationBuilder<T> {
                      */
                     if (searchValue.contains(",") || searchValue.contains("|")) {
 
+                        // QA Bloque AU+ HU-CFG / Bug 5 cajas (2026-05-07): cuando
+                        // el frontend manda "from|to" (rango de fechas) y el campo
+                        // es LocalDate/LocalDateTime, interpretar como rango BETWEEN.
+                        // Antes la rama IN intentaba hacer in() con String contra
+                        // LocalDateTime y Hibernate lanzaba "Cannot compare ... with
+                        // String" rompiendo la peticion.
+                        if ((java.time.LocalDate.class.equals(type) || java.time.LocalDateTime.class.equals(type))
+                                && searchValue.contains("|")) {
+                            String[] parts = searchValue.split("\\|", -1);
+                            String fromStr = parts.length > 0 ? parts[0].trim() : "";
+                            String toStr   = parts.length > 1 ? parts[1].trim() : "";
+                            try {
+                                if (java.time.LocalDate.class.equals(type)) {
+                                    java.time.LocalDate from = !fromStr.isBlank() ? java.time.LocalDate.parse(fromStr) : null;
+                                    java.time.LocalDate to   = !toStr.isBlank()   ? java.time.LocalDate.parse(toStr)   : null;
+                                    if (from != null && to != null) {
+                                        predicate = cb.and(predicate,
+                                                cb.between(path.as(java.time.LocalDate.class), from, to));
+                                    } else if (from != null) {
+                                        predicate = cb.and(predicate,
+                                                cb.greaterThanOrEqualTo(path.as(java.time.LocalDate.class), from));
+                                    } else if (to != null) {
+                                        predicate = cb.and(predicate,
+                                                cb.lessThanOrEqualTo(path.as(java.time.LocalDate.class), to));
+                                    }
+                                } else {
+                                    java.time.LocalDateTime fromDT = !fromStr.isBlank()
+                                            ? java.time.LocalDate.parse(fromStr).atStartOfDay() : null;
+                                    java.time.LocalDateTime toDT = !toStr.isBlank()
+                                            ? java.time.LocalDate.parse(toStr).atTime(23,59,59,999_999_999) : null;
+                                    if (fromDT != null && toDT != null) {
+                                        predicate = cb.and(predicate,
+                                                cb.between(path.as(java.time.LocalDateTime.class), fromDT, toDT));
+                                    } else if (fromDT != null) {
+                                        predicate = cb.and(predicate,
+                                                cb.greaterThanOrEqualTo(path.as(java.time.LocalDateTime.class), fromDT));
+                                    } else if (toDT != null) {
+                                        predicate = cb.and(predicate,
+                                                cb.lessThanOrEqualTo(path.as(java.time.LocalDateTime.class), toDT));
+                                    }
+                                }
+                            } catch (Exception ex) {
+                                // formato invalido -> ignorar filtro
+                            }
+                            continue;
+                        }
+
                         List<String> values = Arrays
                         .stream(searchValue.split("[,|]"))
                                 .map(String::trim)
