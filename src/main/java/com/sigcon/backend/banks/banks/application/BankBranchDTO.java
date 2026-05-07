@@ -48,6 +48,10 @@ public class BankBranchDTO {
     @Schema(description = "Banco al que pertenece la sucursal")
     private BankDTO bank;
 
+    // QA Bloque AU (2026-05-06) — Bug 3: telefono de la sucursal.
+    @Schema(description = "Telefono de contacto de la sucursal", example = "6017512345")
+    private String phone;
+
     @Schema(description = "Fecha de creación del registro")
     private LocalDateTime createdAt;
 

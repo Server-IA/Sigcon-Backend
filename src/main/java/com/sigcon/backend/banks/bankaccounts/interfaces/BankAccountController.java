@@ -122,6 +122,38 @@ public class BankAccountController {
         return bankAccountService.delete(id, request.getMotivo());
     }
 
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 2: toggle handlesCheckbook con reglas.
+     *
+     * Reglas para PERMITIR activar (false → true): cuenta ACTIVA. Sin
+     * restriccion adicional (es seguro activar el manejo de chequera).
+     *
+     * Reglas para BLOQUEAR desactivar (true → false): si existe al menos
+     * un cheque en estado EMITIDO o si hay cheques no conciliados con
+     * banco, se rechaza para preservar la trazabilidad y evitar perder
+     * cheques pendientes. Permitir desactivar solo si todos los cheques
+     * estan ANULADO/COBRADO.
+     *
+     * Cada toggle queda registrado en audit_logs con motivo (HU-001 E5).
+     */
+    @PostMapping("/{id}/toggle-checkbook")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @Operation(summary = "Activar/desactivar manejo de chequera",
+        description = "Activa el manejo de chequera libremente; desactiva solo si no hay cheques EMITIDOS ni no conciliados.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Toggle aplicado correctamente"),
+        @ApiResponse(responseCode = "400", description = "Regla de negocio bloquea la desactivacion"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos"),
+        @ApiResponse(responseCode = "404", description = "Cuenta no encontrada")
+    })
+    public ResponseEntity<?> toggleCheckbook(
+            @Parameter(description = "ID de la cuenta") @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> body) {
+        Boolean enable = body.get("enable") instanceof Boolean ? (Boolean) body.get("enable") : null;
+        String motivo = body.get("motivo") != null ? body.get("motivo").toString() : null;
+        return bankAccountService.toggleCheckbook(id, enable, motivo);
+    }
+
     @PostMapping("/{id}/deactivate")
     @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Desactivar cuenta bancaria", description = "Cambia el estado a INACTIVA cuando no se puede eliminar por dependencias.")

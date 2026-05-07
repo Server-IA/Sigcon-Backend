@@ -126,6 +126,13 @@ public class CashService {
         User alternateResponsible = null;
         if (request.getAlternateResponsibleId() != null) {
             alternateResponsible = existsUser(request.getAlternateResponsibleId());
+            // QA Bloque AU (2026-05-06) — Bug 1: el suplente debe ser una
+            // persona distinta del principal. Validar a nivel BD para que
+            // el frontend no pueda saltarse la regla.
+            if (request.getAlternateResponsibleId().equals(request.getPrincipalResponsibleId())) {
+                throw new IllegalArgumentException(
+                        "El responsable suplente debe ser una persona distinta del principal.");
+            }
         }
 
         // 7. Resolver centro de costos (opcional)

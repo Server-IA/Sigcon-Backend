@@ -966,6 +966,33 @@ public class InvoiceService {
         invoice.setStatus(StatusesInvoices.SETTLED);
         invoiceRepository.save(invoice);
 
+        // QA-BLOQUE-AY HU-AP-03 E1 (2026-05-06): registrar en auditoria el cierre
+        // de la obligacion y notificar a CG para que refleje el saldo cero del
+        // proveedor. Los reportes QA de prod indicaron que el settle no
+        // generaba traza ni evento downstream.
+        try {
+            String thirdPartyName = invoice.getThirdParty() != null
+                    ? invoice.getThirdParty().getBusinessName() : "?";
+            auditPublisher.publishUpdate(AuditModule.AP, "Invoice", invoice.getId(),
+                    "Factura LIQUIDADA (SETTLED) - " + invoice.getResolutionInvoice()
+                    + " | proveedor=" + thirdPartyName
+                    + " | total=" + invoice.getTotalPayment());
+        } catch (RuntimeException ex) {
+            log.warn("No se pudo registrar audit log de settle para factura {}: {}", id, ex.getMessage());
+        }
+        try {
+            Long thirdPartyId = invoice.getThirdParty() != null
+                    ? invoice.getThirdParty().getId() : null;
+            BigDecimal total = invoice.getTotalPayment() != null
+                    ? BigDecimal.valueOf(invoice.getTotalPayment()) : BigDecimal.ZERO;
+            // ApInvoiceUpdatedEvent es consumido por el listener de CG/AAEF
+            // para reflejar el cambio de estado.
+            eventPublisher.publishEvent(new ApInvoiceUpdatedEvent(this, invoice.getId(),
+                    total, thirdPartyId));
+        } catch (RuntimeException ex) {
+            log.warn("No se pudo publicar evento ApInvoiceUpdatedEvent en settle {}: {}", id, ex.getMessage());
+        }
+
         // Bloque AS: payload minimo para evitar serializar proxies JPA.
         java.util.Map<String, Object> minimal = new java.util.HashMap<>();
         minimal.put("id", invoice.getId());

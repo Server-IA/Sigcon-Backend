@@ -25,6 +25,8 @@ import com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReceipt;
 import com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReceiptLine;
 import com.sigcon.backend.invoices.purchase_orders.domain.model.PurchaseOrder;
 import com.sigcon.backend.invoices.purchase_orders.domain.model.PurchaseOrderLine;
+import com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReceiptInvoiceLink;
+import com.sigcon.backend.invoices.purchase_orders.domain.repository.GoodsReceiptInvoiceLinkRepository;
 import com.sigcon.backend.invoices.purchase_orders.domain.repository.GoodsReceiptLineRepository;
 import com.sigcon.backend.invoices.purchase_orders.domain.repository.GoodsReceiptRepository;
 import com.sigcon.backend.invoices.purchase_orders.domain.repository.PurchaseOrderLineRepository;
@@ -60,6 +62,12 @@ public class GoodsReceiptService {
     private final AuditPublisher auditPublisher;
 
     /**
+     * QA-BLOQUE-AY HU-AP-19 (2026-05-06): repositorio de vinculaciones N:M
+     * receipt<->invoice con monto facturado por link.
+     */
+    private final GoodsReceiptInvoiceLinkRepository receiptInvoiceLinkRepository;
+
+    /**
      * QA-BLOQUE-AY HU-AP-21 (2026-05-05): repositorio de devoluciones para
      * generar consecutivo unico por empresa (DV-{año}{6dig}).
      */
@@ -85,8 +93,15 @@ public class GoodsReceiptService {
         PurchaseOrder order = orderRepository.findById(request.getPurchaseOrderId())
                 .orElseThrow(() -> new IllegalArgumentException("La orden de compra no fue encontrada"));
 
-        if (!"APPROVED".equals(order.getStatus())) {
-            throw new IllegalStateException("Solo se pueden crear recepciones para ordenes aprobadas (APPROVED)");
+        // QA-BLOQUE-AY HU-AP-18 E2 (2026-05-06): permitir recepciones tambien
+        // cuando la OC ya esta PARTIALLY_RECEIVED. El status se actualiza
+        // automaticamente al recepcionar (RECEIVED si llego todo, PARTIALLY_RECEIVED
+        // si aun falta). Solo se bloquea si la OC esta en estado distinto al
+        // ciclo de recepcion (DRAFT, PENDING, REJECTED, CLOSED).
+        String s = order.getStatus();
+        if (!"APPROVED".equals(s) && !"PARTIALLY_RECEIVED".equals(s)) {
+            throw new IllegalStateException(
+                "Solo se pueden crear recepciones para ordenes APROBADAS o PARCIALMENTE RECIBIDAS (estado actual: " + s + ")");
         }
 
         // 2. Generar numero de recepcion
@@ -237,10 +252,6 @@ public class GoodsReceiptService {
         GoodsReceipt receipt = receiptRepository.findById(receiptId)
                 .orElseThrow(() -> new IllegalArgumentException("La recepcion no fue encontrada"));
 
-        if (receipt.getInvoiceId() != null) {
-            throw new IllegalStateException("La recepcion ya tiene una factura vinculada (ID: " + receipt.getInvoiceId() + ")");
-        }
-
         // Validar que la factura existe
         Invoices invoice = invoiceRepository.findById(request.getInvoiceId())
                 .orElseThrow(() -> new IllegalArgumentException("La factura no fue encontrada"));
@@ -256,9 +267,13 @@ public class GoodsReceiptService {
             }
         }
 
-        // HU-AP-19 E3 / E5 (Bloque AR): comparar monto factura vs total recepcion.
-        // E3 (bloqueo): factura > recepcion → no permitir vincular.
-        // E5 (alerta info): factura < recepcion → vincular pero avisar diferencia.
+        // QA-BLOQUE-AY HU-AP-19 E1/E4/E5/E6 (2026-05-06): vinculacion parcial N:M.
+        // 1) Calcular total recepcion (sumando lineas pedidas * precio).
+        // 2) Calcular total ya facturado (sumando links activos).
+        // 3) Validar idempotencia: no re-link mismo (receipt, invoice).
+        // 4) E4: si total_facturado >= total_recepcion -> bloquear (mensaje literal).
+        // 5) E3: si invoice.totalAmount > saldo_pendiente -> bloquear.
+        // 6) E5: si invoice.totalAmount < saldo_pendiente -> warning informativo.
         java.math.BigDecimal receiptTotal = java.math.BigDecimal.ZERO;
         if (receipt.getLines() != null) {
             for (var rl : receipt.getLines()) {
@@ -275,36 +290,104 @@ public class GoodsReceiptService {
                 ? java.math.BigDecimal.valueOf(invoice.getTotalAmount())
                 : java.math.BigDecimal.ZERO;
 
+        // E1 idempotencia: si ya existe link activo para mismo (receipt, invoice), bloquear.
+        if (receiptInvoiceLinkRepository
+                .findFirstByReceiptIdAndInvoiceIdAndDeletedAtIsNull(receipt.getId(), invoice.getId())
+                .isPresent()) {
+            throw new IllegalStateException(
+                "Esta factura ya esta vinculada a esta recepcion. Use otra factura "
+                + "o ajuste el link existente.");
+        }
+
+        java.math.BigDecimal alreadyInvoiced = java.util.Optional.ofNullable(
+                receiptInvoiceLinkRepository.sumInvoicedAmountByReceiptId(receipt.getId()))
+                .orElse(java.math.BigDecimal.ZERO);
+        java.math.BigDecimal pending = receiptTotal.subtract(alreadyInvoiced);
+
+        // E4: si la recepcion ya esta totalmente facturada, bloquear.
+        if (receiptTotal.signum() > 0
+                && pending.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException(
+                "Esta recepcion ya fue facturada en su totalidad");
+        }
+
+        // E3: el monto de la factura supera el saldo pendiente de la recepcion.
         String warning = null;
         if (receiptTotal.signum() > 0) {
-            int cmp = invoiceTotal.compareTo(receiptTotal);
+            int cmp = invoiceTotal.compareTo(pending);
             if (cmp > 0) {
                 throw new IllegalArgumentException(
-                        "El monto de la factura supera el valor de lo recibido. "
-                        + "Verifique las cantidades o solicite una nota crédito al proveedor.");
+                        "El monto de la factura supera el valor pendiente por facturar de la recepcion. "
+                        + "Saldo pendiente: $" + pending + " - Factura: $" + invoiceTotal
+                        + ". Verifique las cantidades o solicite una nota credito al proveedor.");
             } else if (cmp < 0) {
-                java.math.BigDecimal diff = receiptTotal.subtract(invoiceTotal);
-                warning = "El monto facturado ($" + invoiceTotal + ") es inferior al monto recibido ($"
-                        + receiptTotal + "). Diferencia: $" + diff
-                        + ". Verifique si existe nota crédito del proveedor pendiente de registrar.";
-                log.warn("HU-AP-19 E5 receipt={} invoice={} diff={}", receipt.getId(), invoice.getId(), diff);
+                // E5: factura inferior al saldo pendiente -> warning informativo
+                java.math.BigDecimal diff = pending.subtract(invoiceTotal);
+                warning = "El monto facturado ($" + invoiceTotal + ") es inferior al saldo pendiente "
+                        + "de la recepcion ($" + pending + "). Diferencia: $" + diff
+                        + ". La recepcion queda como Parcialmente facturada.";
+                log.warn("HU-AP-19 E5 receipt={} invoice={} pending={} diff={}",
+                        receipt.getId(), invoice.getId(), pending, diff);
             }
         }
 
-        receipt.setInvoiceId(invoice.getId());
-        receipt = receiptRepository.save(receipt);
-        auditPublisher.publishCreate(AuditModule.AP, "GoodsReceipt", receipt.getId(),
-                warning != null
-                    ? "GoodsReceipt vinculado a factura " + invoice.getId() + " con alerta: " + warning
-                    : "GoodsReceipt creado id=" + receipt.getId());
-        log.info("Recepcion {} vinculada a factura {}", receipt.getReceiptNumber(), invoice.getId());
+        // Persistir el link (HU-AP-19 E6: multi-link)
+        GoodsReceiptInvoiceLink link = GoodsReceiptInvoiceLink.builder()
+                .receiptId(receipt.getId())
+                .invoiceId(invoice.getId())
+                .invoicedAmount(invoiceTotal)
+                .notes(warning)
+                .build();
+        link = receiptInvoiceLinkRepository.save(link);
 
-        String successMsg = warning != null
-                ? ("Factura vinculada con alerta: " + warning)
-                : "Factura vinculada exitosamente a la recepcion";
+        // Compatibilidad con el modelo legacy: si el receipt aun no tiene
+        // invoice_id, asignamos el del primer link (para que el listado y
+        // reportes legacy sigan funcionando). En links posteriores se mantiene
+        // el primero.
+        if (receipt.getInvoiceId() == null) {
+            receipt.setInvoiceId(invoice.getId());
+            receipt = receiptRepository.save(receipt);
+        }
+
+        // Estado fully-invoiced si total facturado tras este link >= recepcion.
+        java.math.BigDecimal totalAfterLink = alreadyInvoiced.add(invoiceTotal);
+        boolean fullyInvoiced = receiptTotal.signum() > 0
+                && totalAfterLink.compareTo(receiptTotal) >= 0;
+
+        auditPublisher.publishCreate(AuditModule.AP, "GoodsReceiptInvoiceLink", link.getId(),
+                "Link receipt #" + receipt.getId() + " <-> invoice #" + invoice.getId()
+                + " | invoicedAmount=$" + invoiceTotal
+                + " | totalFacturado=$" + totalAfterLink
+                + " | totalRecepcion=$" + receiptTotal
+                + (warning != null ? " | warning: " + warning : ""));
+        log.info("HU-AP-19 link receipt={} invoice={} amount={} fullyInvoiced={}",
+                receipt.getReceiptNumber(), invoice.getId(), invoiceTotal, fullyInvoiced);
+
+        String successMsg;
+        if (fullyInvoiced) {
+            successMsg = "Factura vinculada exitosamente. La recepcion queda Totalmente facturada.";
+        } else if (warning != null) {
+            successMsg = "Factura vinculada con alerta: " + warning;
+        } else {
+            successMsg = "Factura vinculada exitosamente a la recepcion. Saldo pendiente por facturar: $"
+                    + receiptTotal.subtract(totalAfterLink);
+        }
+
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("receiptId", receipt.getId());
+        payload.put("invoiceId", invoice.getId());
+        payload.put("linkId", link.getId());
+        payload.put("invoicedAmount", invoiceTotal);
+        payload.put("totalReceipt", receiptTotal);
+        payload.put("totalInvoiced", totalAfterLink);
+        payload.put("pendingToInvoice", receiptTotal.subtract(totalAfterLink));
+        payload.put("fullyInvoiced", fullyInvoiced);
+        payload.put("invoicedStatus", fullyInvoiced ? "FULLY_INVOICED"
+                : (totalAfterLink.signum() > 0 ? "PARTIALLY_INVOICED" : "NOT_INVOICED"));
+        if (warning != null) payload.put("warning", warning);
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
-                        Optional.of(successMsg), Optional.of(toDTO(receipt))));
+                        Optional.of(successMsg), Optional.of(payload)));
     }
 
     /**
@@ -337,10 +420,12 @@ public class GoodsReceiptService {
             throw new IllegalStateException("La recepcion ya esta rechazada");
         }
 
-        // HU-AP-21 E3 (Bloque AR): mensaje literal HU. Si la recepcion ya tiene
-        // factura asociada, la devolucion fisica de mercancia no procede aqui;
-        // debe solicitarse una nota credito al proveedor para ajustar saldos.
-        if (receipt.getInvoiceId() != null) {
+        // HU-AP-21 E3 (Bloque AR/AY): mensaje literal HU. Si la recepcion ya tiene
+        // ALGUN link activo a factura, la devolucion fisica no procede aqui;
+        // debe solicitarse una nota credito al proveedor.
+        boolean hasInvoiceLink = receipt.getInvoiceId() != null
+                || !receiptInvoiceLinkRepository.findByReceiptIdAndDeletedAtIsNull(receipt.getId()).isEmpty();
+        if (hasInvoiceLink) {
             throw new IllegalStateException(
                     "No se puede devolver: los ítems seleccionados ya tienen una recepción "
                     + "con factura de compra asociada. Solicite una nota crédito al proveedor.");
@@ -478,6 +563,19 @@ public class GoodsReceiptService {
         receipt.setStatus(newStatus);
         receiptRepository.save(receipt);
 
+        // QA-BLOQUE-AY HU-AP-21 E1 (2026-05-06): tras devolver, la OC debe
+        // recalcular su estado: si todas las cantidades devueltas dejaron al
+        // OC con saldo pendiente otra vez, debe volver a PARTIALLY_RECEIVED o
+        // APPROVED para permitir nuevas recepciones del proveedor.
+        if (receipt.getPurchaseOrder() != null) {
+            try {
+                updatePurchaseOrderReceptionStatusAfterReturn(receipt.getPurchaseOrder());
+            } catch (Exception ex) {
+                log.warn("HU-AP-21 E1: no se pudo recalcular status OC {} tras devolucion: {}",
+                        receipt.getPurchaseOrder().getOrderNumber(), ex.getMessage());
+            }
+        }
+
         auditPublisher.publishCreate(AuditModule.AP, "GoodsReturn", gr.getId(),
                 "Devolucion " + returnNumber + " sobre recepcion " + receipt.getReceiptNumber()
                         + " - Cantidad total devuelta: " + totalReturnedThis + " - Motivo: " + request.getReason());
@@ -488,6 +586,38 @@ public class GoodsReceiptService {
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Devolucion registrada exitosamente"),
                 Optional.of(buildReturnDTO(gr, receipt))));
+    }
+
+    /**
+     * QA-BLOQUE-AY HU-AP-21 E1 (2026-05-06): variante de updatePurchaseOrderReceptionStatus
+     * que se ejecuta tras una devolucion. Si la cantidad neta recibida (received-returned)
+     * baja por debajo de lo pedido, la OC vuelve a PARTIALLY_RECEIVED. Si la devolucion
+     * llevo el neto a 0, la OC vuelve a APPROVED.
+     */
+    private void updatePurchaseOrderReceptionStatusAfterReturn(PurchaseOrder order) {
+        List<PurchaseOrderLine> lines = orderLineRepository.findByPurchaseOrderId(order.getId());
+        if (lines == null || lines.isEmpty()) return;
+        BigDecimal totalOrdered = BigDecimal.ZERO;
+        BigDecimal totalNetReceived = BigDecimal.ZERO;
+        for (PurchaseOrderLine line : lines) {
+            BigDecimal qty = line.getQuantity() != null ? line.getQuantity() : BigDecimal.ZERO;
+            totalOrdered = totalOrdered.add(qty);
+            totalNetReceived = totalNetReceived.add(calculateTotalReceived(line.getId()));
+        }
+        String newStatus;
+        if (totalNetReceived.signum() <= 0) {
+            newStatus = "APPROVED";
+        } else if (totalNetReceived.compareTo(totalOrdered) >= 0) {
+            newStatus = "RECEIVED";
+        } else {
+            newStatus = "PARTIALLY_RECEIVED";
+        }
+        if (!newStatus.equals(order.getStatus())) {
+            order.setStatus(newStatus);
+            orderRepository.save(order);
+            log.info("HU-AP-21 E1: OC {} status -> {} (neto recibido {} de {})",
+                    order.getOrderNumber(), newStatus, totalNetReceived, totalOrdered);
+        }
     }
 
     private Long safeUserId() {
@@ -653,17 +783,23 @@ public class GoodsReceiptService {
     // ========================= Helpers privados =========================
 
     /**
-     * Calcula la cantidad total ya recibida para una linea de orden de compra.
+     * Calcula la cantidad NETA recibida para una linea de OC (recibido menos
+     * devuelto). QA-BLOQUE-AY HU-AP-21 E1 (2026-05-06): si la mercancia se
+     * devuelve, la cantidad disponible para recepcionar de nuevo se restaura.
      *
      * @param purchaseOrderLineId ID de la linea de OC
-     * @return cantidad total recibida
+     * @return cantidad neta recibida (total received - total returned)
      */
     private BigDecimal calculateTotalReceived(Long purchaseOrderLineId) {
         List<GoodsReceiptLine> receivedLines = receiptLineRepository
                 .findByPurchaseOrderLineId(purchaseOrderLineId);
-        return receivedLines.stream()
-                .map(GoodsReceiptLine::getQuantityReceived)
+        BigDecimal totalReceived = receivedLines.stream()
+                .map(l -> l.getQuantityReceived() != null ? l.getQuantityReceived() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalReturned = receivedLines.stream()
+                .map(l -> l.getQuantityReturned() != null ? l.getQuantityReturned() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return totalReceived.subtract(totalReturned);
     }
 
     /**

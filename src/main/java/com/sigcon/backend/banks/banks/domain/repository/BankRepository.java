@@ -22,6 +22,22 @@ public interface BankRepository extends JpaRepository<Bank, Long>, JpaSpecificat
 
     boolean existsByNitAndIdNotAndDeletedAtIsNull(String nit, Long id);
 
+    // QA Bloque AU (2026-05-06): validaciones explicitas de unicidad por
+    // nombre corto, SWIFT y codigo ACH. Antes el UK de BD disparaba
+    // DataIntegrityViolation que el GlobalExceptionHandler mapeaba a
+    // "la empresa tiene registros asociados" (mensaje ambiguo).
+    boolean existsByNameShortAndDeletedAtIsNull(String nameShort);
+
+    boolean existsByNameShortAndIdNotAndDeletedAtIsNull(String nameShort, Long id);
+
+    boolean existsBySwiftAndDeletedAtIsNull(String swift);
+
+    boolean existsBySwiftAndIdNotAndDeletedAtIsNull(String swift, Long id);
+
+    boolean existsByCodeAchAndDeletedAtIsNull(String codeAch);
+
+    boolean existsByCodeAchAndIdNotAndDeletedAtIsNull(String codeAch, Long id);
+
     Optional<Bank> findByIdAndDeletedAtIsNull(Long id);
 
     List<Bank> findByCodeAndDeletedAtIsNull(String code);

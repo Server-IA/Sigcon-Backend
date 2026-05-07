@@ -4,7 +4,9 @@ import com.sigcon.backend.banks.bnk_cash_flow.application.CreateCashFlowProjecti
 import com.sigcon.backend.banks.bnk_cash_flow.application.UpdateCashFlowProjectionDTO;
 import com.sigcon.backend.banks.bnk_cash_flow.application.ViewCashFlowProjectionDTO;
 import com.sigcon.backend.banks.bnk_cash_flow.domain.model.CashFlowProjection;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.model.enums.ProjectionPeriodicity;
 import com.sigcon.backend.banks.bnk_cash_flow.domain.model.enums.ProjectionStatus;
+import com.sigcon.backend.banks.bnk_cash_flow.domain.model.enums.ProjectionType;
 import com.sigcon.backend.banks.bnk_cash_flow.domain.repository.CashFlowProjectionRepository;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
@@ -25,7 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.validation.BindingResult;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 /**
@@ -88,8 +92,30 @@ public class CashFlowProjectionService {
                             Optional.of("La fecha de fin debe ser posterior a la fecha de inicio.")));
         }
 
-        // Calcular saldo final en el backend (no se acepta del cliente)
-        BigDecimal finalBalance = request.getInitialBalance().add(request.getNetFlow());
+        // QA Bloque AV (2026-05-06) — Bug 5: validar coherencia de saldo inicial.
+        if (request.getInitialBalance().signum() < 0) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("El saldo inicial no puede ser negativo.")));
+        }
+
+        // QA Bloque AV (2026-05-06) — Bug 5: el rango debe contener al menos
+        // un periodo completo de la periodicidad elegida.
+        long periods = countPeriods(request.getStartDate(), request.getEndDate(), request.getPeriodicity());
+        if (periods <= 0) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("El rango de fechas no contiene ningun periodo completo de "
+                                    + request.getPeriodicity() + ". Aumente el rango o cambie la periodicidad.")));
+        }
+
+        // QA Bloque AV (2026-05-06) — Bug 3 + Bug 4: el `netFlow` se interpreta
+        // como flujo POR PERIODO (no total). El signo se normaliza segun el
+        // tipo de proyeccion (INGRESOS positivo, EGRESOS negativo, NETA tal cual).
+        // El saldo final = inicial + (signedFlowPerPeriod * numPeriodos).
+        BigDecimal signedPerPeriod = signFlowByType(request.getNetFlow(), request.getProjectionType());
+        BigDecimal finalBalance = request.getInitialBalance()
+                .add(signedPerPeriod.multiply(BigDecimal.valueOf(periods)));
 
         CashFlowProjection projection = CashFlowProjection.builder()
                 .name(request.getName().trim())
@@ -99,7 +125,7 @@ public class CashFlowProjectionService {
                 .periodicity(request.getPeriodicity())
                 .projectionType(request.getProjectionType())
                 .initialBalance(request.getInitialBalance())
-                .netFlow(request.getNetFlow())
+                .netFlow(signedPerPeriod)
                 .finalBalance(finalBalance)
                 .currency(request.getCurrency().toUpperCase().trim())
                 .build();
@@ -193,10 +219,40 @@ public class CashFlowProjectionService {
         if (request.getCurrency() != null)       projection.setCurrency(request.getCurrency().toUpperCase().trim());
         if (request.getStatus() != null)         projection.setStatus(request.getStatus());
 
-        // Recalcular finalBalance si cambia alguno de los saldos
-        if (request.getInitialBalance() != null) projection.setInitialBalance(request.getInitialBalance());
-        if (request.getNetFlow() != null)        projection.setNetFlow(request.getNetFlow());
-        projection.setFinalBalance(projection.getInitialBalance().add(projection.getNetFlow()));
+        // QA Bloque AV (2026-05-06) — Bug 5: validar saldo inicial >= 0.
+        if (request.getInitialBalance() != null) {
+            if (request.getInitialBalance().signum() < 0) {
+                return ResponseEntity.badRequest()
+                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                Optional.of("El saldo inicial no puede ser negativo.")));
+            }
+            projection.setInitialBalance(request.getInitialBalance());
+        }
+
+        // QA Bloque AV (2026-05-06) — Bugs 3+4: el flujo recibido se interpreta
+        // POR PERIODO + signo segun tipo. El saldo final se recalcula multiplicando
+        // por la cantidad de periodos en el rango. Si solo cambia el tipo (sin
+        // enviar netFlow), tomamos el netFlow ya almacenado, le quitamos el signo
+        // anterior y lo re-firmamos con el tipo nuevo.
+        BigDecimal rawFlow;
+        if (request.getNetFlow() != null) {
+            rawFlow = request.getNetFlow();
+        } else {
+            // ya estaba firmado en BD; tomar magnitud para re-firmar con tipo nuevo
+            rawFlow = projection.getNetFlow() != null ? projection.getNetFlow().abs() : BigDecimal.ZERO;
+        }
+        BigDecimal signedPerPeriod = signFlowByType(rawFlow, projection.getProjectionType());
+        projection.setNetFlow(signedPerPeriod);
+
+        long periods = countPeriods(projection.getStartDate(), projection.getEndDate(), projection.getPeriodicity());
+        if (periods <= 0) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(
+                            Optional.of("El rango de fechas no contiene ningun periodo completo de "
+                                    + projection.getPeriodicity() + ". Aumente el rango o cambie la periodicidad.")));
+        }
+        projection.setFinalBalance(projection.getInitialBalance()
+                .add(signedPerPeriod.multiply(BigDecimal.valueOf(periods))));
 
         // Registrar motivo de modificación
         if (request.getModificationReason() != null && !request.getModificationReason().isBlank()) {
@@ -393,6 +449,40 @@ public class CashFlowProjectionService {
         return projectionRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() ->
                         new IllegalArgumentException("La proyección no existe o fue eliminada."));
+    }
+
+    /**
+     * QA Bloque AV (2026-05-06) — Bug 3: normaliza el signo del netFlow segun
+     * el tipo de proyeccion. INGRESOS siempre positivo, EGRESOS siempre negativo,
+     * NETA tal cual lo haya enviado el usuario (puede ser positivo o negativo).
+     * El usuario envia magnitudes; el backend se encarga del signo.
+     */
+    private static BigDecimal signFlowByType(BigDecimal raw, ProjectionType type) {
+        if (raw == null) return BigDecimal.ZERO;
+        if (type == ProjectionType.INGRESOS) return raw.abs();
+        if (type == ProjectionType.EGRESOS) return raw.abs().negate();
+        return raw;
+    }
+
+    /**
+     * QA Bloque AV (2026-05-06) — Bug 4: cuenta cuantos periodos completos de la
+     * periodicidad indicada caben en el rango [start, end]. Ejemplo: rango de
+     * 90 dias con periodicidad MENSUAL devuelve 3.
+     */
+    private static long countPeriods(LocalDate start, LocalDate end, ProjectionPeriodicity periodicity) {
+        if (start == null || end == null || periodicity == null) return 0L;
+        long days = ChronoUnit.DAYS.between(start, end);
+        if (days <= 0) return 0L;
+        return switch (periodicity) {
+            case DIARIA     -> days;
+            case SEMANAL    -> days / 7;
+            case QUINCENAL  -> days / 15;
+            case MENSUAL    -> ChronoUnit.MONTHS.between(start, end);
+            case BIMESTRAL  -> ChronoUnit.MONTHS.between(start, end) / 2;
+            case TRIMESTRAL -> ChronoUnit.MONTHS.between(start, end) / 3;
+            case SEMESTRAL  -> ChronoUnit.MONTHS.between(start, end) / 6;
+            case ANUAL      -> ChronoUnit.YEARS.between(start, end);
+        };
     }
 
     /**

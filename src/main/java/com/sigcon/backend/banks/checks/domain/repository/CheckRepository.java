@@ -20,4 +20,15 @@ public interface CheckRepository extends JpaRepository<Check, Long>, JpaSpecific
     Optional<Check> findWithCheckbookAndBankById(@Param("id") Long id);
 
     long countByCheckbook_Id(Long checkbookId);
+
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 2: cheques en estado activo de la
+     * cuenta bancaria. Recorre todas las chequeras de la cuenta y cuenta
+     * cheques cuyo statusCheck NO es ANULADO ni COBRADO.
+     */
+    @Query("SELECT COUNT(c) FROM Check c "
+         + "WHERE c.checkbook.bankAccount.id = :bankAccountId "
+         + "AND c.deletedAt IS NULL "
+         + "AND c.statusCheck NOT IN ('ANULADO', 'COBRADO')")
+    long countActiveByBankAccountId(@Param("bankAccountId") Long bankAccountId);
 }

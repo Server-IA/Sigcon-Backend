@@ -81,6 +81,15 @@ public class Check {
     @Column(name = "support_document_mime", length = 50)
     private String supportDocumentMime;
 
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 5: contenido binario del soporte
+     * para cheques virtuales. Antes solo se guardaba `path` (disco) que
+     * en docker ephemeral se perdia al rebuild. Hibernate ddl-auto crea
+     * la columna BYTEA. Sin @Lob por bug Hibernate 6 que la mapea a OID.
+     */
+    @Column(name = "support_document_content", columnDefinition = "BYTEA")
+    private byte[] supportDocumentContent;
+
     @Column(name = "void_reason", length = 500)
     private String voidReason;
 

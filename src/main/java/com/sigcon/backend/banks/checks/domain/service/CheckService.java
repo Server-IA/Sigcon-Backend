@@ -50,6 +50,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class CheckService {
 
     private static final int MAX_PAGE_SIZE = 200;
@@ -94,6 +95,7 @@ public class CheckService {
 
         String supportPath = null;
         String supportMime = null;
+        byte[] supportContentBytes = null;
         CheckType checkType = request.getTypeCheck() == null ? CheckType.FISICO : request.getTypeCheck();
 
         if (checkType == CheckType.VIRTUAL) {
@@ -104,6 +106,8 @@ public class CheckService {
             supportMime = resolveSupportedMime(request.getSupportDocumentBase64(), decoded);
             String extension = extensionByMime(supportMime);
             supportPath = buildVirtualDocumentPath(request.getNumberCheck(), extension);
+            // QA Bloque AU (2026-05-06) — Bug 5: persistir el contenido en BD.
+            supportContentBytes = decoded;
         }
 
         Check check = Check.builder()
@@ -118,6 +122,7 @@ public class CheckService {
                 .observations(emptyToNull(request.getObservations()))
                 .supportDocumentPath(supportPath)
                 .supportDocumentMime(supportMime)
+                .supportDocumentContent(supportContentBytes)
                 .blockPayment(false)
                 .build();
 
@@ -284,11 +289,60 @@ public class CheckService {
 
         if (movementToMatch != null) {
             financialMovementService.markMatchedToCheck(movementToMatch, check.getId());
+        } else if (request.getConciliationMethod() == ConciliationMethod.MANUAL
+                   && request.getFinancialMovementId() == null) {
+            // QA Bloque AU (2026-05-06) — Bug 5: cuando el cobro es MANUAL y
+            // el usuario no asocia un FinancialMovement existente, generamos
+            // automaticamente uno (egreso) que descuente el valor del cheque
+            // del saldo de la cuenta bancaria. Antes el cheque quedaba como
+            // COBRADO pero la cuenta nunca veia el descuento real.
+            try {
+                FinancialMovement fm = FinancialMovement.builder()
+                        .bankAccount(check.getCheckbook().getBankAccount())
+                        .movementDate(request.getCollectionDate())
+                        .amount(check.getValue().negate())
+                        .description("Cobro cheque #" + check.getNumberCheck()
+                                + " a " + check.getBeneficiary())
+                        .externalReference(request.getCollectionReference())
+                        .build();
+                FinancialMovement savedFm = financialMovementRepository.save(fm);
+                check.setFinancialMovementId(savedFm.getId());
+                checkRepository.save(check);
+                log.info("FM generado automaticamente para cobro de cheque {}: fmId={}",
+                        check.getId(), savedFm.getId());
+            } catch (RuntimeException ex) {
+                log.warn("No se pudo generar FM automatico para cobro de cheque {}: {}",
+                        check.getId(), ex.getMessage());
+            }
         }
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Cheque conciliado exitosamente."),
                 Optional.of(toDto(check))));
+    }
+
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 5: descarga binaria del soporte del
+     * cheque virtual. Devuelve el contenido con Content-Type/Disposition
+     * apropiados.
+     */
+    public ResponseEntity<?> downloadSupport(Long id) {
+        Check check = checkRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Cheque no encontrado"));
+        byte[] content = check.getSupportDocumentContent();
+        if (content == null || content.length == 0) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "El cheque no tiene documento soporte adjunto.")));
+        }
+        String mime = check.getSupportDocumentMime() != null
+                ? check.getSupportDocumentMime() : "application/octet-stream";
+        String ext = mime.contains("pdf") ? "pdf" : mime.contains("png") ? "png" : "jpg";
+        String fileName = "cheque-" + check.getNumberCheck() + "-soporte." + ext;
+        return ResponseEntity.ok()
+                .header("Content-Type", mime)
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .body(content);
     }
 
     @Transactional

@@ -56,7 +56,9 @@ public class InvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Archivo no valido, tipo no permitido o factura no existe")
     })
     @PostMapping(value = "/invoices/{id}/attachments", consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA-BLOQUE-AY HU-AP-12 E10 (2026-05-06): permisos granulares de attachments,
+    // un usuario con rol de solo consulta no debe poder adjuntar.
+    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_ATTACHMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> upload(@PathVariable Long id,
                                      @RequestParam("file") MultipartFile file,
                                      @RequestParam(value = "documentType", required = false) String documentType,
@@ -79,7 +81,7 @@ public class InvoiceAttachmentController {
         @ApiResponse(responseCode = "200", description = "Listado obtenido")
     })
     @GetMapping("/invoices/{id}/attachments")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_INVOICE_ATTACHMENT') or hasAuthority('PERM_READ_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> listByInvoice(@PathVariable Long id,
                                             @RequestParam(value = "documentType", required = false) String documentType) {
         return service.listByInvoice(id, documentType);
@@ -95,7 +97,7 @@ public class InvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Adjunto no encontrado")
     })
     @GetMapping("/attachments/{id}/download")
-    @PreAuthorize("hasAuthority('PERM_READ_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_VIEW_INVOICE_ATTACHMENT') or hasAuthority('PERM_READ_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> download(@PathVariable Long id) {
         try {
             InvoiceAttachment a = service.getForDownload(id);
@@ -124,7 +126,7 @@ public class InvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Adjunto no existe, archivo invalido o ya fue reemplazado")
     })
     @PostMapping(value = "/attachments/{id}/replace", consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('PERM_UPDATE_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_ATTACHMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> replace(@PathVariable Long id,
                                       @RequestParam("file") MultipartFile file,
                                       @RequestParam(value = "description", required = false) String description) {
@@ -146,7 +148,7 @@ public class InvoiceAttachmentController {
         @ApiResponse(responseCode = "400", description = "Adjunto no encontrado")
     })
     @DeleteMapping("/attachments/{id}")
-    @PreAuthorize("hasAuthority('PERM_DELETE_AP_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_DELETE_INVOICE_ATTACHMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);

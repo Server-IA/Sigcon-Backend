@@ -24,7 +24,10 @@ import com.sigcon.backend.general.accounting.AccountingPeriodService;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO;
+import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntry;
+import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus;
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
+import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
 import com.sigcon.backend.invoices.ap_payments.application.ApPaymentDTO;
 import com.sigcon.backend.invoices.ap_payments.application.CreateApPaymentRequest;
@@ -57,6 +60,9 @@ public class ApPaymentService {
     private final ApPaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
     private final JournalEntryService journalEntryService;
+    // HU-AP-07 E2 (2026-05-06): chequear que el JE de la factura este POSTED
+    // antes de permitir registrar pagos.
+    private final JournalEntryRepository journalEntryRepository;
     private final AccountingPeriodService accountingPeriodService;
     private final AccountMappingService accountMappingService;
     private final ApplicationEventPublisher eventPublisher;
@@ -95,6 +101,26 @@ public class ApPaymentService {
         }
         if (invoice.getStatus() == StatusesInvoices.PAID) {
             throw new IllegalStateException("La factura ya se encuentra totalmente pagada");
+        }
+
+        // HU-AP-07 E2 (2026-05-06): no se puede pagar una factura cuyo
+        // comprobante contable aun esta en BORRADOR. La obligacion contable
+        // debe estar reconocida antes de aceptar pagos. Mensaje exacto del
+        // Excel HU para auditoria legal.
+        if (invoice.getJournalEntryId() != null) {
+            JournalEntry je = journalEntryRepository.findById(invoice.getJournalEntryId()).orElse(null);
+            if (je == null || je.getStatus() != JournalEntryStatus.POSTED) {
+                String estado = je == null ? "INEXISTENTE" : je.getStatus().name();
+                throw new IllegalStateException(
+                    "No se puede registrar el pago: la factura aun no esta contabilizada en Contabilidad General "
+                    + "(comprobante en estado " + estado + "). Contabilice la factura antes de registrar pagos.");
+            }
+        } else {
+            // Defensa adicional: si la factura existe sin journalEntryId, es un caso
+            // anomalo (datos inconsistentes). Bloquear pago hasta que se corrija.
+            throw new IllegalStateException(
+                "No se puede registrar el pago: la factura no tiene comprobante contable asociado. "
+                + "Contacte al administrador para regenerar el asiento.");
         }
 
         // HU-AP-07: calcular descuento por pronto pago si aplica

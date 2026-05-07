@@ -60,12 +60,37 @@ public class BankBranchService {
 
                 Optional<BankBranch> existingBranch = bankBranchRepository.findByBankIdAndMainBranchTrueAndDeletedAtIsNull(bank.getId());
 
+                // QA Bloque AU (2026-05-06) — Bug 1: la primera sucursal de un
+                // banco DEBE ser Principal. Si el frontend manda mainBranch=false
+                // y aun no existe principal, forzamos true (defensa en profundidad
+                // contra request invalido). Si ya hay principal, respetamos el
+                // valor del request (default false).
+                boolean isFirstBranch = !existingBranch.isPresent();
+                boolean mainBranchValue;
+                if (isFirstBranch) {
+                        mainBranchValue = true;
+                } else {
+                        mainBranchValue = request.getMainBranch() != null && request.getMainBranch();
+                }
+
+                // QA Bloque AU — Bug 1 swap consistente con HU-057 E2 (mismo
+                // patron del update). Si ya hay Principal y el usuario crea
+                // otra Principal, hacemos SWAP: la previa pasa a Secundaria.
+                if (mainBranchValue && !isFirstBranch) {
+                        BankBranch oldMain = existingBranch.get();
+                        oldMain.setMainBranch(false);
+                        bankBranchRepository.save(oldMain);
+                        auditPublisher.publishUpdate(AuditModule.BNK, "BankBranch", oldMain.getId(),
+                                        "Swap sede principal: BankBranch " + oldMain.getId() + " ahora secundaria");
+                }
+
                 BankBranch branch = BankBranch.builder()
                                 .address(request.getAddress().trim())
                                 .municipality(municipality)
-                                .mainBranch(
-                                        !existingBranch.isPresent() ? true : request.getMainBranch() != null ? request.getMainBranch() : false)
+                                .mainBranch(mainBranchValue)
                                 .bank(bank)
+                                // QA Bloque AU (2026-05-06) — Bug 3: persistir telefono.
+                                .phone(request.getPhone() != null ? request.getPhone().trim() : null)
                                 .build();
 
                 bankBranchRepository.save(branch);
@@ -176,8 +201,12 @@ public class BankBranchService {
                 if (request.getAddress() != null && !request.getAddress().equals(branch.getAddress())) {
                         branch.setAddress(request.getAddress().trim());
                 }
-                
 
+                // QA Bloque AU (2026-05-06) — Bug 3: actualizar telefono.
+                if (request.getPhone() != null) {
+                        String trimmed = request.getPhone().trim();
+                        branch.setPhone(trimmed.isEmpty() ? null : trimmed);
+                }
 
                 if(request.getMainBranch() != null && request.getMainBranch() != branch.getMainBranch()) {
                         branch.setMainBranch(request.getMainBranch());
@@ -243,6 +272,8 @@ public class BankBranchService {
                 return BankBranchDTO.builder()
                         .id(branch.getId())
                         .address(branch.getAddress())
+                        // QA Bloque AU (2026-05-06) — Bug 3: exponer telefono.
+                        .phone(branch.getPhone())
                         .municipality(branch.getMunicipality() != null
                                         ? toMunicipalityDto(branch.getMunicipality())
                                         : null)

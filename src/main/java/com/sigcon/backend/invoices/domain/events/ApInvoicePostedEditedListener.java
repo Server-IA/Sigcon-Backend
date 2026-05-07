@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryLineRequest;
 import com.sigcon.backend.general.accounting.journal.application.CreateJournalEntryRequest;
 import com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO;
@@ -34,6 +36,7 @@ public class ApInvoicePostedEditedListener {
 
     private final JournalEntryService journalEntryService;
     private final JournalEntryRepository journalEntryRepository;
+    private final AuditPublisher auditPublisher;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -74,6 +77,21 @@ public class ApInvoicePostedEditedListener {
                     original.getId(), correctionReq, "sistema");
             log.info("HU-AP-13 E2 listener: ajuste contable DRAFT id={} generado para factura {} (JE original {} POSTED)",
                     correction.getId(), event.getInvoiceId(), original.getId());
+
+            // QA-BLOQUE-AY HU-AP-13 E2 (2026-05-06): registrar en auditoria la
+            // generacion del comprobante de ajuste para que el contador pueda
+            // rastrear desde AU el flujo completo: edicion factura -> evento ->
+            // comprobante de correccion. Antes la generacion solo quedaba en log
+            // de servidor y QA reporto que CG no notificaba nada.
+            try {
+                auditPublisher.publishCreate(AuditModule.CG, "JournalEntry", correction.getId(),
+                        "Comprobante de ajuste generado por edicion de factura AP "
+                        + event.getResolutionInvoice() + " | JE original=" + original.getId()
+                        + " | factura=" + event.getInvoiceId());
+            } catch (RuntimeException auditEx) {
+                log.warn("HU-AP-13 E2 listener: no se pudo registrar audit log del ajuste {}: {}",
+                        correction.getId(), auditEx.getMessage());
+            }
         } catch (Exception e) {
             log.warn("HU-AP-13 E2 listener: no se pudo generar ajuste contable para factura {}: {}",
                     event.getInvoiceId(), e.getMessage());

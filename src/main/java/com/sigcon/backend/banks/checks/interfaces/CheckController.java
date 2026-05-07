@@ -63,6 +63,19 @@ public class CheckController {
         return checkService.getDetail(id);
     }
 
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 5: descargar el documento soporte
+     * de un cheque virtual. Antes el contenido se guardaba en disco
+     * (ephemeral en docker) y no habia endpoint para descargarlo.
+     */
+    @GetMapping("/{id}/support/download")
+    @PreAuthorize("hasAuthority('PERM_BNK.CHEQUES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @Operation(summary = "Descargar soporte cheque virtual",
+            description = "Devuelve el archivo binario (PDF/JPG/PNG) del soporte del cheque virtual.")
+    public ResponseEntity<?> downloadSupport(@PathVariable Long id) {
+        return checkService.downloadSupport(id);
+    }
+
     @PutMapping("/{id}/void")
     @PreAuthorize("hasAuthority('PERM_VOID_BANK_CHECK') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "Anular cheque", description = "BNK-RF-22: anula un cheque con motivo y confirmacion por contrasena.")

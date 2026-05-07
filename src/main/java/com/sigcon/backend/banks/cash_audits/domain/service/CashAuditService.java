@@ -229,6 +229,26 @@ public class CashAuditService {
             }
         }
 
+        // QA Bloque AU (2026-05-06) — Bug 2: el arqueo APROBADO debe
+        // ajustar el saldo fisico de la caja a `physicalBalance` (lo
+        // contado realmente). El JE de ajuste contable (lineas arriba) ya
+        // refleja la diferencia en libros; aqui actualizamos la entidad
+        // Cash para que el balance del modulo BNK tambien quede consistente.
+        // Si no se hace, la caja sigue mostrando $50.000 cuando el arqueo
+        // dijo que solo hay $35.000 fisicos.
+        try {
+            com.sigcon.backend.banks.cash_management.domain.model.Cash cash = audit.getCash();
+            if (cash != null && audit.getPhysicalBalance() != null) {
+                cash.setCurrentBalance(audit.getPhysicalBalance());
+                cashRepository.save(cash);
+                log.info("Saldo de caja actualizado por arqueo: cashId={} nuevoSaldo={}",
+                        cash.getId(), audit.getPhysicalBalance());
+            }
+        } catch (RuntimeException ex) {
+            log.warn("No se pudo actualizar el saldo de la caja tras aprobar arqueo {}: {}",
+                    audit.getId(), ex.getMessage());
+        }
+
         CashAudit saved = cashAuditRepository.save(audit);
         log.info("Arqueo de caja aprobado: id={}", saved.getId());
 

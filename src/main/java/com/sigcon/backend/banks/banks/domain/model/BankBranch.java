@@ -46,6 +46,15 @@ public class BankBranch {
     @Column(name = "address", nullable = false, length = 45)
     private String address;
 
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 3: telefono de la sucursal. La HU pide
+     * que cada sucursal tenga su contacto telefonico para que el contador
+     * pueda comunicarse cuando hay incidencias bancarias. Hibernate ddl-auto
+     * crea la columna automaticamente; nullable para no romper datos legacy.
+     */
+    @Column(name = "phone", length = 30)
+    private String phone;
+
     @Column(name = "main_branch", nullable = false)
     private Boolean mainBranch;
 
@@ -77,7 +86,15 @@ public class BankBranch {
         }
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
-        this.mainBranch = false;
+        // QA Bloque AU (2026-05-06) — Bug 1 (BUG CRITICO): el @PrePersist tenia
+        // `this.mainBranch = false` lo cual SOBRESCRIBIA siempre el valor que
+        // el service inyectaba via builder. Resultado: NUNCA se podia crear
+        // una sucursal Principal — todas terminaban Secundaria. Ahora solo
+        // inicializamos a false si es null (defensa por NOT NULL en BD), sin
+        // sobrescribir el valor del service.
+        if (this.mainBranch == null) {
+            this.mainBranch = false;
+        }
     }
 
     @PreUpdate

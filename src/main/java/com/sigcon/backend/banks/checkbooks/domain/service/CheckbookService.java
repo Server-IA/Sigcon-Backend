@@ -98,19 +98,45 @@ public class CheckbookService {
                 return ErrorRespondJson.getErrorRespondMessage(Optional.of("Rango superpuesto"));
         }
 
+        // QA Bloque AU (2026-05-06) — Bug 3: validar reglas al cambiar
+        // estado en update.
+        // - INACTIVA/ANULADA/BLOQUEADA: bloquear si hay cheques activos
+        //   (no anulados ni cobrados aun, es decir EMITIDOS pendientes).
+        // - Activacion: libre.
+        if (isUpdate && request.getStatus() != null) {
+            CheckbookStatus oldStatus = entity.getStatus();
+            CheckbookStatus newStatus = request.getStatus();
+            boolean wantsToInactivate = newStatus == CheckbookStatus.ANULADA
+                    || newStatus == CheckbookStatus.BLOQUEADA;
+            if (wantsToInactivate && oldStatus != newStatus) {
+                long activeChecks = checkRepository.countActiveByBankAccountId(bankAccount.getId());
+                if (activeChecks > 0) {
+                    return ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "No se puede inactivar la chequera porque existen "
+                            + activeChecks + " cheque(s) en estado EMITIDO o no conciliados. "
+                            + "Anule o concilie los cheques pendientes antes de inactivarla."));
+                }
+            }
+        }
+
         // User user = userUtil.getUser();
 
         entity.setBankAccount(bankAccount);
 
-        entity.setCheckbookNumber(request.getCheckbookNumber());
+        // QA Bloque AU (2026-05-06) — Bug 3: en update preservar campos
+        // criticos del rango y numero. La HU exige inmutabilidad porque
+        // los cheques emitidos hacen referencia a esos numeros.
+        if (!isUpdate) {
+            entity.setCheckbookNumber(request.getCheckbookNumber());
+            entity.setCheckStartNumber(request.getCheckStartNumber());
+            entity.setCheckEndNumber(request.getCheckEndNumber());
+            entity.setReceivedDate(request.getReceivedDate());
+        }
         entity.setIssuingBank(request.getIssuingBank());
-        entity.setCheckStartNumber(request.getCheckStartNumber());
-        entity.setCheckEndNumber(request.getCheckEndNumber());
-        entity.setReceivedDate(request.getReceivedDate());
         entity.setActivationDate(request.getActivationDate());
         entity.setObservations(request.getObservations());
 
-        int total = (int) (request.getCheckEndNumber() - request.getCheckStartNumber() + 1);
+        int total = (int) (entity.getCheckEndNumber() - entity.getCheckStartNumber() + 1);
         entity.setTotalChecks(total);
 
         int used = isUpdate

@@ -85,6 +85,9 @@ public class BankAccountService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final CostCenterRepository costCenterRepository;
     private final CheckbookRepository checkbookRepository;
+    // QA Bloque AU (2026-05-06) — Bug 2: validar cheques activos al desactivar
+    // el manejo de chequera.
+    private final com.sigcon.backend.banks.checks.domain.repository.CheckRepository checkRepository;
     // QA HU-003 E1: validar movimientos antes de eliminar cuenta bancaria.
     private final com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository financialMovementRepository;
     private final AuditPublisher auditPublisher;
@@ -128,9 +131,15 @@ public class BankAccountService {
         validateBankActive(bank);
         validateCurrencyActive(currencyType);
 
-        // Sucursal y centro de costo son opcionales
-        BankBranch bankBranch = request.getBankBranchId() != null ? getBankBranchOrThrow(request.getBankBranchId()) : null;
-        CostCenter costCenter = request.getCostCenterId() != null ? getCostCenterOrThrow(request.getCostCenterId()) : null;
+        // Sucursal y centro de costo son opcionales.
+        // QA Bloque AU (2026-05-06) — Bug 1: tratar 0 como null. El frontend
+        // envia `Number(record.costCenterId) || 0` que mapea "" -> 0 cuando
+        // el usuario no selecciona ninguna opcion, y antes el backend tomaba
+        // 0 como id valido y lanzaba "Centro de costo no encontrado".
+        BankBranch bankBranch = (request.getBankBranchId() != null && request.getBankBranchId() > 0)
+                ? getBankBranchOrThrow(request.getBankBranchId()) : null;
+        CostCenter costCenter = (request.getCostCenterId() != null && request.getCostCenterId() > 0)
+                ? getCostCenterOrThrow(request.getCostCenterId()) : null;
 
         // Regla de negocio: sobregiro requiere limite de credito positivo
         if (Boolean.TRUE.equals(request.getAllowsOverdraft()) && (request.getCreditLimit() == null || request.getCreditLimit().compareTo(BigDecimal.ZERO) <= 0)) {
@@ -284,11 +293,13 @@ public class BankAccountService {
         account.setMinimumBalance(request.getMinimumBalance());
         account.setUpdatedBy(getCurrentUserId());
 
-        if (request.getCostCenterId() != null) {
+        // QA Bloque AU (2026-05-06) — Bug 1 + Bug 3: tratar 0 como null y
+        // NO permitir borrar la asignacion de centro de costo en update
+        // (la HU exige preservar la trazabilidad contable).
+        if (request.getCostCenterId() != null && request.getCostCenterId() > 0) {
             account.setCostCenter(getCostCenterOrThrow(request.getCostCenterId()));
-        } else {
-            account.setCostCenter(null);
         }
+        // Si llega null o 0, mantenemos el costCenter actual sin cambios.
 
         bankAccountRepository.save(account);
         auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount actualizado id=" + account.getId());
@@ -369,6 +380,69 @@ public class BankAccountService {
      * @param motivo justificacion de la desactivacion (minimo 5 caracteres)
      * @return ResponseEntity con la cuenta desactivada o error de validacion
      */
+    /**
+     * QA Bloque AU (2026-05-06) — Bug 2: toggle handlesCheckbook con reglas.
+     *
+     * <p>Activar (false → true): permitido si la cuenta esta ACTIVA.</p>
+     * <p>Desactivar (true → false): bloqueado si existen cheques en estado
+     * EMITIDO (no anulados ni cobrados aun). Esto preserva la trazabilidad
+     * y evita perder cheques pendientes.</p>
+     *
+     * @param id      identificador de la cuenta
+     * @param enable  true para activar, false para desactivar
+     * @param motivo  justificacion (recomendado para auditoria)
+     * @return ResponseEntity con la cuenta actualizada o error de regla de negocio
+     */
+    @Transactional
+    public ResponseEntity<?> toggleCheckbook(Long id, Boolean enable, String motivo) {
+        if (enable == null) {
+            return error("BNK-ERR-030", "Debe indicar el valor a aplicar (enable: true/false)");
+        }
+
+        BankAccount account = getBankAccountOrThrow(id);
+        if (account.getDeletedAt() != null) {
+            return error("BNK-ERR-029", "Cuenta no encontrada");
+        }
+        if (account.getStatus() != BankAccountStatus.ACTIVA) {
+            return error("BNK-ERR-031", "Solo se puede cambiar el manejo de chequera en cuentas ACTIVAS");
+        }
+
+        boolean current = Boolean.TRUE.equals(account.getHandlesCheckbook());
+        if (current == enable) {
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("El manejo de chequera ya estaba en el estado solicitado."),
+                Optional.of(toDto(account))
+            ));
+        }
+
+        if (!enable) {
+            // Desactivar: bloquear si hay cheques activos (no anulados ni cobrados).
+            long activeChecks = checkRepository.countActiveByBankAccountId(id);
+            if (activeChecks > 0) {
+                return error("BNK-ERR-032",
+                    "No se puede desactivar el manejo de chequera porque existen "
+                    + activeChecks + " cheque(s) en estado EMITIDO o no conciliados. "
+                    + "Anule o concilie los cheques pendientes antes de desactivar.");
+            }
+        }
+
+        account.setHandlesCheckbook(enable);
+        account.setUpdatedBy(getCurrentUserId());
+        bankAccountRepository.save(account);
+
+        String descripcion = enable
+            ? ("Manejo de chequera ACTIVADO" + (motivo != null && !motivo.isBlank() ? " | motivo=" + motivo : ""))
+            : ("Manejo de chequera DESACTIVADO" + (motivo != null && !motivo.isBlank() ? " | motivo=" + motivo : ""));
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), descripcion);
+
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+            Optional.of(enable
+                ? "Manejo de chequera activado correctamente."
+                : "Manejo de chequera desactivado correctamente."),
+            Optional.of(toDto(account))
+        ));
+    }
+
     @Transactional
     public ResponseEntity<?> deactivate(Long id, String motivo) {
         if (!StringUtils.hasText(motivo) || motivo.trim().length() < 5) {
@@ -607,6 +681,9 @@ public class BankAccountService {
                 .notifyLowBalance(e.getNotifyLowBalance())
                 .minimumBalance(e.getMinimumBalance())
                 .bankPhone(e.getBankPhone())
+                // QA Bloque AU (2026-05-06) — Bug 1: incluir handlesCheckbook
+                // para que el View y Update muestren el estado real del toggle.
+                .handlesCheckbook(e.getHandlesCheckbook())
                 // Flag para que el frontend deshabilite campos criticos como
                 // codigo y banco si la cuenta ya tiene chequeras/movimientos.
                 .hasAssociatedAccounts(

@@ -198,6 +198,18 @@ public class InvoiceAttachmentService {
         }
         String fileHash = computeSha256(content);
 
+        // QA-BLOQUE-AY HU-AP-12 E4 (2026-05-06): bloquear reemplazo cuando el
+        // archivo nuevo coincide con el documento vigente, ya sea por mismo
+        // nombre o por mismo contenido (hash). El HU exige el mensaje literal.
+        boolean sameName = file.getOriginalFilename() != null
+                && file.getOriginalFilename().equalsIgnoreCase(previous.getFileName());
+        boolean sameContent = fileHash != null && fileHash.equals(previous.getFileHash());
+        if (sameName || sameContent) {
+            throw new IllegalArgumentException(
+                "El documento seleccionado ya corresponde a la version vigente de esta factura. "
+                + "Cargue una version diferente para reemplazar.");
+        }
+
         InvoiceAttachment newer = InvoiceAttachment.builder()
                 .invoiceId(previous.getInvoiceId())
                 .documentType(previous.getDocumentType())
@@ -274,6 +286,16 @@ public class InvoiceAttachmentService {
         if (inv != null && inv.getStatus() == com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices.VOIDED) {
             throw new IllegalStateException(
                 "La factura esta anulada. La trazabilidad documental se conserva: no se pueden eliminar adjuntos.");
+        }
+        // QA-BLOQUE-AY HU-AP-12 E9 (2026-05-06): no se permite eliminar versiones
+        // historicas de adjuntos. Se considera version historica cuando el
+        // adjunto fue reemplazado (replaced_by_id != null) o cuando NO es la
+        // version vigente para su (invoiceId, documentType). Las versiones
+        // anteriores deben preservarse para trazabilidad y auditoria.
+        if (att.getReplacedById() != null) {
+            throw new IllegalStateException(
+                "No se permite eliminar versiones historicas del documento. "
+                + "Las versiones anteriores se conservan para trazabilidad y auditoria.");
         }
         attachmentRepository.deleteById(attachmentId);
         auditPublisher.publishDelete(AuditModule.AP, "InvoiceAttachment", attachmentId,

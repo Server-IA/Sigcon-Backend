@@ -71,6 +71,35 @@ public class BankService {
                                                         Optional.of("Ya existe un banco registrado con ese NIT")));
                 }
 
+                // QA Bloque AU (2026-05-06) — Bug 1: unicidad explicita en nombre,
+                // nombre corto, SWIFT y codigo ACH. Antes el UK de BD producia el
+                // mensaje ambiguo "la empresa tiene registros asociados" porque los
+                // indices se llaman uk_banks_company_* y el handler matcheaba "compan".
+                if (request.getName() != null
+                                && bankRepository.existsByNameAndDeletedAtIsNull(request.getName().trim())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese nombre")));
+                }
+                if (request.getNameShort() != null
+                                && bankRepository.existsByNameShortAndDeletedAtIsNull(request.getNameShort().trim())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese nombre corto")));
+                }
+                if (request.getSwift() != null
+                                && bankRepository.existsBySwiftAndDeletedAtIsNull(request.getSwift().trim())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese código SWIFT")));
+                }
+                if (request.getCodeAch() != null && !request.getCodeAch().isBlank()
+                                && bankRepository.existsByCodeAchAndDeletedAtIsNull(request.getCodeAch().trim())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese código ACH")));
+                }
+
                 Country country = resolveCountry(request.getCountryId());
 
                 Bank bank = Bank.builder()
@@ -146,6 +175,51 @@ public class BankService {
                 }
 
                 Bank bank = getBankOrThrow(id);
+
+                // QA Bloque AU (2026-05-06) — Bug 1: validacion de unicidad
+                // excluyendo el id actual, antes de mutar la entidad.
+                if (request.getCode() != null
+                                && bankRepository.existsByCodeAndIdNotAndDeletedAtIsNull(
+                                                request.getCode().trim(), id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese código")));
+                }
+                if (request.getNit() != null
+                                && bankRepository.existsByNitAndIdNotAndDeletedAtIsNull(
+                                                request.getNit().trim(), id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese NIT")));
+                }
+                if (request.getName() != null
+                                && bankRepository.existsByNameAndIdNotAndDeletedAtIsNull(
+                                                request.getName().trim(), id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese nombre")));
+                }
+                if (request.getNameShort() != null
+                                && bankRepository.existsByNameShortAndIdNotAndDeletedAtIsNull(
+                                                request.getNameShort().trim(), id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese nombre corto")));
+                }
+                if (request.getSwift() != null
+                                && bankRepository.existsBySwiftAndIdNotAndDeletedAtIsNull(
+                                                request.getSwift().trim(), id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese código SWIFT")));
+                }
+                if (request.getCodeAch() != null && !request.getCodeAch().isBlank()
+                                && bankRepository.existsByCodeAchAndIdNotAndDeletedAtIsNull(
+                                                request.getCodeAch().trim(), id)) {
+                        return ResponseEntity.badRequest()
+                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                        Optional.of("Ya existe un banco registrado con ese código ACH")));
+                }
 
                 if (request.getCountryId() != null) {
                         bank.setCountry(resolveCountry(request.getCountryId()));

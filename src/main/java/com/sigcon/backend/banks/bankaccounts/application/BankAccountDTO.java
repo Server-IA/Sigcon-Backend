@@ -108,6 +108,13 @@ public class BankAccountDTO {
     @Schema(description = "Telefono de banco / sucursal")
     private String bankPhone;
 
+    // QA Bloque AU (2026-05-06) — Bug 1 (toggle Maneja chequera): el DTO NO
+    // exponia este campo, asi que el frontend lo recibia undefined y al
+    // re-abrir el detalle/edicion siempre se veia "No". Ahora se incluye en
+    // toDto.
+    @Schema(description = "Indica si la cuenta maneja chequera (cheques fisicos/virtuales)")
+    private Boolean handlesCheckbook;
+
     @Schema(description = "Indica si la cuenta tiene chequeras o movimientos asociados (frontend deshabilita campos criticos)")
     private Boolean hasAssociatedAccounts;
 }
