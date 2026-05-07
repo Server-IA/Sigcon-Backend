@@ -41,13 +41,21 @@
 -- usa este script para sus 6 empresas QA (90X1100000, 90X1211111, etc.).
 -- Asi las QA creadas con NIT '90...' sobreviven re-runs.
 -- =============================================================================
+-- QA Bloque AU+ (2026-05-06) FIX root-cause: el filtro NOT LIKE '901%' NO
+-- excluia los NITs de las empresas QA (que empiezan con '9001211111',
+-- '9001322222', etc. — todos comienzan con '9001'). Resultado: cada
+-- re-arranque del backend este UPDATE soft-deleteaba las empresas QA
+-- creadas en el arranque anterior, y el PASO 2 las re-creaba con ids
+-- nuevos generando NITs duplicados (id=4 deleted, id=12 active misma NIT).
+--
+-- Fix: lista explicita de NITs LEGADOS a desactivar. Las empresas QA con
+-- NIT 9001NNNNNN sobreviven re-runs porque NO estan en esta lista.
 UPDATE companies SET deleted_at = NOW(), status = 'INACTIVE'
-WHERE id BETWEEN 2 AND 6
-  AND deleted_at IS NULL
-  AND nit NOT LIKE '901%';
+WHERE deleted_at IS NULL
+  AND nit IN ('900100200', '800500600', '900111222', '900222333');
 
 UPDATE users SET deleted_at = NOW(), status = 'INACTIVE'
-WHERE company_id IN (SELECT id FROM companies WHERE deleted_at IS NOT NULL AND status = 'INACTIVE')
+WHERE company_id IN (SELECT id FROM companies WHERE deleted_at IS NOT NULL)
   AND deleted_at IS NULL;
 
 -- =============================================================================
@@ -188,12 +196,36 @@ BEGIN
     -- --------------------------------------------------------------------- --
     -- 1) USUARIOS — admin, contador, auditor
     -- --------------------------------------------------------------------- --
+    -- QA Bloque AU+ (2026-05-06): WHERE NOT EXISTS en vez de ON CONFLICT
+    -- DO NOTHING. La tabla users no tenia UNIQUE sobre email hasta V9-ZZZT,
+    -- y aunque ahora si la tiene, este patron es idempotente independiente
+    -- del index. Cada usuario solo se crea si NO existe activo con ese email.
     INSERT INTO users (name, lastname, username, email, password, status, failed_login_attempts, company_id, created_at, updated_at)
-    VALUES
-      ('Admin'   , 'QA' || p_suffix, 'admin.qa'    || p_suffix, 'admin@empresa'    || p_suffix || '.test', v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW()),
-      ('Contador', 'QA' || p_suffix, 'contador.qa' || p_suffix, 'contador@empresa' || p_suffix || '.test', v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW()),
-      ('Auditor' , 'QA' || p_suffix, 'auditor.qa'  || p_suffix, 'auditor@empresa'  || p_suffix || '.test', v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW())
-    ON CONFLICT DO NOTHING;
+    SELECT 'Admin', 'QA' || p_suffix, 'admin.qa' || p_suffix,
+           'admin@empresa' || p_suffix || '.test',
+           v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW()
+     WHERE NOT EXISTS (
+        SELECT 1 FROM users
+         WHERE lower(email) = lower('admin@empresa' || p_suffix || '.test')
+           AND deleted_at IS NULL);
+
+    INSERT INTO users (name, lastname, username, email, password, status, failed_login_attempts, company_id, created_at, updated_at)
+    SELECT 'Contador', 'QA' || p_suffix, 'contador.qa' || p_suffix,
+           'contador@empresa' || p_suffix || '.test',
+           v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW()
+     WHERE NOT EXISTS (
+        SELECT 1 FROM users
+         WHERE lower(email) = lower('contador@empresa' || p_suffix || '.test')
+           AND deleted_at IS NULL);
+
+    INSERT INTO users (name, lastname, username, email, password, status, failed_login_attempts, company_id, created_at, updated_at)
+    SELECT 'Auditor', 'QA' || p_suffix, 'auditor.qa' || p_suffix,
+           'auditor@empresa' || p_suffix || '.test',
+           v_pwd_hash, 'ACTIVE', 0, p_company_id, NOW(), NOW()
+     WHERE NOT EXISTS (
+        SELECT 1 FROM users
+         WHERE lower(email) = lower('auditor@empresa' || p_suffix || '.test')
+           AND deleted_at IS NULL);
 
     -- IMPORTANTE: filtrar deleted_at IS NULL y ORDER BY id DESC. Si corridas
     -- previas soft-deletaron al usuario con ese email, queremos al mas reciente

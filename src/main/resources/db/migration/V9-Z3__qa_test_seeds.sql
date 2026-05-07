@@ -57,9 +57,21 @@ BEGIN
     SELECT id INTO v_role_contador_id FROM roles WHERE name = 'CONTADOR' AND deleted_at IS NULL;
     SELECT id INTO v_role_auditor_id FROM roles WHERE name = 'AUDITOR' AND deleted_at IS NULL;
 
-    FOR c IN SELECT id, business_name, nit FROM companies WHERE deleted_at IS NULL ORDER BY id
+    -- QA Bloque AU+ (2026-05-06) FIX: V9-Z3 originalmente iteraba sobre TODAS
+    -- las companies activas creando users con sufijo "tenantN". Cuando V9-ZZC
+    -- crea las 6 empresas QA, V9-Z3 vuelve a correr y agrega
+    -- admin@tenant4.test, admin@tenant5.test, etc., ENSUCIANDO el dataset
+    -- con users adicionales que confunden al QA.
+    --
+    -- Ahora SOLO crea users para las 3 empresas legacy con NIT especifico:
+    -- 900000000 (SIGCON DEMO), 900100200 (ACME DEMO), 800500600 (CONTADOR TEST).
+    -- Las empresas QA tienen sus propios users via V9-ZZC con emails
+    -- admin@empresaN.test (un set claro y consistente).
+    FOR c IN SELECT id, business_name, nit FROM companies
+              WHERE deleted_at IS NULL
+                AND nit IN ('900000000', '900100200', '800500600')
+              ORDER BY id
     LOOP
-        -- Sufijo corto para emails: "sigcon", "acme", "contador"
         v_suffix := CASE c.nit
             WHEN '900000000' THEN 'sigcondemo'
             WHEN '900100200' THEN 'acmedemo'
