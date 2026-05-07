@@ -125,8 +125,11 @@ public class InvoiceAttachmentController {
         @ApiResponse(responseCode = "200", description = "Documento reemplazado"),
         @ApiResponse(responseCode = "400", description = "Adjunto no existe, archivo invalido o ya fue reemplazado")
     })
+    // QA Bloque AU+ HU-AP-12 E10 (2026-05-07): permiso propio UPDATE para
+    // permitir habilitar "reemplazar" sin permitir "subir nuevo". Mantiene
+    // CREATE como fallback para compat con asignaciones existentes.
     @PostMapping(value = "/attachments/{id}/replace", consumes = "multipart/form-data")
-    @PreAuthorize("hasAuthority('PERM_CREATE_INVOICE_ATTACHMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_INVOICE_ATTACHMENT') or hasAuthority('PERM_CREATE_INVOICE_ATTACHMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> replace(@PathVariable Long id,
                                       @RequestParam("file") MultipartFile file,
                                       @RequestParam(value = "description", required = false) String description) {
