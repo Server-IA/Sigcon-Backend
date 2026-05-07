@@ -146,6 +146,17 @@ public class InvoiceService {
     @Transactional
     public Invoices createInvoice(InvoiceFCRequestDTO invoiceFCRequestDTO, Long typeInvoiceId) {
 
+        // QA Bloque AU+ HU-AP-06 E2 (2026-05-06): bloquear creacion si la
+        // empresa no tiene NINGUNA regla tributaria activa. La HU exige
+        // alerta explicita: "No hay reglas tributarias activas".
+        long activeRules = taxRulerRepository.countByStatusAndDeletedAtIsNull(
+                com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax.ACTIVE);
+        if (activeRules == 0) {
+            throw new IllegalStateException(
+                "No hay reglas tributarias activas en el sistema. Active al menos una regla en "
+                + "Listas Contables -> Reglas Tributarias antes de registrar una factura de compra.");
+        }
+
         Invoices invoice = new Invoices();
         TypesInvoices typeInvoice = typeInvoiceRepository.findById(typeInvoiceId).orElseThrow(
             () -> new RuntimeException("El tipo de factura no existe")
@@ -730,11 +741,31 @@ public class InvoiceService {
             for (LinesInvoice old : oldLines) {
                 linesInvoiceRepository.delete(old);
             }
-            // Eliminar JE asociado si DRAFT, para regenerar luego
+            // QA Bloque AU+ HU-AP-13 E2 (2026-05-06): si el JE viejo esta POSTED y
+            // se editan lineas/monto, REVERSAR el JE viejo (queda REVERSED + crea
+            // contrapartida REV-) y luego regenerar el JE nuevo en DRAFT. Antes
+            // solo se borraba el JE DRAFT y se dejaba intacto el POSTED, lo que
+            // generaba dos JE para la misma factura sin trazabilidad de reversion.
             if (invoice.getJournalEntryId() != null) {
                 JournalEntry oldJe = journalEntryRepository.findById(invoice.getJournalEntryId()).orElse(null);
-                if (oldJe != null && oldJe.getStatus() == JournalEntryStatus.DRAFT) {
-                    journalEntryService.deleteEntry(oldJe.getId());
+                if (oldJe != null) {
+                    if (oldJe.getStatus() == JournalEntryStatus.DRAFT) {
+                        journalEntryService.deleteEntry(oldJe.getId());
+                    } else if (oldJe.getStatus() == JournalEntryStatus.POSTED) {
+                        try {
+                            journalEntryService.reverseEntry(oldJe.getId(),
+                                "Reversion automatica por edicion de lineas factura AP "
+                                + invoice.getResolutionInvoice() + " (HU-AP-13 E2)",
+                                "sistema");
+                            log.info("HU-AP-13 E2: JE {} POSTED reversado por edicion lineas factura {}",
+                                oldJe.getId(), invoice.getId());
+                        } catch (RuntimeException revEx) {
+                            log.warn("HU-AP-13 E2: no se pudo reversar JE {} de factura {}: {}",
+                                oldJe.getId(), invoice.getId(), revEx.getMessage());
+                            throw new IllegalStateException(
+                                "No se pudo reversar el comprobante contable original: " + revEx.getMessage());
+                        }
+                    }
                     invoice.setJournalEntryId(null);
                 }
             }
@@ -989,8 +1020,16 @@ public class InvoiceService {
             // para reflejar el cambio de estado.
             eventPublisher.publishEvent(new ApInvoiceUpdatedEvent(this, invoice.getId(),
                     total, thirdPartyId));
+
+            // QA Bloque AU+ HU-AP-03 E1 (2026-05-06): evento dedicado al cierre
+            // formal para que CG registre la deuda saldada en su propia bitacora.
+            String thirdPartyName = invoice.getThirdParty() != null
+                    ? invoice.getThirdParty().getBusinessName() : null;
+            eventPublisher.publishEvent(new com.sigcon.backend.invoices.domain.events.ApInvoiceSettledEvent(
+                    this, invoice.getId(), invoice.getResolutionInvoice(),
+                    thirdPartyName, thirdPartyId, total));
         } catch (RuntimeException ex) {
-            log.warn("No se pudo publicar evento ApInvoiceUpdatedEvent en settle {}: {}", id, ex.getMessage());
+            log.warn("No se pudo publicar eventos en settle {}: {}", id, ex.getMessage());
         }
 
         // Bloque AS: payload minimo para evitar serializar proxies JPA.

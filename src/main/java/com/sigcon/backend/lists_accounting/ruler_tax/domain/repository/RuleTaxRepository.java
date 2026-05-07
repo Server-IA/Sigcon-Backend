@@ -25,4 +25,10 @@ public interface RuleTaxRepository extends JpaRepository<TaxRulerEntity, Long>, 
     // HU-CFG-RF-11 E3: validar unicidad excluyendo el id actual al editar.
     boolean existsByNameAndIdNotAndDeletedAtIsNull(String name, Long id);
 
+    // QA Bloque AU+ HU-AP-06 E2 (2026-05-06): contar reglas tributarias ACTIVE
+    // en el tenant. Si retorna 0, la creacion de facturas debe bloquearse con
+    // mensaje "No hay reglas tributarias activas...". @Filter(tenantFilter)
+    // hace que la cuenta sea por empresa automaticamente.
+    long countByStatusAndDeletedAtIsNull(com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax status);
+
 }

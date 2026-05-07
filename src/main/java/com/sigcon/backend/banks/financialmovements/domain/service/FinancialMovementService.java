@@ -547,6 +547,24 @@ public class FinancialMovementService {
                     Optional.of("El asiento ya esta emparejado con otro movimiento financiero.")));
         }
 
+        // QA Bloque AU+ HU-AP-08 E3 (2026-05-06): bloquear emparejamiento si los
+        // montos NO coinciden. Antes se permitia conciliar JE-2026-12 ($238.000)
+        // con un movimiento de -$476.000, lo que rompe la trazabilidad CxP/Bancos.
+        // Se compara el TOTAL del JE (sum debits = sum credits) contra el valor
+        // absoluto del movimiento bancario, con tolerancia de $0.01 para evitar
+        // problemas de redondeo.
+        java.math.BigDecimal jeTotal = je.getTotalDebit() != null
+                ? je.getTotalDebit() : (je.getTotalCredit() != null ? je.getTotalCredit() : java.math.BigDecimal.ZERO);
+        java.math.BigDecimal movAmount = mov.getAmount() != null
+                ? mov.getAmount().abs() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal diff = jeTotal.subtract(movAmount).abs();
+        if (diff.compareTo(new java.math.BigDecimal("0.01")) > 0) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("No se puede conciliar: el monto del asiento ($" + jeTotal
+                            + ") no coincide con el monto del movimiento bancario ($" + movAmount
+                            + "). La diferencia es de $" + diff + ". Verifique los importes antes de emparejar (HU-AP-08 E3).")));
+        }
+
         mov.setMatchedJournalEntryId(jeId);
         FinancialMovement saved = financialMovementRepository.save(mov);
 
