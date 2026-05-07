@@ -644,9 +644,14 @@ public class BankAccountService {
                     .name(e.getBank().getName())
                     .build()
                     : null)
+                // QA Bloque AU+ (2026-05-07) Bug 1: incluir phone de la sucursal
+                // para que el detalle muestre el telefono real registrado al
+                // crear la sucursal. Antes el DTO solo traia id+address y el
+                // frontend caia al telefono general del banco.
                 .bankBranchDTO(e.getBankBranch() != null ? BankBranchDTO.builder()
                     .id(e.getBankBranch().getId())
                     .address(e.getBankBranch().getAddress())
+                    .phone(e.getBankBranch().getPhone())
                     .build()
                     : null)
                 .currencyTypeDTO(e.getCurrencyType() != null ? CurrencyTypeResponseDTO.builder()
