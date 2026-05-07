@@ -148,7 +148,17 @@ public class DataTableSpecificationBuilder<T> {
             /* ============================================================
                🔹 COLUMN SEARCH
             ============================================================ */
-            else if (request.getColumns() != null) {
+            // QA Bloque AU+ (2026-05-07) Bug raiz: ANTES era `else if`, lo que
+            // descartaba los filtros de columna cuando habia global search. En la
+            // pagina /banks/branches/{id} el filtro fijo `bank.id = X` se aplicaba
+            // como columna fija via filterColumns. Si el usuario tipeaba "1" en
+            // el global search, el global predicate aplicaba LIKE %1% sobre todas
+            // las columnas searchable (incluyendo bank.id) PERO el filter fijo
+            // bank.id=X se ignoraba porque era else if. Resultado: aparecian
+            // sucursales de TODOS los bancos cuyo cualquier campo contuviera "1".
+            // Fix: cambiar a `if` independiente para que ambos predicates apliquen
+            // (global como OR sobre searchable, column filter como AND).
+            if (request.getColumns() != null) {
     
                 for (DataTableRequest.DataTableColumn column : request.getColumns()) {
     
