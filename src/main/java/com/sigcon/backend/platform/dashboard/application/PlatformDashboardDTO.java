@@ -52,6 +52,30 @@ public class PlatformDashboardDTO {
     @Schema(description = "Empresas con lotes AAEF en estado ACK_FAILED")
     private List<CompanyStat> companiesWithFailedAck;
 
+    /**
+     * QA Bloque PA Bug 52 (HU-PA-15 E5, 2026-05-09): estado del ultimo run del job
+     * nocturno de vencimiento de permisos temporales. Carlos (PLATFORM_ADMIN) lo
+     * ve directo en el panel sin tener que entrar al endpoint dedicado.
+     */
+    @Schema(description = "Estado del ultimo run del scheduler de permisos temporales (HU-PA-15 E5)",
+            example = "{\"status\":\"OK\",\"expiredCount\":3,\"durationMs\":42}")
+    private java.util.Map<String, Object> tempPermSchedulerStatus;
+
+    /**
+     * QA Bloque PA Bug 68 (HU-PA-PLAT-06 E2, 2026-05-09): estado tiempo real de
+     * servicios (database, aaef) con badge OK / WARNING / CRITICAL.
+     */
+    @Schema(description = "Salud de servicios (HU-PA-PLAT-06 E2)",
+            example = "{\"database\":{\"status\":\"OK\",\"latencyMs\":4},\"aaef\":{\"status\":\"OK\",\"errorsLastHour\":0}}")
+    private java.util.Map<String, Object> servicesHealth;
+
+    /**
+     * QA Bloque PA Bug 68 (HU-PA-PLAT-06 E3, 2026-05-09): metricas de uso.
+     */
+    @Schema(description = "Metricas de uso (HU-PA-PLAT-06 E3)",
+            example = "{\"activeSessionsApprox\":12,\"errors5xxLastHour\":0}")
+    private java.util.Map<String, Object> usageMetrics;
+
     @Data
     @Builder
     @NoArgsConstructor

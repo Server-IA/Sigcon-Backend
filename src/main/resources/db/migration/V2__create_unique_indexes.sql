@@ -8,9 +8,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_users_username_active
 ON users (username)
 WHERE deleted_at IS NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_roles_active
-ON roles (name)
-WHERE deleted_at IS NULL;
+-- QA Bloque PA Bug 4 (HU-PA-04 E3, 2026-05-09): la unicidad de roles ahora es
+-- compuesta (company_id, name). Ver V9-ZZZY que crea uk_roles_company_name_active
+-- y uk_roles_global_name_active. El UNIQUE global sobre name solo aceptaba un
+-- AUDITOR/CONTADOR/etc. en TODO el sistema, lo que rompe multi-tenant.
+DROP INDEX IF EXISTS uk_roles_active;
+-- CREATE UNIQUE INDEX IF NOT EXISTS uk_roles_active
+-- ON roles (name)
+-- WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_permissions_active
 ON permissions (code)

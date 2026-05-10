@@ -51,6 +51,8 @@ public class TemporaryPermissionController {
     private final TemporaryPermissionService service;
     private final TemporaryPermissionExpiryScheduler scheduler;
     private final UserRepository userRepository;
+    /** QA Bloque PA Bug 45 (HU-PA-16 E5): audit log para registrar exportaciones. */
+    private final com.sigcon.backend.audit.domain.service.AuditPublisher auditPublisher;
 
     @PostMapping
     @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.ASIGNAR') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
@@ -129,11 +131,33 @@ public class TemporaryPermissionController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    @Operation(summary = "HU-PA-16 E6: detalle con timeline")
+    @Operation(summary = "HU-PA-16 E6: detalle con timeline completo de eventos")
     public ResponseEntity<?> detail(@PathVariable Long id) {
         try {
             TemporaryPermission tp = service.findById(id);
-            return ResponseEntity.ok(TemporaryPermissionDTO.from(tp));
+            // QA Bloque PA Bug 45 (HU-PA-16 E6, 2026-05-09): incluir array timeline[]
+            // con los eventos cronologicos para evidencia de auditoria.
+            Map<String, Object> body = new HashMap<>();
+            TemporaryPermissionDTO dto = TemporaryPermissionDTO.from(tp);
+            body.put("id", dto.getId());
+            body.put("companyId", dto.getCompanyId());
+            body.put("userId", dto.getUserId());
+            body.put("permissionId", dto.getPermissionId());
+            body.put("permissionCode", dto.getPermissionCode());
+            body.put("grantedByUserId", dto.getGrantedByUserId());
+            body.put("grantedByEmail", dto.getGrantedByEmail());
+            body.put("justification", dto.getJustification());
+            body.put("startDate", dto.getStartDate());
+            body.put("endDate", dto.getEndDate());
+            body.put("status", dto.getStatus());
+            body.put("revokedAt", dto.getRevokedAt());
+            body.put("revokedByEmail", dto.getRevokedByEmail());
+            body.put("revocationReason", dto.getRevocationReason());
+            body.put("createdAt", dto.getCreatedAt());
+            body.put("daysRemaining", dto.getDaysRemaining());
+            body.put("scheduled", dto.getScheduled());
+            body.put("timeline", service.getTimeline(id));
+            return ResponseEntity.ok(body);
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.status(404).body(Map.of("success", false, "message", ex.getMessage()));
         }
@@ -170,9 +194,82 @@ public class TemporaryPermissionController {
         } catch (Exception ex) {
             return ResponseEntity.internalServerError().build();
         }
+        // QA Bloque PA Bug 45 (HU-PA-16 E5, 2026-05-09): registrar export en audit log.
+        try {
+            auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                com.sigcon.backend.audit.domain.model.enums.AuditModule.PA,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                "TemporaryPermission", 0L,
+                "TEMP_PERMISSION_HISTORY_EXPORTED format=CSV count=" + all.getTotalElements()
+                    + " filters: userId=" + userId + " status=" + st + " from=" + from + " to=" + to,
+                null, null, null);
+        } catch (Exception ignored) { /* audit no debe romper export */ }
         return ResponseEntity.ok()
                 .header("Content-Type", "text/csv; charset=UTF-8")
                 .header("Content-Disposition", "attachment; filename=\"temporary-permissions.csv\"")
+                .body(buf.toByteArray());
+    }
+
+    /**
+     * QA Bloque PA Bug 45 (HU-PA-16 E5, 2026-05-09): exportar historial a XLSX
+     * (formato pedido por la HU). Usa Apache POI. Registra en audit log.
+     */
+    @GetMapping("/export.xlsx")
+    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @Operation(summary = "HU-PA-16 E5: exportar historial a XLSX (Apache POI)")
+    public ResponseEntity<byte[]> exportXlsx(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        Status st = parseStatus(status);
+        var all = service.search(userId, st, from, to,
+                PageRequest.of(0, 10000, Sort.by("createdAt").descending()));
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            org.apache.poi.ss.usermodel.Sheet sheet = wb.createSheet("Permisos Temporales");
+            String[] headers = {"ID","UserID","Permiso","Estado","Inicio","Fin","Otorgado por","Justificacion","Revocado por","Revocado el","Motivo revocacion"};
+            org.apache.poi.ss.usermodel.Row hr = sheet.createRow(0);
+            org.apache.poi.ss.usermodel.CellStyle bold = wb.createCellStyle();
+            org.apache.poi.ss.usermodel.Font fb = wb.createFont(); fb.setBold(true); bold.setFont(fb);
+            for (int i = 0; i < headers.length; i++) {
+                org.apache.poi.ss.usermodel.Cell c = hr.createCell(i);
+                c.setCellValue(headers[i]); c.setCellStyle(bold);
+            }
+            int rownum = 1;
+            for (var t : all.getContent()) {
+                org.apache.poi.ss.usermodel.Row r = sheet.createRow(rownum++);
+                r.createCell(0).setCellValue(t.getId() != null ? t.getId() : 0);
+                r.createCell(1).setCellValue(t.getUserId() != null ? t.getUserId() : 0);
+                r.createCell(2).setCellValue(t.getPermissionCode() != null ? t.getPermissionCode() : "");
+                r.createCell(3).setCellValue(t.getStatus() != null ? t.getStatus().name() : "");
+                r.createCell(4).setCellValue(String.valueOf(t.getStartDate()));
+                r.createCell(5).setCellValue(String.valueOf(t.getEndDate()));
+                r.createCell(6).setCellValue(t.getGrantedByEmail() != null ? t.getGrantedByEmail() : "");
+                r.createCell(7).setCellValue(t.getJustification() != null ? t.getJustification() : "");
+                r.createCell(8).setCellValue(t.getRevokedByEmail() != null ? t.getRevokedByEmail() : "");
+                r.createCell(9).setCellValue(String.valueOf(t.getRevokedAt()));
+                r.createCell(10).setCellValue(t.getRevocationReason() != null ? t.getRevocationReason() : "");
+            }
+            for (int i = 0; i < headers.length; i++) sheet.autoSizeColumn(i);
+            wb.write(buf);
+        } catch (Exception ex) {
+            return ResponseEntity.internalServerError().build();
+        }
+        try {
+            auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                com.sigcon.backend.audit.domain.model.enums.AuditModule.PA,
+                com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                "TemporaryPermission", 0L,
+                "TEMP_PERMISSION_HISTORY_EXPORTED format=XLSX count=" + all.getTotalElements()
+                    + " filters: userId=" + userId + " status=" + st + " from=" + from + " to=" + to,
+                null, null, null);
+        } catch (Exception ignored) { /* audit no debe romper */ }
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .header("Content-Disposition", "attachment; filename=\"temporary-permissions.xlsx\"")
                 .body(buf.toByteArray());
     }
 

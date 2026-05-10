@@ -48,11 +48,14 @@ public class NavSettingsController {
     @PreAuthorize("hasAuthority('PERM_PAR.NAVEGACION.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @Operation(summary = "HU-PA-NAV-01 E3: guardar orden de modulos")
     public ResponseEntity<?> putOrder(@RequestBody Map<String, Object> body) {
+        // QA Bloque PA Bug 69 (HU-PA-NAV-01 E3, 2026-05-09): aceptar 'order' o
+        // 'moduleOrder' (ambos nombres usados por la HU + clientes legacy).
         Object orderObj = body.get("order");
+        if (orderObj == null) orderObj = body.get("moduleOrder");
         if (!(orderObj instanceof List<?> list)) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "El campo 'order' es obligatorio y debe ser un array de IDs"));
+                    "message", "El campo 'order' (o 'moduleOrder') es obligatorio y debe ser un array de IDs"));
         }
         List<Long> ordered = new java.util.ArrayList<>();
         for (Object o : list) {

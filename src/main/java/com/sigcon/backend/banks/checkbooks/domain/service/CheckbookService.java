@@ -65,8 +65,11 @@ public class CheckbookService {
         if (isUpdate && entity == null)
             return ErrorRespondJson.getErrorRespondMessage(Optional.of("Chequera no encontrada"));
 
-        if (request.getCheckEndNumber() <= request.getCheckStartNumber())
-            return ErrorRespondJson.getErrorRespondMessage(Optional.of("Rango inválido"));
+        // QA Bloque AU+ Bug 6 (2026-05-07): el rango debe permitir igualdad
+        // (ej. start=1, end=1 = chequera de 1 cheque). Antes se exigia
+        // strictamente end > start, rechazando chequeras de 1 unico cheque.
+        if (request.getCheckEndNumber() < request.getCheckStartNumber())
+            return ErrorRespondJson.getErrorRespondMessage(Optional.of("Rango inválido: el cheque final debe ser mayor o igual al inicial"));
 
         //  VALIDACIÓN ESTADO INICIAL
         if (!isUpdate) {

@@ -64,12 +64,15 @@ public class PlatformUserController {
             @RequestParam(required = false) Boolean platform,
             @Parameter(description = "Filtrar por estado (ACTIVE / INACTIVE)", example = "ACTIVE")
             @RequestParam(required = false) String status,
+            @Parameter(description = "Filtrar por nombre de rol asignado (case-insensitive)", example = "CONTADOR")
+            @RequestParam(required = false) String roleName,
             @Parameter(description = "Pagina (base 0)", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Tamanio de pagina", example = "20")
             @RequestParam(defaultValue = "20") int size) {
         var pageable = PageRequest.of(page, size, Sort.by("id").ascending());
-        return ResponseEntity.ok(service.search(companyId, platform, status, pageable));
+        // QA Bloque PA Bug 63 (HU-PA-PLAT-04 E3): roleName filter
+        return ResponseEntity.ok(service.search(companyId, platform, status, roleName, pageable));
     }
 
     @PreAuthorize("hasAuthority('PLATFORM_ADMIN')")
@@ -90,5 +93,75 @@ public class PlatformUserController {
         service.resetPassword(id, body.getNewPassword());
         return ResponseEntity.ok(Map.of("success", true,
                 "message", "Contrasenia reseteada correctamente"));
+    }
+
+    /**
+     * QA Bloque PA Bug 65 (HU-PA-PLAT-07 E1, 2026-05-09): crear PLATFORM_ADMIN secundario.
+     * Email unico globalmente (cross-tenant), platform_role=PLATFORM_ADMIN, company_id=NULL.
+     */
+    @PostMapping("/platform-admin")
+    @Operation(summary = "HU-PA-PLAT-07 E1: crear PLATFORM_ADMIN secundario",
+               description = "Crea un nuevo usuario de plataforma. Email unico globalmente. "
+                           + "platform_role=PLATFORM_ADMIN, company_id=NULL.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "PLATFORM_ADMIN creado"),
+        @ApiResponse(responseCode = "400", description = "Email duplicado, contrasenia invalida"),
+        @ApiResponse(responseCode = "403", description = "No es PLATFORM_ADMIN")
+    })
+    public ResponseEntity<?> createPlatformAdmin(@RequestBody java.util.Map<String, Object> body) {
+        try {
+            PlatformUserDTO dto = service.createPlatformAdmin(
+                (String) body.get("name"),
+                (String) body.get("lastname"),
+                (String) body.get("email"),
+                (String) body.get("username"),
+                (String) body.get("password"));
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(dto);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false, "code", 400, "message", ex.getMessage()));
+        }
+    }
+
+    /**
+     * QA Bloque PA Bug 65 (HU-PA-PLAT-07 E3): editar PLATFORM_ADMIN. Permite cambiar
+     * name/lastname/email pero NO el flag platform (eso requiere flujo distinto).
+     */
+    @org.springframework.web.bind.annotation.PutMapping("/platform-admin/{id}")
+    @Operation(summary = "HU-PA-PLAT-07 E3: editar PLATFORM_ADMIN secundario")
+    public ResponseEntity<?> updatePlatformAdmin(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> body) {
+        try {
+            PlatformUserDTO dto = service.updatePlatformAdmin(id,
+                (String) body.get("name"),
+                (String) body.get("lastname"),
+                (String) body.get("email"));
+            return ResponseEntity.ok(dto);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false, "code", 400, "message", ex.getMessage()));
+        }
+    }
+
+    /**
+     * QA Bloque PA Bug 65 (HU-PA-PLAT-07 E4, 2026-05-09): desactivar PLATFORM_ADMIN
+     * con safeguard. Si es el unico activo, bloquea con HTTP 409.
+     */
+    @org.springframework.web.bind.annotation.DeleteMapping("/platform-admin/{id}")
+    @Operation(summary = "HU-PA-PLAT-07 E4: desactivar PLATFORM_ADMIN secundario",
+               description = "Bloquea con HTTP 409 si seria el ultimo PLATFORM_ADMIN activo.")
+    public ResponseEntity<?> deactivatePlatformAdmin(@PathVariable Long id) {
+        try {
+            service.deactivatePlatformAdmin(id);
+            return ResponseEntity.ok(Map.of("success", true,
+                    "message", "PLATFORM_ADMIN desactivado"));
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(Map.of(
+                "success", false, "code", 409, "message", ex.getMessage()));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false, "code", 400, "message", ex.getMessage()));
+        }
     }
 }

@@ -3,6 +3,9 @@ package com.sigcon.backend.banks.banks.domain.service;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
+import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
+import com.sigcon.backend.banks.reconciliation.domain.repository.BankReconciliationSessionRepository;
+import com.sigcon.backend.banks.reconciliation.domain.model.enums.ReconciliationSessionStatus;
 import com.sigcon.backend.banks.banks.application.BankBranchDTO;
 import com.sigcon.backend.banks.banks.application.BankDTO;
 import com.sigcon.backend.banks.banks.domain.model.Bank;
@@ -43,6 +46,8 @@ public class BankService {
         private final BankRepository bankRepository;
         private final CountryRepository countryRepository;
         private final BankAccountRepository bankAccountRepository;
+        private final FinancialMovementRepository financialMovementRepository;
+        private final BankReconciliationSessionRepository reconciliationSessionRepository;
         private final AuditPublisher auditPublisher;
 
         private final DataTableSpecificationBuilder<Bank> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -246,12 +251,32 @@ public class BankService {
                 if (request.getPhone() != null)
                         bank.setPhone(request.getPhone());
                 if (request.getStatus() != null) {
-                        // Validar que no tenga cuentas activas al cambiar a INACTIVE
-                        if (request.getStatus() == BankStatus.INACTIVE
-                                        && bankAccountRepository.existsByBankIdAndDeletedAtIsNull(id)) {
-                                return ResponseEntity.badRequest()
-                                                .body(ErrorRespondJson.getErrorRespondMessage(
-                                                                Optional.of("BNK-ERR-003: No se puede desactivar el banco porque tiene cuentas bancarias activas asociadas.")));
+                        // QA Bloque AU+ Bug 3 (2026-05-07): al inactivar banco
+                        // se valida 3 dependencias:
+                        //   (1) cuentas bancarias activas (existente)
+                        //   (2) movimientos financieros pendientes de conciliar
+                        //   (3) sesiones de conciliacion abiertas (DRAFT)
+                        if (request.getStatus() == BankStatus.INACTIVE) {
+                                if (bankAccountRepository.existsByBankIdAndDeletedAtIsNull(id)) {
+                                        return ResponseEntity.badRequest()
+                                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                                        Optional.of("BNK-ERR-003: No se puede desactivar el banco porque tiene cuentas bancarias activas asociadas.")));
+                                }
+                                long unreconciledCount = financialMovementRepository.countUnreconciledByBankId(id);
+                                if (unreconciledCount > 0) {
+                                        return ResponseEntity.badRequest()
+                                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                                        Optional.of("BNK-ERR-003B: No se puede desactivar el banco porque tiene "
+                                                                                        + unreconciledCount + " movimiento(s) financiero(s) pendiente(s) de conciliar.")));
+                                }
+                                long openSessions = reconciliationSessionRepository.countByBankAccount_Bank_IdAndStatus(
+                                                id, ReconciliationSessionStatus.DRAFT);
+                                if (openSessions > 0) {
+                                        return ResponseEntity.badRequest()
+                                                        .body(ErrorRespondJson.getErrorRespondMessage(
+                                                                        Optional.of("BNK-ERR-003C: No se puede desactivar el banco porque tiene "
+                                                                                        + openSessions + " conciliacion(es) bancaria(s) abierta(s).")));
+                                }
                         }
                         bank.setStatus(request.getStatus());
                 }

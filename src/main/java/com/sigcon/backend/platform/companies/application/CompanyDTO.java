@@ -34,6 +34,41 @@ public class CompanyDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    /**
+     * QA Bloque PA Bug 56 (HU-PA-PLAT-01 E1, 2026-05-09): id del usuario admin
+     * creado en el flujo with-admin. Solo se popula en {@link CompanyService#createWithAdmin}.
+     * Para listados/get-by-id se queda null.
+     */
+    @Schema(description = "Id del primer admin creado (solo en respuesta de /with-admin)", example = "203")
+    private Long adminUserId;
+    @Schema(description = "Email del primer admin creado (solo en respuesta de /with-admin)")
+    private String adminEmail;
+    @Schema(description = "Username del primer admin creado (solo en respuesta de /with-admin)")
+    private String adminUsername;
+
+    /**
+     * QA Bloque PA Bug 57 (HU-PA-PLAT-02 E1+E4, 2026-05-09): metricas opcionales para
+     * la vista listado/detalle de empresas. Pueden venir null si no se calcularon.
+     */
+    @Schema(description = "Numero de usuarios activos (no PLATFORM_ADMIN) en la empresa")
+    private Long activeUsersCount;
+    @Schema(description = "Numero de periodos contables OPEN en el anio actual")
+    private Long openPeriodsCount;
+    @Schema(description = "Estado AAEF: OK si no hay lotes ACK_FAILED, ERROR si los hay")
+    private String aaefStatus;
+    @Schema(description = "Numero de lotes AAEF totales en la empresa")
+    private Long aaefBatchesCount;
+    @Schema(description = "Fecha del ultimo login de cualquier usuario de la empresa")
+    private LocalDateTime lastLoginAt;
+    @Schema(description = "Conteo de usuarios por nombre de rol (solo en detalle GET /{id})")
+    private java.util.Map<String, Long> usersByRole;
+    @Schema(description = "Conteo de periodos por estado (OPEN/CLOSED/LOCKED)")
+    private java.util.Map<String, Long> periodsByStatus;
+    @Schema(description = "Id del ultimo lote AAEF recibido")
+    private Long aaefLastBatchId;
+    @Schema(description = "Fecha del ultimo lote AAEF recibido")
+    private LocalDateTime aaefLastBatchAt;
+
     public static CompanyDTO from(Company c) {
         return CompanyDTO.builder()
                 .id(c.getId())

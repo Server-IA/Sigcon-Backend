@@ -28,6 +28,14 @@ public class NotificationPurgeScheduler {
 
     private final NotificationRepository notificationRepository;
 
+    /**
+     * QA Bloque PA Bug 55 (HU-PA-24 E3, 2026-05-09): hard cap de retencion en
+     * dias. Por default 90d (lo que pide la HU). Configurable via
+     * {@code sigcon.parametrization.notifications.retention-days}.
+     */
+    @org.springframework.beans.factory.annotation.Value("${sigcon.parametrization.notifications.retention-days:90}")
+    private int retentionDays;
+
     private final AtomicReference<RunSummary> lastRun = new AtomicReference<>();
 
     @Scheduled(cron = "${sigcon.parametrization.notifications.purge-cron:0 30 3 * * *}")
@@ -41,12 +49,26 @@ public class NotificationPurgeScheduler {
         RunSummary summary = new RunSummary();
         summary.startedAt = LocalDateTime.now();
         try {
-            int deleted = notificationRepository.hardDeleteExpired(LocalDateTime.now());
-            summary.deletedCount = deleted;
+            LocalDateTime now = LocalDateTime.now();
+            // Fase 1: purga por expires_at vencida (TTL clasico)
+            int deleted = notificationRepository.hardDeleteExpired(now);
+            // QA Bloque PA Bug 54 (HU-PA-24 E2): backfill legacy expires_at IS NULL
+            // (cualquier registro creado antes de que se introdujera la columna).
+            // Cutoff = retentionDays dias (default 90). Mas conservador que la
+            // purga clasica para no eliminar legacy aun fresca.
+            int legacyDeleted = notificationRepository.hardDeleteLegacyOlderThan(now.minusDays(retentionDays));
+            // QA Bloque PA Bug 55 (HU-PA-24 E3): hard cap absoluto por created_at
+            // (HU pide max 90 dias retencion incluso si expires_at fue extendido).
+            int hardCapDeleted = notificationRepository.hardDeleteOlderThanAbsolute(now.minusDays(retentionDays));
+            summary.deletedCount = deleted + legacyDeleted + hardCapDeleted;
+            summary.expiredDeleted = deleted;
+            summary.legacyDeleted = legacyDeleted;
+            summary.hardCapDeleted = hardCapDeleted;
+            summary.retentionDaysApplied = retentionDays;
             summary.status = "OK";
-            if (deleted > 0) {
-                log.info("HU-PA-24 notification purge: deleted={} duration={}ms",
-                        deleted, System.currentTimeMillis() - t0);
+            if (summary.deletedCount > 0) {
+                log.info("HU-PA-24 notification purge: expired={} legacy={} hardCap={} retentionDays={} duration={}ms",
+                        deleted, legacyDeleted, hardCapDeleted, retentionDays, System.currentTimeMillis() - t0);
             }
         } catch (RuntimeException ex) {
             summary.status = "FAILED";
@@ -66,6 +88,10 @@ public class NotificationPurgeScheduler {
         public LocalDateTime endedAt;
         public long durationMs;
         public int deletedCount;
+        public int expiredDeleted;
+        public int legacyDeleted;
+        public int hardCapDeleted;
+        public int retentionDaysApplied;
         public String status;
         public String errorMessage;
     }

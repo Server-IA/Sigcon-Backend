@@ -25,5 +25,15 @@ public interface CompanyRepository extends JpaRepository<Company, Long>,
 
     boolean existsByNitAndIdNotAndDeletedAtIsNull(String nit, Long id);
 
+    /**
+     * QA Bloque PA Bug 25 (HU-PA-10 E2, 2026-05-09): chequeo de unicidad de NIT
+     * incluyendo empresas soft-deleted. Util para evitar reuso accidental de NIT
+     * de una empresa "eliminada" que sigue persistida con deleted_at != null.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            value = "SELECT COUNT(*) > 0 FROM companies WHERE nit = :nit",
+            nativeQuery = true)
+    boolean existsByNit(@org.springframework.data.repository.query.Param("nit") String nit);
+
     List<Company> findByStatusAndDeletedAtIsNull(CompanyStatus status);
 }

@@ -27,8 +27,13 @@
 -- actualizar las URLs aqui (o usar parametros de configuracion para
 -- inyectar dinamicamente).
 
+-- QA Bloque PA Bug 70 (2026-05-09): AgroFusion confirmo el callback real:
+-- https://api.inmero.co/agrofusion/test/int/accounting-ACK
+-- (antes era el placeholder agrofusion.co que no existe). V9-ZZZZF refuerza
+-- esta URL en cada arranque; aqui solo nos aseguramos de no quedarnos en
+-- localhost si la BD venia con mocks.
 UPDATE parameters
-   SET value = 'https://api.agrofusion.co/integrations/aaef/ack',
+   SET value = 'https://api.inmero.co/agrofusion/test/int/accounting-ACK',
        updated_at = NOW()
  WHERE name = 'AGROFUSION_ACK_CALLBACK_URL'
    AND deleted_at IS NULL

@@ -43,12 +43,14 @@ public class NotificationController {
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "HU-PA-21: bandeja paginada (orden cronologico desc, no incluye expiradas)")
     public ResponseEntity<?> my(@RequestParam(required = false) String module,
+                                @RequestParam(required = false) String type,
                                 @RequestParam(required = false) Boolean unreadOnly,
                                 @RequestParam(defaultValue = "0") int page,
                                 @RequestParam(defaultValue = "20") int size) {
         User u = currentUser();
         if (u == null) return ResponseEntity.status(401).body(Map.of("success", false, "message", "No autenticado"));
-        Page<NotificationDTO> p = service.listForUser(u.getId(), module, unreadOnly, page, size);
+        // QA Bloque PA Bug 53 (HU-PA-21 E2, 2026-05-09): combinar filtros (no excluyentes)
+        Page<NotificationDTO> p = service.listForUser(u.getId(), module, type, unreadOnly, page, size);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("data", p.getContent());
         body.put("totalElements", p.getTotalElements());

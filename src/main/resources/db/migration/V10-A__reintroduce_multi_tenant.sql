@@ -122,8 +122,14 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS company_id    BIGINT,
     ADD COLUMN IF NOT EXISTS platform_role VARCHAR(50);
 
--- Backfill: todos los usuarios van a la empresa default EXCEPTO superadmin.
-UPDATE users SET company_id = 1 WHERE company_id IS NULL AND username != 'superadmin';
+-- Backfill: todos los usuarios van a la empresa default EXCEPTO superadmin
+-- y EXCEPTO cualquier otro PLATFORM_ADMIN ya creado (HU-PA-PLAT-07: secundarios
+-- con platform_role NOT NULL no deben recibir company_id por el constraint
+-- ck_users_tenant_or_platform).
+UPDATE users SET company_id = 1
+ WHERE company_id IS NULL
+   AND username != 'superadmin'
+   AND platform_role IS NULL;
 
 -- superadmin se convierte en PLATFORM_ADMIN sin empresa.
 UPDATE users

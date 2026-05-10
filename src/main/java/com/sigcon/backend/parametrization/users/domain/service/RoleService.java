@@ -53,6 +53,19 @@ public class RoleService {
     private final UserRepository userRepository;
     private final ModuleRepository moduleRepository;
     private final AuditPublisher auditPublisher;
+    /**
+     * QA Bloque PA Bug 48 (HU-PA-20 E2/E4, 2026-05-09): notificacion personal a
+     * los usuarios afectados cuando se editan los permisos del rol o cuando se
+     * les agrega un rol. Inyectado por setter para evitar ciclo (notifications
+     * tambien depende de roles).
+     */
+    private com.sigcon.backend.parametrization.notifications.domain.service.NotificationService notificationService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setNotificationService(
+            com.sigcon.backend.parametrization.notifications.domain.service.NotificationService ns) {
+        this.notificationService = ns;
+    }
 
     private final DataTableSpecificationBuilder<Role> roleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
@@ -68,11 +81,9 @@ public class RoleService {
      * @return ResponseEntity con DataTableResponse de roles y sus permisos asociados
      */
     public ResponseEntity<?> getRoles(DataTableRequest request) {
-
         try {
             int start  = Math.max(0, request.getStart());
             int length = request.getLength();
-
             int safeLength = length <= 0 ? 10 : length;
             int page = start / safeLength;
 
@@ -80,35 +91,68 @@ public class RoleService {
                 ? Pageable.unpaged()
                 : PageRequest.of(page, safeLength);
 
+            // HU-PA-03 E3 / Bug 2 (2026-05-09): aislamiento estricto multi-tenant.
+            // Si el usuario es PLATFORM_ADMIN, ve TODOS los roles (globales + tenant)
+            // para administracion. Si es ADMIN_EMPRESA, ve SOLO los roles de su tenant
+            // (los globales PLATFORM_ADMIN/ADMIN/USER NO se le muestran).
+            final Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+            final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+
             Specification<Role> spec = roleSpecificationBuilder.build(request)
                 .and((root, query, cb) -> cb.isNull(root.get("deletedAt")));
 
-            Page<Role> roles = roleRepository.findAll(spec, pageable);
+            if (!isPlatform) {
+                // Filtrar SOLO roles del tenant actual
+                if (tenantId == null) {
+                    return ResponseEntity.ok(DataTableResponse.from(Page.empty(pageable), request.getDraw()));
+                }
+                spec = spec.and((root, query, cb) -> cb.equal(root.get("companyId"), tenantId));
+            }
 
-            Page<RoleRequest> data = roles.map(role -> {
-                RoleRequest dto = new RoleRequest();
-                dto.setId(role.getId());
-                dto.setName(role.getName());
-                dto.setPermissionIds(
-                    role.getPermissions().stream().map(Permission::getId).collect(Collectors.toSet())
-                );
-                dto.setPermissions(
-                    role.getPermissions().stream().map(permission -> PermissionDTO.builder()
-                        .name(permission.getName())
-                        .type(permission.getType())
-                        .description(permission.getDescription())
-                        .build()).collect(Collectors.toList()));
-                dto.setStatus(parseStatus(role.getStatus()));
-                return dto;
-            });
+            // Filtro adicional: ?type=PREDEFINED|CUSTOM|GLOBAL (HU-PA-03 E2 / Bug 3)
+            String typeFilter = extractTypeFilter(request);
+            if (typeFilter != null) {
+                final String t = typeFilter.toUpperCase();
+                spec = spec.and((root, query, cb) -> {
+                    var nameUpper = cb.upper(root.get("name"));
+                    var inPredef = nameUpper.in(Role.PREDEFINED_NAMES);
+                    var inGlobal = nameUpper.in(Role.SYSTEM_GLOBAL_NAMES);
+                    if ("PREDEFINED".equals(t)) return inPredef;
+                    if ("CUSTOM".equals(t)) return cb.and(cb.not(inPredef), cb.not(inGlobal));
+                    if ("GLOBAL".equals(t)) return inGlobal;
+                    return cb.conjunction();
+                });
+            }
+
+            Page<Role> roles = roleRepository.findAll(spec, pageable);
+            Page<RoleRequest> data = roles.map(this::toRequest);
 
             return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
-
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            // HU-PA-03 E6: error tecnico al cargar listado -> mensaje generico
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("No fue posible cargar los roles. Intente de nuevo o contacte al administrador.")));
         }
+    }
 
-        // return roleRepository.findAllAndDeletedAtIsNull(request.getPageable());
+    /**
+     * Extrae el filtro `type` desde DataTableRequest.columns[].search.value
+     * cuando hay una columna llamada "type" o "tipo". Devuelve uno de
+     * PREDEFINED / CUSTOM / GLOBAL o null si no se filtro.
+     */
+    private String extractTypeFilter(DataTableRequest req) {
+        if (req == null || req.getColumns() == null) return null;
+        for (var col : req.getColumns()) {
+            if (col == null || col.getName() == null) continue;
+            String n = col.getName().toLowerCase();
+            if (("type".equals(n) || "tipo".equals(n))
+                && col.getSearch() != null
+                && col.getSearch().getValue() != null
+                && !col.getSearch().getValue().isBlank()) {
+                return col.getSearch().getValue().trim();
+            }
+        }
+        return null;
     }
 
     /**
@@ -120,45 +164,74 @@ public class RoleService {
      * @return ResponseEntity con el rol creado o mensaje de error por duplicidad
      */
     public ResponseEntity<?> createRole(RoleRequest request) {
-        try{
-
+        try {
             if (request.getName() == null || request.getName().isBlank()) {
                 return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del rol es obligatorio"))
                 );
             }
-    
-            if (roleRepository.findByNameAndDeletedAtIsNull(request.getName().toUpperCase()).isPresent()) {
+
+            // HU-PA-04 E5: validar al menos un permiso seleccionado.
+            // (HU dice "Mostrar mensaje 'Debe asignar al menos un permiso al rol'")
+            if (request.getPermissionIds() == null || request.getPermissionIds().isEmpty()) {
                 return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe asignar al menos un permiso al rol"))
                 );
             }
-    
-            Set<Permission> permissions = Set.of();
-    
-            if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
-                permissions = permissionRepository.findAllById(request.getPermissionIds())
-                        .stream().collect(Collectors.toSet());
+
+            // HU-PA-04 E3 / Bug 4 (2026-05-09): unicidad por TENANT, no global.
+            // PLATFORM_ADMIN crea roles globales (companyId=NULL). ADMIN_EMPRESA
+            // crea roles del tenant actual.
+            final Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+            final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+            final Long targetCompanyId = isPlatform ? null : tenantId;
+
+            if (!isPlatform && tenantId == null) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "El usuario actual no pertenece a una empresa; no puede crear roles."))
+                );
             }
-    
+
+            // HU-PA-04 E3: validar nombre unico solo dentro del scope (companyId)
+            String upper = request.getName().toUpperCase().trim();
+            if (roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(upper, targetCompanyId).isPresent()) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Ya existe un rol con ese nombre en " + (targetCompanyId == null ? "el sistema" : "esta empresa") + "."))
+                );
+            }
+
+            // HU-PA-04 E3: ADMIN_EMPRESA NO puede usar nombres reservados de roles globales
+            if (!isPlatform && Role.SYSTEM_GLOBAL_NAMES.contains(upper)) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Ese nombre esta reservado para roles del sistema."))
+                );
+            }
+
+            Set<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds())
+                    .stream().collect(Collectors.toSet());
+
             Role role = Role.builder()
-                    .name(request.getName().toUpperCase())
+                    .name(upper)
+                    .description(request.getDescription())
+                    .companyId(targetCompanyId)
                     .permissions(permissions)
                     .status(Status.ACTIVE)
                     .createdAt(LocalDateTime.now())
                     .updatedAt(LocalDateTime.now())
                     .build();
-    
+
             roleRepository.save(role);
-            auditPublisher.publishCreate(AuditModule.PA, "Role", role.getId(), "Role creado id=" + role.getId());
-    
-            RoleRequest roleDTO = toRequest(role);
-    
+            auditPublisher.publishCreate(AuditModule.PA, "Role", role.getId(),
+                    "Role creado: " + role.getName() + " (companyId=" + role.getCompanyId() + ")");
+
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(roleDTO))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(toRequest(role)))
             );
 
-        }catch (Exception e) {
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
@@ -182,44 +255,115 @@ public class RoleService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
-        if (roleRepository.findByNameAndDeletedAtIsNull(request.getName().toUpperCase()).isPresent()
-                && !role.getName().equalsIgnoreCase(request.getName())) {
-
-            return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("El rol ya existe."))
+        // HU-PA-05 E4 (QA Bloque PA Bug 9, 2026-05-09): optimistic locking.
+        // Si el cliente envia `version` y NO coincide con la actual, el rol
+        // fue modificado por otro usuario en el intervalo. Lanza 409 con
+        // mensaje literal HU. Si no envia version (clientes legacy), permite
+        // continuar pero @Version sigue protegiendo a nivel JPA.
+        if (request.getVersion() != null
+                && role.getVersion() != null
+                && !request.getVersion().equals(role.getVersion())) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "Este rol fue modificado por otro usuario. Recarga los datos y vuelve a intentarlo."))
             );
         }
 
-        Set<Permission> permissions = new HashSet<>();
+        // HU-PA-05 E2 (QA Bloque PA, 2026-05-09): si es predefinido, el NOMBRE no se
+        // puede cambiar (queda en solo lectura). Solo descripcion y permisos.
+        boolean isPredefined = role.isPredefined();
+        String upperRequested = request.getName().toUpperCase().trim();
 
+        if (isPredefined && !role.getName().equalsIgnoreCase(upperRequested)) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "El nombre de los roles predefinidos no puede modificarse."))
+            );
+        }
+
+        // HU-PA-04 E3 / Bug 4: unicidad scoped al tenant (companyId del rol)
+        if (!role.getName().equalsIgnoreCase(upperRequested)
+                && roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(upperRequested, role.getCompanyId()).isPresent()) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "Ya existe un rol con ese nombre en " + (role.getCompanyId() == null ? "el sistema" : "esta empresa") + "."))
+            );
+        }
+
+        // QA Bloque PA Bug 48 (HU-PA-20 E2): capturar permisos previos para construir
+        // el diff (agregados/removidos) y notificar a los usuarios afectados.
+        Set<String> previousCodes = role.getPermissions() == null ? new HashSet<>()
+                : role.getPermissions().stream().map(Permission::getCode).collect(Collectors.toCollection(HashSet::new));
+
+        Set<Permission> permissions = new HashSet<>();
         if (request.getPermissionIds() != null && !request.getPermissionIds().isEmpty()) {
             permissions = permissionRepository.findAllById(request.getPermissionIds())
                     .stream().collect(Collectors.toSet());
         }
 
-        role.setName(request.getName().toUpperCase());
+        if (!isPredefined) {
+            role.setName(upperRequested);
+        }
+        role.setDescription(request.getDescription());
         role.setPermissions(permissions);
-        role.setStatus(Status.valueOf(request.getStatus()));
+        if (request.getStatus() != null && !request.getStatus().isBlank()) {
+            role.setStatus(Status.valueOf(request.getStatus()));
+        }
 
         roleRepository.save(role);
-        auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(), "Role actualizado id=" + role.getId());
+        auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(),
+                "Role actualizado: " + role.getName() + " (companyId=" + role.getCompanyId() + ")");
 
-        RoleRequest roleDTO = toRequest(role);
+        // HU-PA-20 E2: notificar a TODOS los usuarios que tienen este rol asignado
+        // con detalle de permisos agregados/removidos.
+        try {
+            if (notificationService != null) {
+                Set<String> newCodes = permissions.stream().map(Permission::getCode).collect(Collectors.toCollection(HashSet::new));
+                Set<String> added = new HashSet<>(newCodes); added.removeAll(previousCodes);
+                Set<String> removed = new HashSet<>(previousCodes); removed.removeAll(newCodes);
+                if (!added.isEmpty() || !removed.isEmpty()) {
+                    List<User> affected = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
+                    String body = "Su rol " + role.getName() + " fue modificado."
+                            + (added.isEmpty() ? "" : " Agregados: " + added)
+                            + (removed.isEmpty() ? "" : " Removidos: " + removed);
+                    for (User u : affected) {
+                        try {
+                            notificationService.publishToUser(u.getId(),
+                                com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                                    .companyId(u.getCompanyId())
+                                    .eventKey("ROLE_PERMISSIONS_CHANGED")
+                                    .title("Su rol " + role.getName() + " fue modificado")
+                                    .body(body)
+                                    .actionUrl("/perfil")
+                                    .sourceId(role.getId())
+                                    .sourceType("Role")
+                                    .build());
+                        } catch (RuntimeException ignored) { /* notif individual no rompe update */ }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            // notificacion no debe romper el update
+        }
 
         return ResponseEntity.ok(
-            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol actualizado exitosamente"), Optional.of(roleDTO))
+            SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol actualizado exitosamente"), Optional.of(toRequest(role)))
         );
     }
 
     /**
-     * Elimina un rol de forma logica (soft delete).
-     * Valida que no este asignado a ningun usuario antes de eliminar para evitar inconsistencias.
+     * QA Bloque PA Bugs 10/11/12 (HU-PA-06 E2/E3/E4, 2026-05-09):
+     * elimina un rol con motivo obligatorio (>=30 chars), bloqueo si tiene
+     * usuarios asignados con datos de cuantos y quienes, y bloqueo
+     * especial si el rol es el unico que da acceso a algun usuario.
      *
-     * @param id ID del rol a eliminar
-     * @return ResponseEntity con mensaje de exito o error si tiene usuarios asociados
+     * Acepta motivo via query param `?reason=...`. Si esta vacio o <30 chars
+     * responde 400 con el texto literal de la HU. Si hay usuarios responde
+     * 400 con cantidad + listado (ids/emails) + indicacion para reasignar.
+     * Si algun usuario quedaria sin roles, mensaje literal HU-PA-06 E3.
+     * Si el rol ADMIN_EMPRESA fuera el ultimo de la empresa, mensaje E5.
      */
-    public ResponseEntity<?> deleteRole(Long id) {
-
+    public ResponseEntity<?> deleteRole(Long id, String reason) {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
@@ -229,23 +373,114 @@ public class RoleService {
             );
         }
 
-        boolean hasUsers = !userRepository.findAllByRoles_Name(role.getName()).isEmpty();
-
-        if (hasUsers) {
+        // HU-PA-06 E4: motivo obligatorio (>=30 chars).
+        if (reason == null || reason.trim().length() < 30) {
             return ResponseEntity.badRequest().body(
-                ErrorRespondJson.getErrorRespondMessage(Optional.of("No se puede eliminar el rol porque está asociado a usuarios"))
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "Debe ingresar un motivo de eliminación de al menos 30 caracteres"))
             );
         }
 
+        // HU-PA-06 E5: roles globales del sistema (PLATFORM_ADMIN, ADMIN, USER) NO se eliminan.
+        if (Role.SYSTEM_GLOBAL_NAMES.contains(role.getName().toUpperCase())) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "No se pueden eliminar los roles globales del sistema."))
+            );
+        }
+
+        // HU-PA-06 E5 (predefinido): si es predefinido y es el unico ADMIN_EMPRESA del tenant,
+        // bloquear con mensaje literal HU.
+        if ("ADMIN_EMPRESA".equalsIgnoreCase(role.getName())
+                && role.getCompanyId() != null
+                && userRepository.countOtherAdminEmpresaInCompany(role.getCompanyId(), role.getId()) == 0) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "Debe existir al menos un ADMIN_EMPRESA activo en la empresa"))
+            );
+        }
+
+        // HU-PA-06 E2/E3: si tiene usuarios asignados, devolver mensaje detallado.
+        java.util.List<com.sigcon.backend.parametrization.users.domain.model.User> users =
+                userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
+
+        if (!users.isEmpty()) {
+            // HU-PA-06 E3: detectar si algun usuario perderia acceso (rol unico)
+            long onlyThisRoleUsers = userRepository.countUsersWithOnlyThisRoleActive(role.getId());
+
+            // Construir listado de usuarios afectados con datos para reasignar
+            java.util.List<java.util.Map<String, Object>> affected = users.stream()
+                .limit(10)
+                .map(u -> {
+                    java.util.Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id", u.getId());
+                    m.put("email", u.getEmail());
+                    m.put("username", u.getUsername());
+                    m.put("editUrl", "/parametrizacion/usuarios/" + u.getId() + "/edit");
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+            String mainMsg;
+            if (onlyThisRoleUsers > 0) {
+                // HU-PA-06 E3 mensaje literal
+                mainMsg = "No se puede eliminar el rol: " + onlyThisRoleUsers
+                       + " usuario(s) perderian acceso total al sistema. "
+                       + "Asigne otro rol a esos usuarios antes de eliminar.";
+            } else {
+                // HU-PA-06 E2 mensaje literal con detalles
+                mainMsg = "No se puede eliminar el rol porque está asociado a "
+                       + users.size() + " usuario(s) activos. "
+                       + "Reasigne otro rol a los usuarios antes de eliminar.";
+            }
+
+            java.util.Map<String, Object> body = new java.util.HashMap<>();
+            body.put("success", false);
+            body.put("code", 400);
+            body.put("error", "Error en la operación");
+            body.put("message", mainMsg);
+            body.put("data", null);
+            body.put("affectedUsersCount", users.size());
+            body.put("usersWithOnlyThisRole", onlyThisRoleUsers);
+            body.put("affectedUsers", affected);
+            body.put("timestamp", LocalDateTime.now().toString());
+            return ResponseEntity.badRequest().body(body);
+        }
+
+        // HU-PA-06 E7 (QA Bloque PA Bug 14, 2026-05-09): snapshot completo del
+        // rol ANTES de eliminar + motivo. Incluye nombre, descripcion, status,
+        // companyId, lista de permission codes (no solo cuenta) y timestamp.
+        // Esto cumple "snapshot completo del rol antes de eliminar y company_id"
+        // exigido por la HU.
+        java.util.List<String> permCodes = role.getPermissions() == null ? java.util.List.of()
+            : role.getPermissions().stream()
+                .map(p -> p.getCode() != null ? p.getCode() : p.getName())
+                .sorted()
+                .collect(Collectors.toList());
+
+        StringBuilder snapshot = new StringBuilder();
+        snapshot.append("ROLE_DELETED snapshot: ")
+                .append("name=").append(role.getName())
+                .append(" | id=").append(role.getId())
+                .append(" | companyId=").append(role.getCompanyId())
+                .append(" | status=").append(role.getStatus())
+                .append(" | description=\"").append(role.getDescription() == null ? "" : role.getDescription()).append("\"")
+                .append(" | permissions(").append(permCodes.size()).append(")=").append(permCodes)
+                .append(" | createdAt=").append(role.getCreatedAt())
+                .append(" | motivo=\"").append(reason.trim()).append("\"");
+
         role.setDeletedAt(LocalDateTime.now());
         roleRepository.save(role);
-        auditPublisher.publishDelete(AuditModule.PA, "Role", role.getId(), "Role eliminado id=" + role.getId());
-
-        RoleRequest roleDTO = toRequest(role);
+        auditPublisher.publishDelete(AuditModule.PA, "Role", role.getId(), snapshot.toString());
 
         return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol eliminado exitosamente"), Optional.of(roleDTO))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol eliminado exitosamente"), Optional.of(toRequest(role)))
         );
+    }
+
+    /** Compat: firma legacy para callers que aun no envien `reason`. */
+    public ResponseEntity<?> deleteRole(Long id) {
+        return deleteRole(id, null);
     }
 
     /**
@@ -553,13 +788,41 @@ public class RoleService {
                 .build();
     }
 
+    /**
+     * HU-PA-03 E1 (QA Bloque PA, 2026-05-09): mapea Role -> RoleRequest con
+     * los campos extra que la HU exige en el listado:
+     *   - description: campo nuevo de la entidad
+     *   - type: PREDEFINED / CUSTOM / GLOBAL (calculado)
+     *   - assignedUsersCount: COUNT(*) FROM users_roles WHERE role_id = ?
+     *   - createdAt: formato ISO para mostrar fecha
+     *   - companyId: para que el frontend pueda discriminar
+     */
     private RoleRequest toRequest(Role role) {
+        String type;
+        if (role.getCompanyId() == null) {
+            type = "GLOBAL";
+        } else if (role.isPredefined()) {
+            type = "PREDEFINED";
+        } else {
+            type = "CUSTOM";
+        }
+        Long usersCount = 0L;
+        try {
+            usersCount = roleRepository.countActiveUsersByRoleId(role.getId());
+        } catch (Exception ignore) { /* defensivo: no romper el listado */ }
+
         return RoleRequest.builder()
             .id(role.getId())
             .name(role.getName())
+            .description(role.getDescription())
             .permissionIds(role.getPermissions().stream().map(Permission::getId).collect(Collectors.toSet()))
             .permissions(role.getPermissions().stream().map(this::toDTO).collect(Collectors.toList()))
             .status(role.getStatus().name())
+            .type(type)
+            .companyId(role.getCompanyId())
+            .assignedUsersCount(usersCount == null ? 0L : usersCount)
+            .createdAt(role.getCreatedAt() == null ? null : role.getCreatedAt().toString())
+            .version(role.getVersion())
             .build();
     }
 

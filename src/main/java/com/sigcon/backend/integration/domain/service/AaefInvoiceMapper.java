@@ -49,8 +49,13 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AaefInvoiceMapper {
 
+    // QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion comunico que
+    // los unicos status validos para facturas y nominas de Sigma/Disriego son
+    // PAID y PENDING. Antes aceptabamos ACTIVE/CANCELLED/PARTIAL pero AgroFusion
+    // no los emite — generaban INVALID_STATUS innecesarios. Mantenemos validacion
+    // estricta para detectar payloads malformados temprano.
     private static final Set<String> VALID_STATUSES =
-            Set.of("ACTIVE", "PAID", "CANCELLED", "PARTIAL");
+            Set.of("PAID", "PENDING");
 
     /** AgroFusion feedback v1.1 (2026-04-28): set completo de Type.Code validos. */
     public static final String SALES_TYPE_CODE = "01";          // Factura venta

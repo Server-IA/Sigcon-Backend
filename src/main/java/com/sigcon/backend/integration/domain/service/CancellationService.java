@@ -289,8 +289,10 @@ public class CancellationService {
             String syntheticExchangeId = dto.getOriginalExchangeId() + "-" + tag;
             metadata.put("ExchangeId", syntheticExchangeId);
             metadata.put("StandardVersion", STANDARD_VERSION);
-            metadata.put("GeneratedAt", java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+            // QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): GeneratedAt ahora es
+            // fecha sola (yyyy-MM-dd) por compatibilidad con AAEF v1.1.
+            metadata.put("GeneratedAt", java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+                    .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE));
             com.fasterxml.jackson.databind.node.ObjectNode srcSys = objectMapper.createObjectNode();
             srcSys.put("SystemId", "AgroFusion-PullDiff");
             srcSys.put("Version", "1.0");

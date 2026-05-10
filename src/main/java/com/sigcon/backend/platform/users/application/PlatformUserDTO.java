@@ -55,4 +55,19 @@ public class PlatformUserDTO {
 
     @Schema(description = "Fecha de creacion")
     private LocalDateTime createdAt;
+
+    /**
+     * QA Bloque PA Bug 63 (HU-PA-PLAT-04 E1, 2026-05-09): fecha del ultimo
+     * login del usuario (extraida de audit_logs action=LOGIN). null si nunca
+     * se logueo o si no hay registro.
+     */
+    @Schema(description = "Fecha del ultimo login (null si no hay registro)")
+    private LocalDateTime lastLoginAt;
+
+    /**
+     * QA Bloque PA Bug 63 (HU-PA-PLAT-04 E1, 2026-05-09): cantidad de permisos
+     * temporales en estado ACTIVE asignados al usuario.
+     */
+    @Schema(description = "Cantidad de permisos temporales activos del usuario", example = "2")
+    private Long activeTemporaryPermissionsCount;
 }

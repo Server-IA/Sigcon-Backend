@@ -135,6 +135,16 @@ public class AuthService implements UserDetailsService {
                                 Optional.of("Cuenta bloqueada temporalmente por multiples intentos fallidos. Intente de nuevo mas tarde."))
                 );
             }
+            // QA Bloque PA Bug 15 (HU-PA-07 E3, 2026-05-09): bloquear pre-authenticate
+            // si el usuario tiene status=BLOCKED. Si no, Spring Security responderia
+            // con BadCredentialsException porque isEnabled()=false (mensaje generico).
+            if (foundUser.getStatus() == com.sigcon.backend.parametrization.users.domain.model.enums.Status.BLOCKED) {
+                auditUserEvent(foundUser, AuditAction.LOGIN, AuditSeverity.HIGH,
+                        "USER_BLOCKED: intento de login bloqueado, usuario con status=BLOCKED");
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "Tu cuenta esta bloqueada por el administrador. Contacta al administrador para mas informacion.")));
+            }
         }
 
         try {
@@ -144,15 +154,32 @@ public class AuthService implements UserDetailsService {
 
             User user = (User) auth.getPrincipal();
 
-            // HU-PLAT-05 E3: si la empresa del usuario esta INACTIVE, bloquear login.
+            // HU-PA-07 E3 (QA Bloque PA Bug 15, 2026-05-09): bloquear login si
+            // el usuario tiene status=BLOCKED (estado administrativo distinto
+            // de INACTIVE soft-delete y de lockedUntil temporal).
+            if (user.getStatus() == com.sigcon.backend.parametrization.users.domain.model.enums.Status.BLOCKED) {
+                auditUserEvent(user, AuditAction.LOGIN, AuditSeverity.HIGH,
+                        "USER_BLOCKED: intento de login bloqueado, usuario con status=BLOCKED");
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "Tu cuenta esta bloqueada por el administrador. Contacta al administrador para mas informacion.")));
+            }
+
+            // HU-PA-01 E3 / HU-PLAT-05 E3 (QA Bloque PA Bug 1, 2026-05-09):
+            // si la empresa del usuario esta INACTIVE, bloquear login con
+            // HTTP 403 (no 400) y mensaje literal de la HU. Tambien registrar
+            // intento en auditoria con motivo COMPANY_INACTIVE.
             // PLATFORM_ADMIN (sin company_id) no aplica.
             if (user.getCompanyId() != null) {
                 var company = companyRepository.findById(user.getCompanyId()).orElse(null);
                 if (company == null
                         || company.getStatus() != com.sigcon.backend.platform.companies.domain.model.Company.CompanyStatus.ACTIVE) {
-                    return ResponseEntity.badRequest().body(
+                    auditUserEvent(user, AuditAction.LOGIN, AuditSeverity.HIGH,
+                            "COMPANY_INACTIVE: intento de login bloqueado, empresa desactivada (companyId="
+                              + user.getCompanyId() + ")");
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
                             ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                                    "La empresa a la que pertenece esta cuenta esta desactivada. "
+                                    "La empresa a la que pertenece esta cuenta está desactivada. "
                                   + "Contacte al administrador de plataforma.")));
                 }
             }

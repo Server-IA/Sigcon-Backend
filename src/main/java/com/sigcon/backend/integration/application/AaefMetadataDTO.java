@@ -9,7 +9,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 
 /**
  * AAEF v1.0 - Metadata del lote (RF-INT-13 seccion "metadata").
@@ -30,9 +29,15 @@ public class AaefMetadataDTO {
             message = "ExchangeId no cumple formato AF-YYYY-MM-NNNNN")
     private String exchangeId;
 
-    /** Timestamp de generacion del lote (ISO 8601 UTC). */
+    /**
+     * Fecha de generacion del lote (formato ISO 8601 yyyy-MM-dd).
+     *
+     * <p>QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion solo emite
+     * fecha (sin hora). Antes era OffsetDateTime y rechazabamos lotes que
+     * trajeran "2026-05-09" en lugar de "2026-05-09T10:30:00Z".
+     */
     @JsonProperty("GeneratedAt")
-    private OffsetDateTime generatedAt;
+    private LocalDate generatedAt;
 
     /** Version del estandar AAEF. Valor actual: "1.0". */
     @JsonProperty("StandardVersion")

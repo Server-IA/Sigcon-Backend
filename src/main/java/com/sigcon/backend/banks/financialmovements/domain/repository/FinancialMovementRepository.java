@@ -93,4 +93,11 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
             @Param("bankAccountId") Long bankAccountId,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to);
+
+    /** QA Bloque AU+ Bug 3 (2026-05-07): cuenta movimientos no conciliados de
+     *  todas las cuentas de un banco para bloquear inactivacion del banco. */
+    @Query("SELECT COUNT(fm) FROM FinancialMovement fm WHERE fm.bankAccount.bank.id = :bankId "
+            + "AND fm.matchedCheckId IS NULL AND fm.matchedVoucherId IS NULL "
+            + "AND fm.matchedJournalEntryId IS NULL AND fm.reconciliationSession IS NULL")
+    long countUnreconciledByBankId(@Param("bankId") Long bankId);
 }

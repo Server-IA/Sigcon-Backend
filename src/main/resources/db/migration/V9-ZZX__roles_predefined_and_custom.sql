@@ -32,25 +32,20 @@ BEGIN
     END IF;
 END $$;
 
--- 3. Marcar los 7 roles del glosario como predefinidos del sistema
--- (ADMIN_EMPRESA, CONTADOR, AUXILIAR_CONTABLE, TESORERO, AUDITOR,
---  OPERADOR_NOMINA, PLATFORM_ADMIN). Estos NO tienen company_id.
+-- QA Bloque PA Bug 4 (HU-PA-04 E3, 2026-05-09): el disenio cambio. Los roles
+-- predefinidos NO son globales; son tenant-scoped (cada empresa tiene su copia).
+-- V9-ZZZY clona los predefinidos por empresa. El UPDATE original ponia
+-- company_id=NULL en todos los roles con esos nombres lo que rompe el modelo.
+-- Comentado para no recrear el conflicto. Solo se actualiza la descripcion
+-- en los roles que SIGAN siendo globales (PLATFORM_ADMIN).
 UPDATE roles
-   SET is_predefined = true,
-       company_id    = NULL,
-       description   = CASE name
-            WHEN 'ADMIN_EMPRESA'      THEN 'Administrador de la empresa con acceso total a todos los modulos.'
-            WHEN 'CONTADOR'           THEN 'Operador contable que gestiona AP, AR, BNK y consultas CG.'
-            WHEN 'AUXILIAR_CONTABLE'  THEN 'Captura basica de facturas y pagos en AP/AR.'
-            WHEN 'TESORERO'           THEN 'Gestion de bancos, cajas, pagos y cobros.'
-            WHEN 'AUDITOR'            THEN 'Acceso de solo lectura global para auditoria.'
-            WHEN 'OPERADOR_NOMINA'    THEN 'Operacion del modulo de Nomina (NOM).'
-            WHEN 'PLATFORM_ADMIN'     THEN 'Administrador de plataforma multi-tenant.'
+   SET description = CASE name
+            WHEN 'PLATFORM_ADMIN' THEN 'Administrador de plataforma multi-tenant.'
             ELSE description
        END,
        updated_at = NOW()
- WHERE name IN ('ADMIN_EMPRESA','CONTADOR','AUXILIAR_CONTABLE','TESORERO',
-                'AUDITOR','OPERADOR_NOMINA','PLATFORM_ADMIN')
+ WHERE name IN ('PLATFORM_ADMIN')
+   AND company_id IS NULL
    AND deleted_at IS NULL;
 
 -- 4. UNIQUE indexes:

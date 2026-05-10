@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 
 /**
  * AAEF v1.0 - DTO tipado para transacciones (RF-INT-13 seccion "transactions").
@@ -50,7 +49,12 @@ public class AaefTransactionDTO {
     @JsonProperty("Currency")
     private String currency;
 
-    /** COMPLETED | REVERSED (estados aceptados en AAEF). */
+    /**
+     * REFUSED | COMPLETED (estados aceptados en AAEF v1.1).
+     *
+     * <p>QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion solo emite
+     * REFUSED o COMPLETED. Antes aceptabamos COMPLETED/REVERSED.
+     */
     @JsonProperty("Status")
     private String status;
 
@@ -64,8 +68,9 @@ public class AaefTransactionDTO {
     @JsonProperty("Notes")
     private String notes;
 
+    /** Fecha de ultima actualizacion (yyyy-MM-dd, sin hora). */
     @JsonProperty("UpdatedAt")
-    private OffsetDateTime updatedAt;
+    private LocalDate updatedAt;
 
     @Data
     @Builder

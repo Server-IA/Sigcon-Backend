@@ -60,6 +60,25 @@ public class JournalEntryService {
     private final com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository parameterRepository;
     private final com.sigcon.backend.general.accounting.journal.attachments.domain.repository.JournalEntrySupportRepository supportRepository;
     private final com.sigcon.backend.general.accounting.series.domain.service.VoucherSeriesService voucherSeriesService;
+    /**
+     * QA Bloque PA Bug 49 (HU-PA-20 E5, 2026-05-09): NotificationService inyectado
+     * por setter (evitar ciclo) para emitir USER_VOUCHER_REJECTED al creador
+     * cuando un asiento es reversado/rechazado.
+     */
+    private com.sigcon.backend.parametrization.notifications.domain.service.NotificationService notificationService;
+    private com.sigcon.backend.parametrization.users.domain.repository.UserRepository jeUserRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setNotificationService(
+            com.sigcon.backend.parametrization.notifications.domain.service.NotificationService ns) {
+        this.notificationService = ns;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setJeUserRepository(
+            com.sigcon.backend.parametrization.users.domain.repository.UserRepository repo) {
+        this.jeUserRepository = repo;
+    }
 
     private final DataTableSpecificationBuilder<JournalEntry> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -470,6 +489,31 @@ public class JournalEntryService {
                         + " -> nuevo asiento #" + savedReversal.getEntryNumber()
                         + " motivo: " + description,
                 null, null, savedReversal.getId());
+
+        // QA Bloque PA Bug 49 (HU-PA-20 E5): notif al creador del asiento original
+        // cuando es rechazado/reversado por otro usuario.
+        try {
+            if (notificationService != null && jeUserRepository != null
+                    && original.getCreatedBy() != null
+                    && !original.getCreatedBy().equalsIgnoreCase(createdBy)) {
+                jeUserRepository.findByUsernameOrEmail(original.getCreatedBy(), original.getCreatedBy())
+                    .ifPresent(creator ->
+                        notificationService.publishToUser(creator.getId(),
+                            com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                                .companyId(creator.getCompanyId())
+                                .eventKey("USER_VOUCHER_REJECTED")
+                                .title("Un comprobante que creo fue rechazado")
+                                .body("El comprobante #" + original.getEntryNumber()
+                                        + " fue reversado/rechazado por " + createdBy
+                                        + ". Motivo: " + description)
+                                .actionUrl("/contabilidad/comprobantes/" + original.getId())
+                                .sourceId(original.getId())
+                                .sourceType("JournalEntry")
+                                .severity(com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.WARNING)
+                                .build()));
+            }
+        } catch (RuntimeException ignored) { /* notif no rompe el reverse */ }
+
         return toDTO(savedReversal);
     }
 

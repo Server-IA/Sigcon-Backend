@@ -299,8 +299,61 @@ public class TemporaryPermissionService {
 
     @Transactional(readOnly = true)
     public TemporaryPermission findById(Long id) {
-        return repository.findById(id)
+        TemporaryPermission tp = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Permiso temporal no encontrado"));
+        // QA Bloque PA Bug 44 (HU-PA-17 E4, 2026-05-09): aislar cross-tenant. Si
+        // el actor no es PLATFORM_ADMIN y el permiso pertenece a otra empresa, NO
+        // exponer la fila (404 generico, no 403, para no revelar existencia).
+        if (!TenantContext.isPlatformAdmin()) {
+            Long currentTenant = TenantContext.getCompanyId();
+            if (currentTenant != null && tp.getCompanyId() != null
+                    && !currentTenant.equals(tp.getCompanyId())) {
+                throw new IllegalArgumentException("Permiso temporal no encontrado");
+            }
+        }
+        return tp;
+    }
+
+    /**
+     * QA Bloque PA Bug 45 (HU-PA-16 E6, 2026-05-09): construye el timeline
+     * cronologico de eventos del permiso temporal. Incluye creacion, expiracion
+     * por job nocturno (si aplica) y revocacion manual (si aplica). Sirve como
+     * evidencia unica para auditoria externa.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getTimeline(Long temporaryPermissionId) {
+        TemporaryPermission tp = findById(temporaryPermissionId);
+        List<Map<String, Object>> events = new ArrayList<>();
+
+        Map<String, Object> created = new LinkedHashMap<>();
+        created.put("event", "GRANTED");
+        created.put("at", tp.getCreatedAt());
+        created.put("byUserId", tp.getGrantedByUserId());
+        created.put("byEmail", tp.getGrantedByEmail());
+        created.put("description", "Permiso temporal otorgado: " + tp.getPermissionCode());
+        created.put("justification", tp.getJustification());
+        events.add(created);
+
+        if (tp.getStatus() == Status.REVOKED) {
+            Map<String, Object> rev = new LinkedHashMap<>();
+            rev.put("event", "REVOKED");
+            rev.put("at", tp.getRevokedAt());
+            rev.put("byUserId", tp.getRevokedByUserId());
+            rev.put("byEmail", tp.getRevokedByEmail());
+            rev.put("description", "Permiso temporal revocado manualmente antes de su vencimiento");
+            rev.put("reason", tp.getRevocationReason());
+            events.add(rev);
+        } else if (tp.getStatus() == Status.EXPIRED) {
+            Map<String, Object> exp = new LinkedHashMap<>();
+            exp.put("event", "EXPIRED");
+            exp.put("at", tp.getEndDate());
+            exp.put("byUserId", null);
+            exp.put("byEmail", "system");
+            exp.put("description", "Permiso temporal vencido automaticamente (job nocturno)");
+            events.add(exp);
+        }
+
+        return events;
     }
 
     /** Excepcion especifica para mapear a HTTP 409 (HU-PA-13 E3). */

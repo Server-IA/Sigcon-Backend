@@ -31,6 +31,20 @@ public class PlatformDashboardService {
     private EntityManager em;
 
     /**
+     * QA Bloque PA Bug 52 (HU-PA-15 E5, 2026-05-09): inyectar el scheduler de
+     * vencimiento de permisos temporales para exponer su ultimo run en el
+     * dashboard de plataforma. Required=false: si el bean no esta disponible
+     * (entornos minimos), el dashboard devuelve null y no rompe.
+     */
+    private com.sigcon.backend.parametrization.temporary_permissions.domain.service.TemporaryPermissionExpiryScheduler tempPermScheduler;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTempPermScheduler(
+            com.sigcon.backend.parametrization.temporary_permissions.domain.service.TemporaryPermissionExpiryScheduler scheduler) {
+        this.tempPermScheduler = scheduler;
+    }
+
+    /**
      * Calcula los KPIs del dashboard.
      *
      * @return DTO con conteos agregados + top-5 empresas por volumen
@@ -65,6 +79,34 @@ public class PlatformDashboardService {
               + "WHERE c.deleted_at IS NULL "
               + "GROUP BY c.id, c.business_name ORDER BY value DESC LIMIT 10");
 
+        // QA Bloque PA Bug 52 (HU-PA-15 E5): incluir estado del scheduler de vencimiento
+        // de permisos temporales en el panel de plataforma.
+        java.util.Map<String, Object> tempPermSchedulerStatus = null;
+        if (tempPermScheduler != null) {
+            try {
+                var s = tempPermScheduler.getLastRun();
+                tempPermSchedulerStatus = new java.util.LinkedHashMap<>();
+                if (s == null) {
+                    tempPermSchedulerStatus.put("status", "NEVER_RAN");
+                } else {
+                    tempPermSchedulerStatus.put("status", s.status);
+                    tempPermSchedulerStatus.put("expiredCount", s.expiredCount);
+                    tempPermSchedulerStatus.put("notifiedCount", s.notifiedCount);
+                    tempPermSchedulerStatus.put("durationMs", s.durationMs);
+                    tempPermSchedulerStatus.put("startedAt", s.startedAt);
+                    tempPermSchedulerStatus.put("endedAt", s.endedAt);
+                    if (s.errorMessage != null) tempPermSchedulerStatus.put("errorMessage", s.errorMessage);
+                }
+            } catch (RuntimeException ignored) {
+                tempPermSchedulerStatus = java.util.Map.of("status", "ERROR_FETCHING_STATUS");
+            }
+        }
+
+        // QA Bloque PA Bug 68 (HU-PA-PLAT-06 E2): salud de servicios (DB + AAEF)
+        java.util.Map<String, Object> servicesHealth = computeServicesHealth();
+        // QA Bloque PA Bug 68 (HU-PA-PLAT-06 E3): metricas de uso
+        java.util.Map<String, Object> usageMetrics = computeUsageMetrics();
+
         return PlatformDashboardDTO.builder()
                 .activeCompanies(active)
                 .inactiveCompanies(inactive)
@@ -75,7 +117,81 @@ public class PlatformDashboardService {
                 .ackFailedBatches(ackFailed)
                 .topCompaniesByJe(topJe)
                 .companiesWithFailedAck(failedAck)
+                .tempPermSchedulerStatus(tempPermSchedulerStatus)
+                .servicesHealth(servicesHealth)
+                .usageMetrics(usageMetrics)
                 .build();
+    }
+
+    /**
+     * QA Bloque PA Bug 68 (HU-PA-PLAT-06 E2): estado tiempo real de servicios.
+     */
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> computeServicesHealth() {
+        java.util.Map<String, Object> h = new java.util.LinkedHashMap<>();
+        // BD: latencia de un SELECT trivial + activity count
+        long t0 = System.currentTimeMillis();
+        Number activeConn = null;
+        try {
+            activeConn = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM pg_stat_activity WHERE state IS NOT NULL").getSingleResult();
+        } catch (Exception ignored) {}
+        long dbLatencyMs = System.currentTimeMillis() - t0;
+        java.util.Map<String, Object> db = new java.util.LinkedHashMap<>();
+        db.put("status", dbLatencyMs < 100 ? "OK" : (dbLatencyMs < 500 ? "WARNING" : "CRITICAL"));
+        db.put("latencyMs", dbLatencyMs);
+        db.put("activeConnections", activeConn != null ? activeConn.longValue() : null);
+        h.put("database", db);
+        // AAEF: errores en ultima hora + latencia promedio ultimos 15 min
+        java.util.Map<String, Object> aaef = new java.util.LinkedHashMap<>();
+        try {
+            Number errorsLastHour = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM integration_batches WHERE status='ACK_FAILED' " +
+                "AND received_at > NOW() - INTERVAL '1 hour' AND deleted_at IS NULL").getSingleResult();
+            Number latencyP95 = (Number) em.createNativeQuery(
+                "SELECT EXTRACT(EPOCH FROM percentile_cont(0.95) WITHIN GROUP " +
+                "(ORDER BY ack_sent_at - received_at)) FROM integration_batches " +
+                "WHERE received_at > NOW() - INTERVAL '15 minutes' AND ack_sent_at IS NOT NULL").getSingleResult();
+            long errors = errorsLastHour != null ? errorsLastHour.longValue() : 0;
+            aaef.put("status", errors == 0 ? "OK" : (errors < 5 ? "WARNING" : "CRITICAL"));
+            aaef.put("errorsLastHour", errors);
+            aaef.put("latencyP95Seconds15m", latencyP95);
+        } catch (Exception ex) {
+            aaef.put("status", "WARNING");
+            aaef.put("errorMessage", ex.getMessage());
+        }
+        h.put("aaef", aaef);
+        return h;
+    }
+
+    /**
+     * QA Bloque PA Bug 68 (HU-PA-PLAT-06 E3): metricas de uso (sesiones activas,
+     * tiempos de respuesta, errores 5xx).
+     */
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> computeUsageMetrics() {
+        java.util.Map<String, Object> u = new java.util.LinkedHashMap<>();
+        // Sesiones activas: aproximacion via login events recientes (ultimas 8h)
+        try {
+            Number activeSessions = (Number) em.createNativeQuery(
+                "SELECT COUNT(DISTINCT user_id) FROM audit_logs " +
+                "WHERE action = 'LOGIN' AND timestamp > NOW() - INTERVAL '8 hours'").getSingleResult();
+            u.put("activeSessionsApprox", activeSessions != null ? activeSessions.longValue() : 0);
+        } catch (Exception ignored) {
+            u.put("activeSessionsApprox", null);
+        }
+        // Errores 5xx en ultima hora desde audit_logs (severidad CRITICAL)
+        try {
+            Number errors5xx = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM audit_logs WHERE severity = 'CRITICAL' " +
+                "AND timestamp > NOW() - INTERVAL '1 hour'").getSingleResult();
+            u.put("errors5xxLastHour", errors5xx != null ? errors5xx.longValue() : 0);
+        } catch (Exception ignored) {
+            u.put("errors5xxLastHour", null);
+        }
+        u.put("note", "Metricas de p50/p95/p99 requieren APM externo (Prometheus/Grafana). "
+                    + "Aqui se exponen aproximaciones via audit_logs.");
+        return u;
     }
 
     private long scalar(String sql, Object... params) {

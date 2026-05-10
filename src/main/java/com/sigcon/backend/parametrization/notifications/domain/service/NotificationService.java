@@ -88,6 +88,31 @@ public class NotificationService {
     }
 
     /**
+     * HU-PA-19 E5 (Bloque PA Bug 47, 2026-05-09): version asincrona del publish
+     * por suscripcion de rol. Se invoca con {@code @Async} para no bloquear la
+     * transaccion del modulo origen (CG/AR/AP/BNK/NOM). El TenantContext puede
+     * NO estar propagado en el thread async, por eso se requiere companyId
+     * explicito en el request.
+     *
+     * <p>Cualquier service que dispare un evento de negocio debe llamar este
+     * metodo en lugar de {@link #publishByRoleSubscription} si la operacion es
+     * critica y el bloqueo por persistencia de notificaciones afectaria UX.
+     */
+    @org.springframework.scheduling.annotation.Async
+    public void publishByRoleSubscriptionAsync(PublishEventRequest req) {
+        try {
+            // Propagar tenant explicitamente para que el @Filter de Hibernate aplique.
+            com.sigcon.backend.platform.tenant.TenantContext.setCompanyId(req.getCompanyId());
+            publishByRoleSubscription(req);
+        } catch (Exception ex) {
+            log.error("[NOTIF] Async publishByRoleSubscription fallo: evt={} company={}",
+                    req.getEventKey(), req.getCompanyId(), ex);
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.clear();
+        }
+    }
+
+    /**
      * HU-PA-19: publica notificacion a todos los usuarios de la empresa cuyo
      * rol este suscrito al evento. Aplica dedup HU-PA-25 por usuario.
      */
@@ -128,21 +153,50 @@ public class NotificationService {
     // LISTAR / MARCAR
     // =============================================================
 
-    /** HU-PA-21: bandeja paginada del usuario actual. */
+    /**
+     * HU-PA-21: bandeja paginada del usuario actual.
+     *
+     * <p>QA Bloque PA Bug 53 (HU-PA-21 E2, 2026-05-09): los filtros se combinan
+     * via Specification en lugar de ser mutuamente excluyentes. Acepta module,
+     * type (USER_EVENT/ROL_EVENT) y unreadOnly simultaneamente.
+     */
     @Transactional(readOnly = true)
     public Page<NotificationDTO> listForUser(Long userId, String moduleFilter, Boolean unreadOnly,
                                              int page, int size) {
+        return listForUser(userId, moduleFilter, null, unreadOnly, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<NotificationDTO> listForUser(Long userId, String moduleFilter, String typeFilter,
+                                             Boolean unreadOnly, int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
         LocalDateTime now = LocalDateTime.now();
-        Page<Notification> result;
-        if (Boolean.TRUE.equals(unreadOnly)) {
-            result = notificationRepository.findActiveUnreadByUser(userId, now, pageable);
-        } else if (moduleFilter != null && !moduleFilter.isBlank()) {
-            result = notificationRepository.findActiveByUserAndModule(userId, now, moduleFilter, pageable);
-        } else {
-            result = notificationRepository.findActiveByUser(userId, now, pageable);
-        }
+
+        // Build Specification combinando filtros
+        org.springframework.data.jpa.domain.Specification<Notification> spec = (root, q, cb) -> {
+            var preds = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            preds.add(cb.equal(root.get("userId"), userId));
+            preds.add(cb.isNull(root.get("deletedAt")));
+            preds.add(cb.or(cb.isNull(root.get("expiresAt")), cb.greaterThan(root.get("expiresAt"), now)));
+            if (Boolean.TRUE.equals(unreadOnly)) {
+                preds.add(cb.isNull(root.get("readAt")));
+            }
+            if (moduleFilter != null && !moduleFilter.isBlank()) {
+                preds.add(cb.equal(root.get("module"), moduleFilter));
+            }
+            if (typeFilter != null && !typeFilter.isBlank()) {
+                try {
+                    Notification.Type t = Notification.Type.valueOf(typeFilter.toUpperCase());
+                    preds.add(cb.equal(root.get("type"), t));
+                } catch (IllegalArgumentException ignored) {
+                    // tipo invalido: no aplicar filtro (no rompe la query)
+                }
+            }
+            return cb.and(preds.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        Page<Notification> result = notificationRepository.findAll(spec, pageable);
         return result.map(NotificationDTO::from);
     }
 

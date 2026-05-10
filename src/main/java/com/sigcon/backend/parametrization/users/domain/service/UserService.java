@@ -57,6 +57,18 @@ public class UserService {
     private final SystemInfoService systemInfoService;
     private final AuditPublisher auditPublisher;
 
+    /**
+     * QA Bloque PA Bug 48 (HU-PA-20 E3/E4, 2026-05-09): NotificationService inyectado
+     * por setter (evitar ciclo) para emitir USER_DEACTIVATED y USER_ROLE_ADDED.
+     */
+    private com.sigcon.backend.parametrization.notifications.domain.service.NotificationService notificationService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setNotificationService(
+            com.sigcon.backend.parametrization.notifications.domain.service.NotificationService ns) {
+        this.notificationService = ns;
+    }
+
     private final UserUtil userUtil;
 
     private final AvatarStorageService avatarStorageService;
@@ -143,9 +155,26 @@ public class UserService {
         }
 
         if (userRepository.existsByEmailAndDeletedAtIsNull(request.getEmail())) {
+            // QA Bloque PA Bug 19 (HU-PA-08 E6, 2026-05-09): mensaje especifico cuando
+            // el email ya pertenece a un usuario de plataforma. La HU exige reflejar
+            // el constraint ck_users_tenant_or_platform a nivel de aplicacion.
+            Optional<User> existingOpt = userRepository.findByEmail(request.getEmail());
+            if (existingOpt.isPresent() && existingOpt.get().getPlatformRole() != null) {
+                return ResponseEntity.badRequest().body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "Un usuario no puede ser simultaneamente usuario de plataforma y usuario de empresa")));
+            }
+            // QA Bloque PA Bug 18 (HU-PA-08 E3): mensaje literal HU para email duplicado cross-tenant.
             return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El correo electrónico ya está registrado")));
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Ya existe un usuario con ese email en el sistema")));
+        }
 
+        // QA Bloque PA Bug 17 (HU-PA-08 E4, 2026-05-09): validar al menos un rol
+        // asignado al crear usuario. La HU exige bloquear con mensaje literal.
+        if (request.getRoles() == null || request.getRoles().isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe asignar al menos un rol al usuario")));
         }
 
         // Multi-tenant: el usuario nuevo debe pertenecer a la empresa del admin que lo crea.
@@ -159,6 +188,27 @@ public class UserService {
                           + "Los usuarios de plataforma se crean desde el modulo Plataforma.")));
         }
 
+        // QA Bloque PA Bug 16 (HU-PA-08 E2): resolver cada rol POR TENANT.
+        // findByName devolvia el primer rol global cuando los roles eran globales,
+        // ahora cada empresa tiene sus copias y necesitamos filtrar por companyId.
+        Set<Role> resolvedRoles = new java.util.HashSet<>();
+        java.util.List<String> notFound = new java.util.ArrayList<>();
+        for (String roleName : request.getRoles()) {
+            if (roleName == null || roleName.isBlank()) continue;
+            Optional<Role> opt = roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(
+                    roleName.trim().toUpperCase(), tenantCompanyId);
+            if (opt.isPresent()) {
+                resolvedRoles.add(opt.get());
+            } else {
+                notFound.add(roleName);
+            }
+        }
+        if (resolvedRoles.isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Ninguno de los roles solicitados existe en esta empresa: " + notFound)));
+        }
+
         User user = User.builder()
                 .name(request.getName())
                 .lastname(request.getLastname())
@@ -167,11 +217,13 @@ public class UserService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .status(Status.ACTIVE)
                 .companyId(tenantCompanyId)
-                .roles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent)
-                        .map(Optional::get).collect(Collectors.toSet()))
+                .roles(resolvedRoles)
                 .build();
         userRepository.save(user);
-        auditPublisher.publishCreate(AuditModule.PA, "User", user.getId(), "User creado id=" + user.getId());
+        // HU-PA-08 audit: incluir roles asignados en la descripcion
+        String rolesStr = resolvedRoles.stream().map(Role::getName).sorted().collect(Collectors.joining(", "));
+        auditPublisher.publishCreate(AuditModule.PA, "User", user.getId(),
+                "Usuario creado: " + user.getEmail() + " | roles=[" + rolesStr + "] | companyId=" + tenantCompanyId);
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario creado correctamente"),
                         Optional.empty()));
@@ -321,6 +373,12 @@ public class UserService {
 
         User user = userOpt.get();
 
+        // QA Bloque PA Bug 48 (HU-PA-20 E3/E4, 2026-05-09): capturar estado previo
+        // para detectar cambios que requieren notificar al user (status + roles).
+        Status previousStatus = user.getStatus();
+        Set<String> previousRoles = user.getRoles() == null ? new java.util.HashSet<>()
+                : user.getRoles().stream().map(Role::getName).collect(Collectors.toCollection(java.util.HashSet::new));
+
         if (request.getName() != null) {
             user.setName(request.getName());
         }
@@ -329,7 +387,15 @@ public class UserService {
             user.setLastname(request.getLastname());
         }
 
-        if (request.getEmail() != null) {
+        // QA Bloque PA Bug 22 (HU-PA-09 E4, 2026-05-09): validar unicidad global del
+        // email al editar. Antes el endpoint hacia setEmail sin validar y permitia
+        // duplicados que rompian el login con "Query did not return a unique result".
+        if (request.getEmail() != null && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.existsByEmailAndIdNotAndDeletedAtIsNull(request.getEmail(), id)) {
+                return ResponseEntity.badRequest().body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "Ya existe un usuario con ese email en el sistema")));
+            }
             user.setEmail(request.getEmail());
         }
 
@@ -341,9 +407,42 @@ public class UserService {
             user.setStatus(request.getStatus());
         }
 
+        // QA Bloque PA Bugs 20+21 (HU-PA-09 E1/E2/E3, 2026-05-09):
+        // - Multi-rol: usar resolucion per-tenant en lugar de findByName cross-tenant.
+        // - E3: si el cliente envia un array vacio de roles, bloquear con mensaje literal HU.
+        // - El cliente debe enviar roles como List<String> (multi-select). Solo se procesa
+        //   si la propiedad viene presente en el request; si llega null se preserva el set actual.
         if (request.getRoles() != null) {
-            user.setRoles(request.getRoles().stream().map(roleRepository::findByName).filter(Optional::isPresent)
-                    .map(Optional::get).collect(Collectors.toSet()));
+            if (request.getRoles().isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "El usuario debe tener al menos un rol activo. Asigne otro rol antes de remover este")));
+            }
+            Long tenantCompanyId = TenantContext.getCompanyId();
+            Set<Role> resolvedRoles = new java.util.HashSet<>();
+            java.util.List<String> notFound = new java.util.ArrayList<>();
+            for (String roleName : request.getRoles()) {
+                if (roleName == null || roleName.isBlank()) continue;
+                Optional<Role> opt;
+                if (tenantCompanyId != null) {
+                    opt = roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(
+                            roleName.trim().toUpperCase(), tenantCompanyId);
+                } else {
+                    // Fallback platform admin: si esta editando sin tenant, usar findByName legacy.
+                    opt = roleRepository.findByName(roleName.trim().toUpperCase());
+                }
+                if (opt.isPresent()) {
+                    resolvedRoles.add(opt.get());
+                } else {
+                    notFound.add(roleName);
+                }
+            }
+            if (resolvedRoles.isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "Ninguno de los roles solicitados existe en esta empresa: " + notFound)));
+            }
+            user.setRoles(resolvedRoles);
         }
 
         if (request.getUsername() != null) {
@@ -352,7 +451,60 @@ public class UserService {
 
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
-        auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(), "User actualizado id=" + user.getId());
+        // HU-PA-09 audit: incluir cambios clave (email + roles) para trazabilidad
+        String rolesAfter = user.getRoles().stream().map(Role::getName).sorted().collect(Collectors.joining(", "));
+        auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(),
+                "User actualizado id=" + user.getId() + " | email=" + user.getEmail() + " | roles=[" + rolesAfter + "]");
+
+        // QA Bloque PA Bug 48 (HU-PA-20 E3): notif al desactivar
+        if (notificationService != null && previousStatus == Status.ACTIVE && user.getStatus() == Status.INACTIVE) {
+            try {
+                notificationService.publishToUser(user.getId(),
+                    com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                        .companyId(user.getCompanyId())
+                        .eventKey("USER_DEACTIVATED")
+                        .title("Su cuenta sera desactivada")
+                        .body("Su cuenta " + user.getEmail() + " fue desactivada por un administrador. "
+                                + "Su sesion sera invalidada en breve. Si requiere reactivarla, contacte al administrador.")
+                        .actionUrl("/perfil")
+                        .sourceId(user.getId())
+                        .sourceType("User")
+                        .severity(com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.WARNING)
+                        .build());
+            } catch (RuntimeException ignored) { /* notif no rompe update */ }
+        }
+        // HU-PA-20 E4: notif al asignar nuevos roles
+        if (notificationService != null) {
+            try {
+                Set<String> newRoles = user.getRoles().stream().map(Role::getName).collect(Collectors.toCollection(java.util.HashSet::new));
+                Set<String> added = new java.util.HashSet<>(newRoles); added.removeAll(previousRoles);
+                Set<String> removed = new java.util.HashSet<>(previousRoles); removed.removeAll(newRoles);
+                if (!added.isEmpty()) {
+                    notificationService.publishToUser(user.getId(),
+                        com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                            .companyId(user.getCompanyId())
+                            .eventKey("USER_ROLE_ADDED")
+                            .title("Se le agrego un nuevo rol")
+                            .body("Se le agregaron los siguientes roles: " + added
+                                    + (removed.isEmpty() ? "" : " (removidos: " + removed + ")"))
+                            .actionUrl("/perfil")
+                            .sourceId(user.getId())
+                            .sourceType("User")
+                            .build());
+                } else if (!removed.isEmpty()) {
+                    notificationService.publishToUser(user.getId(),
+                        com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                            .companyId(user.getCompanyId())
+                            .eventKey("USER_ROLE_REMOVED")
+                            .title("Se le retiro un rol")
+                            .body("Se le retiraron los siguientes roles: " + removed)
+                            .actionUrl("/perfil")
+                            .sourceId(user.getId())
+                            .sourceType("User")
+                            .build());
+                }
+            } catch (RuntimeException ignored) { /* notif no rompe update */ }
+        }
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(

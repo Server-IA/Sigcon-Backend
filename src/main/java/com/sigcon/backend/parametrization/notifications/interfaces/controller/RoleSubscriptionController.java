@@ -27,14 +27,14 @@ public class RoleSubscriptionController {
     private final RoleSubscriptionService service;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('PERM_PAR.NOTIFICACIONES.CONFIGURAR_ROL') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_PARAMETRIZACION.ROLES.EDITAR') or hasAuthority('PERM_PAR.ROLES.EDITAR') or hasAuthority('PERM_PAR.NOTIFICACIONES.CONFIGURAR_ROL') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "HU-PA-18: lista suscripciones del rol")
     public ResponseEntity<?> list(@PathVariable Long roleId) {
         return ResponseEntity.ok(Map.of("data", service.listForRole(roleId)));
     }
 
     @PutMapping
-    @PreAuthorize("hasAuthority('PERM_PAR.NOTIFICACIONES.CONFIGURAR_ROL') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_PARAMETRIZACION.ROLES.EDITAR') or hasAuthority('PERM_PAR.ROLES.EDITAR') or hasAuthority('PERM_PAR.NOTIFICACIONES.CONFIGURAR_ROL') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "HU-PA-18: crea o actualiza una suscripcion del rol")
     public ResponseEntity<?> upsert(@PathVariable Long roleId, @Valid @RequestBody UpsertRoleSubscriptionRequest req) {
         try {
@@ -45,7 +45,7 @@ public class RoleSubscriptionController {
     }
 
     @DeleteMapping("/{eventKey}")
-    @PreAuthorize("hasAuthority('PERM_PAR.NOTIFICACIONES.CONFIGURAR_ROL') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_PARAMETRIZACION.ROLES.EDITAR') or hasAuthority('PERM_PAR.ROLES.EDITAR') or hasAuthority('PERM_PAR.NOTIFICACIONES.CONFIGURAR_ROL') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
     @Operation(summary = "HU-PA-18: elimina una suscripcion (soft delete)")
     public ResponseEntity<?> delete(@PathVariable Long roleId, @PathVariable String eventKey) {
         boolean ok = service.delete(roleId, eventKey);

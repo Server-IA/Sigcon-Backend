@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -51,9 +50,15 @@ public class AaefInvoiceDTO {
         @JsonProperty("Type") private Type type;
         @JsonProperty("IssueDate") private LocalDate issueDate;
         @JsonProperty("DueDate") private LocalDate dueDate;
-        /** ACTIVE | PAID | CANCELLED | PARTIAL (estados aceptados en AAEF). */
+        /**
+         * PAID | PENDING (estados aceptados en AAEF v1.1).
+         *
+         * <p>QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion solo
+         * emite PAID o PENDING. Antes aceptabamos ACTIVE/CANCELLED/PARTIAL.
+         */
         @JsonProperty("Status") private String status;
-        @JsonProperty("UpdatedAt") private OffsetDateTime updatedAt;
+        /** Fecha de ultima actualizacion (yyyy-MM-dd, sin hora). */
+        @JsonProperty("UpdatedAt") private LocalDate updatedAt;
     }
 
     @Data

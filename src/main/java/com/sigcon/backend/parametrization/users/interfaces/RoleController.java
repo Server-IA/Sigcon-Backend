@@ -83,14 +83,17 @@ public class RoleController {
 
     @PostMapping("/deleteRole/{id}")
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    @Operation(summary = "Eliminar rol (soft delete)", description = "Elimina logicamente un rol del sistema <br> Permiso requerido: DELETE_ROLE")
+    @Operation(summary = "Eliminar rol (soft delete)",
+               description = "Elimina logicamente un rol del sistema. Requiere `reason` >=30 chars (HU-PA-06 E4). <br> Permiso requerido: DELETE_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol eliminado exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Motivo invalido o rol con usuarios asignados"),
         @ApiResponse(responseCode = "403", description = "Sin permisos para eliminar roles"),
         @ApiResponse(responseCode = "404", description = "Rol no encontrado")
     })
-    public ResponseEntity<?> deleteRole(@PathVariable Long id) {
-        return roleService.deleteRole(id);
+    public ResponseEntity<?> deleteRole(@PathVariable Long id,
+                                         @org.springframework.web.bind.annotation.RequestParam(value="reason", required=false) String reason) {
+        return roleService.deleteRole(id, reason);
     }
 
     @PostMapping("/assignRole")

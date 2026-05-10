@@ -31,4 +31,27 @@ public interface RoleRepository extends JpaRepository<Role,Long>, JpaSpecificati
     List<Role> findAllByPermissions_Id(Long permissionId);
 
     Optional<Role> findByNameAndDeletedAtIsNull(String name);
+
+    /**
+     * HU-PA-04 E3 / Bug 4 (2026-05-09): unicidad por (companyId, name) en
+     * lugar de unicidad global. Se usa en createRole para validar que no
+     * exista otro rol con el mismo nombre DENTRO DEL TENANT.
+     * companyId == null busca en roles globales del sistema.
+     */
+    Optional<Role> findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(String name, Long companyId);
+
+    /**
+     * HU-PA-03 E1: lista los roles visibles para un tenant. Incluye:
+     *  - Los roles del propio tenant (companyId = X).
+     * NO incluye roles globales (PLATFORM_ADMIN, ADMIN, USER) por el
+     * aislamiento estricto que pide HU-PA-03 E3.
+     */
+    @Query("SELECT r FROM Role r WHERE r.deletedAt IS NULL AND r.companyId = :companyId")
+    List<Role> findAllForTenant(Long companyId);
+
+    /** Conteo de usuarios asignados al rol (HU-PA-03 E1, columna #usuarios). */
+    @Query(value = "SELECT COUNT(*) FROM users_roles ur " +
+                   "JOIN users u ON u.id = ur.user_id " +
+                   "WHERE ur.role_id = :roleId AND u.deleted_at IS NULL", nativeQuery = true)
+    Long countActiveUsersByRoleId(Long roleId);
 }

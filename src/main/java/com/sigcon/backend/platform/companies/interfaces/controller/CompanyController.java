@@ -88,9 +88,16 @@ public class CompanyController {
             @Parameter(description = "Indice de pagina 0-based", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Filas por pagina (max 100)", example = "20")
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "Filtrar por status (ACTIVE/INACTIVE). Por defecto retorna todas.")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Filtrar por NIT (busqueda por prefijo, no exacta).")
+            @RequestParam(required = false) String nit,
+            @Parameter(description = "Si true, enriquece el listado con counts (activeUsers/openPeriods/aaefStatus).")
+            @RequestParam(required = false, defaultValue = "false") boolean enrich) {
         Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100));
-        return ResponseEntity.ok(companyService.findAll(pageable));
+        // QA Bloque PA Bug 57 (HU-PA-PLAT-02 E2+E3): filtros opcionales
+        return ResponseEntity.ok(companyService.findAll(pageable, status, nit, enrich));
     }
 
     /**
@@ -157,10 +164,18 @@ public class CompanyController {
                      description = "NIT / email / username duplicado, password menor a 6 chars, etc."),
         @ApiResponse(responseCode = "403", description = "Usuario no es PLATFORM_ADMIN")
     })
-    public ResponseEntity<CompanyDTO> createWithAdmin(
+    public ResponseEntity<?> createWithAdmin(
             @Valid @RequestBody CreateCompanyWithAdminRequest request) {
-        CompanyDTO dto = companyService.createWithAdmin(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        try {
+            CompanyDTO dto = companyService.createWithAdmin(request);
+            // QA Bloque PA Bug 56 (HU-PA-PLAT-01 E1): retornar 201 con company + adminUserId.
+            return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                    "success", false,
+                    "code", 400,
+                    "message", ex.getMessage()));
+        }
     }
 
     /**
@@ -202,10 +217,30 @@ public class CompanyController {
         @ApiResponse(responseCode = "400", description = "Empresa no existe"),
         @ApiResponse(responseCode = "403", description = "Usuario no es PLATFORM_ADMIN")
     })
-    public ResponseEntity<CompanyDTO> deactivate(
+    public ResponseEntity<?> deactivate(
             @Parameter(description = "ID de la empresa", example = "2")
-            @PathVariable Long id) {
-        return ResponseEntity.ok(companyService.deactivate(id));
+            @PathVariable Long id,
+            @RequestBody(required = false) java.util.Map<String, Object> body) {
+        // QA Bloque PA Bug 60 (HU-PA-PLAT-03 E3, 2026-05-09): motivo obligatorio
+        // minimo 30 chars al desactivar para auditoria.
+        String reason = body == null ? null : (String) body.get("reason");
+        if (reason == null || reason.trim().length() < 30) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "success", false,
+                "code", 400,
+                "message", "El motivo de desactivacion es obligatorio y debe tener al menos 30 caracteres."));
+        }
+        // QA Bloque PA Bug 61 (HU-PA-PLAT-03 E4): force=true para confirmar incluso
+        // si hay jobs en ejecucion. Default false retorna 409 con la lista.
+        boolean force = body != null && Boolean.TRUE.equals(body.get("force"));
+        try {
+            return ResponseEntity.ok(companyService.deactivate(id, reason, force));
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(java.util.Map.of(
+                "success", false,
+                "code", 409,
+                "message", ex.getMessage()));
+        }
     }
 
     /** HU-PLAT-05 E2: reactiva una empresa INACTIVE previamente. */
