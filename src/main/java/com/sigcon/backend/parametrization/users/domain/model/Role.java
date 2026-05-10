@@ -95,7 +95,8 @@ public class Role {
      * HTTP 409 con el mensaje "Este rol fue modificado por otro usuario...".
      */
     @jakarta.persistence.Version
-    @Column(name = "version", nullable = false)
+    @Column(name = "version", nullable = false,
+            columnDefinition = "BIGINT NOT NULL DEFAULT 0")
     @Builder.Default
     private Long version = 0L;
 
