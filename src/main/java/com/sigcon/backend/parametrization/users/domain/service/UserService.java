@@ -450,11 +450,27 @@ public class UserService {
         }
 
         user.setUpdatedAt(LocalDateTime.now());
+
+        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): si los roles o el status
+        // cambiaron, invalidar sesiones activas del usuario. JwtService.validateToken
+        // rechazara cualquier token emitido ANTES de este timestamp y forzara
+        // re-login para que los permisos actuales tengan efecto. Antes el usuario
+        // seguia operando con permisos viejos hasta que su token expirara.
+        Set<String> rolesAfterSet = user.getRoles() == null ? new java.util.HashSet<>()
+                : user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
+        boolean rolesChanged = !previousRoles.equals(rolesAfterSet);
+        boolean statusChanged = previousStatus != user.getStatus();
+        if (rolesChanged || statusChanged) {
+            user.setSessionInvalidatedAt(LocalDateTime.now());
+        }
+
         userRepository.save(user);
         // HU-PA-09 audit: incluir cambios clave (email + roles) para trazabilidad
         String rolesAfter = user.getRoles().stream().map(Role::getName).sorted().collect(Collectors.joining(", "));
         auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(),
-                "User actualizado id=" + user.getId() + " | email=" + user.getEmail() + " | roles=[" + rolesAfter + "]");
+                "User actualizado id=" + user.getId() + " | email=" + user.getEmail()
+                + " | roles=[" + rolesAfter + "]"
+                + (rolesChanged || statusChanged ? " | session_invalidated=true" : ""));
 
         // QA Bloque PA Bug 48 (HU-PA-20 E3): notif al desactivar
         if (notificationService != null && previousStatus == Status.ACTIVE && user.getStatus() == Status.INACTIVE) {

@@ -101,6 +101,18 @@ public class User implements UserDetails {
     @Column(name = "platform_role", length = 50)
     private String platformRole;
 
+    /**
+     * QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): timestamp de invalidacion
+     * de sesion. Cuando un admin modifica los roles, status (INACTIVE/BLOCKED)
+     * o permisos del usuario, se setea a NOW(). El JwtService valida que el
+     * iat (issued at) del token sea POSTERIOR a este valor; si no, el token
+     * se considera obsoleto y el usuario debe re-loguear para que sus permisos
+     * actuales tengan efecto. Resuelve "invalidacion de cache de permisos en
+     * sesion activa" sin desplegar un cache distribuido.
+     */
+    @Column(name = "session_invalidated_at")
+    private LocalDateTime sessionInvalidatedAt;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

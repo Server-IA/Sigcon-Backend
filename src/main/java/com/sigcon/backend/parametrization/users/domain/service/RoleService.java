@@ -323,6 +323,26 @@ public class RoleService {
         auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(),
                 "Role actualizado: " + role.getName() + " (companyId=" + role.getCompanyId() + ")");
 
+        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): si los permisos del rol
+        // cambiaron, invalidar las sesiones de TODOS los usuarios que tienen
+        // este rol. Antes el cambio solo aplicaba a tokens emitidos despues; los
+        // tokens en sesion activa seguian con permisos viejos hasta expirar.
+        Set<String> newCodesForInvalidation = permissions.stream().map(Permission::getCode).collect(Collectors.toCollection(HashSet::new));
+        if (!previousCodes.equals(newCodesForInvalidation)) {
+            try {
+                List<User> usersWithRole = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                for (User u : usersWithRole) {
+                    u.setSessionInvalidatedAt(now);
+                }
+                if (!usersWithRole.isEmpty()) {
+                    userRepository.saveAll(usersWithRole);
+                }
+            } catch (Exception ex) {
+                // defensivo: no romper el update si saveAll falla por algun lock
+            }
+        }
+
         // HU-PA-20 E2: notificar a TODOS los usuarios que tienen este rol asignado
         // con detalle de permisos agregados/removidos.
         try {
@@ -392,6 +412,13 @@ public class RoleService {
 
         // HU-PA-06 E5: roles globales del sistema (PLATFORM_ADMIN, ADMIN, USER) NO se eliminan.
         if (Role.SYSTEM_GLOBAL_NAMES.contains(role.getName().toUpperCase())) {
+            // QA Bloque PA Bug 78 (HU-PA-06 E7, 2026-05-11): registrar intento bloqueado.
+            try {
+                auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(),
+                    "ROLE_DELETE_BLOCKED snapshot: name=" + role.getName()
+                    + " | motivoBloqueo=\"rol global del sistema\""
+                    + " | reason=\"" + reason.trim() + "\"");
+            } catch (Exception ignore) {}
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of(
                     "No se pueden eliminar los roles globales del sistema."))
@@ -403,6 +430,14 @@ public class RoleService {
         if ("ADMIN_EMPRESA".equalsIgnoreCase(role.getName())
                 && role.getCompanyId() != null
                 && userRepository.countOtherAdminEmpresaInCompany(role.getCompanyId(), role.getId()) == 0) {
+            // QA Bloque PA Bug 78 (HU-PA-06 E7, 2026-05-11): registrar intento bloqueado.
+            try {
+                auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(),
+                    "ROLE_DELETE_BLOCKED snapshot: name=ADMIN_EMPRESA"
+                    + " | companyId=" + role.getCompanyId()
+                    + " | motivoBloqueo=\"ultimo ADMIN_EMPRESA de la empresa\""
+                    + " | reason=\"" + reason.trim() + "\"");
+            } catch (Exception ignore) {}
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of(
                     "Debe existir al menos un ADMIN_EMPRESA activo en la empresa"))
@@ -457,6 +492,22 @@ public class RoleService {
             body.put("usersWithOnlyThisRole", onlyThisRoleUsers);
             body.put("affectedUsers", affected);
             body.put("timestamp", LocalDateTime.now().toString());
+
+            // QA Bloque PA Bug 78 (HU-PA-06 E7, 2026-05-11): registrar el intento
+            // BLOQUEADO de eliminacion en auditoria. La HU exige trazabilidad de
+            // CUALQUIER intento (exitoso o no) sobre roles del sistema. Antes solo
+            // registrabamos cuando la eliminacion era exitosa.
+            try {
+                String blockedSnapshot = "ROLE_DELETE_BLOCKED snapshot: "
+                    + "name=" + role.getName()
+                    + " | id=" + role.getId()
+                    + " | companyId=" + role.getCompanyId()
+                    + " | reason=\"" + (reason == null ? "" : reason.trim()) + "\""
+                    + " | motivoBloqueo=\"" + mainMsg + "\""
+                    + " | affectedUsersCount=" + users.size()
+                    + " | usersWithOnlyThisRole=" + onlyThisRoleUsers;
+                auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(), blockedSnapshot);
+            } catch (Exception ignore) { /* defensivo: no romper la respuesta */ }
             return ResponseEntity.badRequest().body(body);
         }
 

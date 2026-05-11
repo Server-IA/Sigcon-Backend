@@ -35,6 +35,7 @@ public class SecurityConfig {
     private final AaefPayloadSizeFilter aaefPayloadSizeFilter;
     private final AaefRateLimitFilter aaefRateLimitFilter;
     private final TenantContextFilter tenantContextFilter;
+    private final SessionInvalidationFilter sessionInvalidationFilter;
     private final Environment environment;
 
 
@@ -183,6 +184,13 @@ public class SecurityConfig {
         // (companyId, platformRole) y setear el TenantContext para el resto
         // del request.
         http.addFilterAfter(tenantContextFilter, BearerTokenAuthenticationFilter.class);
+
+        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): SessionInvalidationFilter
+        // corre DESPUES de BearerToken pero ANTES de TenantContextFilter (orden
+        // por @Order). Si el token es viejo (iat < user.sessionInvalidatedAt)
+        // responde 401 sin avanzar a controllers. Asi un cambio de rol invalida
+        // sesiones activas inmediatamente sin esperar a que expire el JWT.
+        http.addFilterAfter(sessionInvalidationFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();
 

@@ -113,7 +113,31 @@ public class JwtService {
 
     public  boolean validateToken (String token, UserDetails userDetails){
         final String username = getUsername(token);
+        if (!username.equals(userDetails.getUsername()) || tokenExpired(token)) {
+            return false;
+        }
 
-        return (username.equals(userDetails.getUsername()) && !tokenExpired(token));
+        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): si el usuario tuvo cambios
+        // en roles/status/permisos despues de emitido el token (sessionInvalidatedAt
+        // > token.iat), invalidar el token. El usuario debe re-loguear para que sus
+        // permisos actuales tengan efecto. Asi resolvemos la invalidacion de cache
+        // en sesion activa sin necesidad de un cache distribuido o un endpoint de
+        // refresh periodico.
+        if (userDetails instanceof User u && u.getSessionInvalidatedAt() != null) {
+            Date iat;
+            try {
+                iat = getClaim(token, Claims::getIssuedAt);
+            } catch (Exception e) {
+                iat = null;
+            }
+            if (iat != null) {
+                Date cutoff = Date.from(u.getSessionInvalidatedAt()
+                        .atZone(java.time.ZoneId.systemDefault()).toInstant());
+                if (iat.before(cutoff)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }
