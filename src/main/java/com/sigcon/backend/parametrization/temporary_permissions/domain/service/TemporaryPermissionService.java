@@ -131,13 +131,39 @@ public class TemporaryPermissionService {
             throw new IllegalArgumentException("Uno o mas permisos no son validos");
         }
 
-        // Resolver actor
+        // Resolver actor. Con oauth2ResourceServer.jwt() el principal es Jwt
+        // (no la entidad User), asi que leemos el claim userId. Si la integracion
+        // legacy de UsernamePasswordAuth pone User como principal, tambien se cubre.
         Long grantorId = null;
         String grantorEmail = null;
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof User u) {
-            grantorId = u.getId();
-            grantorEmail = u.getEmail();
+        if (auth != null) {
+            Object principal = auth.getPrincipal();
+            if (principal instanceof User u) {
+                grantorId = u.getId();
+                grantorEmail = u.getEmail();
+            } else if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+                Object uid = jwt.getClaim("userId");
+                if (uid instanceof Number n) {
+                    grantorId = n.longValue();
+                }
+                grantorEmail = jwt.getSubject();
+                if (grantorId == null && grantorEmail != null) {
+                    // Fallback: cargar el user por email/username
+                    grantorId = userRepository.findByUsernameOrEmail(grantorEmail, grantorEmail)
+                            .map(User::getId).orElse(null);
+                }
+            }
+        }
+
+        // QA Bloque PA Bug 80 (HU-PA-13 E7, 2026-05-11): anti-self-grant. La HU
+        // exige que un admin no pueda otorgarse permisos a si mismo (separacion
+        // de funciones). El frontend filtra el dropdown pero el backend tambien
+        // valida para prevenir bypass via curl/API directa.
+        if (grantorId != null && grantorId.equals(userId)) {
+            throw new IllegalArgumentException(
+                "No puede asignarse permisos temporales a si mismo. Solicite a otro administrador "
+              + "que se los otorgue (separacion de funciones HU-PA-13 E7).");
         }
 
         List<Long> createdIds = new ArrayList<>();
