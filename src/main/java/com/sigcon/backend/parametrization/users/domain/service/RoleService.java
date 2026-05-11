@@ -53,6 +53,15 @@ public class RoleService {
     private final UserRepository userRepository;
     private final ModuleRepository moduleRepository;
     private final AuditPublisher auditPublisher;
+
+    /**
+     * QA Bloque PA Bug 75 (HU-PA-03 E3, 2026-05-11): para enriquecer cada Role
+     * con su companyName legible en el listado cross-empresa (PLATFORM_ADMIN).
+     * Inyeccion opcional para no crear ciclo si algun deploy minimo no carga
+     * el modulo platform.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.platform.companies.domain.repository.CompanyRepository companyRepository;
     /**
      * QA Bloque PA Bug 48 (HU-PA-20 E2/E4, 2026-05-09): notificacion personal a
      * los usuarios afectados cuando se editan los permisos del rol o cuando se
@@ -416,7 +425,11 @@ public class RoleService {
                     m.put("id", u.getId());
                     m.put("email", u.getEmail());
                     m.put("username", u.getUsername());
-                    m.put("editUrl", "/parametrizacion/usuarios/" + u.getId() + "/edit");
+                    // QA Bloque PA Bug 77 (HU-PA-06 E2, 2026-05-11): la ruta
+                    // real del modulo Usuarios es /parametrizacion/users (no
+                    // /usuarios) y la edicion es via modal abierto por query
+                    // param ?edit={id}. Antes apuntabamos a una ruta inexistente.
+                    m.put("editUrl", "/parametrizacion/users?edit=" + u.getId());
                     return m;
                 })
                 .collect(Collectors.toList());
@@ -811,6 +824,19 @@ public class RoleService {
             usersCount = roleRepository.countActiveUsersByRoleId(role.getId());
         } catch (Exception ignore) { /* defensivo: no romper el listado */ }
 
+        // QA Bloque PA Bug 75 (HU-PA-03 E3, 2026-05-11): resolver companyName
+        // legible para discriminar roles del mismo nombre entre empresas en la
+        // vista cross-empresa de PLATFORM_ADMIN. Defensivo: si no hay company
+        // (rol global) o el repo no esta inyectado, queda null.
+        String companyName = null;
+        if (role.getCompanyId() != null && companyRepository != null) {
+            try {
+                companyName = companyRepository.findById(role.getCompanyId())
+                    .map(c -> c.getBusinessName())
+                    .orElse(null);
+            } catch (Exception ignore) { /* no romper el listado */ }
+        }
+
         return RoleRequest.builder()
             .id(role.getId())
             .name(role.getName())
@@ -820,6 +846,7 @@ public class RoleService {
             .status(role.getStatus().name())
             .type(type)
             .companyId(role.getCompanyId())
+            .companyName(companyName)
             .assignedUsersCount(usersCount == null ? 0L : usersCount)
             .createdAt(role.getCreatedAt() == null ? null : role.getCreatedAt().toString())
             .version(role.getVersion())

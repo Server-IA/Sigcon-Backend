@@ -42,6 +42,14 @@ public class RoleRequest {
     private Long companyId;
 
     /**
+     * QA Bloque PA Bug 75 (HU-PA-03 E3, 2026-05-11): nombre legible de la
+     * empresa dueña del rol. Para PLATFORM_ADMIN que ve la lista cross-empresa,
+     * permite distinguir "CONTADOR de SIGCON DEMO" de "CONTADOR de EMPRESA QA 2".
+     * NULL para roles globales (PLATFORM_ADMIN, ADMIN, USER, etc.).
+     */
+    private String companyName;
+
+    /**
      * HU-PA-05 E4 (QA Bloque PA, 2026-05-09): version optimista. El cliente
      * envia el `version` que recibio en el GET; el backend compara con la
      * version actual antes del UPDATE. Si difiere -> HTTP 409.
