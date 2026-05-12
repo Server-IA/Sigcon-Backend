@@ -36,4 +36,17 @@ public interface ParameterRepository extends JpaRepository<Parameter, Long>, Jpa
                  + "AND deleted_at IS NULL ORDER BY company_id ASC LIMIT 1",
            nativeQuery = true)
     Optional<String> findGlobalValueByName(@org.springframework.data.repository.query.Param("name") String name);
+
+    /**
+     * QA Bloque PA Bug 83 (HU-PA-PLAT-03 E1, 2026-05-11): busca un parametro
+     * scoped por empresa SIN aplicar el tenant filter (necesario para que el
+     * SessionInvalidationFilter pueda validar el JWT_INVALIDATION_CUTOFF de
+     * empresas distintas a la del request actual).
+     */
+    @Query(value = "SELECT value FROM parameters WHERE name = :name "
+                 + "AND company_id = :companyId AND deleted_at IS NULL LIMIT 1",
+           nativeQuery = true)
+    Optional<String> findValueByNameAndCompanyId(
+            @org.springframework.data.repository.query.Param("name") String name,
+            @org.springframework.data.repository.query.Param("companyId") Long companyId);
 }

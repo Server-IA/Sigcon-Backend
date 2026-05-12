@@ -2,6 +2,7 @@ package com.sigcon.backend.general.security;
 
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
@@ -54,6 +55,7 @@ import java.util.Optional;
 public class SessionInvalidationFilter extends OncePerRequestFilter {
 
     private final UserRepository userRepository;
+    private final ParameterRepository parameterRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -86,6 +88,37 @@ public class SessionInvalidationFilter extends OncePerRequestFilter {
                                   + "cambios surtan efecto.\","
                                   + "\"error\":\"SESSION_INVALIDATED\"}");
                                 return;
+                            }
+                        }
+
+                        // QA Bloque PA Bug 83 (HU-PA-PLAT-03 E1, 2026-05-11): tambien
+                        // validar el cutoff a nivel EMPRESA. CompanyService.deactivate()
+                        // setea JWT_INVALIDATION_CUTOFF en parameters cuando se desactiva
+                        // una empresa. Aqui rechazamos cualquier token cuyo iat sea
+                        // ANTERIOR al cutoff de su empresa, forzando re-login (que ahora
+                        // sera bloqueado por AuthService porque la empresa esta INACTIVE).
+                        if (u.getCompanyId() != null) {
+                            try {
+                                Optional<String> cutoffStr = parameterRepository
+                                    .findValueByNameAndCompanyId("JWT_INVALIDATION_CUTOFF",
+                                                                 u.getCompanyId());
+                                if (cutoffStr.isPresent()) {
+                                    long cutoffEpoch = Long.parseLong(cutoffStr.get().trim());
+                                    if (iat.getEpochSecond() < cutoffEpoch) {
+                                        SecurityContextHolder.clearContext();
+                                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                        response.setContentType("application/json;charset=UTF-8");
+                                        response.getWriter().write(
+                                            "{\"success\":false,\"code\":401,"
+                                          + "\"message\":\"La empresa a la que pertenece esta cuenta "
+                                          + "fue desactivada. Su sesion fue invalidada. "
+                                          + "Contacte al administrador de plataforma.\","
+                                          + "\"error\":\"COMPANY_SESSION_INVALIDATED\"}");
+                                        return;
+                                    }
+                                }
+                            } catch (NumberFormatException nfe) {
+                                log.debug("JWT_INVALIDATION_CUTOFF mal formado para companyId={}", u.getCompanyId());
                             }
                         }
                     }
