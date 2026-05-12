@@ -76,6 +76,19 @@ public class PlatformDashboardDTO {
             example = "{\"activeSessionsApprox\":12,\"errors5xxLastHour\":0}")
     private java.util.Map<String, Object> usageMetrics;
 
+    /** QA Bloque PA Bug 87 (HU-PA-PLAT-06 E1): empresas creadas en los ultimos 30 dias. */
+    @Schema(description = "Empresas creadas en los ultimos 30 dias", example = "3")
+    private Long companiesCreatedLast30Days;
+
+    /** QA Bloque PA Bug 87 (HU-PA-PLAT-06 E1): empresas activas sin actividad en 7 dias. */
+    @Schema(description = "Empresas sin actividad reciente (sin eventos audit en 7 dias)", example = "2")
+    private Long companiesWithoutActivityLast7Days;
+
+    /** QA Bloque PA Bug 87 (HU-PA-PLAT-06 E1): distribucion por regimen tributario. */
+    @Schema(description = "Distribucion de empresas por regimen tributario",
+            example = "[{\"regimen\":\"Comun\",\"count\":8},{\"regimen\":\"Simplificado\",\"count\":4}]")
+    private java.util.List<java.util.Map<String, Object>> companiesByRegimen;
+
     @Data
     @Builder
     @NoArgsConstructor

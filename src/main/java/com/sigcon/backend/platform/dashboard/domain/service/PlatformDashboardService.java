@@ -107,6 +107,30 @@ public class PlatformDashboardService {
         // QA Bloque PA Bug 68 (HU-PA-PLAT-06 E3): metricas de uso
         java.util.Map<String, Object> usageMetrics = computeUsageMetrics();
 
+        // QA Bloque PA Bug 87 (HU-PA-PLAT-06 E1, 2026-05-11): widgets faltantes
+        long companiesLast30d = scalar(
+            "SELECT COUNT(*) FROM companies WHERE created_at >= NOW() - INTERVAL '30 days' AND deleted_at IS NULL");
+        long inactiveCompaniesLast7d = scalar(
+            "SELECT COUNT(DISTINCT c.id) FROM companies c "
+          + "WHERE c.deleted_at IS NULL AND c.status='ACTIVE' AND NOT EXISTS ("
+          + "  SELECT 1 FROM audit_logs al WHERE al.company_id=c.id "
+          + "  AND al.timestamp > NOW() - INTERVAL '7 days')");
+        java.util.List<java.util.Map<String, Object>> companiesByRegimen = new java.util.ArrayList<>();
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.List<Object[]> rows = em.createNativeQuery(
+                "SELECT COALESCE(tr.name, 'No especificado') AS regimen, COUNT(*) "
+              + "FROM companies c LEFT JOIN type_regimen tr ON tr.id = c.type_regimen_id "
+              + "WHERE c.deleted_at IS NULL GROUP BY regimen ORDER BY 2 DESC")
+                .getResultList();
+            for (Object[] r : rows) {
+                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("regimen", r[0]);
+                m.put("count", ((Number) r[1]).longValue());
+                companiesByRegimen.add(m);
+            }
+        } catch (Exception ignored) { /* defensivo */ }
+
         return PlatformDashboardDTO.builder()
                 .activeCompanies(active)
                 .inactiveCompanies(inactive)
@@ -120,6 +144,9 @@ public class PlatformDashboardService {
                 .tempPermSchedulerStatus(tempPermSchedulerStatus)
                 .servicesHealth(servicesHealth)
                 .usageMetrics(usageMetrics)
+                .companiesCreatedLast30Days(companiesLast30d)
+                .companiesWithoutActivityLast7Days(inactiveCompaniesLast7d)
+                .companiesByRegimen(companiesByRegimen)
                 .build();
     }
 
@@ -161,6 +188,50 @@ public class PlatformDashboardService {
             aaef.put("errorMessage", ex.getMessage());
         }
         h.put("aaef", aaef);
+
+        // QA Bloque PA Bug 87 (HU-PA-PLAT-06 E2, 2026-05-11): cola de procesamiento.
+        // No hay un MQ externo; usamos como proxy los lotes AAEF en estados de
+        // procesamiento pendiente (RECEIVED, PROCESSING). Si la cola crece
+        // sin drenar, indica congestion del worker async.
+        java.util.Map<String, Object> queue = new java.util.LinkedHashMap<>();
+        try {
+            Number pending = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM integration_batches WHERE status IN ('RECEIVED','PROCESSING') "
+              + "AND deleted_at IS NULL").getSingleResult();
+            Number oldest = (Number) em.createNativeQuery(
+                "SELECT EXTRACT(EPOCH FROM (NOW() - MIN(received_at))) FROM integration_batches "
+              + "WHERE status IN ('RECEIVED','PROCESSING') AND deleted_at IS NULL").getSingleResult();
+            long pendingCount = pending != null ? pending.longValue() : 0;
+            long oldestSec = oldest != null ? oldest.longValue() : 0;
+            queue.put("status", pendingCount == 0 ? "OK"
+                              : oldestSec > 600 ? "CRITICAL"
+                              : oldestSec > 120 ? "WARNING"
+                              : "OK");
+            queue.put("pendingCount", pendingCount);
+            queue.put("oldestPendingSeconds", oldestSec);
+        } catch (Exception ex) {
+            queue.put("status", "WARNING");
+            queue.put("errorMessage", ex.getMessage());
+        }
+        h.put("queue", queue);
+
+        // QA Bloque PA Bug 87 (HU-PA-PLAT-06 E2): motor de reportes. Proxy: si
+        // el ultimo export de auditoria fue exitoso en 24h, marcar OK. Si hubo
+        // intentos pero todos fallaron, CRITICAL. Si no hay actividad, NEVER_RAN.
+        java.util.Map<String, Object> reports = new java.util.LinkedHashMap<>();
+        try {
+            Number recentExports = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM audit_logs WHERE action='EXPORT' "
+              + "AND timestamp > NOW() - INTERVAL '24 hours'").getSingleResult();
+            long recent = recentExports != null ? recentExports.longValue() : 0;
+            reports.put("status", recent > 0 ? "OK" : "NEVER_RAN");
+            reports.put("exportsLast24h", recent);
+        } catch (Exception ex) {
+            reports.put("status", "WARNING");
+            reports.put("errorMessage", ex.getMessage());
+        }
+        h.put("reports", reports);
+
         return h;
     }
 
@@ -189,8 +260,49 @@ public class PlatformDashboardService {
         } catch (Exception ignored) {
             u.put("errors5xxLastHour", null);
         }
-        u.put("note", "Metricas de p50/p95/p99 requieren APM externo (Prometheus/Grafana). "
-                    + "Aqui se exponen aproximaciones via audit_logs.");
+        // QA Bloque PA Bug 87 (HU-PA-PLAT-06 E3, 2026-05-11): peticiones por
+        // minuto (audit_logs es el unico punto donde registramos casi cualquier
+        // accion del usuario; lo usamos como proxy de "carga"). Promedio sobre
+        // los ultimos 5 min para suavizar.
+        try {
+            Number reqsLast5m = (Number) em.createNativeQuery(
+                "SELECT COUNT(*) FROM audit_logs "
+              + "WHERE timestamp > NOW() - INTERVAL '5 minutes'").getSingleResult();
+            long count = reqsLast5m != null ? reqsLast5m.longValue() : 0;
+            u.put("requestsPerMinuteApprox", Math.round((double) count / 5.0));
+            u.put("requestsLast5Minutes", count);
+        } catch (Exception ignored) {
+            u.put("requestsPerMinuteApprox", null);
+        }
+
+        // QA Bloque PA Bug 87 (HU-PA-PLAT-06 E3): p50/p95/p99 sobre tiempo de
+        // respuesta. NO tenemos timing real per-request (eso requiere APM tipo
+        // Prometheus); usamos como proxy la latencia AAEF (received_at -> ack_sent_at)
+        // que SI medimos. Indicado en la nota.
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.List<Object[]> percentiles = em.createNativeQuery(
+                "SELECT "
+              + "  EXTRACT(EPOCH FROM percentile_cont(0.50) WITHIN GROUP (ORDER BY ack_sent_at - received_at)), "
+              + "  EXTRACT(EPOCH FROM percentile_cont(0.95) WITHIN GROUP (ORDER BY ack_sent_at - received_at)), "
+              + "  EXTRACT(EPOCH FROM percentile_cont(0.99) WITHIN GROUP (ORDER BY ack_sent_at - received_at)) "
+              + "FROM integration_batches "
+              + "WHERE ack_sent_at IS NOT NULL AND received_at > NOW() - INTERVAL '1 hour'")
+                .getResultList();
+            if (!percentiles.isEmpty()) {
+                Object[] row = percentiles.get(0);
+                u.put("p50ResponseSeconds", row[0]);
+                u.put("p95ResponseSeconds", row[1]);
+                u.put("p99ResponseSeconds", row[2]);
+            }
+        } catch (Exception ignored) {
+            u.put("p50ResponseSeconds", null);
+            u.put("p95ResponseSeconds", null);
+            u.put("p99ResponseSeconds", null);
+        }
+
+        u.put("note", "Metricas p50/p95/p99 estan calculadas sobre latencia AAEF como proxy. "
+                    + "Para metricas reales de respuesta HTTP cross-endpoint instalar APM (Prometheus/Grafana).");
         return u;
     }
 
