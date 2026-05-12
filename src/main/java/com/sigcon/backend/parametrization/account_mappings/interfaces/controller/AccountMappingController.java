@@ -14,10 +14,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -105,5 +109,58 @@ public class AccountMappingController {
                 .orElseGet(() -> ResponseEntity.status(404).body(
                         ErrorRespondJson.getErrorRespondMessage(
                                 Optional.of("Concepto no configurado: " + conceptCode))));
+    }
+
+    /**
+     * QA Bloque PA Bug 92 (HU-TENNAT-04 E2, 2026-05-11): actualiza la cuenta
+     * destino de un concepto. Acepta PUT y PATCH para flexibilidad de cliente.
+     *
+     * <p>Body: {"accountingAccountId": 123}
+     */
+    @PatchMapping("/{conceptCode}")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @Operation(
+        summary = "Actualizar la cuenta destino de un mapeo (HU-TENNAT-04 E2)",
+        description = "Permite al admin de empresa reasignar la cuenta contable destino de un "
+                    + "concepto (ej. AR_CLIENTES) sin necesidad de DDL. La nueva cuenta debe "
+                    + "existir y pertenecer a la misma empresa. Invalida el cache."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Mapeo actualizado"),
+        @ApiResponse(responseCode = "400", description = "Concepto o cuenta destino invalido"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    public ResponseEntity<?> updateMapping(
+            @PathVariable("conceptCode") String conceptCode,
+            @RequestBody Map<String, Object> body) {
+        try {
+            Object idRaw = body.get("accountingAccountId");
+            if (idRaw == null) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("accountingAccountId es obligatorio")));
+            }
+            Long accountId = idRaw instanceof Number n
+                    ? n.longValue() : Long.parseLong(String.valueOf(idRaw).trim());
+            AccountMappingDTO updated = accountMappingService.updateMapping(conceptCode, accountId);
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Mapeo actualizado correctamente"), Optional.of(updated)));
+        } catch (NumberFormatException ex) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("accountingAccountId debe ser un numero")));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of(ex.getMessage())));
+        }
+    }
+
+    @PutMapping("/{conceptCode}")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @Operation(summary = "Alias PUT del PATCH /{conceptCode}")
+    public ResponseEntity<?> updateMappingPut(
+            @PathVariable("conceptCode") String conceptCode,
+            @RequestBody Map<String, Object> body) {
+        return updateMapping(conceptCode, body);
     }
 }

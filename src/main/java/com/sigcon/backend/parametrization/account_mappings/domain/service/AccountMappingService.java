@@ -238,4 +238,62 @@ public class AccountMappingService {
     public void clearCache() {
         cache.clear();
     }
+
+    /**
+     * QA Bloque PA Bug 92 (HU-TENNAT-04 E2, 2026-05-11): permite actualizar
+     * la cuenta destino de un concepto via PATCH/PUT. Valida que la cuenta
+     * destino exista y este activa antes de actualizar. Invalida el cache para
+     * que el siguiente resolveOrThrow lea el valor nuevo.
+     *
+     * @param conceptCode concepto del mapeo (ej. AR_CLIENTES)
+     * @param newAccountingAccountId id de la nueva cuenta destino
+     * @return mapeo actualizado
+     * @throws IllegalArgumentException si el concepto no existe o la cuenta no es valida
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public AccountMappingDTO updateMapping(String conceptCode, Long newAccountingAccountId) {
+        if (conceptCode == null || conceptCode.isBlank()) {
+            throw new IllegalArgumentException("El concepto es obligatorio");
+        }
+        if (newAccountingAccountId == null) {
+            throw new IllegalArgumentException("El id de la cuenta destino es obligatorio");
+        }
+        Long companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (companyId == null) {
+            throw new IllegalArgumentException(
+                "El admin actual no pertenece a una empresa. Los mapeos son por empresa.");
+        }
+        // Verificar que la cuenta destino existe y pertenece a la empresa.
+        AccountingAccount targetAccount = accountingAccountRepository.findById(newAccountingAccountId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "La cuenta contable destino (id=" + newAccountingAccountId + ") no existe."));
+        if (!companyId.equals(targetAccount.getCompanyId())) {
+            throw new IllegalArgumentException(
+                "La cuenta contable destino no pertenece a su empresa.");
+        }
+        // Buscar el mapeo existente por (companyId, conceptCode)
+        AccountMapping mapping = mappingRepository
+                .findByCompanyIdAndConceptCodeAndDeletedAtIsNull(companyId, conceptCode.trim().toUpperCase())
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "Concepto no configurado para esta empresa: " + conceptCode));
+
+        Long previousId = mapping.getAccountingAccountId();
+        mapping.setAccountingAccountId(newAccountingAccountId);
+        mapping = mappingRepository.save(mapping);
+
+        // Invalidar cache para que la proxima llamada a resolveOrThrow lea el valor nuevo.
+        clearCache();
+
+        log.info("HU-TENNAT-04: companyId={} mapeo {} actualizado: cuenta {} -> {}",
+                companyId, conceptCode, previousId, newAccountingAccountId);
+
+        return AccountMappingDTO.builder()
+                .id(mapping.getId())
+                .conceptCode(mapping.getConceptCode())
+                .conceptDescription(mapping.getConceptDescription())
+                .pucCode(mapping.getPucCode())
+                .accountingAccountId(mapping.getAccountingAccountId())
+                .accountingAccountName(targetAccount.getCustomName())
+                .build();
+    }
 }
