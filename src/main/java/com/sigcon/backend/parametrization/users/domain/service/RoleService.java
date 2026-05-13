@@ -744,6 +744,23 @@ public class RoleService {
         role.getPermissions().addAll(permissions);
         roleRepository.save(role);
 
+        // QA Bloque PA Bug 96 (HU-PA-11 E4, 2026-05-13): invalidar sesion de
+        // todos los usuarios que tienen este rol. assignPermissions agrega
+        // permisos al rol; los usuarios deben re-resolver effectivePermissions
+        // en la siguiente request, no esperar a que su token expire.
+        try {
+            List<User> usersWithRole = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            for (User u : usersWithRole) {
+                u.setSessionInvalidatedAt(now);
+            }
+            if (!usersWithRole.isEmpty()) {
+                userRepository.saveAll(usersWithRole);
+            }
+        } catch (Exception ex) {
+            // defensivo: no romper el endpoint si la invalidacion falla
+        }
+
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos asignados correctamente al rol"), Optional.of(role))
         );
@@ -775,6 +792,24 @@ public class RoleService {
 
             roleRepository.save(role);
             auditPublisher.publishDelete(AuditModule.PA, "Role", role.getId(), "Role eliminado id=" + role.getId());
+
+            // QA Bloque PA Bug 96 (HU-PA-11 E4, 2026-05-13): invalidar sesion
+            // de todos los usuarios que tienen este rol cuando se le quitan
+            // permisos. Asi su effectivePermissions se recalcula en la
+            // siguiente request en lugar de quedar con permisos viejos hasta
+            // que expire el token.
+            try {
+                List<User> usersWithRole = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                for (User u : usersWithRole) {
+                    u.setSessionInvalidatedAt(now);
+                }
+                if (!usersWithRole.isEmpty()) {
+                    userRepository.saveAll(usersWithRole);
+                }
+            } catch (Exception ex) {
+                // defensivo
+            }
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos removidos correctamente del rol"), Optional.of(role))
