@@ -50,6 +50,8 @@ public class ModuleService {
     private final SpringDataMenuRepository menuRepository;
     private final AuditPublisher auditPublisher;
     private final NavSettingsService navSettingsService;
+    private final UserRepository userRepository;
+    private final com.sigcon.backend.parametrization.temporary_permissions.domain.service.TemporaryPermissionService temporaryPermissionService;
     private final DataTableSpecificationBuilder<ModuleEntity> moduleSpecificationBuilder =
         new DataTableSpecificationBuilder<>();
 
@@ -161,6 +163,26 @@ public class ModuleService {
                         if (ga.getAuthority().startsWith("PERM_")) {
                             permCodesAuth.add(ga.getAuthority().substring(5));
                         }
+                    }
+                }
+                // QA Bloque AT (HU-PA-13 E7, 2026-05-13): sumar permisos
+                // temporales ACTIVE en la ventana actual al set. Sin esto, un
+                // OPERADOR_NOMINA con permiso temporal puntual (ej.
+                // PAR.PERMISOS_TEMPORALES.VER) NO ve el modulo Parametrizacion
+                // en el dashboard porque su rol no tiene permisos PAR.*. El
+                // JWT solo trae authorities del rol — los temporales viven en
+                // BD y deben resolverse aqui en cada request.
+                if (auth != null && auth.getName() != null) {
+                    try {
+                        Optional<User> userOpt = userRepository.findByEmail(auth.getName());
+                        if (userOpt.isPresent()) {
+                            java.util.Set<String> temp = temporaryPermissionService
+                                    .computeEffectiveCodes(userOpt.get().getId());
+                            if (temp != null) permCodesAuth.addAll(temp);
+                        }
+                    } catch (RuntimeException ex) {
+                        // defensivo: si falla calculo temporal, NO bloqueamos
+                        // el resto del menu (sigue con permisos del rol).
                     }
                 }
                 java.util.Set<Long> accessibleModuleIds = permCodesAuth.isEmpty()

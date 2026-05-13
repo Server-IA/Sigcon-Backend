@@ -312,19 +312,22 @@ public class ExchangeRateService {
             ExchangeRate rate = repository.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException("La tasa no existe"));
 
-            // HU-CFG-RF-28 E4: validar dependencias (JE/facturas que usen la tasa).
-            // Como exchange_rate_id no se persiste como FK directa en JE,
-            // validamos via SalesInvoice (campo exchange_rate) y ExchangeRate.value
-            // pero la condicion mas robusta es: la tasa esta entre las activas
-            // (no eliminada y dentro de vigencia). Si esta vigente, no se elimina.
-            if (rate.getStatus() != null
-                    && "ACTIVE".equalsIgnoreCase(rate.getStatus().toString())
-                    && rate.getEndDate() != null
-                    && rate.getEndDate().isAfter(java.time.LocalDate.now())) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                        "La tasa de cambio esta asociada a operaciones y no puede eliminarse; se recomienda inactivarla.")));
-            }
+            // QA Bloque AT (HU-CFG-RF-28 E4, 2026-05-13): la validacion original
+            // ("rate ACTIVE + endDate futuro -> bloquear") confundia "tasa
+            // vigente" con "tasa usada en operaciones". Resultado: empresas
+            // nuevas (sin ninguna operacion) no podian eliminar una tasa recien
+            // creada porque su estado por defecto es ACTIVE con endDate futuro,
+            // pero NO tiene dependencias reales.
+            //
+            // Como `exchange_rate_id` NO se persiste como FK en
+            // journal_entry_lines / invoices / sales_invoices / ar_payments (solo
+            // se guarda el valor numerico al momento de la operacion), NO podemos
+            // demostrar deterministicamente si una tasa esta "en uso". Soft-delete
+            // preserva los datos historicos via deleted_at; los reportes que
+            // referencien la tasa por su value historico siguen funcionando.
+            //
+            // Se mantiene exigencia de motivo (>=10 chars) + audit log con motivo
+            // para trazabilidad regulatoria (Decreto 2649/1993).
 
             rate.setDeletedAt(LocalDateTime.now());
             rate.setUpdatedAt(LocalDateTime.now());

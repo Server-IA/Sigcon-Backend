@@ -21,9 +21,11 @@ import com.sigcon.backend.audit.domain.model.enums.AuditAction;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
+import com.sigcon.backend.parametrization.temporary_permissions.domain.service.TemporaryPermissionService;
 import com.sigcon.backend.platform.tenant.TenantContext;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +39,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -44,6 +47,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService implements UserDetailsService {
 
     private final UserRepository userRepository;
@@ -57,6 +61,7 @@ public class AuthService implements UserDetailsService {
     private final AvatarStorageService avatarStorageService;
     private final CompanyRepository companyRepository;
     private final AuditPublisher auditPublisher;
+    private final TemporaryPermissionService temporaryPermissionService;
 
     /**
      * Publica un audit log en el contexto del tenant del usuario afectado.
@@ -71,6 +76,55 @@ public class AuthService implements UserDetailsService {
         } else {
             publish.run();
         }
+    }
+
+    /**
+     * QA Bloque AT (HU-PA-13 E6/E7 + HU-PA-12 E3, 2026-05-13): construye el set
+     * de permisos efectivos del usuario combinando los permisos de TODOS sus
+     * roles activos con los permisos temporales ACTIVE dentro de su ventana
+     * (delegados por un admin). El set retornado SIN prefijo {@code PERM_} —
+     * el frontend lo usa directamente con codigos planos
+     * (ej. {@code PAR.PERMISOS_TEMPORALES.VER}).
+     *
+     * <p>PLATFORM_ADMIN y ADMIN tienen bypass total en el frontend
+     * ({@code usePermissions}), pero igual incluimos sus codigos por
+     * trazabilidad y consistencia.
+     */
+    private Set<String> buildEffectivePermissions(User user) {
+        Set<String> codes = new LinkedHashSet<>();
+        if (user.getRoles() != null) {
+            user.getRoles().stream()
+                    .filter(r -> r != null && r.getPermissions() != null)
+                    .flatMap(r -> r.getPermissions().stream())
+                    .filter(p -> p != null && p.getCode() != null)
+                    .map(p -> p.getCode().startsWith("PERM_") ? p.getCode().substring(5) : p.getCode())
+                    .forEach(codes::add);
+        }
+        try {
+            Set<String> temporary = temporaryPermissionService.computeEffectiveCodes(user.getId());
+            if (temporary != null) codes.addAll(temporary);
+        } catch (Exception ex) {
+            // defensivo: si el calculo de temporales falla por cualquier razon, NO
+            // bloqueamos el login (el rol siempre alcanza para entrar a su tablero
+            // base). Se loguea para diagnostico.
+            log.warn("HU-PA-13 buildEffectivePermissions fallo para userId={}: {}",
+                    user.getId(), ex.getMessage());
+        }
+        return codes;
+    }
+
+    /**
+     * QA Bloque AT (HU-PA-13, 2026-05-13): refresh runtime del set efectivo.
+     * El frontend {@code usePermissions} lo invoca despues de operaciones que
+     * pueden alterar los permisos (asignar/revocar temporal, cambio de rol),
+     * sin requerir re-login.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Set<String> getMyEffectivePermissions(String email) {
+        if (email == null || email.isBlank()) return new LinkedHashSet<>();
+        return userRepository.findByEmail(email)
+                .map(this::buildEffectivePermissions)
+                .orElse(new LinkedHashSet<>());
     }
 
     @Value("${app.frontend.url}")
@@ -208,6 +262,15 @@ public class AuthService implements UserDetailsService {
                     user.getCompanyId() == null ? null :
                     companyRepository.findById(user.getCompanyId())
                             .map(c -> c.getBusinessName()).orElse(null));
+
+            // QA Bloque AT (HU-PA-13 E6/E7 + HU-PA-12 E3, 2026-05-13): construye
+            // el set de permisos efectivos = permisos del rol + permisos temporales
+            // ACTIVE dentro de su ventana. Sin esto, el frontend recibe
+            // effectivePermissions=[] y usePermissions().has() siempre falla, lo
+            // que provoca que: (a) los permisos temporales asignados no den
+            // acceso real al modulo, (b) el menu/sidebar no se filtre por
+            // permisos y muestre items que el usuario no puede operar.
+            response.put("effectivePermissions", buildEffectivePermissions(user));
 
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Inicio de sesion exitoso."), Optional.of(response))

@@ -70,4 +70,29 @@ public class AuthController {
         return authService.logout(token);
     }
 
+    /**
+     * QA Bloque AT (HU-PA-13, 2026-05-13): refresh runtime de los permisos
+     * efectivos (rol + permisos temporales ACTIVE dentro de su ventana) del
+     * usuario autenticado. El frontend lo invoca despues de operaciones que
+     * pueden alterar permisos del usuario actual (recibir un permiso temporal,
+     * verlo expirar) sin requerir cierre de sesion.
+     *
+     * <p>Si el JWT no expone el principal, retorna 401.
+     */
+    @GetMapping("/me/effective-permissions")
+    public ResponseEntity<?> getMyEffectivePermissions(
+            org.springframework.security.core.Authentication auth) {
+        if (auth == null || auth.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("No autenticado.")));
+        }
+        Map<String, Object> data = Map.of(
+                "effectivePermissions", authService.getMyEffectivePermissions(auth.getName())
+        );
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Permisos efectivos del usuario actual."),
+                        Optional.of(data)));
+    }
+
 }

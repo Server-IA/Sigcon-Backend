@@ -117,7 +117,20 @@ public class AgroFusionAckClient {
         // Spec AAEF Bloque W: elegir envelope segun el tipo de batch.
         //   - isUpdate=true -> AgroFusionAcknowledgmentDTO PascalCase (Pull+Diff)
         //   - isUpdate=false -> AaefAckDTO camelCase (lote inicial)
+        //
+        // QA Bloque AT (HU-INT-RF-07, 2026-05-13): AgroFusion en produccion
+        // envia lotes INICIALES (POST /aaef directo, no envelope) cuyo
+        // ExchangeId tiene prefijo {@code AF-UPD-} o {@code AF-NEW-}. Para esos
+        // casos, AgroFusion ESPERA el ACK con envelope PascalCase
+        // {@code AgroFusionAcknowledgment} (NO el camelCase plano). Sin esta
+        // deteccion, AgroFusion rechazaba el ACK con HTTP 422 Unprocessable
+        // Entity y el retry scheduler corria en bucle indefinidamente.
         boolean isUpdate = Boolean.TRUE.equals(batch.getIsUpdate());
+        String exchId = batch.getExchangeId();
+        if (!isUpdate && exchId != null
+                && (exchId.startsWith("AF-UPD-") || exchId.startsWith("AF-NEW-"))) {
+            isUpdate = true;
+        }
         String body;
         try {
             if (isUpdate) {

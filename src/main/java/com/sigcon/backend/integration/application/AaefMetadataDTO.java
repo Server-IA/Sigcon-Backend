@@ -22,11 +22,20 @@ import java.time.LocalDate;
 @NoArgsConstructor
 public class AaefMetadataDTO {
 
-    /** ID unico del lote. Formato: AF-YYYY-MM-NNNNN. */
+    /**
+     * ID unico del lote. Formato: AF[-PREFIX]-YYYY-MM-NNNNN.
+     *
+     * <p>QA Bloque AT (HU-INT-RF-01, 2026-05-13): AgroFusion en produccion
+     * emite IDs con prefijo intermedio (ej. {@code AF-UPD-2026-05-7316297}
+     * para lotes Pull+Diff, {@code AF-NEW-2026-05-...}, etc.). El regex
+     * original {@code ^AF-\\d{4}-\\d{2}-\\d{5,}$} rechazaba cualquier ID
+     * con prefijo, devolviendo HTTP 400. Ahora se permite UN segmento
+     * alfabetico opcional entre {@code AF-} y el {@code YYYY-MM-NNNN}.
+     */
     @JsonProperty("ExchangeId")
     @NotBlank(message = "metadata.ExchangeId es obligatorio")
-    @Pattern(regexp = "^AF-\\d{4}-\\d{2}-\\d{5,}$",
-            message = "ExchangeId no cumple formato AF-YYYY-MM-NNNNN")
+    @Pattern(regexp = "^AF-(?:[A-Z]+-)?\\d{4}-\\d{2}-\\d{4,}$",
+            message = "ExchangeId no cumple formato AF[-PREFIX]-YYYY-MM-NNNN")
     private String exchangeId;
 
     /**

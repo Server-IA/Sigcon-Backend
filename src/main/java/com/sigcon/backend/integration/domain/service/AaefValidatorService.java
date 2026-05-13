@@ -31,8 +31,17 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AaefValidatorService {
 
-    /** Versiones del estandar AAEF que SIGCON soporta actualmente. */
-    private static final Set<String> SUPPORTED_VERSIONS = Set.of("1.0");
+    /**
+     * Versiones del estandar AAEF que SIGCON soporta actualmente.
+     *
+     * <p>QA Bloque AT (HU-INT-RF-01, 2026-05-13): AgroFusion en produccion
+     * emite lotes con {@code StandardVersion=2.0} (estandar AAEF v2 con
+     * extensiones para Pull+Diff y campos opcionales). El contrato base de
+     * payload (metadata, summary, invoices, transactions) sigue siendo
+     * compatible — los campos extra simplemente se ignoran por Jackson.
+     * Aceptamos ambas versiones.
+     */
+    private static final Set<String> SUPPORTED_VERSIONS = Set.of("1.0", "2.0");
 
     /**
      * Valida la estructura del lote AAEF.

@@ -31,7 +31,16 @@ public class CorsConfig {
 
 
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        // QA Bloque AT (HU-PA-22, 2026-05-13): faltaba PATCH en la lista de
+        // metodos permitidos. Resultado: cualquier endpoint PATCH (ej.
+        // PATCH /api/parametrization/notifications/read-all,
+        // PATCH /api/v1/cash-flow-projections/{id}/inactivate, etc.) fallaba
+        // su preflight CORS con 403 "Invalid CORS request" cuando el frontend
+        // intentaba consumirlo desde el navegador. El curl directo SI
+        // funcionaba (no requiere preflight). Sintoma visible: "Sin conexion"
+        // tras retry en fetchHelper.patch porque el preflight 403 dispara
+        // "Failed to fetch" -> retry -> mismo error -> dialog "Sin conexion".
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
 
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
