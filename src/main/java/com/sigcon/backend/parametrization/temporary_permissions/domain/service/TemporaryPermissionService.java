@@ -310,6 +310,14 @@ public class TemporaryPermissionService {
             Long userIdFilter, Status statusFilter,
             LocalDateTime from, LocalDateTime to,
             org.springframework.data.domain.Pageable pageable) {
+        // QA Bloque PA Bug 100 (HU-PA-13 leak, 2026-05-13): aislar cross-tenant.
+        // El listado debe ver SOLO permisos de la empresa actual cuando NO es
+        // PLATFORM_ADMIN. La entidad TemporaryPermission tiene @Filter pero el
+        // builder de Specification no lo aplica automaticamente; agregamos el
+        // predicate companyId = currentTenant a mano (igual patron que
+        // UserService.getUsers).
+        final boolean isPlatformAdmin = TenantContext.isPlatformAdmin();
+        final Long currentTenant = isPlatformAdmin ? null : TenantContext.getCompanyId();
         org.springframework.data.jpa.domain.Specification<TemporaryPermission> spec =
                 (root, q, cb) -> {
                     var preds = new ArrayList<jakarta.persistence.criteria.Predicate>();
@@ -318,6 +326,14 @@ public class TemporaryPermissionService {
                     if (statusFilter != null) preds.add(cb.equal(root.get("status"), statusFilter));
                     if (from != null) preds.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from));
                     if (to != null) preds.add(cb.lessThanOrEqualTo(root.get("createdAt"), to));
+                    if (!isPlatformAdmin) {
+                        if (currentTenant != null) {
+                            preds.add(cb.equal(root.get("companyId"), currentTenant));
+                        } else {
+                            // actor sin tenant ni platform => no ve nada (defensivo)
+                            preds.add(cb.isFalse(cb.literal(true)));
+                        }
+                    }
                     return cb.and(preds.toArray(new jakarta.persistence.criteria.Predicate[0]));
                 };
         return repository.findAll(spec, pageable);

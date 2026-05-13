@@ -418,17 +418,25 @@ public class UserService {
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(
                                 "El usuario debe tener al menos un rol activo. Asigne otro rol antes de remover este")));
             }
-            Long tenantCompanyId = TenantContext.getCompanyId();
+            // QA Bloque PA Bug 98 (HU-PA-12 E4, 2026-05-13): el lookup de rol por
+            // nombre debe usar la empresa del USUARIO editado, no la del actor.
+            // Cuando un PLATFORM_ADMIN edita un usuario tenant, su propio
+            // tenantCompanyId es null y el fallback findByName(legacy) elegia un
+            // rol global cualquiera (de otra empresa), corrompiendo users_roles
+            // con asignaciones cross-tenant. Hoy hay usuarios con N copias de
+            // ADMIN_EMPRESA acumuladas por este bug.
+            Long targetCompanyId = user.getCompanyId(); // empresa del user editado
             Set<Role> resolvedRoles = new java.util.HashSet<>();
             java.util.List<String> notFound = new java.util.ArrayList<>();
             for (String roleName : request.getRoles()) {
                 if (roleName == null || roleName.isBlank()) continue;
                 Optional<Role> opt;
-                if (tenantCompanyId != null) {
+                if (targetCompanyId != null) {
+                    // user de empresa: rol debe pertenecer a SU empresa
                     opt = roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(
-                            roleName.trim().toUpperCase(), tenantCompanyId);
+                            roleName.trim().toUpperCase(), targetCompanyId);
                 } else {
-                    // Fallback platform admin: si esta editando sin tenant, usar findByName legacy.
+                    // user de plataforma (companyId=null): roles globales (ADMIN/USER/PLATFORM_ADMIN)
                     opt = roleRepository.findByName(roleName.trim().toUpperCase());
                 }
                 if (opt.isPresent()) {
