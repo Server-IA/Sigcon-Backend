@@ -102,10 +102,22 @@ public class AaefInvoiceMapper {
         // explicitamente; antes haciamos compareTo() == 0 strict y rechazabamos
         // diferencias de centavos legitimas).
         if (expected.subtract(actual).abs().compareTo(new BigDecimal("0.01")) > 0) {
+            // QA Bloque AT (HU-INT-RF-04, 2026-05-13): mensaje explicito con
+            // diferencia exacta y recomendacion de accion para AgroFusion.
+            BigDecimal diff = actual.subtract(expected);
+            String docId = header != null && header.getDocumentId() != null
+                    ? header.getDocumentId() : "(sin DocumentId)";
+            String accion = diff.signum() > 0
+                    ? "TotalPayment es MAYOR que la suma de las lineas. Verifique si falta agregar lineas o si TotalPayment esta mal calculado."
+                    : "TotalPayment es MENOR que la suma de las lineas. Revise descuentos o retenciones no declarados.";
             throw new AaefMappingException(
                     AaefMappingException.AMOUNT_MISMATCH,
-                    "TotalPayment (" + actual + ") no coincide con Subtotal+TotalVAT"
-                            + "-Retenciones-Descuentos (" + expected + "). Tolerancia ±$0.01.");
+                    "La factura " + docId + " tiene descuadre contable. "
+                            + "TotalPayment=" + actual + " no coincide con "
+                            + "Subtotal(" + subtotal + ") + TotalVAT(" + vat + ") "
+                            + "- TotalWithholdings(" + withholdings + ") - TotalDiscounts(" + discounts + ") = " + expected + ". "
+                            + "Diferencia: " + diff.abs() + " COP (tolerancia maxima: $0.01). "
+                            + accion);
         }
 
         // Mapear lineas
@@ -217,10 +229,22 @@ public class AaefInvoiceMapper {
         // explicitamente; antes haciamos compareTo() == 0 strict y rechazabamos
         // diferencias de centavos legitimas).
         if (expected.subtract(actual).abs().compareTo(new BigDecimal("0.01")) > 0) {
+            // QA Bloque AT (HU-INT-RF-04, 2026-05-13): mensaje explicito con
+            // contexto suficiente para que AgroFusion lo muestre directo al usuario.
+            BigDecimal diff = actual.subtract(expected);
+            String docId = header != null && header.getDocumentId() != null
+                    ? header.getDocumentId() : "(sin DocumentId)";
+            String accion = diff.signum() > 0
+                    ? "TotalPayment es MAYOR que la suma de las lineas. Verifique si falta agregar lineas o si TotalPayment esta mal calculado."
+                    : "TotalPayment es MENOR que la suma de las lineas. Revise descuentos o retenciones no declarados.";
             throw new AaefMappingException(
                     AaefMappingException.AMOUNT_MISMATCH,
-                    "TotalPayment (" + actual + ") no coincide con Subtotal+TotalVAT"
-                            + "-Retenciones-Descuentos (" + expected + "). Tolerancia ±$0.01.");
+                    "La factura de compra " + docId + " tiene descuadre contable. "
+                            + "TotalPayment=" + actual + " no coincide con "
+                            + "Subtotal(" + subtotal + ") + TotalVAT(" + vat + ") "
+                            + "- TotalWithholdings(" + withholdings + ") - TotalDiscounts(" + discounts + ") = " + expected + ". "
+                            + "Diferencia: " + diff.abs() + " COP (tolerancia maxima: $0.01). "
+                            + accion);
         }
 
         // Resolver cuenta contable default (AP_COMPRAS_DEFAULT -> PUC 5135 Servicios)
@@ -452,10 +476,20 @@ public class AaefInvoiceMapper {
                     "IssueDate es obligatoria");
         }
 
-        if (invoice.getThirdParty() == null || invoice.getThirdParty().getNit() == null) {
+        if (invoice.getThirdParty() == null || invoice.getThirdParty().getNit() == null
+                || invoice.getThirdParty().getNit().trim().isEmpty()) {
+            // QA Bloque AT (HU-INT-RF-04, 2026-05-13): mensaje explicito con
+            // contexto suficiente para que AgroFusion lo muestre directo al
+            // usuario sin necesidad de interpretacion adicional.
+            String docId = invoice.getHeader() != null && invoice.getHeader().getDocumentId() != null
+                    ? invoice.getHeader().getDocumentId() : "(sin DocumentId)";
+            String tpName = invoice.getThirdParty() != null && invoice.getThirdParty().getName() != null
+                    ? invoice.getThirdParty().getName() : "(sin nombre)";
             throw new AaefMappingException(
                     AaefMappingException.UNKNOWN_THIRD_PARTY,
-                    "ThirdParty.NIT es obligatorio");
+                    "La factura " + docId + " no se procesa porque el campo ThirdParty.NIT viene vacio. "
+                            + "El tercero '" + tpName + "' debe identificarse con su NIT (empresa) o "
+                            + "cedula (persona natural). Complete el NIT en el sistema fuente y reenvie el lote.");
         }
 
         if (invoice.getTotals() == null) {

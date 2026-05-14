@@ -25,6 +25,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -118,19 +120,20 @@ public class AgroFusionAckClient {
         //   - isUpdate=true -> AgroFusionAcknowledgmentDTO PascalCase (Pull+Diff)
         //   - isUpdate=false -> AaefAckDTO camelCase (lote inicial)
         //
-        // QA Bloque AT (HU-INT-RF-07, 2026-05-13): AgroFusion en produccion
-        // envia lotes INICIALES (POST /aaef directo, no envelope) cuyo
-        // ExchangeId tiene prefijo {@code AF-UPD-} o {@code AF-NEW-}. Para esos
-        // casos, AgroFusion ESPERA el ACK con envelope PascalCase
-        // {@code AgroFusionAcknowledgment} (NO el camelCase plano). Sin esta
-        // deteccion, AgroFusion rechazaba el ACK con HTTP 422 Unprocessable
-        // Entity y el retry scheduler corria en bucle indefinidamente.
+        // QA Bloque AT (HU-INT-RF-07, 2026-05-13): AgroFusion confirmo en
+        // reunion del 13/05/2026 que SIEMPRE espera el ACK en camelCase plano
+        // (Formato A) cuando el lote vino por POST plano a /aaef, sin importar
+        // el prefijo del ExchangeId. El envelope PascalCase
+        // {@code AgroFusionAcknowledgment} (Formato B) solo se envia cuando el
+        // lote llego envuelto en {@code AgroFusionExchangeUpdate} (Pull+Diff
+        // real, controlado por {@code batch.isUpdate=true} que setea
+        // CancellationService al crear el batch sintetico).
+        //
+        // El intento previo de detectar el prefijo AF-UPD-/AF-NEW- en el
+        // ExchangeId para elegir formato B fue INCORRECTO: AgroFusion puede
+        // emitir lotes planos con cualquier prefijo de ExchangeId y siempre
+        // espera ACK plano. La unica senial valida es como llego el payload.
         boolean isUpdate = Boolean.TRUE.equals(batch.getIsUpdate());
-        String exchId = batch.getExchangeId();
-        if (!isUpdate && exchId != null
-                && (exchId.startsWith("AF-UPD-") || exchId.startsWith("AF-NEW-"))) {
-            isUpdate = true;
-        }
         String body;
         try {
             if (isUpdate) {
@@ -211,14 +214,33 @@ public class AgroFusionAckClient {
 
     // ======== Construccion del ACK ========
 
+    /**
+     * Construye el ACK (Formato A camelCase plano) alineado byte-a-byte con
+     * el modelo que AgroFusion espera (QA Bloque AU, 2026-05-14).
+     *
+     * <p>Diferencias respecto al builder previo:
+     * <ul>
+     *   <li>{@code exchangeId} en vez de {@code originalExchangeId}.</li>
+     *   <li>Se agrega {@code batchId} (Long).</li>
+     *   <li>{@code accountingEntryId} como Long (no String).</li>
+     *   <li>{@code ProcessedDocument} con {@code errorCode:null} y
+     *       {@code errorMessage:null} (siempre presentes por contrato).</li>
+     *   <li>{@code FailedDocument} con {@code documentType},
+     *       {@code status:"FAILED"} y {@code accountingEntryId:null}.</li>
+     *   <li>{@code retryAllowed} no se envia en el ACK (campo interno SIGCON).</li>
+     *   <li>{@code processedAt} truncado a segundos en offset UTC para
+     *       cumplir formato ISO {@code 2026-04-18T08:15:22Z}.</li>
+     * </ul>
+     */
     private AaefAckDTO buildAck(IntegrationBatch batch) {
         List<IntegrationTransfer> transfers =
                 transferRepository.findByBatch_IdAndDeletedAtIsNull(batch.getId());
 
         AaefAckDTO ack = AaefAckDTO.builder()
-                .originalExchangeId(batch.getExchangeId())
-                .processedAt(OffsetDateTime.now())
+                .exchangeId(batch.getExchangeId())
+                .batchId(batch.getId())
                 .status(resolveAckStatus(batch))
+                .processedAt(OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS))
                 .build();
 
         for (IntegrationTransfer t : transfers) {
@@ -226,16 +248,19 @@ public class AgroFusionAckClient {
                 ack.getProcessedDocuments().add(AaefAckDTO.ProcessedDocument.builder()
                         .documentId(t.getDocumentId())
                         .documentType(t.getDocumentType() != null ? t.getDocumentType().name() : null)
-                        .accountingEntryId(t.getAccountingEntryId() != null
-                                ? String.valueOf(t.getAccountingEntryId()) : null)
                         .status("PROCESSED")
+                        .accountingEntryId(t.getAccountingEntryId())
+                        .errorCode(null)
+                        .errorMessage(null)
                         .build());
             } else if (t.getTransferStatus() == TransferStatus.FAILED) {
                 ack.getFailedDocuments().add(AaefAckDTO.FailedDocument.builder()
                         .documentId(t.getDocumentId())
+                        .documentType(t.getDocumentType() != null ? t.getDocumentType().name() : null)
+                        .status("FAILED")
+                        .accountingEntryId(null)
                         .errorCode(t.getErrorCode())
                         .errorMessage(t.getErrorMessage())
-                        .retryAllowed(t.getRetryAllowed())
                         .build());
             }
         }

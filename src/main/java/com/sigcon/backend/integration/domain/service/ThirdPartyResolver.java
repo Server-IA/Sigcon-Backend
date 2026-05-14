@@ -50,9 +50,15 @@ public class ThirdPartyResolver {
     @Transactional
     public ThirdParty findOrCreate(String nit, String dv, String businessName) {
         if (nit == null || nit.trim().isEmpty()) {
+            // QA Bloque AT (HU-INT-RF-04, 2026-05-13): incluir nombre del tercero
+            // (si esta disponible) para que AgroFusion lo muestre directo al usuario.
+            String tpName = (businessName != null && !businessName.trim().isEmpty())
+                    ? businessName.trim() : "(sin nombre)";
             throw new AaefMappingException(
                     AaefMappingException.UNKNOWN_THIRD_PARTY,
-                    "NIT del tercero es obligatorio en AAEF");
+                    "ThirdParty.NIT es obligatorio. El tercero '" + tpName + "' debe "
+                            + "identificarse con su NIT (empresa) o cedula (persona natural). "
+                            + "Complete el campo NIT en el sistema fuente y reenvie el lote.");
         }
 
         String cleanNit = nit.trim();

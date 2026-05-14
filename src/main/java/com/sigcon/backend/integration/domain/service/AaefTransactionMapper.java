@@ -111,10 +111,24 @@ public class AaefTransactionMapper {
                     "Type=ADJ requiere AdjustmentReason");
         }
 
-        if (tx.getThirdParty() == null || tx.getThirdParty().getNit() == null) {
+        if (tx.getThirdParty() == null || tx.getThirdParty().getNit() == null
+                || tx.getThirdParty().getNit().trim().isEmpty()) {
+            // QA Bloque AT (HU-INT-RF-04, 2026-05-13): mensaje explicito con
+            // DocumentId del pago + tipo + monto + nombre del pagador. AgroFusion
+            // muestra esto directo al usuario en su UI.
+            String docId = tx.getDocumentId() != null ? tx.getDocumentId() : "(sin DocumentId)";
+            String typeName = typeCode != null ? typeCode : "(sin tipo)";
+            String amount = tx.getAmount() != null ? tx.getAmount().toString() : "(sin monto)";
+            String tpName = tx.getThirdParty() != null && tx.getThirdParty().getName() != null
+                    ? tx.getThirdParty().getName() : "(sin nombre)";
+            String relInv = tx.getRelatedInvoiceId() != null
+                    ? " (referenciada a la factura " + tx.getRelatedInvoiceId() + ")" : "";
             throw new AaefMappingException(
                     AaefMappingException.UNKNOWN_THIRD_PARTY,
-                    "ThirdParty.NIT es obligatorio");
+                    "La transaccion " + docId + " (tipo " + typeName + ", monto " + amount + " COP)"
+                            + relInv + " no se procesa porque el campo ThirdParty.NIT viene vacio. "
+                            + "El pagador '" + tpName + "' debe identificarse con su NIT (empresa) o "
+                            + "cedula (persona natural). Complete el NIT en el sistema fuente y reenvie el lote.");
         }
     }
 
@@ -145,10 +159,16 @@ public class AaefTransactionMapper {
             return new ResolvedInvoice(InvoiceScope.AP, ap.get().getId());
         }
 
+        // QA Bloque AT (HU-INT-RF-04, 2026-05-13): mensaje claro con accion
+        // recomendada para AgroFusion.
         throw new AaefMappingException(
                 AaefMappingException.ORIGINAL_NOT_FOUND,
-                "No existe factura con externalId='" + externalId
-                        + "' en SIGCON. Verifique que la factura haya sido recibida previamente.");
+                "El pago referencia la factura con DocumentId='" + externalId
+                        + "' pero esa factura no fue encontrada en SIGCON. "
+                        + "Posibles causas: (1) la factura aun no se envio en un lote previo; "
+                        + "(2) el envio anterior de esa factura fallo (revise el ACK del lote original). "
+                        + "Solucion: incluya la factura en el lote actual o reenvie un lote previo que la contenga "
+                        + "antes de procesar este pago.");
     }
 
     // ---------- Mapeo a request interno ----------
