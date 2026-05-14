@@ -323,25 +323,10 @@ public class RoleService {
         auditPublisher.publishUpdate(AuditModule.PA, "Role", role.getId(),
                 "Role actualizado: " + role.getName() + " (companyId=" + role.getCompanyId() + ")");
 
-        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): si los permisos del rol
-        // cambiaron, invalidar las sesiones de TODOS los usuarios que tienen
-        // este rol. Antes el cambio solo aplicaba a tokens emitidos despues; los
-        // tokens en sesion activa seguian con permisos viejos hasta expirar.
-        Set<String> newCodesForInvalidation = permissions.stream().map(Permission::getCode).collect(Collectors.toCollection(HashSet::new));
-        if (!previousCodes.equals(newCodesForInvalidation)) {
-            try {
-                List<User> usersWithRole = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
-                java.time.LocalDateTime now = java.time.LocalDateTime.now();
-                for (User u : usersWithRole) {
-                    u.setSessionInvalidatedAt(now);
-                }
-                if (!usersWithRole.isEmpty()) {
-                    userRepository.saveAll(usersWithRole);
-                }
-            } catch (Exception ex) {
-                // defensivo: no romper el update si saveAll falla por algun lock
-            }
-        }
+        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14): NO invalidar
+        // la sesion. EffectivePermissionsFilter recomputa authorities en cada
+        // request, asi los cambios al rol se reflejan en la siguiente accion
+        // del usuario sin expulsarlo.
 
         // HU-PA-20 E2: notificar a TODOS los usuarios que tienen este rol asignado
         // con detalle de permisos agregados/removidos.
@@ -357,13 +342,19 @@ public class RoleService {
                             + (removed.isEmpty() ? "" : " Removidos: " + removed);
                     for (User u : affected) {
                         try {
+                            // QA Bloque AV (Bug 4, 2026-05-14): NO incluir
+                            // actionUrl en la notificacion de cambio de rol.
+                            // El usuario reporto que clickear estas notifs
+                            // lleva a 404 ya que la ruta /perfil no resuelve
+                            // al destino correcto y depende del modulo. La
+                            // HU pide que click "solo marque como leida"
+                            // sin navegacion forzada.
                             notificationService.publishToUser(u.getId(),
                                 com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
                                     .companyId(u.getCompanyId())
                                     .eventKey("ROLE_PERMISSIONS_CHANGED")
                                     .title("Su rol " + role.getName() + " fue modificado")
                                     .body(body)
-                                    .actionUrl("/perfil")
                                     .sourceId(role.getId())
                                     .sourceType("Role")
                                     .build());
@@ -744,25 +735,21 @@ public class RoleService {
         role.getPermissions().addAll(permissions);
         roleRepository.save(role);
 
-        // QA Bloque PA Bug 96 (HU-PA-11 E4, 2026-05-13): invalidar sesion de
-        // todos los usuarios que tienen este rol. assignPermissions agrega
-        // permisos al rol; los usuarios deben re-resolver effectivePermissions
-        // en la siguiente request, no esperar a que su token expire.
-        try {
-            List<User> usersWithRole = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
-            java.time.LocalDateTime now = java.time.LocalDateTime.now();
-            for (User u : usersWithRole) {
-                u.setSessionInvalidatedAt(now);
-            }
-            if (!usersWithRole.isEmpty()) {
-                userRepository.saveAll(usersWithRole);
-            }
-        } catch (Exception ex) {
-            // defensivo: no romper el endpoint si la invalidacion falla
-        }
+        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14): NO invalidar
+        // la sesion de los usuarios. El EffectivePermissionsFilter recomputa
+        // sus authorities en cada request consultando BD, asi los nuevos
+        // permisos surten efecto en la SIGUIENTE accion del usuario sin
+        // expulsarlo de la sesion. Antes (Bug 96) se hacia
+        // setSessionInvalidatedAt(now) lo cual obligaba a re-login -
+        // comportamiento que la HU prohibe explicitamente.
 
+        // Payload minimo para evitar errores de serializacion Hibernate proxy.
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("id", role.getId());
+        payload.put("name", role.getName());
+        payload.put("permissionCount", role.getPermissions() != null ? role.getPermissions().size() : 0);
         return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos asignados correctamente al rol"), Optional.of(role))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos asignados correctamente al rol"), Optional.of(payload))
         );
     }
 
@@ -793,26 +780,20 @@ public class RoleService {
             roleRepository.save(role);
             auditPublisher.publishDelete(AuditModule.PA, "Role", role.getId(), "Role eliminado id=" + role.getId());
 
-            // QA Bloque PA Bug 96 (HU-PA-11 E4, 2026-05-13): invalidar sesion
-            // de todos los usuarios que tienen este rol cuando se le quitan
-            // permisos. Asi su effectivePermissions se recalcula en la
-            // siguiente request en lugar de quedar con permisos viejos hasta
-            // que expire el token.
-            try {
-                List<User> usersWithRole = userRepository.findAllByRoles_IdAndDeletedAtIsNull(role.getId());
-                java.time.LocalDateTime now = java.time.LocalDateTime.now();
-                for (User u : usersWithRole) {
-                    u.setSessionInvalidatedAt(now);
-                }
-                if (!usersWithRole.isEmpty()) {
-                    userRepository.saveAll(usersWithRole);
-                }
-            } catch (Exception ex) {
-                // defensivo
-            }
+            // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14): NO invalidar
+            // la sesion. EffectivePermissionsFilter recomputa authorities en
+            // cada request, asi remover un permiso del rol surte efecto en la
+            // siguiente accion del usuario sin expulsarlo.
 
+            // Devolver payload minimo (no la entidad Role) para evitar errores
+            // de serializacion Jackson con proxies lazy de Hibernate
+            // (ByteBuddyInterceptor).
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("id", role.getId());
+            payload.put("name", role.getName());
+            payload.put("permissionCount", role.getPermissions() != null ? role.getPermissions().size() : 0);
             return ResponseEntity.ok(
-                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos removidos correctamente del rol"), Optional.of(role))
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos removidos correctamente del rol"), Optional.of(payload))
             );
 
         } catch (RuntimeException e) {

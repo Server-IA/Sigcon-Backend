@@ -117,27 +117,17 @@ public class JwtService {
             return false;
         }
 
-        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): si el usuario tuvo cambios
-        // en roles/status/permisos despues de emitido el token (sessionInvalidatedAt
-        // > token.iat), invalidar el token. El usuario debe re-loguear para que sus
-        // permisos actuales tengan efecto. Asi resolvemos la invalidacion de cache
-        // en sesion activa sin necesidad de un cache distribuido o un endpoint de
-        // refresh periodico.
-        if (userDetails instanceof User u && u.getSessionInvalidatedAt() != null) {
-            Date iat;
-            try {
-                iat = getClaim(token, Claims::getIssuedAt);
-            } catch (Exception e) {
-                iat = null;
-            }
-            if (iat != null) {
-                Date cutoff = Date.from(u.getSessionInvalidatedAt()
-                        .atZone(java.time.ZoneId.systemDefault()).toInstant());
-                if (iat.before(cutoff)) {
-                    return false;
-                }
-            }
-        }
+        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14): NO invalidamos
+        // el token por sessionInvalidatedAt. Antes (Bug 79) cualquier cambio
+        // de rol invalidaba el token aqui forzando re-login. La HU dice que
+        // el usuario debe PERMANECER en sesion y solo recomputar permisos en
+        // la siguiente request. Eso lo hace EffectivePermissionsFilter en cada
+        // request HTTP autenticado normal.
+        //
+        // Este metodo se sigue usando para validar tokens en flujos no-HTTP
+        // (ej. SSE/WebSocket en SseTokenAuthFilter). Para esos casos los
+        // permisos no son criticos al validar la conexion inicial - la
+        // re-evaluacion ocurre cuando el cliente hace requests.
         return true;
     }
 }

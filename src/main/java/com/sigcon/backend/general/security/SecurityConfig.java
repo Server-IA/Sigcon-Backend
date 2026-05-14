@@ -36,6 +36,7 @@ public class SecurityConfig {
     private final AaefRateLimitFilter aaefRateLimitFilter;
     private final TenantContextFilter tenantContextFilter;
     private final SessionInvalidationFilter sessionInvalidationFilter;
+    private final EffectivePermissionsFilter effectivePermissionsFilter;
     private final Environment environment;
 
 
@@ -191,6 +192,13 @@ public class SecurityConfig {
         // responde 401 sin avanzar a controllers. Asi un cambio de rol invalida
         // sesiones activas inmediatamente sin esperar a que expire el JWT.
         http.addFilterAfter(sessionInvalidationFilter, BearerTokenAuthenticationFilter.class);
+
+        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4 + HU-PA-13 E7, 2026-05-14):
+        // EffectivePermissionsFilter recomputa las authorities del usuario en
+        // CADA request a partir de BD (rol + temporales con prefijo TEMP_).
+        // Asi cambios al rol y permisos temporales surten efecto en la
+        // siguiente request SIN expulsar al usuario.
+        http.addFilterAfter(effectivePermissionsFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();
 

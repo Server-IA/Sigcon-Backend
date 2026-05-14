@@ -54,8 +54,16 @@ public class TemporaryPermissionController {
     /** QA Bloque PA Bug 45 (HU-PA-16 E5): audit log para registrar exportaciones. */
     private final com.sigcon.backend.audit.domain.service.AuditPublisher auditPublisher;
 
+    /**
+     * QA Bloque AV (HU-PA-13 E7 regla #11, 2026-05-14): la accion de ASIGNAR
+     * permisos temporales solo se habilita con permiso de ROL (no temporal),
+     * para evitar escalada recursiva de privilegios. Por eso NO incluimos el
+     * prefijo {@code TEMP_*} en este @PreAuthorize. Si un admin delega
+     * temporalmente la facultad de "asignar", el delegado NO puede usarla
+     * para asignar a su vez (defensa en profundidad).
+     */
     @PostMapping
-    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.ASIGNAR') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.ASIGNAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "HU-PA-13 E1: asignar permisos temporales a un usuario")
     public ResponseEntity<?> grant(@RequestBody Map<String, Object> body) {
         try {
@@ -78,8 +86,14 @@ public class TemporaryPermissionController {
         }
     }
 
+    /**
+     * QA Bloque AV (HU-PA-13 E7 regla #11, 2026-05-14): revocar requiere ROL.
+     * Misma razon que ASIGNAR: un delegado temporal NO puede revocar permisos
+     * de otros usuarios para evitar manipulacion descentralizada del set
+     * de permisos efectivos.
+     */
     @PostMapping("/{id}/revoke")
-    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.REVOCAR') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.REVOCAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "HU-PA-14 E1: revocar permiso temporal con justificacion")
     public ResponseEntity<?> revoke(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         try {
@@ -94,7 +108,7 @@ public class TemporaryPermissionController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PAR.PERMISOS_TEMPORALES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "HU-PA-16: listar permisos temporales con filtros")
     public ResponseEntity<?> list(
             @RequestParam(required = false) Long userId,
@@ -130,7 +144,7 @@ public class TemporaryPermissionController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PAR.PERMISOS_TEMPORALES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "HU-PA-16 E6: detalle con timeline completo de eventos")
     public ResponseEntity<?> detail(@PathVariable Long id) {
         try {
@@ -164,7 +178,7 @@ public class TemporaryPermissionController {
     }
 
     @GetMapping("/export.csv")
-    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PAR.PERMISOS_TEMPORALES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "HU-PA-16 E5: exportar historial a CSV")
     public ResponseEntity<byte[]> export(
             @RequestParam(required = false) Long userId,
@@ -216,7 +230,7 @@ public class TemporaryPermissionController {
      * (formato pedido por la HU). Usa Apache POI. Registra en audit log.
      */
     @GetMapping("/export.xlsx")
-    @PreAuthorize("hasAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER') or hasAuthority('ROLE_ADMIN_EMPRESA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PERM_PAR.PERMISOS_TEMPORALES.VER','TEMP_PAR.PERMISOS_TEMPORALES.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "HU-PA-16 E5: exportar historial a XLSX (Apache POI)")
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) Long userId,

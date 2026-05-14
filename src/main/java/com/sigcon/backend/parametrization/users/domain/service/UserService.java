@@ -459,16 +459,16 @@ public class UserService {
 
         user.setUpdatedAt(LocalDateTime.now());
 
-        // QA Bloque PA Bug 79 (HU-PA-11 E4, 2026-05-11): si los roles o el status
-        // cambiaron, invalidar sesiones activas del usuario. JwtService.validateToken
-        // rechazara cualquier token emitido ANTES de este timestamp y forzara
-        // re-login para que los permisos actuales tengan efecto. Antes el usuario
-        // seguia operando con permisos viejos hasta que su token expirara.
+        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14): solo invalidamos
+        // la sesion cuando cambia el STATUS (BLOCKED/INACTIVE expulsan), NO
+        // cuando solo cambian los roles. EffectivePermissionsFilter recomputa
+        // las authorities en cada request, asi un cambio de roles se aplica
+        // sin expulsar al usuario.
         Set<String> rolesAfterSet = user.getRoles() == null ? new java.util.HashSet<>()
                 : user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
         boolean rolesChanged = !previousRoles.equals(rolesAfterSet);
         boolean statusChanged = previousStatus != user.getStatus();
-        if (rolesChanged || statusChanged) {
+        if (statusChanged) {
             user.setSessionInvalidatedAt(LocalDateTime.now());
         }
 

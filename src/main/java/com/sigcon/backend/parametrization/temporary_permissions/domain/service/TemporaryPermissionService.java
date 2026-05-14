@@ -192,6 +192,11 @@ public class TemporaryPermissionService {
             // HU-PA-20: notificacion personal al receptor.
             if (notificationService != null) {
                 try {
+                    // QA Bloque AV (Bug 4, 2026-05-14): NO incluir actionUrl.
+                    // El receptor del permiso temporal puede NO tener acceso
+                    // al modulo /parametrizacion/permisos-temporales (si su
+                    // rol no se lo permite o si solo recibio uno puntual).
+                    // Click en notif debe solo marcarla como leida sin navegar.
                     notificationService.publishToUser(userId,
                         com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
                             .companyId(companyId)
@@ -199,10 +204,6 @@ public class TemporaryPermissionService {
                             .title("Le fue asignado un permiso temporal")
                             .body("Permiso: " + p.getCode() + " | Vence: " + endDate
                                 + " | Justificacion: " + justification.trim())
-                            // QA Bloque AT (HU-PA-13, 2026-05-13): la ruta real
-                            // de la pagina es /parametrizacion/permisos-temporales,
-                            // NO /perfil#permisos-temporales (que devolvia 404).
-                            .actionUrl("/parametrizacion/permisos-temporales")
                             .sourceId(tp.getId())
                             .sourceType("TemporaryPermission")
                             .build());
@@ -266,14 +267,14 @@ public class TemporaryPermissionService {
         // HU-PA-20: notificacion personal al receptor avisando la revocacion.
         if (notificationService != null) {
             try {
+                // QA Bloque AV (Bug 4, 2026-05-14): NO incluir actionUrl. El
+                // receptor puede no tener acceso al modulo. Click marca leida.
                 notificationService.publishToUser(tp.getUserId(),
                     com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
                         .companyId(tp.getCompanyId())
                         .eventKey("TEMP_PERMISSION_REVOKED")
                         .title("Su permiso temporal fue revocado")
                         .body("Permiso: " + tp.getPermissionCode() + " | Motivo: " + reason.trim())
-                        // QA Bloque AT (HU-PA-13, 2026-05-13): ruta real
-                        .actionUrl("/parametrizacion/permisos-temporales")
                         .sourceId(tp.getId())
                         .sourceType("TemporaryPermission")
                         .severity(com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.WARNING)

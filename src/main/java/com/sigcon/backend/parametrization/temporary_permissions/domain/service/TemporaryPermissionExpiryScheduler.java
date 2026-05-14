@@ -87,13 +87,16 @@ public class TemporaryPermissionExpiryScheduler {
                         // HU-PA-20: notifica al receptor que su permiso vencio
                         if (notificationService != null) {
                             try {
+                                // QA Bloque AV (Bug 4, 2026-05-14): NO actionUrl.
+                                // Antes era "/perfil#permisos-temporales" que es
+                                // una ruta inexistente y daba 404. Click marca
+                                // como leida sin navegar.
                                 notificationService.publishToUser(ftp.getUserId(),
                                     com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
                                         .companyId(ftp.getCompanyId())
                                         .eventKey("TEMP_PERMISSION_EXPIRED")
                                         .title("Su permiso temporal vencio")
                                         .body("Permiso: " + ftp.getPermissionCode() + " | Vencio: " + ftp.getEndDate())
-                                        .actionUrl("/perfil#permisos-temporales")
                                         .sourceId(ftp.getId())
                                         .sourceType("TemporaryPermission")
                                         .build());
@@ -120,13 +123,13 @@ public class TemporaryPermissionExpiryScheduler {
                         // HU-PA-20: aviso 24h antes
                         if (notificationService != null) {
                             try {
+                                // QA Bloque AV (Bug 4, 2026-05-14): NO actionUrl.
                                 notificationService.publishToUser(ftp.getUserId(),
                                     com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
                                         .companyId(ftp.getCompanyId())
                                         .eventKey("TEMP_PERMISSION_EXPIRING")
                                         .title("Su permiso temporal vence en 24h")
                                         .body("Permiso: " + ftp.getPermissionCode() + " | Vence: " + ftp.getEndDate())
-                                        .actionUrl("/perfil#permisos-temporales")
                                         .sourceId(ftp.getId())
                                         .sourceType("TemporaryPermission")
                                         .severity(com.sigcon.backend.parametrization.notifications.domain.model.Notification.Severity.WARNING)

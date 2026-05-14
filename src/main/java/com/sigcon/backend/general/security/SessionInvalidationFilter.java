@@ -73,23 +73,20 @@ public class SessionInvalidationFilter extends OncePerRequestFilter {
                     Optional<User> opt = userRepository.findByUsernameOrEmail(username, username);
                     if (opt.isPresent()) {
                         User u = opt.get();
-                        if (u.getSessionInvalidatedAt() != null) {
-                            Instant cutoff = u.getSessionInvalidatedAt()
-                                    .atZone(ZoneId.systemDefault()).toInstant();
-                            if (iat.isBefore(cutoff)) {
-                                // Token obsoleto: limpiar auth y responder 401 literal de la HU.
-                                SecurityContextHolder.clearContext();
-                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                                response.setContentType("application/json;charset=UTF-8");
-                                response.getWriter().write(
-                                    "{\"success\":false,\"code\":401,"
-                                  + "\"message\":\"Su sesion expiro porque un administrador modifico "
-                                  + "sus roles o permisos. Vuelva a iniciar sesion para que los "
-                                  + "cambios surtan efecto.\","
-                                  + "\"error\":\"SESSION_INVALIDATED\"}");
-                                return;
-                            }
-                        }
+                        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14):
+                        // sessionInvalidatedAt YA NO expulsa la sesion en
+                        // cambios ordinarios de permisos del rol. El
+                        // EffectivePermissionsFilter recomputa authorities en
+                        // cada request, asi el usuario permanece en sesion y
+                        // sus permisos se actualizan dinamicamente.
+                        //
+                        // Esta columna se mantiene por compat (la usa
+                        // JwtService.validateToken para tokens enviados a otros
+                        // endpoints) pero AQUI dejamos pasar. El unico path que
+                        // expulsa ahora es el cutoff a nivel EMPRESA (cuando
+                        // PLATFORM_ADMIN desactiva la empresa), abajo.
+                        // Razon: una empresa desactivada SI requiere expulsion
+                        // inmediata; un cambio de rol/permisos NO.
 
                         // QA Bloque PA Bug 83 (HU-PA-PLAT-03 E1, 2026-05-11): tambien
                         // validar el cutoff a nivel EMPRESA. CompanyService.deactivate()
