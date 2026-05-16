@@ -255,19 +255,54 @@ public class UserService {
                             .map(Role::getName)
                             .collect(Collectors.toSet()));
 
-            response.setPermissions(
-                    permissionRepository.findByUserID(user.getId())
-                            .stream()
-                            .map(permission -> new PermissionDTO(
-                                    null,
-                                    permission.getName(),
-                                    permission.getCode(),
-                                    permission.getType(),
-                                    null,
-                                    null,
-                                    permission.getDescription(),
-                                    null))
-                            .collect(Collectors.toList()));
+            // Bloque AY (2026-05-16): expandir permissions[] con aliases legacy<->nuevo
+            // del Map LEGACY_TO_NEW del EffectivePermissionsFilter. Sin esto, los
+            // componentes frontend que verifican `userPermissions.some(p => p.code === LEGACY)`
+            // fallan cuando el rol tiene solo el code formato nuevo MOD.ENTIDAD.ACCION
+            // (y viceversa). Esta expansion mantiene `permissions[]` en sync con las
+            // authorities que el filter inyecta en cada request.
+            List<PermissionDTO> rawPerms = permissionRepository.findByUserID(user.getId())
+                    .stream()
+                    .map(permission -> new PermissionDTO(
+                            null,
+                            permission.getName(),
+                            permission.getCode(),
+                            permission.getType(),
+                            null,
+                            null,
+                            permission.getDescription(),
+                            null))
+                    .collect(Collectors.toList());
+
+            // Construir set de codes ya presentes
+            Set<String> existingCodes = rawPerms.stream()
+                    .map(PermissionDTO::getCode)
+                    .collect(Collectors.toSet());
+
+            // Por cada code presente, agregar sus pares mapeados (legacy<->nuevo)
+            List<PermissionDTO> aliasPerms = new java.util.ArrayList<>();
+            for (PermissionDTO p : rawPerms) {
+                List<String> mappedNew = com.sigcon.backend.general.security.EffectivePermissionsFilter.LEGACY_TO_NEW.get(p.getCode());
+                if (mappedNew != null) {
+                    for (String alias : mappedNew) {
+                        if (!existingCodes.contains(alias)) {
+                            existingCodes.add(alias);
+                            aliasPerms.add(new PermissionDTO(null, p.getName(), alias, p.getType(), null, null, p.getDescription(), null));
+                        }
+                    }
+                }
+                List<String> mappedLegacy = com.sigcon.backend.general.security.EffectivePermissionsFilter.NEW_TO_LEGACY.get(p.getCode());
+                if (mappedLegacy != null) {
+                    for (String alias : mappedLegacy) {
+                        if (!existingCodes.contains(alias)) {
+                            existingCodes.add(alias);
+                            aliasPerms.add(new PermissionDTO(null, p.getName(), alias, p.getType(), null, null, p.getDescription(), null));
+                        }
+                    }
+                }
+            }
+            rawPerms.addAll(aliasPerms);
+            response.setPermissions(rawPerms);
 
             List<ParameterDTO> parameters = parameterRepository.findAll()
                     .stream()
