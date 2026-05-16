@@ -1,6 +1,7 @@
 package com.sigcon.backend.integration.application;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -33,6 +34,7 @@ public class AaefTransactionDTO {
     private Type type;
 
     @JsonProperty("Date")
+    @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
     private LocalDate date;
 
     /** Obligatorio si Type=PAY. Identifica la factura cruzada. */
@@ -68,8 +70,9 @@ public class AaefTransactionDTO {
     @JsonProperty("Notes")
     private String notes;
 
-    /** Fecha de ultima actualizacion (yyyy-MM-dd, sin hora). */
+    /** Fecha de ultima actualizacion. Tolerante a multiples formatos (Bloque AX). */
     @JsonProperty("UpdatedAt")
+    @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
     private LocalDate updatedAt;
 
     @Data

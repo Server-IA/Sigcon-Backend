@@ -68,6 +68,41 @@ public class AaefInvoiceMapper {
             Set.of(SALES_TYPE_CODE, PURCHASE_TYPE_CODE,
                    FEES_TYPE_CODE, CREDIT_NOTE_TYPE_CODE, DEBIT_NOTE_TYPE_CODE);
 
+    /**
+     * QA Bloque AX (HU-INT-13 tolerancia Type.Code, 2026-05-16): AgroFusion
+     * envia ocasionalmente alias literales ("INVOICE", "VENTA", "COMPRA")
+     * en lugar de los codes 01..05. Para evitar rechazos masivos por una
+     * variacion menor del cliente, normalizamos los alias hacia el code
+     * correspondiente ANTES de validar. La normalizacion sigue dos reglas:
+     * <ol>
+     *   <li>Si el code crudo coincide con un alias conocido (case-insensitive),
+     *       se mapea a su code 01..05 directo.</li>
+     *   <li>Si el code es ambiguo (ej. "INVOICE") y existe {@code Name},
+     *       se inspecciona el name buscando palabras clave: "venta"→01,
+     *       "compra"→02, "honorarios"→03, "credito"→04, "debito"→05.</li>
+     * </ol>
+     * Si ningun mapeo aplica, se respeta el code crudo y se valida; si no
+     * pertenece a {@link #VALID_TYPE_CODES} se lanza
+     * {@link AaefMappingException#INVALID_TYPE_CODE}.
+     */
+    private static final java.util.Map<String, String> TYPE_CODE_ALIASES =
+            java.util.Map.ofEntries(
+                    java.util.Map.entry("VENTA",              SALES_TYPE_CODE),
+                    java.util.Map.entry("SALES",              SALES_TYPE_CODE),
+                    java.util.Map.entry("FACTURA_VENTA",      SALES_TYPE_CODE),
+                    java.util.Map.entry("COMPRA",             PURCHASE_TYPE_CODE),
+                    java.util.Map.entry("PURCHASE",           PURCHASE_TYPE_CODE),
+                    java.util.Map.entry("FACTURA_COMPRA",     PURCHASE_TYPE_CODE),
+                    java.util.Map.entry("HONORARIOS",         FEES_TYPE_CODE),
+                    java.util.Map.entry("FEES",               FEES_TYPE_CODE),
+                    java.util.Map.entry("NC",                 CREDIT_NOTE_TYPE_CODE),
+                    java.util.Map.entry("NOTA_CREDITO",       CREDIT_NOTE_TYPE_CODE),
+                    java.util.Map.entry("CREDIT_NOTE",        CREDIT_NOTE_TYPE_CODE),
+                    java.util.Map.entry("ND",                 DEBIT_NOTE_TYPE_CODE),
+                    java.util.Map.entry("NOTA_DEBITO",        DEBIT_NOTE_TYPE_CODE),
+                    java.util.Map.entry("DEBIT_NOTE",         DEBIT_NOTE_TYPE_CODE)
+            );
+
     private final ThirdPartyResolver thirdPartyResolver;
     private final AccountMappingService accountMappingService;
     private final PaymentFormRepository paymentFormRepository;
@@ -386,12 +421,65 @@ public class AaefInvoiceMapper {
             throw new AaefMappingException(AaefMappingException.INVALID_TYPE_CODE,
                     "Header.Type es obligatorio");
         }
-        String code = invoice.getHeader().getType().getCode();
+        // QA Bloque AX (HU-INT-13 tolerancia Type.Code): normalizar alias
+        // ANTES de validar. Si el code crudo es un alias conocido, lo
+        // mapeamos al code canonico y persistimos el cambio en el DTO para
+        // que las llamadas downstream (isPurchaseInvoice, etc.) operen sobre
+        // el code normalizado.
+        String code = normalizeTypeCode(invoice);
         if (code == null || !VALID_TYPE_CODES.contains(code)) {
             throw new AaefMappingException(AaefMappingException.INVALID_TYPE_CODE,
                     "Header.Type.Code='" + code + "' no es valido. Valores admitidos: "
                     + VALID_TYPE_CODES + " (01=Venta, 02=Compra, 03=Honorarios, 04=NC, 05=ND)");
         }
+    }
+
+    /**
+     * QA Bloque AX (HU-INT-13 tolerancia Type.Code, 2026-05-16): convierte
+     * alias literales a code canonico 01..05 y lo persiste en el DTO.
+     *
+     * @return code normalizado (puede ser igual al original si ya era valido)
+     */
+    private String normalizeTypeCode(AaefInvoiceDTO invoice) {
+        AaefInvoiceDTO.Type type = invoice.getHeader().getType();
+        String raw = type.getCode();
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        // Ya es un code canonico, no normalizar
+        if (VALID_TYPE_CODES.contains(trimmed)) {
+            return trimmed;
+        }
+        String upper = trimmed.toUpperCase(java.util.Locale.ROOT);
+        // Buscar alias directo
+        String mapped = TYPE_CODE_ALIASES.get(upper);
+        if (mapped != null) {
+            log.info("AAEF Type.Code alias '{}' -> '{}' (Name='{}', DocumentId='{}')",
+                    raw, mapped, type.getName(), invoice.getHeader().getDocumentId());
+            type.setCode(mapped);
+            return mapped;
+        }
+        // Heuristica: si Name viene, inspeccionar
+        String name = type.getName();
+        if (name != null) {
+            String upperName = name.toUpperCase(java.util.Locale.ROOT);
+            String fromName = null;
+            if (upperName.contains("VENTA"))             fromName = SALES_TYPE_CODE;
+            else if (upperName.contains("COMPRA"))       fromName = PURCHASE_TYPE_CODE;
+            else if (upperName.contains("HONORARIO"))    fromName = FEES_TYPE_CODE;
+            else if (upperName.contains("CREDITO"))      fromName = CREDIT_NOTE_TYPE_CODE;
+            else if (upperName.contains("CRÉDITO"))      fromName = CREDIT_NOTE_TYPE_CODE;
+            else if (upperName.contains("DEBITO"))       fromName = DEBIT_NOTE_TYPE_CODE;
+            else if (upperName.contains("DÉBITO"))       fromName = DEBIT_NOTE_TYPE_CODE;
+            if (fromName != null) {
+                log.info("AAEF Type.Code='{}' Name='{}' normalizado a '{}'",
+                        raw, name, fromName);
+                type.setCode(fromName);
+                return fromName;
+            }
+        }
+        return trimmed;
     }
 
     /**

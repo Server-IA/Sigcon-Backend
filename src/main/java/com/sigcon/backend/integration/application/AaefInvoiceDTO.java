@@ -1,6 +1,7 @@
 package com.sigcon.backend.integration.application;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -48,8 +49,16 @@ public class AaefInvoiceDTO {
         @JsonProperty("Prefix") private String prefix;
         @JsonProperty("Serial") private String serial;
         @JsonProperty("Type") private Type type;
-        @JsonProperty("IssueDate") private LocalDate issueDate;
-        @JsonProperty("DueDate") private LocalDate dueDate;
+        /**
+         * QA Bloque AX (HU-INT-13 tolerancia formatos, 2026-05-16):
+         * Acepta yyyy-MM-dd, dd-MM-yyyy hh:mm:ss a, timestamptz Postgres, etc.
+         */
+        @JsonProperty("IssueDate")
+        @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
+        private LocalDate issueDate;
+        @JsonProperty("DueDate")
+        @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
+        private LocalDate dueDate;
         /**
          * PAID | PENDING (estados aceptados en AAEF v1.1).
          *
@@ -57,8 +66,10 @@ public class AaefInvoiceDTO {
          * emite PAID o PENDING. Antes aceptabamos ACTIVE/CANCELLED/PARTIAL.
          */
         @JsonProperty("Status") private String status;
-        /** Fecha de ultima actualizacion (yyyy-MM-dd, sin hora). */
-        @JsonProperty("UpdatedAt") private LocalDate updatedAt;
+        /** Fecha de ultima actualizacion. Tolerante a multiples formatos (Bloque AX). */
+        @JsonProperty("UpdatedAt")
+        @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
+        private LocalDate updatedAt;
     }
 
     @Data

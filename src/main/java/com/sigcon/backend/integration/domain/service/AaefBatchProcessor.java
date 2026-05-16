@@ -226,6 +226,12 @@ public class AaefBatchProcessor {
             AaefInvoiceDTO invoice = objectMapper.treeToValue(node, AaefInvoiceDTO.class);
             documentId = invoice.getHeader() != null ? invoice.getHeader().getDocumentId() : null;
 
+            // QA Bloque AX (HU-INT-13 tolerancia Type.Code, 2026-05-16):
+            // Normalizar Type.Code ANTES de los is*() del dispatcher. Asi un
+            // alias como "INVOICE" + Name="Factura de Venta" se mapea a "01"
+            // y entra correctamente a la rama isSalesInvoice.
+            invoiceMapper.validateTypeCode(invoice);
+
             if (invoiceMapper.isSalesInvoice(invoice)) {
                 // Type=01 Venta
                 CreateSalesInvoiceRequest req = invoiceMapper.toSalesInvoiceRequest(invoice);
