@@ -127,6 +127,69 @@ public class AuthService implements UserDetailsService {
                 .orElse(new LinkedHashSet<>());
     }
 
+    /**
+     * QA Bloque AV (HU-PA-13 E7 regla #11, 2026-05-14): devuelve los permisos
+     * efectivos del usuario distinguiendo SOURCE (rol vs temporal).
+     *
+     * <p>El frontend lo usa para implementar la regla #11: el boton "Asignar
+     * permiso temporal" solo se muestra si el usuario tiene
+     * {@code PAR.PERMISOS_TEMPORALES.ASIGNAR} via su ROL (no via temporal).
+     * Asi se evita la escalada recursiva: a un usuario al que se le delego
+     * temporalmente la facultad de asignar, no se le habilita la UI para
+     * asignar a otros.
+     *
+     * <p>Estructura:
+     * <pre>{@code
+     * {
+     *   "rolePermissions": ["PERMISO_A", "PERMISO_B", ...],
+     *   "temporaryPermissions": ["PERMISO_C", ...],
+     *   "effectivePermissions": [...]  // union (rolePermissions + temporaryPermissions)
+     * }
+     * }</pre>
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String, Object> getMyEffectivePermissionsSplit(String email) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        if (email == null || email.isBlank()) {
+            result.put("rolePermissions", new LinkedHashSet<>());
+            result.put("temporaryPermissions", new LinkedHashSet<>());
+            result.put("effectivePermissions", new LinkedHashSet<>());
+            return result;
+        }
+        return userRepository.findByEmail(email).map(user -> {
+            Set<String> roleCodes = new LinkedHashSet<>();
+            if (user.getRoles() != null) {
+                user.getRoles().stream()
+                        .filter(r -> r != null && r.getPermissions() != null)
+                        .flatMap(r -> r.getPermissions().stream())
+                        .filter(p -> p != null && p.getCode() != null)
+                        .map(p -> p.getCode().startsWith("PERM_") ? p.getCode().substring(5) : p.getCode())
+                        .forEach(roleCodes::add);
+            }
+            Set<String> tempCodes = new LinkedHashSet<>();
+            try {
+                Set<String> t = temporaryPermissionService.computeEffectiveCodes(user.getId());
+                if (t != null) tempCodes.addAll(t);
+            } catch (Exception ex) {
+                log.warn("HU-PA-13 getMyEffectivePermissionsSplit: error temporal codes userId={}: {}",
+                        user.getId(), ex.getMessage());
+            }
+            Set<String> union = new LinkedHashSet<>(roleCodes);
+            union.addAll(tempCodes);
+            Map<String, Object> r = new java.util.LinkedHashMap<>();
+            r.put("rolePermissions", roleCodes);
+            r.put("temporaryPermissions", tempCodes);
+            r.put("effectivePermissions", union);
+            return r;
+        }).orElseGet(() -> {
+            Map<String, Object> empty = new java.util.LinkedHashMap<>();
+            empty.put("rolePermissions", new LinkedHashSet<>());
+            empty.put("temporaryPermissions", new LinkedHashSet<>());
+            empty.put("effectivePermissions", new LinkedHashSet<>());
+            return empty;
+        });
+    }
+
     @Value("${app.frontend.url}")
     private String frontendUrl;
 

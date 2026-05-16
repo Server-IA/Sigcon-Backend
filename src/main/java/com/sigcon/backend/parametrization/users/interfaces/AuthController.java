@@ -86,9 +86,13 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("No autenticado.")));
         }
-        Map<String, Object> data = Map.of(
-                "effectivePermissions", authService.getMyEffectivePermissions(auth.getName())
-        );
+        // QA Bloque AV (HU-PA-13 E7 regla #11, 2026-05-14): response ahora trae
+        // 3 campos: rolePermissions, temporaryPermissions, effectivePermissions
+        // (union). El frontend usa rolePermissions para decidir visibilidad de
+        // botones como "Asignar permiso temporal" cuya HU exige source=rol.
+        // Backward-compat: effectivePermissions sigue siendo la union (codigo
+        // viejo que solo leia ese campo no se rompe).
+        Map<String, Object> data = authService.getMyEffectivePermissionsSplit(auth.getName());
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Permisos efectivos del usuario actual."),
