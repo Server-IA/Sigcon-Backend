@@ -1,6 +1,7 @@
 -- ============================================================================
--- V9-ZZZZJ : Bloque AY+ - Cierre exhaustivo de gaps operativos en roles
--- Fecha: 2026-05-16
+-- V9-Zzzzc : Bloque AY+ - Cierre exhaustivo de gaps operativos en roles
+-- Fecha: 2026-05-16 (renombrada 2026-05-17, antes V9-ZZZZJ)
+-- Renombre forzado por bug de orden lexical (ver V9-Zzzza header).
 --
 -- HALLAZGOS de auditoria 7 roles x 317 endpoints:
 -- Tras V9-ZZZZI, CONTADOR pasa 62% (187/301). Los 114 restantes incluyen:
@@ -132,5 +133,5 @@ BEGIN
             END IF;
         END LOOP;
     END LOOP;
-    RAISE NOTICE 'V9-ZZZZJ: permisos operativos asignados a CONTADOR/AUDITOR/AUX/TES/OPN';
+    RAISE NOTICE 'V9-Zzzzc: permisos operativos asignados a CONTADOR/AUDITOR/AUX/TES/OPN';
 END $$;

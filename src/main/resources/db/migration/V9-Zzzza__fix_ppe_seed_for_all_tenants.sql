@@ -1,9 +1,9 @@
 -- ============================================================================
--- V9-ZZZZH : Bug fix raiz - empresas nuevas no reciben cuentas PPE (15xx)
--- Fecha: 2026-05-16
+-- V9-Zzzza : Bug fix raiz - empresas nuevas no reciben cuentas PPE (15xx)
+-- Fecha: 2026-05-16 (renombrada 2026-05-17, antes V9-ZZZZH)
 --
 -- BUG IDENTIFICADO (Bloque AY):
--- DataInitializer ejecuta scripts en orden lexical:
+-- DataInitializer ejecuta scripts en orden lexical Unicode:
 --   V10-D, V10-G, V10-H ... V9-Z ... V9-ZZZZG
 -- ('V1' < 'V9' caracter por caracter, asi que V10-* corre ANTES de V9-*)
 --
@@ -20,17 +20,26 @@
 -- Empresa nueva → modal "Crear Regla de Depreciacion" → dropdown "Cuenta
 -- contable asociada" muestra "No se encontraron resultados".
 --
--- FIX (esta migracion):
---   1. Redefinir _tenant_auto_provision INCLUYENDO los 4 pasos extra:
+-- BUG SECUNDARIO DESCUBIERTO 2026-05-17 (backend dejo de arrancar en prod):
+-- El nombre original V9-ZZZZH ordena ANTES de V9-Z__multi_tenant_final_fixes
+-- porque en Unicode 'Z' (0x5A) < '_' (0x5F). El comment original decia
+-- "corre DESPUES de V9-Z" pero era falso. Resultado en BD limpia: el
+-- precheck de _seed_parameters_for_tenant (creado por V9-Z) fallaba con
+-- RAISE EXCEPTION y el backend moria al arrancar.
+--
+-- FIX:
+--   1. Renombrar a V9-Zzzza (lowercase 'z' = 0x7A > '_' = 0x5F) para que
+--      ahora SI corra DESPUES de V9-Z__multi_tenant_final_fixes.
+--   2. Redefinir _tenant_auto_provision INCLUYENDO los 4 pasos extra:
 --      - _seed_payroll_concepts_for_tenant  (16 conceptos NOM, de V10-G)
 --      - _seed_parameters_for_tenant        (20 parameters, de V9-Z)
 --      - _seed_ppe_accounts_for_tenant      (8 cuentas PPE 15xx, de V10-H)
---   2. Re-ejecutar PPE seed para TODAS las empresas existentes que no
+--   3. Re-ejecutar PPE seed para TODAS las empresas existentes que no
 --      tengan las 8 cuentas. Idempotente con NOT EXISTS.
 --
--- Esta migracion corre lexicalmente DESPUES de V9-Z y V9-ZZ*, por lo que
--- es la "definicion final" de _tenant_auto_provision. Cualquier migracion
--- futura que la redefina debe incluir todos los seeds.
+-- Cualquier migracion futura que redefina _tenant_auto_provision DEBE:
+--   (a) Usar prefijo V9-Zz* para ordenar despues de V9-Z__multi
+--   (b) Incluir TODOS los seeds (periodos + CC + 19 mappings + NOM + params + PPE)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -39,13 +48,13 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '_seed_ppe_accounts_for_tenant') THEN
-        RAISE EXCEPTION 'V9-ZZZZH abort: _seed_ppe_accounts_for_tenant no existe. V10-H debe correr antes.';
+        RAISE EXCEPTION 'V9-Zzzza abort: _seed_ppe_accounts_for_tenant no existe. V10-H debe correr antes.';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '_seed_payroll_concepts_for_tenant') THEN
-        RAISE EXCEPTION 'V9-ZZZZH abort: _seed_payroll_concepts_for_tenant no existe. V10-G debe correr antes.';
+        RAISE EXCEPTION 'V9-Zzzza abort: _seed_payroll_concepts_for_tenant no existe. V10-G debe correr antes.';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = '_seed_parameters_for_tenant') THEN
-        RAISE EXCEPTION 'V9-ZZZZH abort: _seed_parameters_for_tenant no existe. V9-Z debe correr antes.';
+        RAISE EXCEPTION 'V9-Zzzza abort: _seed_parameters_for_tenant no existe. V9-Z debe correr antes.';
     END IF;
 END $$;
 
@@ -131,5 +140,5 @@ BEGIN
                 rec.id, rec.business_name, ppe_count;
         END IF;
     END LOOP;
-    RAISE NOTICE 'V9-ZZZZH: empresas reparadas con PPE: %', repaired;
+    RAISE NOTICE 'V9-Zzzza: empresas reparadas con PPE: %', repaired;
 END $$;

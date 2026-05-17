@@ -1,8 +1,9 @@
 -- ============================================================================
--- V9-ZZZZK : Bloque AY+ - Ultimos gaps operativos CONTADOR
--- Fecha: 2026-05-16
+-- V9-Zzzzd : Bloque AY+ - Ultimos gaps operativos CONTADOR
+-- Fecha: 2026-05-16 (renombrada 2026-05-17, antes V9-ZZZZK)
+-- Renombre forzado por bug de orden lexical (ver V9-Zzzza header).
 --
--- Tras V9-ZZZZJ quedan 21 endpoints donde CONTADOR da 403. De estos, ~14 son
+-- Tras V9-Zzzzc quedan 21 endpoints donde CONTADOR da 403. De estos, ~14 son
 -- operativos legitimos del rol contable:
 --   * Crear/editar cuentas contables (plan de cuentas operativo)
 --   * Contabilizar (post) asientos
@@ -101,5 +102,5 @@ BEGIN
             END IF;
         END LOOP;
     END LOOP;
-    RAISE NOTICE 'V9-ZZZZK: gaps operativos finales cerrados';
+    RAISE NOTICE 'V9-Zzzzd: gaps operativos finales cerrados';
 END $$;

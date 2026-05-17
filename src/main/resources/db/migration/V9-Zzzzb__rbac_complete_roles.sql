@@ -1,6 +1,7 @@
 -- ============================================================================
--- V9-ZZZZI : Bloque AY - Completar permisos faltantes en roles predefinidos
--- Fecha: 2026-05-16
+-- V9-Zzzzb : Bloque AY - Completar permisos faltantes en roles predefinidos
+-- Fecha: 2026-05-16 (renombrada 2026-05-17, antes V9-ZZZZI)
+-- Renombre forzado por bug de orden lexical (ver V9-Zzzza header).
 --
 -- HALLAZGOS DE AUDITORIA (matriz roles x endpoints):
 -- El CONTADOR predefinido (creado por V9-J / _seed_predefined_roles_per_tenant)
@@ -136,5 +137,5 @@ BEGIN
             END IF;
         END LOOP;
     END LOOP;
-    RAISE NOTICE 'V9-ZZZZI: permisos asignados a CONTADOR/AUDITOR/AUXILIAR completados';
+    RAISE NOTICE 'V9-Zzzzb: permisos asignados a CONTADOR/AUDITOR/AUXILIAR completados';
 END $$;
