@@ -77,7 +77,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Error de validación (nombre duplicado, fechas inválidas, campos obligatorios)"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_CREATE_CASH_FLOW_PROJECTION','TEMP_PERM_CREATE_CASH_FLOW_PROJECTION','TEMP_CREATE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.CREAR','TEMP_PERM_BNK.PROYECCIONES.CREAR','TEMP_BNK.PROYECCIONES.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @Valid @RequestBody(required = false) CreateCashFlowProjectionDTO request,
             BindingResult bindingResult) {
@@ -117,7 +117,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_UPDATE_CASH_FLOW_PROJECTION','TEMP_PERM_UPDATE_CASH_FLOW_PROJECTION','TEMP_UPDATE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.EDITAR','TEMP_PERM_BNK.PROYECCIONES.EDITAR','TEMP_BNK.PROYECCIONES.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateCashFlowProjectionDTO request,
@@ -144,7 +144,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_DELETE_CASH_FLOW_PROJECTION','TEMP_PERM_DELETE_CASH_FLOW_PROJECTION','TEMP_DELETE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.ELIMINAR','TEMP_PERM_BNK.PROYECCIONES.ELIMINAR','TEMP_BNK.PROYECCIONES.ELIMINAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
 
         return cashFlowProjectionService.delete(id);
@@ -166,7 +166,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_DELETE_CASH_FLOW_PROJECTION','TEMP_PERM_DELETE_CASH_FLOW_PROJECTION','TEMP_DELETE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.ELIMINAR','TEMP_PERM_BNK.PROYECCIONES.ELIMINAR','TEMP_BNK.PROYECCIONES.ELIMINAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> inactivate(@PathVariable Long id) {
 
         return cashFlowProjectionService.inactivate(id);
@@ -186,7 +186,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Estado no permite aprobacion"),
         @ApiResponse(responseCode = "404", description = "No encontrada")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_APPROVE_CASH_FLOW_PROJECTION','TEMP_PERM_APPROVE_CASH_FLOW_PROJECTION','TEMP_APPROVE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.APROBAR','TEMP_PERM_BNK.PROYECCIONES.APROBAR','TEMP_BNK.PROYECCIONES.APROBAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> approve(@PathVariable Long id) {
         return cashFlowProjectionService.approve(id);
     }
@@ -206,7 +206,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Solo proyecciones APROBADAS pueden marcarse como EJECUTADA"),
         @ApiResponse(responseCode = "404", description = "No encontrada")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CASH_FLOW_PROJECTION','TEMP_PERM_EXECUTE_CASH_FLOW_PROJECTION','TEMP_EXECUTE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.EJECUTAR','TEMP_PERM_BNK.PROYECCIONES.EJECUTAR','TEMP_BNK.PROYECCIONES.EJECUTAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> execute(@PathVariable Long id) {
         return cashFlowProjectionService.execute(id);
     }
@@ -245,7 +245,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "No se encontraron proyecciones o parámetros inválidos"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_CASH_FLOW_PROJECTION','TEMP_PERM_VIEW_CASH_FLOW_PROJECTION','TEMP_VIEW_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.VER','TEMP_PERM_BNK.PROYECCIONES.VER','TEMP_BNK.PROYECCIONES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
 
         return cashFlowProjectionService.findAllPaged(request);
@@ -262,7 +262,7 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "404", description = "Proyección no encontrada o eliminada"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_CASH_FLOW_PROJECTION','TEMP_PERM_VIEW_CASH_FLOW_PROJECTION','TEMP_VIEW_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.VER','TEMP_PERM_BNK.PROYECCIONES.VER','TEMP_BNK.PROYECCIONES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> detail(@PathVariable Long id) {
 
         return cashFlowProjectionService.getDetail(id);

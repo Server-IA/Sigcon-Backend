@@ -242,6 +242,97 @@ public class GlobalExceptionHandler {
                 .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(message)));
     }
 
+    /**
+     * QA Bloque BE (2026-05-17): handler dedicado para errores de validacion
+     * Bean Validation (@Valid). Antes caia al handler generico Exception.class
+     * y devolvia 500. La semantica correcta es 400 con detalle de los field
+     * errors (mismo formato que ErrorRespondJson.getErrorRespondJson para
+     * BindingResult). Asi la UI puede pintar errores por campo y el log no
+     * ensucia con stacktraces de validation comunes.
+     */
+    @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
+    public ResponseEntity<?> handleMethodArgumentNotValid(
+            org.springframework.web.bind.MethodArgumentNotValidException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorRespondJson.getErrorRespondJson(ex.getBindingResult()));
+    }
+
+    /**
+     * QA Bloque BE (2026-05-17): body request invalido o ausente (JSON
+     * corrupto, body vacio en endpoint que lo requiere). Antes Exception ->
+     * 500. Ahora devuelve 400 con mensaje legible (sin filtrar el internal
+     * de Jackson).
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleHttpMessageNotReadable(
+            org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        String msg = ex.getMostSpecificCause() != null
+                ? ex.getMostSpecificCause().getMessage()
+                : (ex.getMessage() != null ? ex.getMessage() : "Body de la solicitud invalido o ausente");
+        // Truncar si trae stacktrace de Jackson largo
+        if (msg != null && msg.length() > 300) {
+            msg = msg.substring(0, 300) + "...";
+        }
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(msg)));
+    }
+
+    /**
+     * QA Bloque BE (2026-05-17): metodo HTTP no soportado por el endpoint
+     * (ej. POST a una ruta GET). 405 Method Not Allowed en lugar de 500.
+     */
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<?> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Metodo HTTP no soportado para este endpoint: " + ex.getMethod())));
+    }
+
+    /**
+     * QA Bloque BE (2026-05-17): ruta inexistente (no static resource ...).
+     * Antes Exception -> 500. Ahora 404 limpio.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<?> handleNoResourceFound(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Recurso no encontrado")));
+    }
+
+    /**
+     * QA Bloque BE (2026-05-17): parametros requeridos del request faltantes
+     * (ej. @RequestParam sin defaultValue). Antes Exception -> 500.
+     */
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<?> handleMissingParam(
+            org.springframework.web.bind.MissingServletRequestParameterException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Falta el parametro requerido: " + ex.getParameterName())));
+    }
+
+    /**
+     * QA Bloque BE (2026-05-17): error al convertir un path/query parameter
+     * (ej. "abc" como Long). Antes Exception -> 500.
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<?> handleTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        String expected = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "tipo correcto";
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("Valor invalido para el parametro '" + ex.getName()
+                                + "': se esperaba " + expected)));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleException(Exception ex) {
 

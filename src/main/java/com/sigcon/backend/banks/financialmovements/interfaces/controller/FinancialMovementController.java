@@ -63,7 +63,7 @@ public class FinancialMovementController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado"),
         @ApiResponse(responseCode = "404", description = "Cuenta bancaria no encontrada")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_FINANCIAL_MOVEMENT','TEMP_PERM_VIEW_FINANCIAL_MOVEMENT','TEMP_VIEW_FINANCIAL_MOVEMENT','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> list(
             @RequestParam Long bankAccountId,
             @RequestParam(required = false, defaultValue = "false") boolean unmatchedOnly) {
@@ -86,7 +86,7 @@ public class FinancialMovementController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado"),
         @ApiResponse(responseCode = "404", description = "Cuenta bancaria no encontrada")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_CREATE_FINANCIAL_MOVEMENT','TEMP_PERM_CREATE_FINANCIAL_MOVEMENT','TEMP_CREATE_FINANCIAL_MOVEMENT','PERM_BNK.MOVIMIENTOS.CREAR','TEMP_PERM_BNK.MOVIMIENTOS.CREAR','TEMP_BNK.MOVIMIENTOS.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> store(
             @RequestParam Long bankAccountId,
             @Valid @RequestBody CreateBankFinancialMovementRequest request,
@@ -107,7 +107,7 @@ public class FinancialMovementController {
         @ApiResponse(responseCode = "403", description = "Acceso denegado"),
         @ApiResponse(responseCode = "404", description = "Movimiento financiero no encontrado")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_FINANCIAL_MOVEMENT','TEMP_PERM_VIEW_FINANCIAL_MOVEMENT','TEMP_VIEW_FINANCIAL_MOVEMENT','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         return financialMovementService.listForBankAccount(id, false);
     }
@@ -126,7 +126,7 @@ public class FinancialMovementController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Matching ejecutado")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_AUTO_MATCH_FINANCIAL_MOVEMENT','TEMP_PERM_AUTO_MATCH_FINANCIAL_MOVEMENT','TEMP_AUTO_MATCH_FINANCIAL_MOVEMENT','PERM_BNK.MOVIMIENTOS.CONCILIAR','TEMP_PERM_BNK.MOVIMIENTOS.CONCILIAR','TEMP_BNK.MOVIMIENTOS.CONCILIAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> autoMatch(
             @RequestParam(required = false) Long bankAccountId,
             @RequestParam(required = false, defaultValue = "3") Integer dateToleranceDays) {

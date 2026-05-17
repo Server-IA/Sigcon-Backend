@@ -56,7 +56,7 @@ public class RoleController {
     // QA-2026-05-05: ADMIN_EMPRESA debe poder gestionar roles de SU empresa.
     // Antes solo PLATFORM_ADMIN podia, lo que bloqueaba el QA.
     @PostMapping("/createRole")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_CREATE_ROLE','TEMP_PERM_CREATE_ROLE','TEMP_CREATE_ROLE','PERM_PAR.ROLES.CREAR','TEMP_PERM_PAR.ROLES.CREAR','TEMP_PAR.ROLES.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Crear un nuevo rol", description = "Crea un rol en el sistema con nombre y descripcion <br> Permiso requerido: CREATE_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol creado exitosamente"),
@@ -69,7 +69,7 @@ public class RoleController {
     }
 
     @PutMapping("/updateRole/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_UPDATE_ROLE','TEMP_PERM_UPDATE_ROLE','TEMP_UPDATE_ROLE','PERM_PAR.ROLES.EDITAR','TEMP_PERM_PAR.ROLES.EDITAR','TEMP_PAR.ROLES.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Actualizar un rol existente", description = "Actualiza nombre y/o descripcion de un rol <br> Permiso requerido: UPDATE_ROLE")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Rol actualizado exitosamente"),
@@ -82,7 +82,7 @@ public class RoleController {
     }
 
     @PostMapping("/deleteRole/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_DELETE_ROLE','TEMP_PERM_DELETE_ROLE','TEMP_DELETE_ROLE','PERM_PAR.ROLES.ELIMINAR','TEMP_PERM_PAR.ROLES.ELIMINAR','TEMP_PAR.ROLES.ELIMINAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Eliminar rol (soft delete)",
                description = "Elimina logicamente un rol del sistema. Requiere `reason` >=30 chars (HU-PA-06 E4). <br> Permiso requerido: DELETE_ROLE")
     @ApiResponses(value = {
@@ -137,8 +137,22 @@ public class RoleController {
     }
 
     @PostMapping("/permissions")
-    @PreAuthorize("hasAuthority('PERM_VIEW_PERMISSIONS') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    @Operation(summary = "Listar permisos con filtros", description = "Obtiene la lista paginada de permisos del sistema <br> Permiso requerido: VIEW_PERMISSIONS")
+    // QA Bloque BC Bug 1 (2026-05-17): el dropdown "Permisos atomicos" del form
+    // Asignar Permiso Temporal llama a este endpoint para llenar las opciones.
+    // Antes exigia PERM_VIEW_PERMISSIONS o ROLE_ADMIN_EMPRESA; un user con
+    // PAR.PERMISOS_TEMPORALES.ASIGNAR pero sin esos perms recibia 403 y veia
+    // "No se encontraron resultados". Aceptar tambien el perm de asignar
+    // temporales (rol o temp) para que el dropdown se llene.
+    @PreAuthorize("hasAnyAuthority("
+            + "'PERM_VIEW_PERMISSIONS',"
+            + "'PERM_PAR.PERMISOS_TEMPORALES.ASIGNAR',"
+            + "'TEMP_PERM_PAR.PERMISOS_TEMPORALES.ASIGNAR',"
+            + "'TEMP_PAR.PERMISOS_TEMPORALES.ASIGNAR',"
+            + "'PERM_PAR.PERMISOS_TEMPORALES.VER',"
+            + "'TEMP_PERM_PAR.PERMISOS_TEMPORALES.VER',"
+            + "'TEMP_PAR.PERMISOS_TEMPORALES.VER',"
+            + "'ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    @Operation(summary = "Listar permisos con filtros", description = "Obtiene la lista paginada de permisos del sistema. Accesible por VIEW_PERMISSIONS, PAR.PERMISOS_TEMPORALES.ASIGNAR/VER (rol o temp), o roles ADMIN_EMPRESA/PLATFORM_ADMIN.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de permisos obtenida exitosamente"),
         @ApiResponse(responseCode = "400", description = "Parametros de consulta invalidos"),
@@ -149,7 +163,7 @@ public class RoleController {
     }
 
     @PostMapping("/assign-permissions")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_ASSIGN_PERMISSION','TEMP_PERM_ASSIGN_PERMISSION','TEMP_ASSIGN_PERMISSION','PERM_PAR.ROLES.EDITAR','TEMP_PERM_PAR.ROLES.EDITAR','TEMP_PAR.ROLES.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Asignar permisos a un rol", description = "Asigna una lista de permisos a un rol existente <br> Permiso requerido: ASSIGN_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permisos asignados exitosamente al rol"),
@@ -180,7 +194,7 @@ public class RoleController {
     }
 
     @PostMapping("/remove-permissions")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_ASSIGN_PERMISSION','TEMP_PERM_ASSIGN_PERMISSION','TEMP_ASSIGN_PERMISSION','PERM_PAR.ROLES.EDITAR','TEMP_PERM_PAR.ROLES.EDITAR','TEMP_PAR.ROLES.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Remover permisos de un rol", description = "Remueve una lista de permisos de un rol existente <br> Permiso requerido: REMOVE_PERMISSION")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Permisos removidos exitosamente del rol"),

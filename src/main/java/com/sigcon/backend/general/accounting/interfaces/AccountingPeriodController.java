@@ -42,7 +42,7 @@ public class AccountingPeriodController {
         @ApiResponse(responseCode = "400", description = "Error de validacion o periodo duplicado"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_PERIOD','TEMP_PERM_VIEW_PERIOD','TEMP_VIEW_PERIOD','PERM_CG.PERIODOS.VER','TEMP_PERM_CG.PERIODOS.VER','TEMP_CG.PERIODOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> store(@Valid @RequestBody CreatePeriodRequest request) {
         try {
             AccountingPeriodDTO dto = periodService.createPeriod(request);

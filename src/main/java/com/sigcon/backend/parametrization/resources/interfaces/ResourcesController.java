@@ -34,8 +34,14 @@ public class ResourcesController {
     private final SystemWithholdingAssignmentService systemWithholdingAssignmentService;
 
     @PostMapping("/countries")
-    @PreAuthorize("hasAuthority('PERM_VIEW_COUNTRY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    @Operation(summary = "Obtener países", description = "Obtener países del sistema <br> Permiso requerido: VIEW_COUNTRY")
+    // QA Bloque BC Bug 5 (2026-05-17): paises es catalogo GLOBAL del sistema.
+    // Cualquier user autenticado debe poder consultarlo para llenar dropdowns
+    // de formularios (Crear Tercero -> Contacto, etc.). Antes exigia
+    // PERM_VIEW_COUNTRY o ROLE_ADMIN_EMPRESA y el CONTADOR/AUXILIAR/AUDITOR sin
+    // ese rol veia "No se encontraron resultados" en el dropdown. El CRUD si
+    // sigue restringido a admin.
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Obtener países", description = "Obtener países del sistema (catalogo global, cualquier user autenticado)")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de paises obtenida exitosamente"),
         @ApiResponse(responseCode = "400", description = "Parametros de consulta invalidos"),
@@ -46,8 +52,10 @@ public class ResourcesController {
     }
 
     @PostMapping("/municipalities")
-    @PreAuthorize("hasAuthority('PERM_VIEW_MUNICIPALITY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    @Operation(summary = "Obtener municipios", description = "Obtener municipios del sistema <br> Permiso requerido: VIEW_MUNICIPALITY")
+    // QA Bloque BC Bug 5 (2026-05-17): municipios es catalogo GLOBAL.
+    // Mismo razonamiento que paises.
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Obtener municipios", description = "Obtener municipios del sistema (catalogo global, cualquier user autenticado)")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de municipios obtenida exitosamente"),
         @ApiResponse(responseCode = "400", description = "Parametros de consulta invalidos"),
@@ -194,7 +202,7 @@ public class ResourcesController {
     // ===== ASIGNACIONES DE RETENCIONES DEL SISTEMA =====
 
     @PostMapping("/system-withholdings")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_MANAGE_SYSTEM_WITHHOLDINGS','TEMP_PERM_MANAGE_SYSTEM_WITHHOLDINGS','TEMP_MANAGE_SYSTEM_WITHHOLDINGS','PERM_PAR.RETENCIONES_SISTEMA.GESTIONAR','TEMP_PERM_PAR.RETENCIONES_SISTEMA.GESTIONAR','TEMP_PAR.RETENCIONES_SISTEMA.GESTIONAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Listar asignaciones de retenciones", description = "Obtiene la lista paginada de retenciones asignadas al sistema <br> Permiso requerido: ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Lista de asignaciones de retenciones obtenida exitosamente"),
@@ -206,7 +214,7 @@ public class ResourcesController {
     }
 
     @PostMapping("/system-withholdings/assign")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_MANAGE_SYSTEM_WITHHOLDINGS','TEMP_PERM_MANAGE_SYSTEM_WITHHOLDINGS','TEMP_MANAGE_SYSTEM_WITHHOLDINGS','PERM_PAR.RETENCIONES_SISTEMA.GESTIONAR','TEMP_PERM_PAR.RETENCIONES_SISTEMA.GESTIONAR','TEMP_PAR.RETENCIONES_SISTEMA.GESTIONAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Asignar retencion al sistema", description = "Asigna una retencion existente al sistema con fecha de vigencia <br> Permiso requerido: ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Retencion asignada exitosamente al sistema"),
@@ -219,7 +227,7 @@ public class ResourcesController {
     }
 
     @DeleteMapping("/system-withholdings/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_MANAGE_SYSTEM_WITHHOLDINGS','TEMP_PERM_MANAGE_SYSTEM_WITHHOLDINGS','TEMP_MANAGE_SYSTEM_WITHHOLDINGS','PERM_PAR.RETENCIONES_SISTEMA.GESTIONAR','TEMP_PERM_PAR.RETENCIONES_SISTEMA.GESTIONAR','TEMP_PAR.RETENCIONES_SISTEMA.GESTIONAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Desasignar retencion del sistema", description = "Elimina (soft delete) una asignacion de retencion del sistema <br> Permiso requerido: ROLE_ADMIN")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Asignacion de retencion eliminada exitosamente"),

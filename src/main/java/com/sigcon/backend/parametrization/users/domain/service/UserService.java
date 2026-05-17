@@ -303,10 +303,48 @@ public class UserService {
             // QA Bloque AX (2026-05-17): expandir tambien S/no-S para mostrar botones
             // crear/editar/eliminar en modulos donde frontend uso plural por error.
             List<PermissionDTO> aliasPerms = new java.util.ArrayList<>();
+            // QA Bloque BC Bug 2/4/6 (2026-05-17): inferir type desde prefijo del
+            // alias legacy. En BD muchos permisos "delete" tienen type=UPDATE
+            // semanticamente (DESACTIVAR = soft delete). Pero el frontend chequea
+            // `p.type === 'DELETE'`. Si solo heredo el type del padre, el check
+            // falla. Inferir del prefijo del code alias resuelve el mismatch:
+            //   - DELETE_*, *.ELIMINAR, *.DESACTIVAR -> type=DELETE
+            //   - CREATE_*, *.CREAR -> type=CREATE
+            //   - UPDATE_*, *.EDITAR, *.AJUSTAR -> type=UPDATE
+            //   - VIEW_*, READ_*, *.VER -> type=VIEW
+            //   - ASSIGN_* -> type=ASSIGN
+            //   - sino: usar type del padre
+            java.util.function.Function<String, com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits> inferType = aliasCode -> {
+                if (aliasCode == null) return null;
+                String u = aliasCode.toUpperCase();
+                if (u.startsWith("DELETE_") || u.endsWith(".ELIMINAR") || u.endsWith(".DESACTIVAR")
+                        || u.endsWith(".ANULAR")) {
+                    return com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.DELETE;
+                }
+                if (u.startsWith("CREATE_") || u.endsWith(".CREAR") || u.endsWith(".REGISTRAR")
+                        || u.endsWith(".EMITIR")) {
+                    return com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.CREATE;
+                }
+                if (u.startsWith("UPDATE_") || u.endsWith(".EDITAR") || u.endsWith(".AJUSTAR")
+                        || u.endsWith(".APROBAR") || u.endsWith(".RECHAZAR") || u.endsWith(".CERRAR")
+                        || u.endsWith(".COBRAR") || u.endsWith(".CONCILIAR")) {
+                    return com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.UPDATE;
+                }
+                if (u.startsWith("VIEW_") || u.startsWith("READ_") || u.endsWith(".VER")) {
+                    return com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.VIEW;
+                }
+                if (u.startsWith("ASSIGN_") || u.endsWith(".ASIGNAR")) {
+                    return com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.ASSIGN;
+                }
+                return null;
+            };
             java.util.function.BiConsumer<String, PermissionDTO> addAlias = (alias, base) -> {
                 if (alias != null && !existingCodes.contains(alias)) {
                     existingCodes.add(alias);
-                    aliasPerms.add(new PermissionDTO(null, base.getName(), alias, base.getType(), null, null, base.getDescription(), null));
+                    com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits inferred = inferType.apply(alias);
+                    com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits finalType =
+                            inferred != null ? inferred : base.getType();
+                    aliasPerms.add(new PermissionDTO(null, base.getName(), alias, finalType, null, null, base.getDescription(), null));
                 }
             };
             for (PermissionDTO p : rawPerms) {

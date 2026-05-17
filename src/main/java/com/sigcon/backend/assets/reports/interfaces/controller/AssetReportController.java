@@ -54,7 +54,7 @@ public class AssetReportController {
      * @return datos del reporte agrupados segun criterio seleccionado
      */
     @PostMapping("/generate")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ASSET_REPORT','TEMP_PERM_VIEW_ASSET_REPORT','TEMP_VIEW_ASSET_REPORT','PERM_ACT.ACTIVOS.EXPORTAR_REPORTE','TEMP_PERM_ACT.ACTIVOS.EXPORTAR_REPORTE','TEMP_ACT.ACTIVOS.EXPORTAR_REPORTE','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Generar reporte de activos (JSON)",
                description = "ACT-04: Genera un reporte de activos filtrado por rango de fechas "
                        + "de adquisicion y agrupado por clasificacion, periodo o sin agrupar.")
@@ -111,7 +111,7 @@ public class AssetReportController {
      * @return archivo PDF como bytes con Content-Type application/pdf
      */
     @PostMapping("/generate/pdf")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ASSET_REPORT','TEMP_PERM_VIEW_ASSET_REPORT','TEMP_VIEW_ASSET_REPORT','PERM_ACT.ACTIVOS.EXPORTAR_REPORTE','TEMP_PERM_ACT.ACTIVOS.EXPORTAR_REPORTE','TEMP_ACT.ACTIVOS.EXPORTAR_REPORTE','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Generar reporte de activos (PDF)",
                description = "ACT-07: Genera y descarga un reporte de activos en formato PDF "
                        + "filtrado por rango de fechas y con agrupamiento opcional.")

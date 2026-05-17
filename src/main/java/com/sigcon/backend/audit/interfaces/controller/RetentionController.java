@@ -103,7 +103,7 @@ public class RetentionController {
                             + "retencion legal activa.' o log ya purgado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_LEGAL_HOLD','TEMP_PERM_LEGAL_HOLD','TEMP_LEGAL_HOLD','PERM_AU.RETENCION.LEGAL_HOLD','TEMP_PERM_AU.RETENCION.LEGAL_HOLD','TEMP_AU.RETENCION.LEGAL_HOLD','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @PostMapping("/legal-hold/{logId}")
     public ResponseEntity<?> setLegalHold(
             @Parameter(description = "ID del log", example = "1") @PathVariable Long logId,
@@ -125,7 +125,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "400", description = "Log no encontrado"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_LEGAL_HOLD','TEMP_PERM_LEGAL_HOLD','TEMP_LEGAL_HOLD','PERM_AU.RETENCION.LEGAL_HOLD','TEMP_PERM_AU.RETENCION.LEGAL_HOLD','TEMP_AU.RETENCION.LEGAL_HOLD','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @DeleteMapping("/legal-hold/{logId}")
     public ResponseEntity<?> releaseLegalHold(@PathVariable Long logId) {
         return service.releaseLegalHold(logId);
@@ -141,7 +141,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "200", description = "Purga ejecutada (retorna AuditPurgeRecord o 'Sin candidatos')"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_RETENTION_PURGE','TEMP_PERM_EXECUTE_RETENTION_PURGE','TEMP_EXECUTE_RETENTION_PURGE','PERM_AU.RETENCION.EJECUTAR_PURGA','TEMP_PERM_AU.RETENCION.EJECUTAR_PURGA','TEMP_AU.RETENCION.EJECUTAR_PURGA','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @PostMapping("/purge/run")
     public ResponseEntity<?> runPurgeManual() {
         String executedBy = "admin";

@@ -55,7 +55,7 @@ public class AccountMappingController {
      * @return lista de {@link AccountMappingDTO} ordenada por codigo de concepto
      */
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ACCOUNT_MAPPING','TEMP_PERM_VIEW_ACCOUNT_MAPPING','TEMP_VIEW_ACCOUNT_MAPPING','PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PAR.MAPEOS_CONTABLES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(
         summary = "Listar todos los mapeos contables",
         description = "Retorna la configuracion completa de mapeos concepto-cuenta. "
@@ -89,7 +89,7 @@ public class AccountMappingController {
      * @return mapeo con ID de cuenta y metadatos
      */
     @GetMapping("/{conceptCode}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ACCOUNT_MAPPING','TEMP_PERM_VIEW_ACCOUNT_MAPPING','TEMP_VIEW_ACCOUNT_MAPPING','PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PAR.MAPEOS_CONTABLES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(
         summary = "Consultar un mapeo por codigo de concepto",
         description = "Retorna el mapeo especifico para un concepto. 404 si el concepto no esta mapeado."
@@ -118,7 +118,7 @@ public class AccountMappingController {
      * <p>Body: {"accountingAccountId": 123}
      */
     @PatchMapping("/{conceptCode}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ACCOUNT_MAPPING','TEMP_PERM_VIEW_ACCOUNT_MAPPING','TEMP_VIEW_ACCOUNT_MAPPING','PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PAR.MAPEOS_CONTABLES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(
         summary = "Actualizar la cuenta destino de un mapeo (HU-TENNAT-04 E2)",
         description = "Permite al admin de empresa reasignar la cuenta contable destino de un "
@@ -156,7 +156,7 @@ public class AccountMappingController {
     }
 
     @PutMapping("/{conceptCode}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ACCOUNT_MAPPING','TEMP_PERM_VIEW_ACCOUNT_MAPPING','TEMP_VIEW_ACCOUNT_MAPPING','PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PERM_PAR.MAPEOS_CONTABLES.VER','TEMP_PAR.MAPEOS_CONTABLES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Alias PUT del PATCH /{conceptCode}")
     public ResponseEntity<?> updateMappingPut(
             @PathVariable("conceptCode") String conceptCode,

@@ -357,7 +357,44 @@ public class EffectivePermissionsFilter extends OncePerRequestFilter {
             Map.entry("CREATE_REPORT_TEMPLATE", List.of("PAR.REPORTES_PLANTILLAS.GESTIONAR")),
             Map.entry("CREATE_REPORT_TEMPLATES",List.of("PAR.REPORTES_PLANTILLAS.GESTIONAR")),
             Map.entry("DELETE_REPORT_TEMPLATE", List.of("PAR.REPORTES_PLANTILLAS.GESTIONAR")),
-            Map.entry("DELETE_REPORT_TEMPLATES",List.of("PAR.REPORTES_PLANTILLAS.GESTIONAR"))
+            Map.entry("DELETE_REPORT_TEMPLATES",List.of("PAR.REPORTES_PLANTILLAS.GESTIONAR")),
+            // QA Bloque BC Bug 4 (2026-05-17): el frontend de Segmentacion ECL
+            // checkea CREATE_SEGMENTATION y UPDATE_SEGMENTATION pero la BD solo
+            // tiene TER.SEGMENTACION.AJUSTAR. Mapear ambos al mismo perm para
+            // que los botones aparezcan.
+            Map.entry("CREATE_SEGMENTATION",    List.of("TER.SEGMENTACION.AJUSTAR")),
+            Map.entry("UPDATE_SEGMENTATION",    List.of("TER.SEGMENTACION.AJUSTAR")),
+            Map.entry("VIEW_SEGMENTATION",      List.of("TER.SEGMENTACION.VER")),
+            // QA Bloque BC Bug 6 (2026-05-17): banks/index.jsx usa codes legacy
+            // VIEW_CASH_AND_BANKS / CREATE_CASH_AND_BANKS / UPDATE_CASH_AND_BANKS
+            // / DELETE_CASH_AND_BANKS (codes de un modulo agregado que NO existen
+            // en BD). Mapearlos a BNK.BANCOS.*.
+            Map.entry("VIEW_CASH_AND_BANKS",    List.of("BNK.BANCOS.VER")),
+            Map.entry("CREATE_CASH_AND_BANKS",  List.of("BNK.BANCOS.CREAR")),
+            Map.entry("UPDATE_CASH_AND_BANKS",  List.of("BNK.BANCOS.EDITAR")),
+            Map.entry("DELETE_CASH_AND_BANKS",  List.of("BNK.BANCOS.ELIMINAR")),
+            // Plurales BNK (singulares ya mapeados arriba). El frontend usa
+            // ambas formas dependiendo del archivo (codes incosistentes legacy).
+            Map.entry("VIEW_BANKS",             List.of("BNK.BANCOS.VER")),
+            Map.entry("CREATE_BANKS",           List.of("BNK.BANCOS.CREAR")),
+            Map.entry("UPDATE_BANKS",           List.of("BNK.BANCOS.EDITAR")),
+            Map.entry("DELETE_BANKS",           List.of("BNK.BANCOS.ELIMINAR")),
+            Map.entry("VIEW_BANK_BRANCHES",     List.of("BNK.SUCURSALES.VER")),
+            Map.entry("CREATE_BANK_BRANCHES",   List.of("BNK.SUCURSALES.CREAR")),
+            Map.entry("UPDATE_BANK_BRANCHES",   List.of("BNK.SUCURSALES.EDITAR")),
+            Map.entry("DELETE_BANK_BRANCHES",   List.of("BNK.SUCURSALES.ELIMINAR")),
+            Map.entry("CREATE_BANK_ACCOUNTS",   List.of("BNK.CUENTAS.CREAR")),
+            Map.entry("UPDATE_BANK_ACCOUNTS",   List.of("BNK.CUENTAS.EDITAR")),
+            Map.entry("DELETE_BANK_ACCOUNTS",   List.of("BNK.CUENTAS.ELIMINAR")),
+            // Cheques y chequeras plurales
+            Map.entry("VIEW_CHECKS",            List.of("BNK.CHEQUES.VER")),
+            Map.entry("CREATE_CHECKS",          List.of("BNK.CHEQUES.EMITIR")),
+            Map.entry("UPDATE_CHECKS",          List.of("BNK.CHEQUES.EDITAR")),
+            Map.entry("DELETE_CHECKS",          List.of("BNK.CHEQUES.ELIMINAR")),
+            Map.entry("VIEW_CHECKBOOKS",        List.of("BNK.CHEQUERAS.VER")),
+            Map.entry("CREATE_CHECKBOOKS",      List.of("BNK.CHEQUERAS.CREAR")),
+            Map.entry("UPDATE_CHECKBOOKS",      List.of("BNK.CHEQUERAS.EDITAR")),
+            Map.entry("DELETE_CHECKBOOKS",      List.of("BNK.CHEQUERAS.ELIMINAR"))
     );
 
     /** Indice inverso nuevo->legacy, construido al cargar la clase. */

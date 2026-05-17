@@ -72,7 +72,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Validacion fallida (rango invalido, tipo duplicado)")
     })
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_MANAGE_VOUCHER_SERIES','TEMP_PERM_MANAGE_VOUCHER_SERIES','TEMP_MANAGE_VOUCHER_SERIES','PERM_CG.SERIES.GESTIONAR','TEMP_PERM_CG.SERIES.GESTIONAR','TEMP_CG.SERIES.GESTIONAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateVoucherSeriesRequest req) {
         try {
             return service.create(req);
@@ -90,7 +90,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Validacion fallida")
     })
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_MANAGE_VOUCHER_SERIES','TEMP_PERM_MANAGE_VOUCHER_SERIES','TEMP_MANAGE_VOUCHER_SERIES','PERM_CG.SERIES.GESTIONAR','TEMP_PERM_CG.SERIES.GESTIONAR','TEMP_CG.SERIES.GESTIONAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                      @Valid @RequestBody CreateVoucherSeriesRequest req) {
         try {
@@ -109,7 +109,7 @@ public class VoucherSeriesController {
         @ApiResponse(responseCode = "400", description = "Serie no encontrada")
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_MANAGE_VOUCHER_SERIES','TEMP_PERM_MANAGE_VOUCHER_SERIES','TEMP_MANAGE_VOUCHER_SERIES','PERM_CG.SERIES.GESTIONAR','TEMP_PERM_CG.SERIES.GESTIONAR','TEMP_CG.SERIES.GESTIONAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             return service.delete(id);

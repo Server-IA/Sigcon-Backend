@@ -60,7 +60,8 @@ public class AssetDisposalController {
      * @return respuesta paginada con disposiciones
      */
     @PostMapping("")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BD (2026-05-17 - Bug #16): aceptar perms granulares ACT.ACTIVOS.DAR_DE_BAJA
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ASSET_DISPOSAL','TEMP_PERM_VIEW_ASSET_DISPOSAL','TEMP_VIEW_ASSET_DISPOSAL','PERM_CREATE_ASSET_DISPOSAL','TEMP_PERM_CREATE_ASSET_DISPOSAL','TEMP_CREATE_ASSET_DISPOSAL','PERM_ACT.ACTIVOS.DAR_DE_BAJA','TEMP_PERM_ACT.ACTIVOS.DAR_DE_BAJA','TEMP_ACT.ACTIVOS.DAR_DE_BAJA','PERM_ACT.ACTIVOS.VER','TEMP_PERM_ACT.ACTIVOS.VER','TEMP_ACT.ACTIVOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Listar disposiciones de activos",
                description = "ACT-03: Obtiene listado paginado de bajas y transferencias con filtros dinamicos.")
     @ApiResponses(value = {
@@ -79,7 +80,8 @@ public class AssetDisposalController {
      * @return disposicion creada o errores de validacion
      */
     @PostMapping("/store")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BD (2026-05-17 - Bug #16): aceptar perms granulares ACT.ACTIVOS.DAR_DE_BAJA
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ASSET_DISPOSAL','TEMP_PERM_VIEW_ASSET_DISPOSAL','TEMP_VIEW_ASSET_DISPOSAL','PERM_CREATE_ASSET_DISPOSAL','TEMP_PERM_CREATE_ASSET_DISPOSAL','TEMP_CREATE_ASSET_DISPOSAL','PERM_ACT.ACTIVOS.DAR_DE_BAJA','TEMP_PERM_ACT.ACTIVOS.DAR_DE_BAJA','TEMP_ACT.ACTIVOS.DAR_DE_BAJA','PERM_ACT.ACTIVOS.VER','TEMP_PERM_ACT.ACTIVOS.VER','TEMP_ACT.ACTIVOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Registrar baja o transferencia de activo",
                description = "ACT-03: Crea una disposicion, actualiza estado del activo y genera asiento contable.")
     @ApiResponses(value = {
@@ -119,7 +121,8 @@ public class AssetDisposalController {
      * @return detalle de la disposicion o error
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BD (2026-05-17 - Bug #16): aceptar perms granulares ACT.ACTIVOS.DAR_DE_BAJA
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_ASSET_DISPOSAL','TEMP_PERM_VIEW_ASSET_DISPOSAL','TEMP_VIEW_ASSET_DISPOSAL','PERM_CREATE_ASSET_DISPOSAL','TEMP_PERM_CREATE_ASSET_DISPOSAL','TEMP_CREATE_ASSET_DISPOSAL','PERM_ACT.ACTIVOS.DAR_DE_BAJA','TEMP_PERM_ACT.ACTIVOS.DAR_DE_BAJA','TEMP_ACT.ACTIVOS.DAR_DE_BAJA','PERM_ACT.ACTIVOS.VER','TEMP_PERM_ACT.ACTIVOS.VER','TEMP_ACT.ACTIVOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Obtener disposicion por ID",
                description = "ACT-03: Consulta el detalle de una baja o transferencia especifica.")
     @ApiResponses(value = {

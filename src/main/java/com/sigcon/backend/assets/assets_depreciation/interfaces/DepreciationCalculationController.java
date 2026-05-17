@@ -45,7 +45,7 @@ public class DepreciationCalculationController {
          * en el período contable indicado.
          */
         @PostMapping("/calculate")
-        @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+        @PreAuthorize("hasAnyAuthority('PERM_CALCULATE_DEPRECIATION','TEMP_PERM_CALCULATE_DEPRECIATION','TEMP_CALCULATE_DEPRECIATION','PERM_ACT.ACTIVOS.EJECUTAR_DEPRECIACION','TEMP_PERM_ACT.ACTIVOS.EJECUTAR_DEPRECIACION','TEMP_ACT.ACTIVOS.EJECUTAR_DEPRECIACION','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
         @Operation(summary = "Calcular depreciación automática", description = "Ejecuta el cálculo automático de depreciación de activos (ACT-RF-02).\n\n"
                         +
                         "**El proceso realiza lo siguiente:**\n" +

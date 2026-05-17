@@ -127,7 +127,7 @@ public class NiifAlertsController {
      * @return lista de activos con depreciación mensual calculada
      */
     @GetMapping("/annual-review/assets")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_NIIF_ALERT','TEMP_PERM_VIEW_NIIF_ALERT','TEMP_VIEW_NIIF_ALERT','PERM_ACT.ACTIVOS.VER','TEMP_PERM_ACT.ACTIVOS.VER','TEMP_ACT.ACTIVOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(
             summary = "Listar activos para revisión anual",
             description = "Retorna activos activos elegibles para revisión anual NIC 16, "
@@ -159,7 +159,7 @@ public class NiifAlertsController {
      * @return resultado de la revisión con datos anteriores y nuevos
      */
     @PostMapping("/annual-review")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_NIIF_ALERT','TEMP_PERM_VIEW_NIIF_ALERT','TEMP_VIEW_NIIF_ALERT','PERM_ACT.ACTIVOS.VER','TEMP_PERM_ACT.ACTIVOS.VER','TEMP_ACT.ACTIVOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(
             summary = "Registrar revisión anual de activo",
             description = "Registra la revisión anual de un activo según NIC 16. "

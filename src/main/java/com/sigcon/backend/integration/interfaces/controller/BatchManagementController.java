@@ -30,7 +30,10 @@ import java.util.Map;
  * auditar y reintentar documentos fallidos.
  */
 @Slf4j
-@PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN') or hasAuthority('PLATFORM_ADMIN')")
+// QA Bloque BD (2026-05-17 - Bug #53): aceptar perms granulares de INT y AU
+// ademas de roles admin. Sin esto, un user con PERM_INT.LOTES.VER recibia 403
+// porque el @PreAuthorize de CLASE filtraba antes que el por-metodo.
+@PreAuthorize("hasAnyAuthority('PERM_INT.LOTES.VER','TEMP_PERM_INT.LOTES.VER','TEMP_INT.LOTES.VER','PERM_VIEW_INTEGRATION','TEMP_PERM_VIEW_INTEGRATION','TEMP_VIEW_INTEGRATION','PERM_INT.LOTES.VER_DETALLE','TEMP_PERM_INT.LOTES.VER_DETALLE','TEMP_INT.LOTES.VER_DETALLE','PERM_INT.LOTES.DESCARGAR_JSON','TEMP_PERM_INT.LOTES.DESCARGAR_JSON','TEMP_INT.LOTES.DESCARGAR_JSON','PERM_INT.LOTES.REINTENTAR_DOCUMENTO','TEMP_PERM_INT.LOTES.REINTENTAR_DOCUMENTO','TEMP_INT.LOTES.REINTENTAR_DOCUMENTO','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
 @RestController
 @RequestMapping("/api/contabilidad")
 @RequiredArgsConstructor

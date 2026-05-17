@@ -55,7 +55,8 @@ public class ClosingController {
                     + "o ya existe un cierre previo"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BD (2026-05-17): code real en BD es CG.CIERRES.EJECUTAR_MENSUAL
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CLOSING','TEMP_PERM_EXECUTE_CLOSING','TEMP_EXECUTE_CLOSING','PERM_CG.CIERRES.EJECUTAR_MENSUAL','TEMP_PERM_CG.CIERRES.EJECUTAR_MENSUAL','TEMP_CG.CIERRES.EJECUTAR_MENSUAL','PERM_CG.CIERRES.EJECUTAR','TEMP_PERM_CG.CIERRES.EJECUTAR','TEMP_CG.CIERRES.EJECUTAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> monthlyClosing(
             @Valid @RequestBody ClosingRequest request,
             Authentication authentication) {
@@ -109,7 +110,8 @@ public class ClosingController {
                     + "en algun mes del anio"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BD (2026-05-17): code real en BD es CG.CIERRES.EJECUTAR_ANUAL
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CLOSING','TEMP_PERM_EXECUTE_CLOSING','TEMP_EXECUTE_CLOSING','PERM_CG.CIERRES.EJECUTAR_ANUAL','TEMP_PERM_CG.CIERRES.EJECUTAR_ANUAL','TEMP_CG.CIERRES.EJECUTAR_ANUAL','PERM_CG.CIERRES.EJECUTAR','TEMP_PERM_CG.CIERRES.EJECUTAR','TEMP_CG.CIERRES.EJECUTAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> annualClosing(
             @Valid @RequestBody AnnualClosingRequest request,
             Authentication authentication) {
@@ -137,7 +139,7 @@ public class ClosingController {
             @ApiResponse(responseCode = "400", description = "Ya existe asiento de apertura o no hay saldos del anio anterior"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CLOSING','TEMP_PERM_EXECUTE_CLOSING','TEMP_EXECUTE_CLOSING','PERM_CG.CIERRES.EJECUTAR','TEMP_PERM_CG.CIERRES.EJECUTAR','TEMP_CG.CIERRES.EJECUTAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> openingEntry(
             @Valid @RequestBody OpeningRequest request,
             Authentication authentication) {

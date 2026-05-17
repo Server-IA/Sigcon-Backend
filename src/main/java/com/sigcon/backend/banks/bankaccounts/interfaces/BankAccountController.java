@@ -202,7 +202,9 @@ public class BankAccountController {
     }
 
     @PostMapping("/{id}/financial-movements")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BD (2026-05-17 - Bug #23): aceptar BNK.MOVIMIENTOS.CREAR
+    // (perm dedicado al movimiento, no a editar la cuenta).
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.MOVIMIENTOS.CREAR','TEMP_PERM_BNK.MOVIMIENTOS.CREAR','TEMP_BNK.MOVIMIENTOS.CREAR','PERM_CREATE_FINANCIAL_MOVEMENT','TEMP_PERM_CREATE_FINANCIAL_MOVEMENT','TEMP_CREATE_FINANCIAL_MOVEMENT','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Registrar movimiento bancario manual",
             description = "Alta de línea de extracto u operación bancaria para conciliación (importe negativo = egreso).")
     public ResponseEntity<?> createFinancialMovement(

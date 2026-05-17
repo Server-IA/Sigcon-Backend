@@ -49,7 +49,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "200", description = "Consulta realizada correctamente"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_CASH_AUDIT','TEMP_PERM_VIEW_CASH_AUDIT','TEMP_VIEW_CASH_AUDIT','PERM_BNK.ARQUEOS.VER','TEMP_PERM_BNK.ARQUEOS.VER','TEMP_BNK.ARQUEOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return cashAuditService.search(request);
     }
@@ -66,7 +66,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Caja no encontrada o inactiva"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_CREATE_CASH_AUDIT','TEMP_PERM_CREATE_CASH_AUDIT','TEMP_CREATE_CASH_AUDIT','PERM_BNK.ARQUEOS.CREAR','TEMP_PERM_BNK.ARQUEOS.CREAR','TEMP_BNK.ARQUEOS.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> store(@Valid @RequestBody CreateCashAuditRequest request) {
         return cashAuditService.create(request);
     }
@@ -83,7 +83,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no encontrado o estado invalido"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_APPROVE_CASH_AUDIT','TEMP_PERM_APPROVE_CASH_AUDIT','TEMP_APPROVE_CASH_AUDIT','PERM_BNK.ARQUEOS.APROBAR','TEMP_PERM_BNK.ARQUEOS.APROBAR','TEMP_BNK.ARQUEOS.APROBAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> approve(@PathVariable Long id,
                                       @RequestBody(required = false) ApproveCashAuditRequest request) {
         return cashAuditService.approve(id, request);
@@ -100,7 +100,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no encontrado o estado invalido"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_CASH_AUDIT','TEMP_PERM_VIEW_CASH_AUDIT','TEMP_VIEW_CASH_AUDIT','PERM_BNK.ARQUEOS.VER','TEMP_PERM_BNK.ARQUEOS.VER','TEMP_BNK.ARQUEOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> close(@PathVariable Long id) {
         return cashAuditService.close(id);
     }
@@ -118,7 +118,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no esta en BORRADOR o tiene asiento contable"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_DELETE_CASH_AUDIT','TEMP_PERM_DELETE_CASH_AUDIT','TEMP_DELETE_CASH_AUDIT','PERM_BNK.ARQUEOS.ELIMINAR','TEMP_PERM_BNK.ARQUEOS.ELIMINAR','TEMP_BNK.ARQUEOS.ELIMINAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id,
                                      @Valid @RequestBody DeleteCashAuditRequest request) {
         return cashAuditService.delete(id, request);
@@ -137,7 +137,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no esta en APROBADO o motivo invalido"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VOID_APPROVED_AUDIT','TEMP_PERM_VOID_APPROVED_AUDIT','TEMP_VOID_APPROVED_AUDIT','PERM_BNK.ARQUEOS.ANULAR_APROBADO','TEMP_PERM_BNK.ARQUEOS.ANULAR_APROBADO','TEMP_BNK.ARQUEOS.ANULAR_APROBADO','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> voidAudit(@PathVariable Long id,
                                          @Valid @RequestBody VoidCashAuditRequest request) {
         return cashAuditService.voidAudit(id, request);
@@ -155,7 +155,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no esta en BORRADOR/ABIERTO/RECHAZADO"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_CREATE_CASH_AUDIT','TEMP_PERM_CREATE_CASH_AUDIT','TEMP_CREATE_CASH_AUDIT','PERM_BNK.ARQUEOS.CREAR','TEMP_PERM_BNK.ARQUEOS.CREAR','TEMP_BNK.ARQUEOS.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> submitReview(@PathVariable Long id) {
         return cashAuditService.submitReview(id);
     }
@@ -172,7 +172,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no esta en EN_REVISION o motivo invalido"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_REJECT_CASH_AUDIT','TEMP_PERM_REJECT_CASH_AUDIT','TEMP_REJECT_CASH_AUDIT','PERM_BNK.ARQUEOS.RECHAZAR','TEMP_PERM_BNK.ARQUEOS.RECHAZAR','TEMP_BNK.ARQUEOS.RECHAZAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> reject(@PathVariable Long id,
                                      @RequestBody java.util.Map<String, String> body) {
         return cashAuditService.reject(id, body != null ? body.get("reason") : null);
@@ -189,7 +189,7 @@ public class CashAuditController {
         @ApiResponse(responseCode = "400", description = "Arqueo no encontrado"),
         @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_CASH_AUDIT','TEMP_PERM_VIEW_CASH_AUDIT','TEMP_VIEW_CASH_AUDIT','PERM_BNK.ARQUEOS.VER','TEMP_PERM_BNK.ARQUEOS.VER','TEMP_BNK.ARQUEOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         return cashAuditService.getById(id);
     }

@@ -50,7 +50,7 @@ public class ReportController {
     // ─── Endpoints ───────────────────────────────────────────────────────────
 
     @GetMapping("/template")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERM_VIEW_REPORT','TEMP_PERM_VIEW_REPORT','TEMP_VIEW_REPORT','PERM_PAR.REPORTES.VER','TEMP_PERM_PAR.REPORTES.VER','TEMP_PAR.REPORTES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(
             summary = "Generar plantilla base PDF",
             description = "Genera y retorna la plantilla institucional base en formato PDF. " +
