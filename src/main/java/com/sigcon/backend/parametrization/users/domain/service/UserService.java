@@ -261,13 +261,30 @@ public class UserService {
             // fallan cuando el rol tiene solo el code formato nuevo MOD.ENTIDAD.ACCION
             // (y viceversa). Esta expansion mantiene `permissions[]` en sync con las
             // authorities que el filter inyecta en cada request.
+            // QA Bloque AX-bis (2026-05-17, Bug reportado): el frontend hace
+            // checks `userPermissions.some(p => p.code === 'VIEW_X' && p.type === 'VIEW')`
+            // en 13 archivos (centros-costo, banks, sucursales, invoices, etc.)
+            // PERO la BD usa el estandar SQL: READ/CREATE/UPDATE/DELETE. El check
+            // de `type === 'VIEW'` siempre falla -> botones de Ver/Crear/Editar
+            // ocultos aunque el usuario tenga el permiso. Normalizar READ -> VIEW
+            // al exponer al frontend para que los 13 archivos sigan funcionando
+            // sin modificarlos. Alternativa: editar los 13 archivos a aceptar
+            // ambos types - mas trabajo y propenso a olvidar uno.
+            // Bug Bloque AX-bis: BD usa READ pero frontend chequea p.type === 'VIEW'.
+            // Normalizar al serializar al frontend.
+            java.util.function.Function<com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits, com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits> normalizeType = t -> {
+                if (t == com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.READ) {
+                    return com.sigcon.backend.parametrization.users.domain.model.enums.TypePermits.VIEW;
+                }
+                return t;
+            };
             List<PermissionDTO> rawPerms = permissionRepository.findByUserID(user.getId())
                     .stream()
                     .map(permission -> new PermissionDTO(
                             null,
                             permission.getName(),
                             permission.getCode(),
-                            permission.getType(),
+                            normalizeType.apply(permission.getType()),
                             null,
                             null,
                             permission.getDescription(),
