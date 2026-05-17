@@ -40,7 +40,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "200", description = "Listado de politicas"),
         @ApiResponse(responseCode = "403", description = "Sin rol ADMIN")
     })
-    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/policies")
     public ResponseEntity<?> listPolicies() { return service.listPolicies(); }
 
@@ -156,7 +156,7 @@ public class RetentionController {
         description = "Historial de las ultimas 20 ejecuciones de purga con cantidad, rango "
                     + "temporal y batch_hash de evidencia.")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Listado"))
-    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/purge/records")
     public ResponseEntity<?> listPurgeRecords() {
         return service.listPurgeRecords();
@@ -167,7 +167,7 @@ public class RetentionController {
         description = "Resumen: total de logs, cantidad con legal hold activo, politicas activas, "
                     + "purgas recientes.")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Estado"))
-    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/status")
     public ResponseEntity<?> status() {
         return service.getStatus();
@@ -186,7 +186,7 @@ public class RetentionController {
         @ApiResponse(responseCode = "200", description = "PDF generado"),
         @ApiResponse(responseCode = "404", description = "Registro de purga no encontrado")
     })
-    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PreAuthorize("hasAuthority('PERM_AU.RETENCION.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/purge/records/{id}/pdf")
     public ResponseEntity<?> downloadPurgePdf(@org.springframework.web.bind.annotation.PathVariable Long id) {
         try {

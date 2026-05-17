@@ -76,6 +76,14 @@ public class MenuEntity {
     @Column(name = "menu_type", length = 50)
     private String menuType;
 
+    /**
+     * QA Bloque AX (Bug #3, 2026-05-17): code del permiso requerido para mostrar
+     * este menu en el sidebar. NULL = publico. Seedeado en V9-Zzzzf con mapping
+     * component -> permission_code (ej. CENTROS_COSTO -> CFG.CENTROS_COSTO.VER).
+     */
+    @Column(name = "required_permission_code", length = 120)
+    private String requiredPermissionCode;
+
     @Column(name = "created_at")
     @Temporal(TemporalType.TIMESTAMP)
     @CreationTimestamp

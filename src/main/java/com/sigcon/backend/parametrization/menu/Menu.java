@@ -54,6 +54,14 @@ public class Menu {
     private String menuType;
     private List<PermissionDTO> permissions;
     private List<Menu> childrens;
+    /**
+     * QA Bloque AX (Bug #3, 2026-05-17): code del permiso requerido para que el
+     * menu sea visible en el sidebar. NULL = publico (compat con menus sin
+     * restriccion). MenuService.getMenusByModuleId filtra por este campo cuando
+     * el user no es ADMIN ni PLATFORM_ADMIN. Persistido en menus.required_permission_code
+     * (V9-Zzzzf).
+     */
+    private String requiredPermissionCode;
     private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -280,23 +280,52 @@ public class UserService {
                     .collect(Collectors.toSet());
 
             // Por cada code presente, agregar sus pares mapeados (legacy<->nuevo)
+            // + variantes plural/singular. Asi el frontend que checkea
+            // `userPermissions.some(p => p.code === 'VIEW_COST_CENTERS')` encuentra
+            // el alias plural aunque la BD tenga solo el singular VIEW_COST_CENTER.
+            // QA Bloque AX (2026-05-17): expandir tambien S/no-S para mostrar botones
+            // crear/editar/eliminar en modulos donde frontend uso plural por error.
             List<PermissionDTO> aliasPerms = new java.util.ArrayList<>();
+            java.util.function.BiConsumer<String, PermissionDTO> addAlias = (alias, base) -> {
+                if (alias != null && !existingCodes.contains(alias)) {
+                    existingCodes.add(alias);
+                    aliasPerms.add(new PermissionDTO(null, base.getName(), alias, base.getType(), null, null, base.getDescription(), null));
+                }
+            };
             for (PermissionDTO p : rawPerms) {
-                List<String> mappedNew = com.sigcon.backend.general.security.EffectivePermissionsFilter.LEGACY_TO_NEW.get(p.getCode());
-                if (mappedNew != null) {
-                    for (String alias : mappedNew) {
-                        if (!existingCodes.contains(alias)) {
-                            existingCodes.add(alias);
-                            aliasPerms.add(new PermissionDTO(null, p.getName(), alias, p.getType(), null, null, p.getDescription(), null));
-                        }
+                String code = p.getCode();
+                // 1. Variantes plural/singular del mismo code
+                if (code != null && !code.endsWith("S") && !code.contains(".")) {
+                    addAlias.accept(code + "S", p);
+                }
+                if (code != null && code.endsWith("S") && !code.endsWith("SS") && code.length() > 1 && !code.contains(".")) {
+                    addAlias.accept(code.substring(0, code.length() - 1), p);
+                }
+                // 2. Mapeo LEGACY -> NUEVO
+                List<String> mappedNew = com.sigcon.backend.general.security.EffectivePermissionsFilter.LEGACY_TO_NEW.get(code);
+                if (mappedNew != null) for (String a : mappedNew) addAlias.accept(a, p);
+                // 3. Mapeo NUEVO -> LEGACY (incluye plural/singular automatico)
+                List<String> mappedLegacy = com.sigcon.backend.general.security.EffectivePermissionsFilter.NEW_TO_LEGACY.get(code);
+                if (mappedLegacy != null) {
+                    for (String a : mappedLegacy) {
+                        addAlias.accept(a, p);
+                        // Variantes plural/singular del legacy
+                        if (!a.endsWith("S") && !a.contains(".")) addAlias.accept(a + "S", p);
+                        if (a.endsWith("S") && !a.endsWith("SS") && a.length() > 1 && !a.contains(".")) addAlias.accept(a.substring(0, a.length()-1), p);
                     }
                 }
-                List<String> mappedLegacy = com.sigcon.backend.general.security.EffectivePermissionsFilter.NEW_TO_LEGACY.get(p.getCode());
-                if (mappedLegacy != null) {
-                    for (String alias : mappedLegacy) {
-                        if (!existingCodes.contains(alias)) {
-                            existingCodes.add(alias);
-                            aliasPerms.add(new PermissionDTO(null, p.getName(), alias, p.getType(), null, null, p.getDescription(), null));
+                // 4. Round-trip legacy: si tengo VIEW_USER, busco PAR.USUARIOS.VER y
+                // de ahi todos los legacies (VIEW_USER, VIEW_USERS) - asi el set efectivo
+                // incluye ambas formas independiente de cual este en BD.
+                if (mappedNew != null) {
+                    for (String newCode : mappedNew) {
+                        List<String> roundTrip = com.sigcon.backend.general.security.EffectivePermissionsFilter.NEW_TO_LEGACY.get(newCode);
+                        if (roundTrip != null) {
+                            for (String a : roundTrip) {
+                                addAlias.accept(a, p);
+                                if (!a.endsWith("S") && !a.contains(".")) addAlias.accept(a + "S", p);
+                                if (a.endsWith("S") && !a.endsWith("SS") && a.length() > 1 && !a.contains(".")) addAlias.accept(a.substring(0, a.length()-1), p);
+                            }
                         }
                     }
                 }

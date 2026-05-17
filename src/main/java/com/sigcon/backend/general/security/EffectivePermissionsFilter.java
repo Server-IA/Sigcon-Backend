@@ -526,14 +526,25 @@ public class EffectivePermissionsFilter extends OncePerRequestFilter {
         // Forma con PERM_ y sin PERM_ (TEMP_PERM_X y TEMP_X)
         result.add(new SimpleGrantedAuthority(TEMP_PREFIX + ROLE_PERM_PREFIX + base));
         result.add(new SimpleGrantedAuthority(TEMP_PREFIX + base));
+        // QA Bloque AX Bug #2 (2026-05-17): los perms temporales TAMBIEN deben
+        // satisfacer @PreAuthorize('PERM_X') sin necesidad de reescribir todos
+        // los controllers. Sin esto un user con TEMP BNK.CUENTAS.VER NO puede
+        // consumir /bank-accounts/search (el endpoint pide PERM_VIEW_BANK_ACCOUNT).
+        // La regla #11 (endpoints de gestion de permisos solo aceptan rol) se
+        // sigue cumpliendo: esos endpoints usan hasAuthority explicito y NO
+        // tienen contraparte en LEGACY_TO_NEW, por lo que el filter no expande
+        // un TEMP de "asignar permisos" a PERM_ de gestion.
+        result.add(new SimpleGrantedAuthority(ROLE_PERM_PREFIX + base));
         if (!base.endsWith("S")) {
             result.add(new SimpleGrantedAuthority(TEMP_PREFIX + ROLE_PERM_PREFIX + base + "S"));
             result.add(new SimpleGrantedAuthority(TEMP_PREFIX + base + "S"));
+            result.add(new SimpleGrantedAuthority(ROLE_PERM_PREFIX + base + "S"));
         }
         if (base.endsWith("S") && !base.endsWith("SS") && base.length() > 1) {
             String singular = base.substring(0, base.length() - 1);
             result.add(new SimpleGrantedAuthority(TEMP_PREFIX + ROLE_PERM_PREFIX + singular));
             result.add(new SimpleGrantedAuthority(TEMP_PREFIX + singular));
+            result.add(new SimpleGrantedAuthority(ROLE_PERM_PREFIX + singular));
         }
         // QA Bloque AW (Opcion B): mismos pares legacy<->nuevo, prefijados con TEMP_
         List<String> mappedNew = LEGACY_TO_NEW.get(base);
@@ -541,6 +552,7 @@ public class EffectivePermissionsFilter extends OncePerRequestFilter {
             for (String newCode : mappedNew) {
                 result.add(new SimpleGrantedAuthority(TEMP_PREFIX + ROLE_PERM_PREFIX + newCode));
                 result.add(new SimpleGrantedAuthority(TEMP_PREFIX + newCode));
+                result.add(new SimpleGrantedAuthority(ROLE_PERM_PREFIX + newCode));
             }
         }
         List<String> mappedLegacy = NEW_TO_LEGACY.get(base);
@@ -548,6 +560,7 @@ public class EffectivePermissionsFilter extends OncePerRequestFilter {
             for (String legacyCode : mappedLegacy) {
                 result.add(new SimpleGrantedAuthority(TEMP_PREFIX + ROLE_PERM_PREFIX + legacyCode));
                 result.add(new SimpleGrantedAuthority(TEMP_PREFIX + legacyCode));
+                result.add(new SimpleGrantedAuthority(ROLE_PERM_PREFIX + legacyCode));
             }
         }
     }

@@ -75,6 +75,7 @@ public class MenuRepositoryAdapter implements MenuRepositoryPort {
             .component(e.getComponent())
             .method(e.getMethod())
             .menuType(e.getMenuType())
+            .requiredPermissionCode(e.getRequiredPermissionCode())
             .createdAt(e.getCreatedAt())
             .updatedAt(e.getUpdatedAt())
             .deletedAt(e.getDeletedAt())

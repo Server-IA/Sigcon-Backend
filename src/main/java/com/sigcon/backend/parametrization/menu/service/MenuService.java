@@ -129,15 +129,46 @@ public class MenuService implements MenuUseCase {
                 .collect(Collectors.toList());
 
         // isAdmin se resuelve por NOMBRE del rol, no por ID hardcodeado.
-        // Motivo: tras la reindexacion de roles (V9-J), el id=1 dejo de ser ADMIN
-        // (ahora es CONTADOR). Usar el nombre garantiza que el bypass funcione
-        // independientemente del orden de insercion de roles en la migracion.
         boolean isAdmin = user.getRoles().stream().anyMatch(r ->
                 "ADMIN".equalsIgnoreCase(r.getName())
                 || "SUPERADMIN".equalsIgnoreCase(r.getName()));
 
-        return menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds, isAdmin).values().stream()
+        // PLATFORM_ADMIN tambien hace bypass (gestiona la plataforma globalmente).
+        boolean isPlatformAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "PLATFORM_ADMIN".equalsIgnoreCase(a.getAuthority()));
+
+        List<Menu> base = menuRepositoryPort.findMenusByModuleIdAndRoles(moduleId, roleIds, isAdmin)
+                .values().stream()
                 .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        // QA Bloque AX (Bug #3 QA, 2026-05-17): filtrar menus por permiso requerido.
+        // Antes el query solo filtraba por roles via tabla menu_permissions (vacia),
+        // asi que cualquier submenu de un modulo se mostraba apenas el usuario tenia
+        // 1 perm del modulo. Resultado: 'asigno UN perm de centros costos y aparecen
+        // TODOS los submodulos de listas contables'. Fix: cada menu tiene una columna
+        // required_permission_code; si el usuario NO tiene ese perm en su set, el
+        // menu se oculta. NULL = publico (compat con menus sin restriccion).
+        if (isAdmin || isPlatformAdmin) return base;
+
+        // Build set de perms efectivos del usuario (incluye aliases via filter)
+        final java.util.Set<String> userCodes = new java.util.HashSet<>();
+        if (auth != null) {
+            for (var ga : auth.getAuthorities()) {
+                String a = ga.getAuthority();
+                if (a == null) continue;
+                if (a.startsWith("PERM_")) userCodes.add(a.substring(5));
+                else if (a.startsWith("TEMP_PERM_")) userCodes.add(a.substring(10));
+                else if (a.startsWith("TEMP_")) userCodes.add(a.substring(5));
+            }
+        }
+
+        return base.stream()
+                .filter(m -> {
+                    String req = m.getRequiredPermissionCode();
+                    if (req == null || req.isBlank()) return true; // publico
+                    return userCodes.contains(req);
+                })
                 .toList();
     }
 
