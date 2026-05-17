@@ -264,6 +264,10 @@ public class RoleService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
 
+        // QA Bloque BC (2026-05-17): bloqueo cross-tenant. ADMIN_EMPRESA solo
+        // puede modificar roles de su empresa (PLATFORM_ADMIN bypass).
+        assertRoleAccessible(role);
+
         // HU-PA-05 E4 (QA Bloque PA Bug 9, 2026-05-09): optimistic locking.
         // Si el cliente envia `version` y NO coincide con la actual, el rol
         // fue modificado por otro usuario en el intervalo. Lanza 409 con
@@ -386,6 +390,10 @@ public class RoleService {
     public ResponseEntity<?> deleteRole(Long id, String reason) {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+
+        // QA Bloque BC (2026-05-17): bloqueo cross-tenant. ADMIN_EMPRESA solo
+        // puede eliminar roles de su empresa (PLATFORM_ADMIN bypass).
+        assertRoleAccessible(role);
 
         if (role.getDeletedAt() != null) {
             return ResponseEntity.badRequest().body(
@@ -550,8 +558,16 @@ public class RoleService {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
+        // QA Bloque BC (2026-05-17): el usuario destino debe pertenecer al
+        // tenant del caller (PLATFORM_ADMIN bypass).
+        assertSameTenantUser(user);
+
         Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+
+        // QA Bloque BC (2026-05-17): el rol asignado debe pertenecer al tenant
+        // del caller. Previene asignar a un usuario un rol de otra empresa.
+        assertRoleAccessible(role);
 
         user.getRoles().clear();
         user.getRoles().add(role);
@@ -719,8 +735,23 @@ public class RoleService {
     @Transactional
     public ResponseEntity<?> assignPermissions(RoleRequest request) {
 
+        // QA Bloque BC (2026-05-17): el `id` del rol es obligatorio.
+        // Antes, si venia null se filtraba un mensaje tecnico de Spring Data
+        // ("The given id must not be null"). Ahora se rechaza con mensaje
+        // funcional.
+        if (request == null || request.getId() == null) {
+            throw new IllegalArgumentException("Debe especificar el id del rol.");
+        }
+        if (request.getPermissionIds() == null || request.getPermissionIds().isEmpty()) {
+            throw new IllegalArgumentException("Debe especificar al menos un permiso a asignar.");
+        }
+
         Role role = roleRepository.findById(request.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Rol no encontrado"));
+
+        // QA Bloque BC (2026-05-17): bloqueo cross-tenant. ADMIN_EMPRESA solo
+        // puede asignar permisos a roles de su empresa (PLATFORM_ADMIN bypass).
+        assertRoleAccessible(role);
 
         Set<Permission> permissions = new HashSet<>(
                 permissionRepository.findAllById(request.getPermissionIds())
@@ -763,9 +794,26 @@ public class RoleService {
     @Transactional
     public ResponseEntity<?> removePermissions(RoleRequest request) {
 
+        // QA Bloque BC (2026-05-17): validar request.getId() antes de tocar JPA
+        // para evitar exponer "Transaction silently rolled back" al cliente.
+        if (request == null || request.getId() == null) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe especificar el id del rol."))
+            );
+        }
+        if (request.getPermissionIds() == null || request.getPermissionIds().isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe especificar al menos un permiso a remover."))
+            );
+        }
+
         try {
             Role role = roleRepository.findById(request.getId())
                     .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+
+            // QA Bloque BC (2026-05-17): bloqueo cross-tenant. Antes del IF
+            // (porque la TenantIsolationException debe propagar como 404).
+            assertRoleAccessible(role);
 
             if (role.getPermissions().isEmpty()) {
                 return ResponseEntity.badRequest().body(
@@ -796,6 +844,10 @@ public class RoleService {
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Permisos removidos correctamente del rol"), Optional.of(payload))
             );
 
+        } catch (com.sigcon.backend.platform.tenant.TenantIsolationException tie) {
+            // QA Bloque BC (2026-05-17): dejar propagar para que el
+            // GlobalExceptionHandler la mapee a HTTP 404 "Recurso no encontrado".
+            throw tie;
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage()))
@@ -922,5 +974,67 @@ public class RoleService {
 
     private String parseStatus(Status status) {
         return status.name();
+    }
+
+    /**
+     * QA Bloque BC (2026-05-17): defensa multi-tenant en operaciones mutadoras
+     * de roles. Antes de modificar/eliminar/asignar permisos a un rol, validar
+     * que el rol pertenece al tenant del usuario actual.
+     *
+     * <p>Reglas:
+     * <ul>
+     *   <li>Si el rol es global ({@code companyId == null}) solo PLATFORM_ADMIN
+     *       puede operar sobre el. ADMIN_EMPRESA recibe 404 (no revelar que el
+     *       rol global existe).</li>
+     *   <li>Si el rol tiene tenant y el caller es PLATFORM_ADMIN, bypass.</li>
+     *   <li>Si el rol tiene tenant y el caller pertenece a otro tenant, 404.</li>
+     *   <li>Si el tenant context es null (usuario sin empresa) y el rol tiene
+     *       tenant: 404.</li>
+     * </ul>
+     *
+     * @throws com.sigcon.backend.platform.tenant.TenantIsolationException
+     *         que el {@code GlobalExceptionHandler} traduce a HTTP 404 con
+     *         mensaje literal "Recurso no encontrado".
+     */
+    private void assertRoleAccessible(Role role) {
+        if (role == null) return;
+        final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+        if (isPlatform) return;
+
+        final Long callerTenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        final Long roleTenantId = role.getCompanyId();
+
+        // Rol global -> solo PLATFORM_ADMIN
+        if (roleTenantId == null) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                "Rol global no accesible para usuario tenant (roleId=" + role.getId() + ")");
+        }
+        // Rol tenant -> debe coincidir con tenant del caller
+        if (callerTenantId == null || !roleTenantId.equals(callerTenantId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                "Rol pertenece a otra empresa (roleId=" + role.getId()
+                + ", roleTenant=" + roleTenantId + ", callerTenant=" + callerTenantId + ")");
+        }
+    }
+
+    /**
+     * QA Bloque BC (2026-05-17): defensa multi-tenant para asignacion de rol a
+     * usuario. El usuario destino debe pertenecer al mismo tenant del caller.
+     * PLATFORM_ADMIN tiene bypass.
+     */
+    private void assertSameTenantUser(User user) {
+        if (user == null) return;
+        final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+        if (isPlatform) return;
+
+        final Long callerTenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        final Long userTenantId = user.getCompanyId();
+
+        if (userTenantId == null || callerTenantId == null
+                || !userTenantId.equals(callerTenantId)) {
+            throw new com.sigcon.backend.platform.tenant.TenantIsolationException(
+                "Usuario pertenece a otra empresa (userId=" + user.getId()
+                + ", userTenant=" + userTenantId + ", callerTenant=" + callerTenantId + ")");
+        }
     }
 }
