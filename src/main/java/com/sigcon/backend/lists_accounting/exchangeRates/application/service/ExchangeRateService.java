@@ -49,6 +49,8 @@ import java.util.Optional;
 public class ExchangeRateService {
 
     private final ExchangeRateRepository repository;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+    private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
     private final CurrencyTypeRepository currencyRepository;
     private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<ExchangeRate> exchangeRateSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -293,11 +295,20 @@ public class ExchangeRateService {
                 ExchangeRate::getEndDate,
                 e -> e.getStatus() != null ? e.getStatus().name() : "");
         if ("xlsx".equalsIgnoreCase(format)) {
+            // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                    .baseContext("Tasas de Cambio")
+                    .addFilter("Total registros", String.valueOf(all.size()))
+                    .build();
             return com.sigcon.backend.utils.export.SimpleTableExporter
-                    .toXlsx("Tasas de cambio", headers, cols, all);
+                    .toXlsx("Tasas de cambio", headers, cols, all, ctx);
         }
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Tasas de Cambio")
+                .addFilter("Total registros", String.valueOf(all.size()))
+                .build();
         return com.sigcon.backend.utils.export.SimpleTableExporter
-                .toCsv(headers, cols, all);
+                .toCsv(headers, cols, all, ctx);
     }
 
     public ResponseEntity<?> delete(Long id, String reason) {

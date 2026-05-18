@@ -38,6 +38,8 @@ import org.springframework.validation.BindingResult;
 public class CurrencyTypeService {
 
     private final CurrencyTypeRepository currencyTypeRepository;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+    private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
     private final ExchangeRateRepository exchangeRateRepository;
     private final AccountingAccountRepository accountingAccountRepository;
     private final AuditPublisher auditPublisher;
@@ -231,11 +233,20 @@ public class CurrencyTypeService {
                 c -> c.getStatus() != null ? c.getStatus().name() : "",
                 CurrencyType::getCreatedAt);
         if ("xlsx".equalsIgnoreCase(format)) {
+            // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                    .baseContext("Monedas")
+                    .addFilter("Total registros", String.valueOf(all.size()))
+                    .build();
             return com.sigcon.backend.utils.export.SimpleTableExporter
-                    .toXlsx("Monedas", headers, cols, all);
+                    .toXlsx("Monedas", headers, cols, all, ctx);
         }
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Monedas")
+                .addFilter("Total registros", String.valueOf(all.size()))
+                .build();
         return com.sigcon.backend.utils.export.SimpleTableExporter
-                .toCsv(headers, cols, all);
+                .toCsv(headers, cols, all, ctx);
     }
 
     private String isCurrencyUsed(Long currencyId) {

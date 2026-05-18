@@ -2,6 +2,8 @@ package com.sigcon.backend.third_parties.third_parties.domain.service;
 
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
+import com.sigcon.backend.utils.export.ReportContextResolver;
+import com.sigcon.backend.utils.export.ReportHeaderBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -9,6 +11,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,6 +25,8 @@ import java.util.stream.Collectors;
 public class ThirdPartyExportService {
 
     private final ThirdPartyRepository thirdPartyRepository;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+filtros+totales
+    private final ReportContextResolver reportContextResolver;
 
     private static final String[] HEADERS = {
             "Codigo", "NIT", "DV", "Razon Social", "Estado", "Roles",
@@ -48,6 +53,16 @@ public class ThirdPartyExportService {
 
         // BOM UTF-8 para compatibilidad con Excel
         sb.append('\uFEFF');
+
+        // QA Bloque BJ (2026-05-17): header estandar (empresa+usuario+rol+filtros+totales)
+        BigDecimal totalCredito = BigDecimal.ZERO;
+        for (ThirdParty tp : terceros) if (tp.getCreditLimit() != null) totalCredito = totalCredito.add(tp.getCreditLimit());
+        ReportHeaderBuilder.ReportContext.Builder ctxB = reportContextResolver.baseContext("Reporte de Terceros (CSV)");
+        if (roleFilter != null && !roleFilter.isBlank()) ctxB.addFilter("Filtro Rol", roleFilter);
+        if (statusFilter != null && !statusFilter.isBlank()) ctxB.addFilter("Filtro Estado", statusFilter);
+        ctxB.addFilter("Total Registros", String.valueOf(terceros.size()));
+        ctxB.addTotal("Suma Limite Credito", totalCredito);
+        sb.append(ReportHeaderBuilder.buildCsvHeader(ctxB.build()));
 
         // Headers
         sb.append(String.join(",", HEADERS)).append("\n");
@@ -90,8 +105,18 @@ public class ThirdPartyExportService {
             headerFont.setBold(true);
             headerStyle.setFont(headerFont);
 
-            // Header row
-            Row headerRow = sheet.createRow(0);
+            // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+filtros+totales
+            BigDecimal totalCredito = BigDecimal.ZERO;
+            for (ThirdParty tp : terceros) if (tp.getCreditLimit() != null) totalCredito = totalCredito.add(tp.getCreditLimit());
+            ReportHeaderBuilder.ReportContext.Builder ctxB = reportContextResolver.baseContext("Reporte de Terceros (XLSX)");
+            if (roleFilter != null && !roleFilter.isBlank()) ctxB.addFilter("Filtro Rol", roleFilter);
+            if (statusFilter != null && !statusFilter.isBlank()) ctxB.addFilter("Filtro Estado", statusFilter);
+            ctxB.addFilter("Total Registros", String.valueOf(terceros.size()));
+            ctxB.addTotal("Suma Limite Credito", totalCredito);
+            int startRow = ReportHeaderBuilder.writeXlsxHeader(workbook, sheet, ctxB.build(), HEADERS.length);
+
+            // Header row (despues del header estandar)
+            Row headerRow = sheet.createRow(startRow);
             for (int i = 0; i < HEADERS.length; i++) {
                 Cell cell = headerRow.createCell(i);
                 cell.setCellValue(HEADERS[i]);
@@ -99,7 +124,7 @@ public class ThirdPartyExportService {
             }
 
             // Data rows
-            int rowIdx = 1;
+            int rowIdx = startRow + 1;
             for (ThirdParty tp : terceros) {
                 Row row = sheet.createRow(rowIdx++);
                 row.createCell(0).setCellValue(safe(tp.getThirdPartyCode()));

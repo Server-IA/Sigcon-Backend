@@ -49,10 +49,25 @@ public final class SimpleTableExporter {
     public static <T> byte[] toCsv(List<String> headers,
                                    List<Function<T, Object>> columns,
                                    List<T> rows) {
+        return toCsv(headers, columns, rows, null);
+    }
+
+    /**
+     * QA Bloque BJ (2026-05-17): variante con header estandar opcional.
+     * Si {@code reportCtx != null}, se prepende un bloque de comentarios CSV
+     * con empresa, usuario, rol, fecha, filtros y totales antes del header de
+     * datos.
+     */
+    public static <T> byte[] toCsv(List<String> headers,
+                                   List<Function<T, Object>> columns,
+                                   List<T> rows,
+                                   ReportHeaderBuilder.ReportContext reportCtx) {
         StringBuilder sb = new StringBuilder();
         // BOM UTF-8 para Excel ES
         sb.append('﻿');
-        // Header
+        // Header estandar (empresa, usuario, etc.)
+        if (reportCtx != null) sb.append(ReportHeaderBuilder.buildCsvHeader(reportCtx));
+        // Header de datos
         sb.append(String.join(";", headers)).append('\n');
         // Body
         for (T row : rows) {
@@ -73,6 +88,19 @@ public final class SimpleTableExporter {
                                     List<String> headers,
                                     List<Function<T, Object>> columns,
                                     List<T> rows) {
+        return toXlsx(sheetName, headers, columns, rows, null);
+    }
+
+    /**
+     * QA Bloque BJ (2026-05-17): variante con header estandar opcional.
+     * Si {@code reportCtx != null}, escribe el bloque de empresa+usuario+rol+
+     * filtros+totales antes del header de datos.
+     */
+    public static <T> byte[] toXlsx(String sheetName,
+                                    List<String> headers,
+                                    List<Function<T, Object>> columns,
+                                    List<T> rows,
+                                    ReportHeaderBuilder.ReportContext reportCtx) {
         try (Workbook wb = new XSSFWorkbook();
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet(sheetName != null ? sheetName : "Datos");
@@ -83,16 +111,21 @@ public final class SimpleTableExporter {
             bold.setBold(true);
             headerStyle.setFont(bold);
 
-            Row headerRow = sheet.createRow(0);
+            int startRow = 0;
+            if (reportCtx != null) {
+                startRow = ReportHeaderBuilder.writeXlsxHeader(wb, sheet, reportCtx, headers.size());
+            }
+
+            Row headerRow = sheet.createRow(startRow);
             for (int i = 0; i < headers.size(); i++) {
                 Cell c = headerRow.createCell(i);
                 c.setCellValue(headers.get(i));
                 c.setCellStyle(headerStyle);
             }
-            sheet.createFreezePane(0, 1);
+            sheet.createFreezePane(0, startRow + 1);
 
             // Body
-            int r = 1;
+            int r = startRow + 1;
             for (T row : rows) {
                 Row xr = sheet.createRow(r++);
                 for (int i = 0; i < columns.size(); i++) {

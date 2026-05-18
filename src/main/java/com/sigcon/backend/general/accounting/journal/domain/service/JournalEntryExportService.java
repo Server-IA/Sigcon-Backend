@@ -15,6 +15,8 @@ import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntry;
 import com.sigcon.backend.general.accounting.journal.domain.model.JournalEntryLine;
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.parametrization.parameters.domain.service.SystemInfoService;
+import com.sigcon.backend.utils.export.ReportContextResolver;
+import com.sigcon.backend.utils.export.ReportHeaderBuilder;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +66,10 @@ public class JournalEntryExportService {
 
     private final JournalEntryRepository journalEntryRepository;
     private final SystemInfoService systemInfoService;
+    // QA Bloque BJ (2026-05-17): header estandar (empresa, usuario, rol, fecha,
+    // filtros, totales) en TODA exportacion. Reemplaza el header decorativo
+    // antiguo manteniendo el detalle de lineas del comprobante.
+    private final ReportContextResolver reportContextResolver;
 
     private static final DeviceRgb BRAND_PRIMARY  = new DeviceRgb(30, 58, 138);
     private static final DeviceRgb HEADER_BG      = new DeviceRgb(238, 242, 255);
@@ -88,19 +94,26 @@ public class JournalEntryExportService {
 
             doc.setMargins(36, 36, 36, 36);
 
-            // Cabecera empresa
-            String companyName = safe(systemInfoService.getCompanyName(), "SIGCON");
-            String companyNit  = safe(systemInfoService.getCompanyNit(), "");
-            doc.add(new Paragraph(companyName)
-                    .setBold().setFontSize(14).setFontColor(BRAND_PRIMARY));
-            if (!companyNit.isEmpty()) {
-                doc.add(new Paragraph("NIT: " + companyNit).setFontSize(9).setFontColor(SUBTLE));
-            }
-
-            // Titulo
+            // QA Bloque BJ (2026-05-17): header estandar (empresa+usuario+rol+fecha+filtros+totales).
+            // Sustituye el bloque manual de cabecera empresa+titulo por uno
+            // consistente con el resto de exportaciones.
             String voucherCode = JournalEntryService.buildVoucherCode(entry);
-            doc.add(new Paragraph("COMPROBANTE CONTABLE " + voucherCode)
-                    .setBold().setFontSize(13).setMarginTop(12));
+            BigDecimal sumD0 = BigDecimal.ZERO, sumC0 = BigDecimal.ZERO;
+            if (entry.getLines() != null) {
+                for (JournalEntryLine l : entry.getLines()) {
+                    if (l.getDebitAmount() != null) sumD0 = sumD0.add(l.getDebitAmount());
+                    if (l.getCreditAmount() != null) sumC0 = sumC0.add(l.getCreditAmount());
+                }
+            }
+            ReportHeaderBuilder.ReportContext headerCtx = reportContextResolver
+                    .baseContext("Comprobante contable " + voucherCode)
+                    .addFilter("Fecha del asiento", entry.getEntryDate() != null ? entry.getEntryDate().format(DATE_FMT) : "-")
+                    .addFilter("Estado", entry.getStatus() != null ? entry.getStatus().name() : "-")
+                    .addFilter("Modulo origen", entry.getSourceModule() != null ? entry.getSourceModule().name() : "-")
+                    .addTotal("Total Debito", sumD0)
+                    .addTotal("Total Credito", sumC0)
+                    .build();
+            ReportHeaderBuilder.writePdfHeader(doc, headerCtx);
 
             // Datos cabecera
             Table head = new Table(UnitValue.createPercentArray(new float[]{1, 2, 1, 2}))
@@ -238,44 +251,27 @@ public class JournalEntryExportService {
             String[] cols = {"Cuenta PUC", "Nombre cuenta", "Descripcion", "Tercero NIT", "Centro Costo", "Debito", "Credito"};
             int totalCols = cols.length; // 7
 
-            int r = 0;
-            // Cabecera empresa
-            Row r0 = sh.createRow(r++);
-            r0.createCell(0).setCellValue("Empresa");
-            r0.createCell(1).setCellValue(safe(systemInfoService.getCompanyName(), "SIGCON"));
-            r0.getCell(0).setCellStyle(boldStyle);
-
-            Row r1 = sh.createRow(r++);
-            r1.createCell(0).setCellValue("NIT");
-            r1.createCell(1).setCellValue(safe(systemInfoService.getCompanyNit(), ""));
-            r1.getCell(0).setCellStyle(boldStyle);
-
-            r++; // espacio
-
-            // Titulo: merge a totalCols (no a 6 como antes - desalineaba con la tabla de 7)
-            Row title = sh.createRow(r++);
-            org.apache.poi.ss.usermodel.Cell titleCell = title.createCell(0);
-            titleCell.setCellValue("COMPROBANTE CONTABLE " + voucherCode);
-            titleCell.setCellStyle(titleStyle);
-            sh.addMergedRegion(new CellRangeAddress(title.getRowNum(), title.getRowNum(), 0, totalCols - 1));
-
-            r++; // espacio
-
-            // Cabecera datos del comprobante
-            String[][] headerData = {
-                    {"Fecha", entry.getEntryDate() != null ? entry.getEntryDate().format(DATE_FMT) : "-"},
-                    {"Estado", entry.getStatus() != null ? entry.getStatus().name() : "-"},
-                    {"Modulo origen", entry.getSourceModule() != null ? entry.getSourceModule().name() : "-"},
-                    {"Anio fiscal", entry.getFiscalYear() != null ? entry.getFiscalYear().toString() : "-"},
-                    {"Descripcion", safe(entry.getDescription(), "-")},
-            };
-            for (String[] kv : headerData) {
-                Row hr = sh.createRow(r++);
-                hr.createCell(0).setCellValue(kv[0]);
-                hr.createCell(1).setCellValue(kv[1]);
-                hr.getCell(0).setCellStyle(boldStyle);
+            // QA Bloque BJ (2026-05-17): header estandar (empresa+usuario+rol+fecha+
+            // filtros+totales) reemplaza el bloque manual previo. Antes salia
+            // empresa+nit+titulo+5 filas de cabecera. Ahora helper transversal.
+            BigDecimal sumDp = BigDecimal.ZERO, sumCp = BigDecimal.ZERO;
+            if (entry.getLines() != null) {
+                for (JournalEntryLine l : entry.getLines()) {
+                    if (l.getDebitAmount() != null) sumDp = sumDp.add(l.getDebitAmount());
+                    if (l.getCreditAmount() != null) sumCp = sumCp.add(l.getCreditAmount());
+                }
             }
-            r++; // espacio
+            ReportHeaderBuilder.ReportContext xlsxCtx = reportContextResolver
+                    .baseContext("Comprobante contable " + voucherCode)
+                    .addFilter("Fecha del asiento", entry.getEntryDate() != null ? entry.getEntryDate().format(DATE_FMT) : "-")
+                    .addFilter("Estado", entry.getStatus() != null ? entry.getStatus().name() : "-")
+                    .addFilter("Modulo origen", entry.getSourceModule() != null ? entry.getSourceModule().name() : "-")
+                    .addFilter("Anio fiscal", entry.getFiscalYear() != null ? entry.getFiscalYear().toString() : "-")
+                    .addFilter("Descripcion del asiento", safe(entry.getDescription(), "-"))
+                    .addTotal("Total Debito", sumDp)
+                    .addTotal("Total Credito", sumCp)
+                    .build();
+            int r = ReportHeaderBuilder.writeXlsxHeader(wb, sh, xlsxCtx, totalCols);
 
             // Tabla de lineas con header destacado
             Row hdr = sh.createRow(r++);

@@ -29,6 +29,8 @@ import com.sigcon.backend.invoices.purchase_orders.domain.repository.PurchaseOrd
 import com.sigcon.backend.reports.domain.service.ReportPdfService;
 import com.sigcon.backend.third_parties.third_parties.domain.model.ThirdParty;
 import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPartyRepository;
+import com.sigcon.backend.utils.export.ReportContextResolver;
+import com.sigcon.backend.utils.export.ReportHeaderBuilder;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +51,8 @@ public class ApReportService {
     private final ThirdPartyRepository thirdPartyRepository;
     private final ReportPdfService reportPdfService;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+filtros+totales
+    private final ReportContextResolver reportContextResolver;
 
     private static final String RANGE_0_30 = "0-30 dias";
     private static final String RANGE_31_60 = "31-60 dias";
@@ -151,7 +155,6 @@ public class ApReportService {
         LocalDate today = LocalDate.now();
         List<Paragraph> body = new ArrayList<>();
 
-        body.add(new Paragraph("Fecha de generacion: " + today));
         body.add(new Paragraph("Total facturas pendientes: " + pendingInvoices.size()));
         body.add(new Paragraph(" "));
 
@@ -182,7 +185,15 @@ public class ApReportService {
         body.add(new Paragraph(" "));
         body.add(new Paragraph("TOTAL PENDIENTE: $" + totalPending));
 
-        byte[] pdfBytes = reportPdfService.generateReport("Reporte de Antiguedad de Saldos - Cuentas por Pagar", body);
+        // QA Bloque BJ (2026-05-17): header estandar con empresa+usuario+rol+totales
+        ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Reporte de Antiguedad de Saldos - Cuentas por Pagar")
+                .addFilter("Fecha del reporte", today.toString())
+                .addFilter("Facturas pendientes", String.valueOf(pendingInvoices.size()))
+                .addTotal("Total Pendiente por Cobrar", totalPending)
+                .build();
+        byte[] pdfBytes = reportPdfService.generateEnhancedReport(
+                "Reporte de Antiguedad de Saldos - Cuentas por Pagar", ctx, body);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=aging_report.pdf")

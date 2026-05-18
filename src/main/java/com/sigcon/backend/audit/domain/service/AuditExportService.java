@@ -35,10 +35,21 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuditExportService {
 
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+filtros+totales
+    private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
+
     /** HU-AU-06 E3: Exportar a CSV. */
     public byte[] exportToCsv(List<AuditLogDTO> logs) {
         StringBuilder csv = new StringBuilder();
         csv.append("\uFEFF"); // BOM UTF-8
+
+        // QA Bloque BJ (2026-05-17): header estandar como comentarios CSV
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Reporte de Auditoria (CSV)")
+                .addFilter("Total registros", String.valueOf(logs.size()))
+                .build();
+        csv.append(com.sigcon.backend.utils.export.ReportHeaderBuilder.buildCsvHeader(ctx));
+
         csv.append("ID;Fecha;Usuario;Accion;Entidad;ID_Entidad;Modulo;Severidad;Descripcion;IP;Hash\n");
         for (AuditLogDTO l : logs) {
             csv.append(l.getId()).append(';')
@@ -63,8 +74,15 @@ public class AuditExportService {
             String[] headers = {"ID", "Fecha", "Usuario", "Accion", "Entidad",
                     "ID Entidad", "Modulo", "Severidad", "Descripcion", "IP", "Hash"};
 
+            // QA Bloque BJ (2026-05-17): header estandar
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext xlsxCtx = reportContextResolver
+                    .baseContext("Reporte de Auditoria (XLSX)")
+                    .addFilter("Total registros", String.valueOf(logs.size()))
+                    .build();
+            int startRow = com.sigcon.backend.utils.export.ReportHeaderBuilder.writeXlsxHeader(wb, sheet, xlsxCtx, headers.length);
+
             // Header
-            XSSFRow headerRow = sheet.createRow(0);
+            XSSFRow headerRow = sheet.createRow(startRow);
             XSSFCellStyle headerStyle = wb.createCellStyle();
             XSSFFont font = wb.createFont();
             font.setBold(true);
@@ -78,7 +96,7 @@ public class AuditExportService {
             // Datos
             for (int r = 0; r < logs.size(); r++) {
                 AuditLogDTO l = logs.get(r);
-                XSSFRow row = sheet.createRow(r + 1);
+                XSSFRow row = sheet.createRow(startRow + 1 + r);
                 row.createCell(0).setCellValue(l.getId() != null ? l.getId() : 0);
                 row.createCell(1).setCellValue(l.getTimestamp() != null ? l.getTimestamp().toString() : "");
                 row.createCell(2).setCellValue(nz(l.getUserEmail()));
@@ -119,17 +137,12 @@ public class AuditExportService {
             PdfFont fontBold = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
             PdfFont fontReg  = PdfFontFactory.createFont(StandardFonts.HELVETICA);
 
-            // Titulo
-            doc.add(new Paragraph("Reporte de Auditoria - SIGCON")
-                    .setFont(fontBold).setFontSize(16)
-                    .setTextAlignment(TextAlignment.CENTER));
-            doc.add(new Paragraph("Generado: " + LocalDateTime.now())
-                    .setFont(fontReg).setFontSize(9)
-                    .setTextAlignment(TextAlignment.CENTER));
-            doc.add(new Paragraph("Total registros: " + logs.size())
-                    .setFont(fontReg).setFontSize(9)
-                    .setTextAlignment(TextAlignment.CENTER));
-            doc.add(new Paragraph("\n"));
+            // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+fecha+totales
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext pdfCtx = reportContextResolver
+                    .baseContext("Reporte de Auditoria - SIGCON")
+                    .addFilter("Total registros", String.valueOf(logs.size()))
+                    .build();
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.writePdfHeader(doc, pdfCtx);
 
             // Tabla
             float[] cols = {35f, 90f, 110f, 60f, 75f, 60f, 60f, 110f};

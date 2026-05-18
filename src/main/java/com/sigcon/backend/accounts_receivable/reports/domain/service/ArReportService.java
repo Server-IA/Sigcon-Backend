@@ -69,6 +69,8 @@ public class ArReportService {
     private final ArAdvanceRepository arAdvanceRepository;
     private final ThirdPartyRepository thirdPartyRepository;
     private final ReportPdfService reportPdfService;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+filtros+totales
+    private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
 
     // ========================= AR-05: Reporte por cliente =========================
 
@@ -499,7 +501,17 @@ public class ArReportService {
             default:
                 throw new IllegalArgumentException("Tipo de reporte no valido: " + type);
         }
-        return reportPdfService.generateReport(title, body);
+        // QA Bloque BJ (2026-05-17): header estandar con empresa+usuario+rol+filtros
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext.Builder ctxBuilder = reportContextResolver
+                .baseContext(title);
+        if (request != null) {
+            if (request.getStartDate() != null) ctxBuilder.addFilter("Fecha desde", request.getStartDate().toString());
+            if (request.getEndDate() != null) ctxBuilder.addFilter("Fecha hasta", request.getEndDate().toString());
+            if (request.getStatus() != null) ctxBuilder.addFilter("Estado", request.getStatus());
+            if (request.getThirdPartyId() != null) ctxBuilder.addFilter("Cliente ID", request.getThirdPartyId().toString());
+        }
+        ctxBuilder.addFilter("Tipo de reporte", type);
+        return reportPdfService.generateEnhancedReport(title, ctxBuilder.build(), body);
     }
 
     // ========================= Helpers =========================

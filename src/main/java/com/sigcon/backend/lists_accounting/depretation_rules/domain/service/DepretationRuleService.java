@@ -51,6 +51,8 @@ import java.util.Optional;
 public class DepretationRuleService {
 
     private final DepretationRuleRepository depretationRuleRepository;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+    private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
     private final AccountingAccountRepository accountingAccountRepository;
     private final com.sigcon.backend.assets.assets.domain.repository.AssetsRepository assetsRepository;
     private final com.sigcon.backend.general.accounting.closing.domain.service.ClosingLockService closingLockService;
@@ -569,11 +571,20 @@ public class DepretationRuleService {
                 DepretationRule::getEffectiveDate,
                 r -> r.getStatus() != null ? r.getStatus().name() : "");
         if ("xlsx".equalsIgnoreCase(format)) {
+            // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                    .baseContext("Reglas de Depreciacion")
+                    .addFilter("Total registros", String.valueOf(all.size()))
+                    .build();
             return com.sigcon.backend.utils.export.SimpleTableExporter
-                    .toXlsx("Reglas depreciacion", headers, cols, all);
+                    .toXlsx("Reglas depreciacion", headers, cols, all, ctx);
         }
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Reglas de Depreciacion")
+                .addFilter("Total registros", String.valueOf(all.size()))
+                .build();
         return com.sigcon.backend.utils.export.SimpleTableExporter
-                .toCsv(headers, cols, all);
+                .toCsv(headers, cols, all, ctx);
     }
 
     /**

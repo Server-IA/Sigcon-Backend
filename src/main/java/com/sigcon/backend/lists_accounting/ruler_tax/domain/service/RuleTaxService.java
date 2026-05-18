@@ -41,6 +41,8 @@ import lombok.RequiredArgsConstructor;
 public class RuleTaxService {
 
     private final RuleTaxRepository ruleTaxRepository;
+    // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+    private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
     private final AccountingAccountRepository accountingAccountRepository;
     private final TaxRulerAccountRepository taxRulerAccountRepository;
     private final AuditPublisher auditPublisher;
@@ -260,11 +262,20 @@ public class RuleTaxService {
                 t -> t.getAccountingAccount() != null ? t.getAccountingAccount().getCustomName() : "",
                 t -> t.getStatus() != null ? t.getStatus().name() : "");
         if ("xlsx".equalsIgnoreCase(format)) {
+            // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                    .baseContext("Reglas Tributarias")
+                    .addFilter("Total registros", String.valueOf(all.size()))
+                    .build();
             return com.sigcon.backend.utils.export.SimpleTableExporter
-                    .toXlsx("Reglas tributarias", headers, cols, all);
+                    .toXlsx("Reglas tributarias", headers, cols, all, ctx);
         }
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Reglas Tributarias")
+                .addFilter("Total registros", String.valueOf(all.size()))
+                .build();
         return com.sigcon.backend.utils.export.SimpleTableExporter
-                .toCsv(headers, cols, all);
+                .toCsv(headers, cols, all, ctx);
     }
 
     private RuleTaxDTO convertToDTO(TaxRulerEntity taxRulerEntity) {

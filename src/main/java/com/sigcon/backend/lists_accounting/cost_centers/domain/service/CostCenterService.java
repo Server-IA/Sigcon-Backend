@@ -34,6 +34,8 @@ public class CostCenterService {
         private final CostCenterRepository costCenterRepository;
         private final AccountingAccountRepository accountingAccountRepository;
         private final AuditPublisher auditPublisher;
+        // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+        private final com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
 
         private final DataTableSpecificationBuilder<CostCenter> costCenterSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
@@ -197,12 +199,17 @@ public class CostCenterService {
                                 c -> c.getStatus() != null ? c.getStatus().name() : "",
                                 CostCenter::getCreatedAt,
                                 CostCenter::getUpdatedAt);
+                // QA Bloque BJ (2026-05-17): header estandar empresa+usuario+rol+totales
+                com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                                .baseContext("Centros de Costo")
+                                .addFilter("Total registros", String.valueOf(all.size()))
+                                .build();
                 if ("xlsx".equalsIgnoreCase(format)) {
                         return com.sigcon.backend.utils.export.SimpleTableExporter
-                                        .toXlsx("Centros de costo", headers, cols, all);
+                                        .toXlsx("Centros de costo", headers, cols, all, ctx);
                 }
                 return com.sigcon.backend.utils.export.SimpleTableExporter
-                                .toCsv(headers, cols, all);
+                                .toCsv(headers, cols, all, ctx);
         }
 
         private CostCenterDTO convertToDTO(CostCenter costCenter) {
