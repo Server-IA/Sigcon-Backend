@@ -81,7 +81,13 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): la pagina /bank-reconciliation/{id}
+    // necesita leer el detalle de la cuenta para mostrar nombre/codigo en el
+    // header. Si solo aceptamos PERM_BNK.CUENTAS.VER, un usuario con perms
+    // de CONCILIACIONES/MOVIMIENTOS pero sin VER cuentas recibe 403 y la
+    // pagina entera muestra "No tiene permisos". Aceptamos tambien
+    // BNK.CONCILIACION.VER y BNK.MOVIMIENTOS.VER (lectura ligada).
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.VER','TEMP_PERM_BNK.CUENTAS.VER','TEMP_BNK.CUENTAS.VER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Detalle de cuenta bancaria", description = "Retorna el detalle completo. El número de cuenta se devuelve enmascarado (****1234).")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Detalle obtenido correctamente"),
@@ -192,7 +198,11 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/financial-movements")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar tambien BNK.MOVIMIENTOS.VER
+    // y BNK.CONCILIACION.VER. Listar movimientos es la primera operacion
+    // del flujo de conciliacion; sin esto el usuario con perms de
+    // conciliacion solo recibe "No tiene permisos".
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.VER','TEMP_PERM_BNK.CUENTAS.VER','TEMP_BNK.CUENTAS.VER','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Listar movimientos financieros de la cuenta",
             description = "Movimientos registrados para conciliación. Use unmatchedOnly=true para pendientes de emparejar con cheques.")
     public ResponseEntity<?> listFinancialMovements(
@@ -226,14 +236,18 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/reconciliation-sessions")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar tambien BNK.CONCILIACION.VER
+    // (sin esto un usuario con perms de conciliacion no podia ver sus
+    // propias sesiones).
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.VER','TEMP_PERM_BNK.CUENTAS.VER','TEMP_BNK.CUENTAS.VER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Listar sesiones de conciliación de la cuenta")
     public ResponseEntity<?> listReconciliationSessions(@PathVariable Long id) {
         return bankReconciliationSessionService.listByBankAccount(id);
     }
 
     @PostMapping("/{id}/reconciliation-sessions")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar BNK.CONCILIACION.CREAR.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.CREAR','TEMP_PERM_BNK.CONCILIACION.CREAR','TEMP_BNK.CONCILIACION.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Crear sesión de conciliación (borrador)")
     public ResponseEntity<?> createReconciliationSession(
             @PathVariable Long id,
@@ -243,7 +257,8 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/reconciliation-sessions/{sessionId}/close")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar BNK.CONCILIACION.CERRAR.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.CERRAR','TEMP_PERM_BNK.CONCILIACION.CERRAR','TEMP_BNK.CONCILIACION.CERRAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Cerrar sesión de conciliación", description = "Marca la sesión como cerrada y actualiza la fecha de última conciliación de la cuenta.")
     public ResponseEntity<?> closeReconciliationSession(
             @PathVariable Long id,
@@ -252,7 +267,8 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/reconciliation-sessions/{sessionId}/summary")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar BNK.CONCILIACION.VER.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.VER','TEMP_PERM_BNK.CUENTAS.VER','TEMP_BNK.CUENTAS.VER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Resumen numérico de conciliación",
             description = "Cuadre: aritmética del extracto (saldo inicial + movimientos del periodo vs saldo final) y comparación con saldo libro aproximado (saldo inicial cuenta + comprobantes hasta la fecha fin).")
     public ResponseEntity<?> getReconciliationSummary(
@@ -262,7 +278,8 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/reconciliation-sessions/{sessionId}/statement-balances")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar BNK.CONCILIACION.EDITAR.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.EDITAR','TEMP_PERM_BNK.CONCILIACION.EDITAR','TEMP_BNK.CONCILIACION.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Actualizar saldos del extracto en borrador",
             description = "Solo sesiones en estado borrador. Envíe los campos que desee cambiar.")
     public ResponseEntity<?> updateReconciliationStatementBalances(
@@ -274,7 +291,8 @@ public class BankAccountController {
     }
 
     @PostMapping(value = "/{id}/financial-movements/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar BNK.CONCILIACION.IMPORTAR_EXTRACTO.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.IMPORTAR_EXTRACTO','TEMP_PERM_BNK.CONCILIACION.IMPORTAR_EXTRACTO','TEMP_BNK.CONCILIACION.IMPORTAR_EXTRACTO','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Importar movimientos desde CSV",
             description = "Formato por línea: fecha;importe;descripcion;referencia (punto o coma decimal). Primera línea puede ser encabezado.")
     public ResponseEntity<?> importFinancialMovementsCsv(
@@ -285,7 +303,8 @@ public class BankAccountController {
     }
 
     @GetMapping("/{id}/financial-movements/{movementId}/voucher-suggestions")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar perms de CONCILIACION y MOVIMIENTOS.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.VER','TEMP_PERM_BNK.CUENTAS.VER','TEMP_BNK.CUENTAS.VER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Sugerencias de comprobantes para emparejar un movimiento")
     public ResponseEntity<?> voucherSuggestions(
             @PathVariable Long id,
@@ -294,7 +313,8 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/financial-movements/{movementId}/match-voucher")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar perms de CONCILIACION y MOVIMIENTOS edit.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.EDITAR','TEMP_PERM_BNK.CONCILIACION.EDITAR','TEMP_BNK.CONCILIACION.EDITAR','PERM_BNK.MOVIMIENTOS.EDITAR','TEMP_PERM_BNK.MOVIMIENTOS.EDITAR','TEMP_BNK.MOVIMIENTOS.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Emparejar movimiento con comprobante (voucher)")
     public ResponseEntity<?> matchMovementToVoucher(
             @PathVariable Long id,
@@ -309,7 +329,8 @@ public class BankAccountController {
      * contables) para empresas que no usan Vouchers legacy.
      */
     @GetMapping("/{id}/financial-movements/{movementId}/journal-entry-suggestions")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar perms de CONCILIACION y MOVIMIENTOS view.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.VER','TEMP_PERM_BNK.CUENTAS.VER','TEMP_BNK.CUENTAS.VER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Sugerencias de asientos contables (JE) para emparejar movimiento")
     public ResponseEntity<?> journalEntrySuggestions(
             @PathVariable Long id,
@@ -318,7 +339,8 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/financial-movements/{movementId}/match-journal-entry")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar perms de CONCILIACION y MOVIMIENTOS edit.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.EDITAR','TEMP_PERM_BNK.CONCILIACION.EDITAR','TEMP_BNK.CONCILIACION.EDITAR','PERM_BNK.MOVIMIENTOS.EDITAR','TEMP_PERM_BNK.MOVIMIENTOS.EDITAR','TEMP_BNK.MOVIMIENTOS.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Emparejar movimiento con asiento contable (JournalEntry)")
     public ResponseEntity<?> matchMovementToJournalEntry(
             @PathVariable Long id,
@@ -328,7 +350,8 @@ public class BankAccountController {
     }
 
     @PutMapping("/{id}/financial-movements/{movementId}/unmatch")
-    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): aceptar perms de CONCILIACION y MOVIMIENTOS edit.
+    @PreAuthorize("hasAnyAuthority('PERM_BNK.CUENTAS.EDITAR','TEMP_PERM_BNK.CUENTAS.EDITAR','TEMP_BNK.CUENTAS.EDITAR','PERM_BNK.CONCILIACION.EDITAR','TEMP_PERM_BNK.CONCILIACION.EDITAR','TEMP_BNK.CONCILIACION.EDITAR','PERM_BNK.MOVIMIENTOS.EDITAR','TEMP_PERM_BNK.MOVIMIENTOS.EDITAR','TEMP_BNK.MOVIMIENTOS.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     @Operation(summary = "Quitar emparejamiento con comprobante")
     public ResponseEntity<?> unmatchMovement(
             @PathVariable Long id,

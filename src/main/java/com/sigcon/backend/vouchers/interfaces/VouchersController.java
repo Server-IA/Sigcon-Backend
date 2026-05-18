@@ -30,7 +30,12 @@ public class VouchersController {
         @ApiResponse(responseCode = "200", description = "Vouchers encontrados"),
         @ApiResponse(responseCode = "400", description = "Error al buscar vouchers")
     })
-    @PreAuthorize("hasAuthority('PERM_SEARCH_VOUCHER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    // QA Bloque BJ Bug 5 (2026-05-17): el endpoint se usa desde la pantalla
+    // de conciliacion bancaria para listar comprobantes disponibles a
+    // emparejar. Sin esto un usuario con perms de BNK.CONCILIACION pero sin
+    // PERM_SEARCH_VOUCHER recibe 403. Ampliamos para aceptar tambien los
+    // perms de conciliacion/movimientos VER.
+    @PreAuthorize("hasAnyAuthority('PERM_SEARCH_VOUCHER','TEMP_PERM_SEARCH_VOUCHER','TEMP_SEARCH_VOUCHER','PERM_BNK.CONCILIACION.VER','TEMP_PERM_BNK.CONCILIACION.VER','TEMP_BNK.CONCILIACION.VER','PERM_BNK.MOVIMIENTOS.VER','TEMP_PERM_BNK.MOVIMIENTOS.VER','TEMP_BNK.MOVIMIENTOS.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> search(@RequestBody(required = false) DataTableRequest request) {
         return voucherService.getVouchers(request);
     }
