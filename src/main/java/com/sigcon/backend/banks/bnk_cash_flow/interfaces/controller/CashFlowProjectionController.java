@@ -206,7 +206,13 @@ public class CashFlowProjectionController {
         @ApiResponse(responseCode = "400", description = "Solo proyecciones APROBADAS pueden marcarse como EJECUTADA"),
         @ApiResponse(responseCode = "404", description = "No encontrada")
     })
-    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CASH_FLOW_PROJECTION','TEMP_PERM_EXECUTE_CASH_FLOW_PROJECTION','TEMP_EXECUTE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.EJECUTAR','TEMP_PERM_BNK.PROYECCIONES.EJECUTAR','TEMP_BNK.PROYECCIONES.EJECUTAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    // QA Bloque BH (2026-05-17): el permiso `BNK.PROYECCIONES.EJECUTAR` NO
+    // existe en BD; solo `BNK.PROYECCIONES.APROBAR` (id=7604) cuya descripcion
+    // literal es "Aprobar/ejecutar proyeccion". Agregamos APROBAR aqui para
+    // que el mismo permiso habilite ambas acciones, alineado con la semantica
+    // del catalogo de permisos. EXECUTE_* se mantiene en la lista para no
+    // romper si en el futuro se separa como permiso propio.
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CASH_FLOW_PROJECTION','TEMP_PERM_EXECUTE_CASH_FLOW_PROJECTION','TEMP_EXECUTE_CASH_FLOW_PROJECTION','PERM_BNK.PROYECCIONES.EJECUTAR','TEMP_PERM_BNK.PROYECCIONES.EJECUTAR','TEMP_BNK.PROYECCIONES.EJECUTAR','PERM_BNK.PROYECCIONES.APROBAR','TEMP_PERM_BNK.PROYECCIONES.APROBAR','TEMP_BNK.PROYECCIONES.APROBAR','PERM_APPROVE_CASH_FLOW_PROJECTION','TEMP_PERM_APPROVE_CASH_FLOW_PROJECTION','TEMP_APPROVE_CASH_FLOW_PROJECTION','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> execute(@PathVariable Long id) {
         return cashFlowProjectionService.execute(id);
     }

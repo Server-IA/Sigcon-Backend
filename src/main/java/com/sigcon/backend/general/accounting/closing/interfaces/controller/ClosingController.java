@@ -139,7 +139,13 @@ public class ClosingController {
             @ApiResponse(responseCode = "400", description = "Ya existe asiento de apertura o no hay saldos del anio anterior"),
             @ApiResponse(responseCode = "403", description = "Sin permisos")
     })
-    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CLOSING','TEMP_PERM_EXECUTE_CLOSING','TEMP_EXECUTE_CLOSING','PERM_CG.CIERRES.EJECUTAR','TEMP_PERM_CG.CIERRES.EJECUTAR','TEMP_CG.CIERRES.EJECUTAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    // QA Bloque BH (2026-05-17): el permiso `CG.CIERRES.EJECUTAR` (generico) NO
+    // existe en BD; solo existen `CG.CIERRES.EJECUTAR_MENSUAL` y
+    // `CG.CIERRES.EJECUTAR_ANUAL`. Agregamos ambos para que un usuario con
+    // CUALQUIERA de los dos pueda generar el asiento de apertura (es la
+    // continuidad natural del flujo de cierre anual). EXECUTE_CLOSING y
+    // CG.CIERRES.EJECUTAR se conservan para retrocompat con seeds futuros.
+    @PreAuthorize("hasAnyAuthority('PERM_EXECUTE_CLOSING','TEMP_PERM_EXECUTE_CLOSING','TEMP_EXECUTE_CLOSING','PERM_CG.CIERRES.EJECUTAR','TEMP_PERM_CG.CIERRES.EJECUTAR','TEMP_CG.CIERRES.EJECUTAR','PERM_CG.CIERRES.EJECUTAR_ANUAL','TEMP_PERM_CG.CIERRES.EJECUTAR_ANUAL','TEMP_CG.CIERRES.EJECUTAR_ANUAL','PERM_CG.CIERRES.EJECUTAR_MENSUAL','TEMP_PERM_CG.CIERRES.EJECUTAR_MENSUAL','TEMP_CG.CIERRES.EJECUTAR_MENSUAL','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> openingEntry(
             @Valid @RequestBody OpeningRequest request,
             Authentication authentication) {
