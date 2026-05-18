@@ -62,6 +62,21 @@ public final class SimpleTableExporter {
                                    List<Function<T, Object>> columns,
                                    List<T> rows,
                                    ReportHeaderBuilder.ReportContext reportCtx) {
+        return toCsv(headers, columns, rows, reportCtx, null);
+    }
+
+    /**
+     * QA Bloque BN (2026-05-18): variante con fila TOTAL opcional al final.
+     * Si {@code totalsRow != null}, se agrega una fila adicional al cierre con
+     * los valores precalculados. La cantidad de columnas de la fila debe ser
+     * igual a {@code headers.size()}. Util para reportes contables donde se
+     * exige sumatoria de Subtotal, IVA, Retencion, Total, Saldo, etc.
+     */
+    public static <T> byte[] toCsv(List<String> headers,
+                                   List<Function<T, Object>> columns,
+                                   List<T> rows,
+                                   ReportHeaderBuilder.ReportContext reportCtx,
+                                   List<Object> totalsRow) {
         StringBuilder sb = new StringBuilder();
         // BOM UTF-8 para Excel ES
         sb.append('﻿');
@@ -75,6 +90,16 @@ public final class SimpleTableExporter {
                 Object v = columns.get(i).apply(row);
                 sb.append(escapeCsv(v));
                 if (i < columns.size() - 1) sb.append(';');
+            }
+            sb.append('\n');
+        }
+        // Fila TOTAL (Bloque BN). El caller pasa la lista ya calculada con
+        // strings para columnas no agregables ("TOTAL", "") y numeros/strings
+        // formateados para las columnas numericas.
+        if (totalsRow != null && !totalsRow.isEmpty()) {
+            for (int i = 0; i < totalsRow.size(); i++) {
+                sb.append(escapeCsv(totalsRow.get(i)));
+                if (i < totalsRow.size() - 1) sb.append(';');
             }
             sb.append('\n');
         }
@@ -101,6 +126,20 @@ public final class SimpleTableExporter {
                                     List<Function<T, Object>> columns,
                                     List<T> rows,
                                     ReportHeaderBuilder.ReportContext reportCtx) {
+        return toXlsx(sheetName, headers, columns, rows, reportCtx, null);
+    }
+
+    /**
+     * QA Bloque BN (2026-05-18): variante con fila TOTAL opcional al final del
+     * XLSX. Se renderiza con bold + fondo azul claro destacado para que el
+     * contador la identifique de un vistazo.
+     */
+    public static <T> byte[] toXlsx(String sheetName,
+                                    List<String> headers,
+                                    List<Function<T, Object>> columns,
+                                    List<T> rows,
+                                    ReportHeaderBuilder.ReportContext reportCtx,
+                                    List<Object> totalsRow) {
         try (Workbook wb = new XSSFWorkbook();
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet(sheetName != null ? sheetName : "Datos");
@@ -137,6 +176,29 @@ public final class SimpleTableExporter {
                         c.setCellValue(((Number) v).doubleValue());
                     } else if (v instanceof Boolean) {
                         c.setCellValue((Boolean) v);
+                    } else {
+                        c.setCellValue(v.toString());
+                    }
+                }
+            }
+
+            // Fila TOTAL (Bloque BN): bold + fondo azul claro
+            if (totalsRow != null && !totalsRow.isEmpty()) {
+                CellStyle totalStyle = wb.createCellStyle();
+                totalStyle.setFont(bold);
+                totalStyle.setFillForegroundColor(
+                        org.apache.poi.ss.usermodel.IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+                totalStyle.setFillPattern(
+                        org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+                Row totalRow = sheet.createRow(r);
+                for (int i = 0; i < totalsRow.size(); i++) {
+                    Object v = totalsRow.get(i);
+                    Cell c = totalRow.createCell(i);
+                    c.setCellStyle(totalStyle);
+                    if (v == null) {
+                        c.setBlank();
+                    } else if (v instanceof Number) {
+                        c.setCellValue(((Number) v).doubleValue());
                     } else {
                         c.setCellValue(v.toString());
                     }

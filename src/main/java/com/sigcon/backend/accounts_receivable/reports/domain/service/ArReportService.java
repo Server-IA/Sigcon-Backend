@@ -507,7 +507,11 @@ public class ArReportService {
         if (request != null) {
             if (request.getStartDate() != null) ctxBuilder.addFilter("Fecha desde", request.getStartDate().toString());
             if (request.getEndDate() != null) ctxBuilder.addFilter("Fecha hasta", request.getEndDate().toString());
-            if (request.getStatus() != null) ctxBuilder.addFilter("Estado", request.getStatus());
+            // QA Bloque BN (2026-05-18): traducir estado de enum (ISSUED) a
+            // etiqueta espanola (Emitida) en el bloque "Filtros" del PDF.
+            if (request.getStatus() != null) ctxBuilder.addFilter("Estado",
+                    com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoiceStatus
+                            .labelOf(request.getStatus()));
             if (request.getThirdPartyId() != null) ctxBuilder.addFilter("Cliente ID", request.getThirdPartyId().toString());
         }
         ctxBuilder.addFilter("Tipo de reporte", type);
@@ -586,9 +590,32 @@ public class ArReportService {
             addCell(table, formatMoney(r.getTotalAmount()), regular, bg);
             addCell(table, formatMoney(r.getBalanceDue()), regular, bg);
             addCell(table, r.getDaysOverdue() != null ? r.getDaysOverdue().toString() : "0", regular, bg);
-            addCell(table, r.getStatus() != null ? r.getStatus() : "", regular, bg);
+            // QA Bloque BN (2026-05-18): traducir estado de la fila al espanol.
+            addCell(table, r.getStatus() != null
+                    ? com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoiceStatus
+                            .labelOf(r.getStatus())
+                    : "", regular, bg);
             i++;
         }
+        // QA Bloque BN (2026-05-18): fila TOTAL al final del listado con
+        // sumatoria de Total + Saldo (en negrita y fondo destacado). HU exige
+        // que los reportes muestren totales agregados.
+        BigDecimal sumTotal = rows.stream()
+                .map(r -> nz(r.getTotalAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sumBalance = rows.stream()
+                .map(r -> nz(r.getBalanceDue()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        DeviceRgb totalBg = new DeviceRgb(217, 226, 243); // azul claro
+        addCell(table, "TOTAL", bold, totalBg);
+        addCell(table, "", bold, totalBg);
+        addCell(table, "", bold, totalBg);
+        addCell(table, "", bold, totalBg);
+        addCell(table, "", bold, totalBg);
+        addCell(table, formatMoney(sumTotal), bold, totalBg);
+        addCell(table, formatMoney(sumBalance), bold, totalBg);
+        addCell(table, "", bold, totalBg);
+        addCell(table, "(" + rows.size() + " fact.)", bold, totalBg);
         body.add(new Paragraph().add(table));
         return body;
     }

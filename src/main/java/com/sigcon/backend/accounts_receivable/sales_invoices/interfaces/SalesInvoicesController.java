@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sigcon.backend.accounts_receivable.sales_invoices.application.CreateSalesInvoiceRequest;
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoice;
+import com.sigcon.backend.accounts_receivable.sales_invoices.domain.service.SalesInvoiceExportService;
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.service.SalesInvoiceService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -39,6 +40,7 @@ import lombok.RequiredArgsConstructor;
 public class SalesInvoicesController {
 
     private final SalesInvoiceService service;
+    private final SalesInvoiceExportService exportService;
 
     /**
      * AR-01A: Crea una nueva factura de venta con calculo de impuestos y retenciones.
@@ -195,6 +197,52 @@ public class SalesInvoicesController {
         try {
             return service.delete(id);
         } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * QA Bloque BN (2026-05-18): exportar el listado de facturas de venta al
+     * formato pedido (csv o xlsx). Reemplaza el export cliente del DataTable
+     * (que producia archivos sin header empresa y sin totales) por un export
+     * server-side con formato unificado: empresa+NIT, usuario+rol, fecha de
+     * generacion, filtros aplicados, listado con estado traducido y fila TOTAL
+     * con sumatorias.
+     *
+     * <p>Filtros opcionales (todos como query params):
+     * <ul>
+     *   <li>{@code status}: codigo del enum (DRAFT, ISSUED, PAID, ...).</li>
+     *   <li>{@code dateFrom}/{@code dateTo}: rango fecha emision yyyy-MM-dd.</li>
+     *   <li>{@code thirdPartyId}: filtrar por cliente.</li>
+     * </ul>
+     */
+    @Operation(summary = "Exportar listado de facturas de venta (CSV/XLSX)",
+               description = "Genera el archivo con encabezado estandar (empresa, usuario, filtros) + fila TOTAL con sumatorias.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Archivo generado"),
+        @ApiResponse(responseCode = "400", description = "Formato no soportado")
+    })
+    @GetMapping("/export/{format}")
+    @PreAuthorize("hasAuthority('PERM_READ_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportListing(
+            @PathVariable String format,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+            @org.springframework.web.bind.annotation.RequestParam(required = false)
+                    @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+                    java.time.LocalDate dateFrom,
+            @org.springframework.web.bind.annotation.RequestParam(required = false)
+                    @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+                    java.time.LocalDate dateTo,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Long thirdPartyId) {
+        try {
+            SalesInvoiceExportService.ExportResult res = exportService.exportListing(
+                    format, status, dateFrom, dateTo, thirdPartyId);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.parseMediaType(res.mime));
+            headers.setContentDispositionFormData("attachment", res.fileName);
+            return new ResponseEntity<>(res.content, headers, org.springframework.http.HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
