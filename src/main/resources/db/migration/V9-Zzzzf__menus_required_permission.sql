@@ -103,13 +103,15 @@ UPDATE menus SET required_permission_code = CASE component
     WHEN 'DIAN_RESOLUTIONS'    THEN 'AR.RESOLUCIONES_DIAN.VER'
     -- Integracion AAEF (modulo 10)
     WHEN 'INTEGRACION_LOTES'   THEN 'INT.LOTES.VER'
-    -- Nomina (modulo 11)
+    -- Nomina (modulo 11). QA Bloque BN (2026-05-18): los codes reales sembrados
+    -- por V9-Zzzzb son NOM.LIQUIDACION.* y NOM.PILA.GENERAR; antes apuntaban a
+    -- NOM.RECIBOS.VER (huerfano), lo que ocultaba los 3 menus para non-admin.
     WHEN 'NOMINA_EMPLEADOS'    THEN 'NOM.EMPLEADOS.VER'
-    WHEN 'NOMINA_RECIBOS'      THEN 'NOM.RECIBOS.VER'
+    WHEN 'NOMINA_RECIBOS'      THEN 'NOM.LIQUIDACION.VER'
     WHEN 'NOMINA_CONCEPTOS'    THEN 'NOM.CONCEPTOS.VER'
-    WHEN 'NOMINA_PILA'         THEN 'NOM.RECIBOS.VER'
+    WHEN 'NOMINA_PILA'         THEN 'NOM.PILA.GENERAR'
     WHEN 'NOMINA_PRESTACIONES' THEN 'NOM.PRESTACIONES.VER'
-    WHEN 'NOMINA_RESUMEN'      THEN 'NOM.RECIBOS.VER'
+    WHEN 'NOMINA_RESUMEN'      THEN 'NOM.LIQUIDACION.VER'
     -- Auditoria (modulo 12)
     WHEN 'AU_LOGS'             THEN 'AU.LOG.VER'
     WHEN 'AU_DASHBOARD'        THEN 'AU.LOG.VER'
