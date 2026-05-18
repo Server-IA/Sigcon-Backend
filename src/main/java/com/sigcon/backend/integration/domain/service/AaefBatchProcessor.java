@@ -37,7 +37,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * HU-INT-RF-04/05: Procesador asincrono de lotes AAEF.
@@ -77,10 +79,28 @@ public class AaefBatchProcessor {
     private final ArAdvanceService arAdvanceService;
     /** HU-AP-04 E5: payment AP via AAEF. */
     private final com.sigcon.backend.invoices.ap_payments.domain.service.ApPaymentService apPaymentService;
+    /** QA Bloque BJ (HU-INT-RF-05 E5, 2026-05-18): REF/ADJ -> ArNote. */
+    private final com.sigcon.backend.accounts_receivable.credit_debit_notes.domain.service.ArNoteService arNoteService;
+    /** QA Bloque BJ (HU-INT-RF-05 E5, 2026-05-18): REF/ADJ AP -> ApNote. */
+    private final com.sigcon.backend.invoices.ap_notes.domain.service.ApNoteService apNoteService;
     private final ObjectMapper objectMapper;
     private final AgroFusionAckClient ackClient;
     /** HU-INT-RF-15 E4: registro append-only del resultado de cada transfer. */
     private final TransferHistoryService historyService;
+    /**
+     * QA Bloque BJ (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18):
+     * lista de warnings informativos acumulados durante el procesamiento.
+     * Se exponen en el ACK via {@link AgroFusionAckClient} sin bloquear el
+     * procesamiento (la HU pide "procesar + advertir").
+     */
+    private final ThreadLocal<List<String>> batchWarnings = ThreadLocal.withInitial(ArrayList::new);
+
+    /** Accesor para que {@link AaefReceiverService} pueda capturar warnings del thread actual. */
+    public List<String> consumeBatchWarnings() {
+        List<String> w = new ArrayList<>(batchWarnings.get());
+        batchWarnings.get().clear();
+        return w;
+    }
 
     /** Codigo del tipo de factura "Factura de compra" en {@code types_invoices}. */
     private static final String PURCHASE_INVOICE_TYPE_CODE = "FC";
@@ -148,9 +168,25 @@ public class AaefBatchProcessor {
         int processed = 0;
         int failed = 0;
 
-        // Procesar invoices
+        // QA Bloque BJ (HU-INT-RF-03 E4, 2026-05-18): detectar DocumentId
+        // duplicados intra-batch. Solo procesa la PRIMERA ocurrencia. Las
+        // ocurrencias subsiguientes generan transfer FAILED con errorCode
+        // DUPLICATE_DOCUMENT_ID (no retryable - el cliente debe corregir el
+        // lote).
+        Set<String> seenInvoiceIds = new HashSet<>();
         if (payload.getInvoices() != null) {
             for (JsonNode invoiceNode : payload.getInvoices()) {
+                String docId = readDocumentIdInvoice(invoiceNode);
+                if (docId != null && !seenInvoiceIds.add(docId)) {
+                    IntegrationTransfer dup = failedTransfer(batch, docId,
+                            DocumentType.INVOICE, AaefMappingException.DUPLICATE_DOCUMENT_ID,
+                            "Factura con DocumentId='" + docId + "' aparece duplicada en el lote. "
+                                    + "Solo la primera ocurrencia fue procesada; este duplicado se "
+                                    + "omitio (HU-INT-RF-03 E4).", false);
+                    transfers.add(dup);
+                    failed++;
+                    continue;
+                }
                 IntegrationTransfer t = processInvoiceDocument(batch, invoiceNode);
                 transfers.add(t);
                 if (t.getTransferStatus() == TransferStatus.PROCESSED) processed++;
@@ -158,9 +194,21 @@ public class AaefBatchProcessor {
             }
         }
 
-        // Procesar transactions
+        // Procesar transactions con deteccion de duplicados (HU-INT-RF-03 E4)
+        Set<String> seenTxIds = new HashSet<>();
         if (payload.getTransactions() != null) {
             for (JsonNode txNode : payload.getTransactions()) {
+                String docId = readDocumentIdTransaction(txNode);
+                if (docId != null && !seenTxIds.add(docId)) {
+                    IntegrationTransfer dup = failedTransfer(batch, docId,
+                            DocumentType.TRANSACTION, AaefMappingException.DUPLICATE_DOCUMENT_ID,
+                            "Transaccion con DocumentId='" + docId + "' aparece duplicada en el lote. "
+                                    + "Solo la primera ocurrencia fue procesada; este duplicado se "
+                                    + "omitio (HU-INT-RF-03 E4).", false);
+                    transfers.add(dup);
+                    failed++;
+                    continue;
+                }
                 IntegrationTransfer t = processTransactionDocument(batch, txNode);
                 transfers.add(t);
                 if (t.getTransferStatus() == TransferStatus.PROCESSED) processed++;
@@ -310,12 +358,15 @@ public class AaefBatchProcessor {
             } else if (invoiceMapper.isCreditNote(invoice) || invoiceMapper.isDebitNote(invoice)) {
                 // AAEF v1.1: Type=04 NC / 05 ND -> requieren Pull+Diff
                 // (mecanismo CancellationService) que vincula al documento original.
+                // QA Bloque BK (HU-INT-RF-14 E2): retryAllowed=false porque la
+                // correccion debe venir desde AgroFusion (reenviar via envelope
+                // AgroFusionExchangeUpdate). Reintentar el lote original no resuelve.
                 String tipoNota = invoiceMapper.isCreditNote(invoice) ? "credito (Type=04)" : "debito (Type=05)";
                 return failedTransfer(batch, documentId, DocumentType.INVOICE,
                         AaefMappingException.UNSUPPORTED_TYPE,
                         "Nota " + tipoNota + " debe enviarse via Pull+Diff "
                         + "(POST /api/contabilidad/aaef con AgroFusionExchangeUpdate envelope) "
-                        + "para vincular al documento original", true);
+                        + "para vincular al documento original", false);
             } else {
                 // Type.Code invalido (ya capturado por validateTypeCode pero defense in depth)
                 return failedTransfer(batch, documentId, DocumentType.INVOICE,
@@ -377,11 +428,45 @@ public class AaefBatchProcessor {
                     arAdvanceService.registerAdvance(req);
                     return successTransfer(batch, documentId, DocumentType.TRANSACTION, null);
                 }
-                case AaefTransactionMapper.TYPE_REF:
+                case AaefTransactionMapper.TYPE_REF: {
+                    // QA Bloque BJ (HU-INT-RF-05 E5, 2026-05-18): reembolso
+                    // ahora se procesa como ArNote/ApNote tipo CREDIT por el
+                    // monto del reembolso. La nota credito reduce el saldo de
+                    // la factura referenciada y genera asiento inverso al
+                    // original (D Ingresos / C CxC en AR, D CxP / C Gasto en AP).
+                    AaefTransactionMapper.ResolvedInvoice refInv =
+                            transactionMapper.resolveInvoiceByExternalId(tx.getRelatedInvoiceId());
+                    String refReason = (tx.getNotes() != null && !tx.getNotes().isBlank())
+                            ? "Reembolso AAEF: " + tx.getNotes()
+                            : "Reembolso AAEF (Type=REF) - DocumentId: " + tx.getDocumentId();
+                    Long jeId = createRefundNote(refInv, tx.getAmount(), refReason);
+                    return successTransfer(batch, documentId, DocumentType.TRANSACTION, jeId);
+                }
                 case AaefTransactionMapper.TYPE_ADJ: {
-                    return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
-                            AaefMappingException.UNSUPPORTED_TYPE,
-                            "Type=" + typeCode + " requiere Pull+Diff (Fase 4)", true);
+                    // QA Bloque BJ (HU-INT-RF-05 E4 bonus, 2026-05-18): ajuste
+                    // contable AAEF se materializa como ArNote/ApNote (CREDIT si
+                    // el monto reduce saldo, DEBIT si incrementa). El motivo
+                    // viene en AdjustmentReason. El service ya genera JE de
+                    // correccion.
+                    if (tx.getAdjustmentReason() == null || tx.getAdjustmentReason().isBlank()) {
+                        return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                                AaefMappingException.MISSING_ADJUSTMENT_REASON,
+                                "Type=ADJ requiere AdjustmentReason", false);
+                    }
+                    AaefTransactionMapper.ResolvedInvoice adjInv =
+                            transactionMapper.resolveInvoiceByExternalId(tx.getRelatedInvoiceId());
+                    // Convencion: ADJ con monto positivo y AdjustmentReason que
+                    // contiene "deuda"/"aumento"/"debito" -> DEBIT; en cualquier
+                    // otro caso -> CREDIT (reduccion de saldo).
+                    String reason = tx.getAdjustmentReason().toLowerCase();
+                    boolean isDebitAdj = reason.contains("deuda") || reason.contains("aumento")
+                            || reason.contains("debito") || reason.contains("debit")
+                            || reason.contains("incremento");
+                    String noteType = isDebitAdj ? "DEBIT" : "CREDIT";
+                    String fullReason = "Ajuste AAEF (Type=ADJ): " + tx.getAdjustmentReason()
+                            + " - DocumentId: " + tx.getDocumentId();
+                    Long jeId = createAdjustmentNote(adjInv, tx.getAmount(), fullReason, noteType);
+                    return successTransfer(batch, documentId, DocumentType.TRANSACTION, jeId);
                 }
                 default:
                     return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
@@ -441,5 +526,136 @@ public class AaefBatchProcessor {
             b.setProcessedAt(LocalDateTime.now());
             batchRepository.save(b);
         });
+    }
+
+    // QA Bloque BJ (HU-INT-RF-03 E4, 2026-05-18): helpers para deteccion de duplicados.
+
+    private String readDocumentIdInvoice(JsonNode node) {
+        if (node == null) return null;
+        JsonNode header = node.get("Header");
+        if (header == null) return null;
+        JsonNode docId = header.get("DocumentId");
+        return docId == null || docId.isNull() ? null : docId.asText();
+    }
+
+    private String readDocumentIdTransaction(JsonNode node) {
+        if (node == null) return null;
+        JsonNode docId = node.get("DocumentId");
+        return docId == null || docId.isNull() ? null : docId.asText();
+    }
+
+    /**
+     * QA Bloque BJ (HU-INT-RF-05 E5, 2026-05-18): crea una nota credito en AR
+     * o AP segun el scope de la factura referenciada. Devuelve el journalEntryId
+     * generado, o null si no se pudo crear (validacion fallida).
+     */
+    @SuppressWarnings("unchecked")
+    private Long createRefundNote(AaefTransactionMapper.ResolvedInvoice resolved,
+                                  java.math.BigDecimal amount, String reason) {
+        // QA Bloque BJ: el approverComment es necesario cuando la NC supera 30%
+        // del saldo (HU-AR-07 E2). Para reembolsos AAEF lo poblamos automaticamente
+        // porque AgroFusion ya autorizo la devolucion del lado del orquestador.
+        String approverComment = "Autorizacion automatica AAEF (HU-INT-RF-05 E5). "
+                + "El reembolso fue aprobado por AgroFusion antes de transmitir el lote.";
+        if (resolved.getScope() == AaefTransactionMapper.InvoiceScope.AR) {
+            com.sigcon.backend.accounts_receivable.credit_debit_notes.application.CreateArNoteRequest req =
+                    com.sigcon.backend.accounts_receivable.credit_debit_notes.application.CreateArNoteRequest.builder()
+                            .invoiceId(resolved.getId())
+                            .noteType("CREDIT")
+                            .amount(amount)
+                            .reason(reason)
+                            .approverComment(approverComment)
+                            .build();
+            org.springframework.http.ResponseEntity<?> resp = arNoteService.createNote(req);
+            return extractJournalEntryIdFromResponse(resp);
+        } else {
+            com.sigcon.backend.invoices.ap_notes.application.CreateApNoteRequest req =
+                    com.sigcon.backend.invoices.ap_notes.application.CreateApNoteRequest.builder()
+                            .invoiceId(resolved.getId())
+                            .noteType("CREDIT")
+                            .amount(amount)
+                            .reason(reason)
+                            .build();
+            org.springframework.http.ResponseEntity<?> resp = apNoteService.createNote(req);
+            return extractJournalEntryIdFromResponse(resp);
+        }
+    }
+
+    /**
+     * QA Bloque BJ (HU-INT-RF-05 E4 bonus, 2026-05-18): crea ajuste contable
+     * via ArNote/ApNote. Devuelve journalEntryId del asiento generado.
+     */
+    private Long createAdjustmentNote(AaefTransactionMapper.ResolvedInvoice resolved,
+                                      java.math.BigDecimal amount, String reason,
+                                      String noteType) {
+        String approverComment = "Autorizacion automatica AAEF (HU-INT-RF-05 E4). "
+                + "Ajuste contable validado por AgroFusion antes de transmitir el lote.";
+        if (resolved.getScope() == AaefTransactionMapper.InvoiceScope.AR) {
+            com.sigcon.backend.accounts_receivable.credit_debit_notes.application.CreateArNoteRequest req =
+                    com.sigcon.backend.accounts_receivable.credit_debit_notes.application.CreateArNoteRequest.builder()
+                            .invoiceId(resolved.getId())
+                            .noteType(noteType)
+                            .amount(amount)
+                            .reason(reason)
+                            .approverComment(approverComment)
+                            .build();
+            org.springframework.http.ResponseEntity<?> resp = arNoteService.createNote(req);
+            return extractJournalEntryIdFromResponse(resp);
+        } else {
+            com.sigcon.backend.invoices.ap_notes.application.CreateApNoteRequest req =
+                    com.sigcon.backend.invoices.ap_notes.application.CreateApNoteRequest.builder()
+                            .invoiceId(resolved.getId())
+                            .noteType(noteType)
+                            .amount(amount)
+                            .reason(reason)
+                            .build();
+            org.springframework.http.ResponseEntity<?> resp = apNoteService.createNote(req);
+            return extractJournalEntryIdFromResponse(resp);
+        }
+    }
+
+    /**
+     * Extrae el journalEntryId del ResponseEntity devuelto por ArNoteService/ApNoteService.
+     * Si el service retorna 4xx (validacion), lanza IllegalStateException para que el
+     * catch externo lo convierta en transfer FAILED.
+     *
+     * <p>El body tiene formato {@code {message, data: ArNoteDTO/ApNoteDTO}}. Cuando se
+     * invoca el service via Java directo (no JSON), {@code data} es el DTO Object — usamos
+     * reflection para leer {@code getJournalEntryId()} sin acoplar el tipo concreto.
+     */
+    @SuppressWarnings("unchecked")
+    private Long extractJournalEntryIdFromResponse(org.springframework.http.ResponseEntity<?> resp) {
+        if (!resp.getStatusCode().is2xxSuccessful()) {
+            Object body = resp.getBody();
+            String msg = "Error creando nota AAEF: HTTP " + resp.getStatusCode();
+            if (body instanceof java.util.Map) {
+                java.util.Map<String, Object> m = (java.util.Map<String, Object>) body;
+                Object errMsg = m.get("message");
+                if (errMsg != null) msg = String.valueOf(errMsg);
+            }
+            throw new IllegalStateException(msg);
+        }
+        Object body = resp.getBody();
+        if (body instanceof java.util.Map) {
+            java.util.Map<String, Object> m = (java.util.Map<String, Object>) body;
+            Object data = m.get("data");
+            if (data == null) return null;
+            if (data instanceof java.util.Map) {
+                java.util.Map<String, Object> d = (java.util.Map<String, Object>) data;
+                Object jeId = d.get("journalEntryId");
+                if (jeId instanceof Number) return ((Number) jeId).longValue();
+            } else {
+                // data es ArNoteDTO/ApNoteDTO Object -> reflection
+                try {
+                    java.lang.reflect.Method getter = data.getClass().getMethod("getJournalEntryId");
+                    Object jeId = getter.invoke(data);
+                    if (jeId instanceof Number) return ((Number) jeId).longValue();
+                } catch (Exception e) {
+                    log.warn("No se pudo leer journalEntryId del DTO {}: {}",
+                            data.getClass().getSimpleName(), e.getMessage());
+                }
+            }
+        }
+        return null;
     }
 }

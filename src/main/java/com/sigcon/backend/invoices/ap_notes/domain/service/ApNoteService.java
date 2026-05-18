@@ -291,6 +291,7 @@ public class ApNoteService {
                 .noteNumber(note.getNoteNumber())
                 .amount(note.getAmount())
                 .reason(note.getReason())
+                .journalEntryId(note.getJournalEntryId())
                 .build();
     }
 }

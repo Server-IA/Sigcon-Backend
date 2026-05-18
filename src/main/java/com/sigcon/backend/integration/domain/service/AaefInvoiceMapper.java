@@ -167,6 +167,12 @@ public class AaefInvoiceMapper {
                 }
                 // AAEF v1.1: resolver override de accounting_account si viene en la linea
                 Long[] accOverride = resolveAccountOverride(l);
+                // AAEF QA Bloque BJ (HU-INT-RF-04 E1, 2026-05-18): calcular IVA y
+                // retencion desde Tax[] de la linea. Esto pasa por override al
+                // SalesInvoiceService para que NO invoque SalesTaxEngine (que
+                // requiere taxRuleIds locales del tenant). Antes la factura
+                // AAEF con TotalVAT $19k quedaba con total_tax=0.
+                BigDecimal[] taxSplit = splitLineTaxes(l);
                 lines.add(CreateSalesInvoiceLineRequest.builder()
                         .description(
                                 l.getDescription() != null
@@ -177,9 +183,18 @@ public class AaefInvoiceMapper {
                         .discount(BigDecimal.ZERO)
                         .accountDebitOverride(accOverride[0])
                         .accountCreditOverride(accOverride[1])
+                        .taxAmountOverride(taxSplit[0])
+                        .withholdingAmountOverride(taxSplit[1])
                         .build());
             }
         }
+
+        // Fallback (HU-INT-RF-04 E1): si las lineas no traen Tax[] pero
+        // Totals.TotalVAT > 0, distribuir el IVA total entre las lineas
+        // proporcionalmente al subtotal de cada una. Igual para retenciones.
+        // Esto cubre el caso donde AgroFusion solo manda los totales agregados
+        // (sin Tax[] por linea) y el subtotal cuadra con la suma de lineas.
+        applyAggregateTotalsFallback(lines, totals);
 
         if (lines.isEmpty()) {
             throw new AaefMappingException(
@@ -589,5 +604,115 @@ public class AaefInvoiceMapper {
 
     private BigDecimal safe(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
+    }
+
+    /**
+     * AAEF QA Bloque BJ (HU-INT-RF-04 E1, 2026-05-18): separa los Tax[] de una
+     * linea en [taxAmount, withholdingAmount] segun el TaxType.
+     *
+     * <p>Tipos catalogados:
+     * <ul>
+     *   <li>IVA, VAT, ICA -> tax (impuesto generado, suma al subtotal)</li>
+     *   <li>RTE_FTE, RTE_IVA, RTE_ICA -> withholding (retencion practicada, resta)</li>
+     * </ul>
+     *
+     * @return arreglo {@code [tax, withholding]}, ambos {@code BigDecimal.ZERO} si la
+     *         linea no trae {@code Taxes[]} o todos son null
+     */
+    private BigDecimal[] splitLineTaxes(AaefInvoiceDTO.Line line) {
+        BigDecimal tax = BigDecimal.ZERO;
+        BigDecimal withholding = BigDecimal.ZERO;
+        // Sin Tax[] = sin overrides; permitir que fallback agregue desde Totals.
+        if (line == null || line.getTaxes() == null || line.getTaxes().isEmpty()) {
+            return new BigDecimal[]{null, null};
+        }
+        for (AaefInvoiceDTO.Tax t : line.getTaxes()) {
+            if (t == null || t.getAmount() == null) continue;
+            String type = t.getTaxType() == null ? "" : t.getTaxType().trim().toUpperCase(java.util.Locale.ROOT);
+            BigDecimal amt = t.getAmount();
+            if (type.equals("IVA") || type.equals("VAT") || type.equals("ICA")) {
+                tax = tax.add(amt);
+            } else if (type.startsWith("RTE_") || type.equals("RETE_FUENTE")
+                    || type.equals("RETE_IVA") || type.equals("RETE_ICA")) {
+                withholding = withholding.add(amt);
+            } else {
+                // Heuristica: si rate baja (<10%) probable retencion
+                if (t.getRate() != null && t.getRate().compareTo(new BigDecimal("10")) < 0) {
+                    withholding = withholding.add(amt);
+                } else {
+                    tax = tax.add(amt);
+                }
+            }
+        }
+        // Si no se calculo nada via Tax[] pero el flag amount es 0, devolver null para que el
+        // motor SalesTaxEngine resuelva via taxRuleIds (comportamiento original).
+        if (tax.compareTo(BigDecimal.ZERO) == 0 && withholding.compareTo(BigDecimal.ZERO) == 0) {
+            return new BigDecimal[]{null, null};
+        }
+        return new BigDecimal[]{tax, withholding};
+    }
+
+    /**
+     * AAEF QA Bloque BJ (HU-INT-RF-04 E1, 2026-05-18): fallback cuando AgroFusion
+     * solo manda totales agregados (Totals.TotalVAT > 0) pero las lineas no
+     * traen Taxes[] por linea. Distribuye el IVA y la retencion entre las
+     * lineas proporcionalmente al subtotal de cada una.
+     *
+     * <p>Solo se aplica si las lineas TODAVIA no tienen overrides populados
+     * (es decir, taxAmountOverride == null Y withholdingAmountOverride == null
+     * en TODAS las lineas). Esto evita doble conteo cuando AgroFusion ya envio
+     * Tax[] por linea.
+     *
+     * <p>Si las lineas vienen con Tax[] populados (caso preferido), no se
+     * toca nada y el motor respeta los valores por linea.
+     */
+    private void applyAggregateTotalsFallback(List<CreateSalesInvoiceLineRequest> lines,
+                                              AaefInvoiceDTO.Totals totals) {
+        if (totals == null || lines == null || lines.isEmpty()) return;
+        BigDecimal vat = safe(totals.getTotalVAT());
+        BigDecimal wh = safe(totals.getTotalWithholdings());
+        if (vat.compareTo(BigDecimal.ZERO) == 0 && wh.compareTo(BigDecimal.ZERO) == 0) return;
+
+        // Si CUALQUIER linea ya tiene override populado, asumimos que Tax[] vino por linea
+        boolean anyOverride = lines.stream().anyMatch(l ->
+                l.getTaxAmountOverride() != null || l.getWithholdingAmountOverride() != null);
+        if (anyOverride) return;
+
+        // Distribuir proporcionalmente al subtotal de cada linea
+        BigDecimal sumSubtotal = BigDecimal.ZERO;
+        for (CreateSalesInvoiceLineRequest l : lines) {
+            BigDecimal q = safe(l.getQuantity());
+            BigDecimal u = safe(l.getUnitPrice());
+            BigDecimal d = safe(l.getDiscount());
+            sumSubtotal = sumSubtotal.add(q.multiply(u).subtract(d));
+        }
+        if (sumSubtotal.compareTo(BigDecimal.ZERO) <= 0) {
+            // No se puede distribuir proporcional; asignar todo a la primera linea
+            lines.get(0).setTaxAmountOverride(vat);
+            lines.get(0).setWithholdingAmountOverride(wh);
+            return;
+        }
+        BigDecimal totalDistVat = BigDecimal.ZERO;
+        BigDecimal totalDistWh = BigDecimal.ZERO;
+        for (int i = 0; i < lines.size(); i++) {
+            CreateSalesInvoiceLineRequest l = lines.get(i);
+            BigDecimal q = safe(l.getQuantity());
+            BigDecimal u = safe(l.getUnitPrice());
+            BigDecimal d = safe(l.getDiscount());
+            BigDecimal lineSub = q.multiply(u).subtract(d);
+            if (i == lines.size() - 1) {
+                // Ultima linea: redondear ajustando para que suma exacta
+                l.setTaxAmountOverride(vat.subtract(totalDistVat));
+                l.setWithholdingAmountOverride(wh.subtract(totalDistWh));
+            } else {
+                BigDecimal proportion = lineSub.divide(sumSubtotal, 8, java.math.RoundingMode.HALF_UP);
+                BigDecimal lineVat = vat.multiply(proportion).setScale(2, java.math.RoundingMode.HALF_UP);
+                BigDecimal lineWh = wh.multiply(proportion).setScale(2, java.math.RoundingMode.HALF_UP);
+                l.setTaxAmountOverride(lineVat);
+                l.setWithholdingAmountOverride(lineWh);
+                totalDistVat = totalDistVat.add(lineVat);
+                totalDistWh = totalDistWh.add(lineWh);
+            }
+        }
     }
 }

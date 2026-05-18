@@ -283,10 +283,26 @@ public class SalesInvoiceService {
         BigDecimal subtotal = grossTotal.subtract(discount);
         if (subtotal.compareTo(BigDecimal.ZERO) < 0) subtotal = BigDecimal.ZERO;
 
-        // AR-13 + AR-04: calcular IVA y retencion sobre la base
-        SalesTaxEngine.TaxCalculationResult calc = salesTaxEngine.calculate(subtotal, req.getTaxRuleIds());
+        // AAEF QA Bloque BJ (HU-INT-RF-04 E1, 2026-05-18): si la linea trae
+        // overrides de IVA/retencion (mapper AAEF), persistir esos montos
+        // directos en lugar de invocar SalesTaxEngine. Esto evita que AAEF
+        // necesite resolver tax_rule_id por tenant (varia por empresa). Antes
+        // las facturas AAEF con TotalVAT > 0 quedaban con total_tax=0 porque
+        // no traen taxRuleIds.
+        BigDecimal taxAmount;
+        BigDecimal withholdingAmount;
+        if (req.getTaxAmountOverride() != null || req.getWithholdingAmountOverride() != null) {
+            taxAmount = req.getTaxAmountOverride() != null ? req.getTaxAmountOverride() : BigDecimal.ZERO;
+            withholdingAmount = req.getWithholdingAmountOverride() != null
+                    ? req.getWithholdingAmountOverride() : BigDecimal.ZERO;
+        } else {
+            // AR-13 + AR-04: calcular IVA y retencion sobre la base via motor tributario
+            SalesTaxEngine.TaxCalculationResult calc = salesTaxEngine.calculate(subtotal, req.getTaxRuleIds());
+            taxAmount = calc.tax;
+            withholdingAmount = calc.withholding;
+        }
 
-        BigDecimal total = subtotal.add(calc.tax).subtract(calc.withholding);
+        BigDecimal total = subtotal.add(taxAmount).subtract(withholdingAmount);
 
         Assets item = null;
         if (req.getItemId() != null) {
@@ -301,8 +317,8 @@ public class SalesInvoiceService {
                 .unitPrice(unitPrice)
                 .discount(discount)
                 .subtotal(subtotal)
-                .taxAmount(calc.tax)
-                .withholdingAmount(calc.withholding)
+                .taxAmount(taxAmount)
+                .withholdingAmount(withholdingAmount)
                 .total(total)
                 // AAEF v1.1: persistir overrides PUC si vienen del mapper
                 .accountDebitOverride(req.getAccountDebitOverride())

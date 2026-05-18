@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -107,6 +108,78 @@ public class AaefValidatorService {
         }
 
         return errors;
+    }
+
+    /**
+     * QA Bloque BJ (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18): genera
+     * warnings INFORMATIVOS que NO bloquean el procesamiento.
+     *
+     * <p>Casos detectados:
+     * <ul>
+     *   <li>HU-INT-RF-02 E5: factura sin campo {@code UpdatedAt}. La HU pide
+     *       procesar normalmente pero advertir al cliente.</li>
+     *   <li>HU-INT-RF-03 E4: {@code DocumentId} duplicado dentro del mismo lote.
+     *       La HU pide procesar una sola vez e informar que el duplicado fue
+     *       detectado y omitido. El procesador async usa la misma deteccion para
+     *       skip de duplicados.</li>
+     * </ul>
+     *
+     * @param batch lote a inspeccionar (asume validacion estructural previa OK)
+     * @return lista de strings con advertencias legibles (vacia si no hay warnings)
+     */
+    public List<String> collectWarnings(AaefBatchRequest batch) {
+        List<String> warnings = new ArrayList<>();
+        if (batch == null) return warnings;
+
+        // RF-02 E5: invoices sin UpdatedAt
+        // RF-03 E4: DocumentId duplicado intra-batch
+        Set<String> seenInvoiceIds = new HashSet<>();
+        if (batch.getInvoices() != null) {
+            for (int i = 0; i < batch.getInvoices().size(); i++) {
+                JsonNode node = batch.getInvoices().get(i);
+                if (node == null) continue;
+                String docId = readText(node, "Header", "DocumentId");
+                if (docId != null && !seenInvoiceIds.add(docId)) {
+                    warnings.add("Factura con DocumentId='" + docId + "' aparece duplicada "
+                            + "dentro del lote. Solo se procesara la primera ocurrencia; "
+                            + "el duplicado se omitira (HU-INT-RF-03 E4).");
+                }
+                if (readText(node, "Header", "UpdatedAt") == null) {
+                    String ref = docId != null ? docId : ("[indice " + i + "]");
+                    warnings.add("Factura " + ref + " no tiene campo Header.UpdatedAt. "
+                            + "Se procesa de todos modos pero AgroFusion deberia incluir "
+                            + "la fecha de ultima actualizacion para trazabilidad (HU-INT-RF-02 E5).");
+                }
+            }
+        }
+
+        // RF-03 E4 aplicado tambien a transactions
+        Set<String> seenTxIds = new HashSet<>();
+        if (batch.getTransactions() != null) {
+            for (int i = 0; i < batch.getTransactions().size(); i++) {
+                JsonNode node = batch.getTransactions().get(i);
+                if (node == null) continue;
+                JsonNode docIdNode = node.get("DocumentId");
+                String docId = docIdNode != null && !docIdNode.isNull() ? docIdNode.asText() : null;
+                if (docId != null && !seenTxIds.add(docId)) {
+                    warnings.add("Transaccion con DocumentId='" + docId + "' aparece duplicada "
+                            + "dentro del lote. Solo se procesara la primera ocurrencia; "
+                            + "el duplicado se omitira (HU-INT-RF-03 E4).");
+                }
+            }
+        }
+
+        return warnings;
+    }
+
+    /** Helper para leer un campo anidado del JsonNode. Retorna null si no existe. */
+    private String readText(JsonNode root, String... path) {
+        JsonNode current = root;
+        for (String p : path) {
+            if (current == null) return null;
+            current = current.get(p);
+        }
+        return current == null || current.isNull() ? null : current.asText();
     }
 
     private boolean isBlank(String s) {

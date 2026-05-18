@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * DTO de respuesta para exponer un lote AAEF almacenado (consultas internas y frontend).
@@ -47,4 +48,17 @@ public class IntegrationBatchDTO {
     private LocalDateTime ackSentAt;
     private Integer ackRetryCount;
     private String errorMessage;
+
+    /**
+     * QA Bloque BJ (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18): warnings
+     * informativos detectados durante la recepcion del lote. Cubre los casos:
+     * <ul>
+     *   <li>Factura sin {@code Header.UpdatedAt} (RF-02 E5)</li>
+     *   <li>{@code DocumentId} duplicado dentro del mismo lote (RF-03 E4)</li>
+     * </ul>
+     * No bloquean el procesamiento; el lote se acepta con HTTP 202.
+     */
+    @com.fasterxml.jackson.annotation.JsonInclude(
+            com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+    private List<String> warnings;
 }

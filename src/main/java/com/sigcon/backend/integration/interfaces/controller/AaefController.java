@@ -141,6 +141,15 @@ public class AaefController {
             body.put("batchId", saved.getId());
             body.put("status", saved.getStatus());
             body.put("receivedAt", saved.getReceivedAt());
+            // QA Bloque BJ (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18):
+            // exponer warnings informativos (UpdatedAt ausente, DocumentId
+            // duplicado intra-batch) cuando los haya. La HU pide
+            // "Procesa + advertencia": el lote se acepta con 202 pero la
+            // respuesta incluye las advertencias para que AgroFusion las
+            // muestre al usuario o las loguee.
+            if (saved.getWarnings() != null && !saved.getWarnings().isEmpty()) {
+                body.put("warnings", saved.getWarnings());
+            }
             return ResponseEntity.accepted().body(body);
 
         } catch (AaefReceiverService.ValidationException e) {

@@ -56,6 +56,9 @@ public class IntegrationAdminController {
     private final JwtAuditService jwtAuditService;
     // Spec AAEF Bloque W: scheduler de retencion 5 anios.
     private final com.sigcon.backend.integration.domain.service.IntegrationRetentionScheduler retentionScheduler;
+    // QA Bloque BM (2026-05-18): admin endpoints prod-ready.
+    private final com.sigcon.backend.parametrization.parameters.domain.repository.ParameterRepository parameterRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Operation(
         summary = "Inspeccionar configuracion JWT actualmente cacheada",
@@ -206,5 +209,192 @@ public class IntegrationAdminController {
     @PreAuthorize("hasAnyAuthority('PERM_VIEW_INTEGRATION','TEMP_PERM_VIEW_INTEGRATION','TEMP_VIEW_INTEGRATION','PERM_INT.LOTES.VER','TEMP_PERM_INT.LOTES.VER','TEMP_INT.LOTES.VER','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> runRetention() {
         return ResponseEntity.ok(retentionScheduler.runRetentionManually());
+    }
+
+    // ===================================================================
+    // QA Bloque BM (2026-05-18): Gestion configuracion AAEF prod-ready
+    // ===================================================================
+
+    /**
+     * Lista de parametros AAEF que se exponen en el dashboard. Cada uno marca
+     * si es seguro mostrar su valor (config publica) o si requiere ocultar
+     * todo excepto el sufijo (API Keys).
+     */
+    private static final java.util.Map<String, Boolean> AAEF_PARAMS = java.util.Map.ofEntries(
+            java.util.Map.entry("AGROFUSION_AUTH_MODE", true),
+            java.util.Map.entry("AGROFUSION_API_KEY", false),
+            java.util.Map.entry("AGROFUSION_API_KEY_TEST", false),
+            java.util.Map.entry("AGROFUSION_JWT_ENABLED", true),
+            java.util.Map.entry("AGROFUSION_JWT_ISSUER", true),
+            java.util.Map.entry("AGROFUSION_JWKS_URL", true),
+            java.util.Map.entry("AGROFUSION_JWT_SCOPE_REQUIRED", true),
+            java.util.Map.entry("AGROFUSION_ACK_CALLBACK_URL", true),
+            java.util.Map.entry("AGROFUSION_ACK_RETRY_MAX_ATTEMPTS", true),
+            java.util.Map.entry("AGROFUSION_ACK_RETRY_INITIAL_DELAY_SECONDS", true),
+            java.util.Map.entry("AGROFUSION_MAX_BATCH_SIZE_MB", true),
+            java.util.Map.entry("AGROFUSION_RETENTION_YEARS", true)
+    );
+
+    @Operation(
+        summary = "Estado integral de la integracion AAEF (configuracion + indicadores prod-ready)",
+        description = "Devuelve un snapshot completo de la configuracion AAEF: parametros, mocks "
+                    + "cargados o no, URLs apuntando a localhost vs prod, presencia de API Key "
+                    + "robusta vs placeholder. Util para QA y operaciones antes de un go-live. "
+                    + "Los valores de API Keys se muestran enmascarados (solo ultimos 8 chars).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Snapshot de configuracion AAEF"),
+        @ApiResponse(responseCode = "401", description = "No autenticado"),
+        @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
+    })
+    @GetMapping(value = "/aaef-status", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    public ResponseEntity<?> getAaefStatus() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        // Parametros
+        Map<String, Object> params = new LinkedHashMap<>();
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        for (Map.Entry<String, Boolean> entry : AAEF_PARAMS.entrySet()) {
+            String name = entry.getKey();
+            boolean publico = entry.getValue();
+            String value = parameterRepository.findGlobalValueByName(name).orElse(null);
+            if (value == null) {
+                params.put(name, java.util.Map.of("present", false, "value", null));
+                warnings.add("Parametro '" + name + "' NO existe en BD");
+            } else {
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("present", true);
+                if (publico) {
+                    info.put("value", value);
+                } else {
+                    info.put("value", maskSecret(value));
+                    info.put("length", value.length());
+                }
+                params.put(name, info);
+                // Validaciones prod-readiness
+                if (value.toLowerCase().contains("localhost") || value.toLowerCase().contains("mock")) {
+                    warnings.add("Parametro '" + name + "' apunta a localhost/mock (NO valido en prod): "
+                            + (publico ? value : "[oculto]"));
+                }
+                if (value.startsWith("changeme-")) {
+                    warnings.add("Parametro '" + name + "' tiene placeholder 'changeme-' (rotar antes de prod).");
+                }
+            }
+        }
+        body.put("parameters", params);
+
+        // Estado de mocks
+        Map<String, Object> mocks = new LinkedHashMap<>();
+        boolean mockIdpLoaded = isBeanLoaded("mockIdpController");
+        boolean mockAgroLoaded = isBeanLoaded("mockAgroFusionController");
+        mocks.put("mockIdpController", mockIdpLoaded);
+        mocks.put("mockAgroFusionController", mockAgroLoaded);
+        if (mockIdpLoaded || mockAgroLoaded) {
+            warnings.add("Mocks AAEF CARGADOS (SIGCON_INTEGRATION_MOCKS_ENABLED=true). NO usar en prod.");
+        }
+        body.put("mocksLoaded", mocks);
+
+        // Indicador prod-ready
+        body.put("productionReady", warnings.isEmpty());
+        body.put("warnings", warnings);
+        body.put("inspectedAt", Instant.now().toString());
+        return ResponseEntity.ok(body);
+    }
+
+    @Operation(
+        summary = "Rotar API Key de AAEF (genera nueva clave aleatoria de 64 chars)",
+        description = "Genera una nueva API Key segura usando SecureRandom (64 chars "
+                    + "alfanumericos). Actualiza el parametro en BD. La nueva clave se "
+                    + "devuelve UNA SOLA VEZ en la respuesta (despues se enmascara). "
+                    + "Path param 'type': PROD (AGROFUSION_API_KEY) o TEST "
+                    + "(AGROFUSION_API_KEY_TEST). Debe coordinarse con AgroFusion: "
+                    + "(1) admin rota -> obtiene nueva key, (2) entrega manualmente a "
+                    + "AgroFusion via canal seguro, (3) AgroFusion actualiza su config.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Key rotada exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Tipo invalido"),
+        @ApiResponse(responseCode = "401", description = "No autenticado"),
+        @ApiResponse(responseCode = "403", description = "Falta ROLE_ADMIN")
+    })
+    @PostMapping(value = "/aaef-status/rotate-api-key", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyAuthority('PLATFORM_ADMIN','ROLE_ADMIN')")
+    public ResponseEntity<?> rotateApiKey(
+            @Parameter(description = "PROD o TEST", example = "PROD", required = true)
+            @RequestParam(name = "type") String type) {
+        String paramName;
+        if ("PROD".equalsIgnoreCase(type)) {
+            paramName = "AGROFUSION_API_KEY";
+        } else if ("TEST".equalsIgnoreCase(type)) {
+            paramName = "AGROFUSION_API_KEY_TEST";
+        } else {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                    "success", false,
+                    "error", "Tipo invalido. Use PROD o TEST."));
+        }
+
+        // Generar nueva key segura
+        String newKey = generateSecureApiKey(type.toUpperCase());
+
+        // Actualizar BD via JdbcTemplate (parametros AAEF son globales, no tenant-scoped)
+        int updated = jdbcTemplate.update(
+                "UPDATE parameters SET value = ?, updated_at = NOW() WHERE name = ? AND deleted_at IS NULL",
+                newKey, paramName);
+
+        if (updated == 0) {
+            // El parametro no existia (raro) - crearlo. Usa company_id=1 como global por convencion.
+            jdbcTemplate.update(
+                    "INSERT INTO parameters (name, value, category, status, company_id, created_at, updated_at) "
+                    + "VALUES (?, ?, 'INTEGRATION_AGROFUSION', 'ACTIVE', 1, NOW(), NOW())",
+                    paramName, newKey);
+        }
+
+        log.info("IntegrationAdminController: API Key {} rotada por admin (tipo={}, len={})",
+                paramName, type, newKey.length());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("parameterName", paramName);
+        body.put("newApiKey", newKey);
+        body.put("rotatedAt", Instant.now().toString());
+        body.put("warning", "Esta es la UNICA vez que la nueva clave se muestra en claro. "
+                + "Copiela y compartala con AgroFusion por canal seguro. "
+                + "El proximo lote AAEF que llegue con la key ANTERIOR sera rechazado (401).");
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Genera una API Key segura de 64 chars alfanumericos usando SecureRandom.
+     * Formato: {prefix}-{64chars}. El prefix indica si es PROD o TEST para
+     * facilitar auditoria visual.
+     */
+    private String generateSecureApiKey(String type) {
+        java.security.SecureRandom rng = new java.security.SecureRandom();
+        String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        StringBuilder sb = new StringBuilder();
+        sb.append("SIGCON-AAEF-").append(type).append("-");
+        for (int i = 0; i < 64; i++) {
+            sb.append(alphabet.charAt(rng.nextInt(alphabet.length())));
+        }
+        return sb.toString();
+    }
+
+    /** Enmascara un valor de API Key: muestra solo los ultimos 8 chars precedidos de "..." */
+    private String maskSecret(String value) {
+        if (value == null || value.length() <= 8) return "***";
+        return "..." + value.substring(value.length() - 8);
+    }
+
+    /**
+     * Verifica si un bean esta cargado en el contexto Spring. Util para
+     * detectar si los MockController estan activos (no deben en prod).
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationContext applicationContext;
+
+    private boolean isBeanLoaded(String beanName) {
+        try {
+            return applicationContext.containsBean(beanName);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

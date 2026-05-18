@@ -119,10 +119,25 @@ public class BatchQueryService {
         resp.put("ackSentAt", batch.getAckSentAt());
         resp.put("ackRetryCount", batch.getAckRetryCount());
         resp.put("errorMessage", batch.getErrorMessage());
+        // QA Bloque BK (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18):
+        // exponer warnings persistidos para que la UI los muestre.
+        resp.put("warnings", parseWarnings(batch.getWarningsJson()));
         resp.put("transfers", transfers.stream()
                 .map(IntegrationTransferDTO::from)
                 .collect(Collectors.toList()));
         return resp;
+    }
+
+    /** Deserializa el JSON array TEXT a List<String>. Robusto a NULL y JSON malformado. */
+    private List<String> parseWarnings(String json) {
+        if (json == null || json.isBlank()) return java.util.Collections.emptyList();
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper m =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            return m.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return java.util.Collections.emptyList();
+        }
     }
 
     /** HU-INT-RF-14 E3: recupera el payload JSON original del lote. */

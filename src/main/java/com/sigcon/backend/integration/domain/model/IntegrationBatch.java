@@ -178,6 +178,15 @@ public class IntegrationBatch {
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
 
+    /**
+     * QA Bloque BK (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18): warnings
+     * informativos detectados en la recepcion (UpdatedAt ausente, DocumentId
+     * duplicado intra-batch). Almacenados como JSON array de strings para
+     * persistir entre el response 202 y la consulta posterior del batch en UI.
+     */
+    @Column(name = "warnings", columnDefinition = "TEXT")
+    private String warningsJson;
+
     // ---------- Auditoria ----------
 
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")

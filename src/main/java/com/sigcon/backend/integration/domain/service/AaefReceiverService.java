@@ -55,6 +55,8 @@ public class AaefReceiverService {
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final CompanyRepository companyRepository;
+    /** QA Bloque BK (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18): audit log warnings. */
+    private final com.sigcon.backend.audit.domain.service.AuditPublisher auditPublisher;
 
     /**
      * Recibe, valida, chequea idempotencia y persiste un lote AAEF.
@@ -71,6 +73,12 @@ public class AaefReceiverService {
         if (!errors.isEmpty()) {
             throw new ValidationException(errors);
         }
+
+        // QA Bloque BJ (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18): recolectar
+        // warnings informativos (UpdatedAt ausente, DocumentId duplicados intra-batch).
+        // NO bloquean el procesamiento — solo se notifican en la respuesta del
+        // endpoint y se persisten en el batch para que el QA/Soporte pueda verlos.
+        List<String> warnings = validator.collectWarnings(batch);
 
         AaefMetadataDTO meta = batch.getMetadata();
         String exchangeId = meta.getExchangeId();
@@ -126,6 +134,16 @@ public class AaefReceiverService {
 
         // 4. Persistir batch
         AaefSummaryDTO summary = batch.getSummary();
+        // QA Bloque BK (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18):
+        // serializar warnings a JSON para guardarlos en la columna TEXT.
+        String warningsJson = null;
+        if (warnings != null && !warnings.isEmpty()) {
+            try {
+                warningsJson = objectMapper.writeValueAsString(warnings);
+            } catch (JsonProcessingException e) {
+                log.warn("No se pudo serializar warnings del batch {}: {}", exchangeId, e.getMessage());
+            }
+        }
         IntegrationBatch entity = IntegrationBatch.builder()
                 .exchangeId(exchangeId)
                 .standardVersion(version)
@@ -149,6 +167,7 @@ public class AaefReceiverService {
                 .currency(summary != null ? summary.getCurrency() : null)
                 .status(BatchStatus.RECEIVED)
                 .payloadJson(payloadJson)
+                .warningsJson(warningsJson)
                 .build();
 
         entity = batchRepository.save(entity);
@@ -171,7 +190,31 @@ public class AaefReceiverService {
         // async DESPUES de que esta transaccion se haya comiteado.
         eventPublisher.publishEvent(new BatchReceivedEvent(this, entity.getId()));
 
-        return toDTO(entity);
+        // QA Bloque BK (HU-INT-RF-02 E5 + HU-INT-RF-03 E4, 2026-05-18): emitir
+        // audit log MEDIUM por cada warning detectado para trazabilidad forense.
+        // El admin contable puede consultarlos despues en /auditoria/logs.
+        if (warnings != null && !warnings.isEmpty()) {
+            try {
+                auditPublisher.publish(
+                        com.sigcon.backend.audit.domain.model.enums.AuditAction.CREATE,
+                        com.sigcon.backend.audit.domain.model.enums.AuditModule.INT,
+                        com.sigcon.backend.audit.domain.model.enums.AuditSeverity.MEDIUM,
+                        "IntegrationBatch",
+                        entity.getId(),
+                        "Lote AAEF " + exchangeId + " aceptado con " + warnings.size()
+                                + " warning(s): " + String.join(" | ", warnings),
+                        null, null, null);
+            } catch (Exception ex) {
+                log.warn("No se pudo registrar audit log de warnings para batch {}: {}",
+                        entity.getId(), ex.getMessage());
+            }
+        }
+
+        // QA Bloque BJ (HU-INT-RF-02 E5 + HU-INT-RF-03 E4): adjuntar warnings al DTO
+        // de respuesta. El controller los serializa en el body del 202 RECEIVED.
+        IntegrationBatchDTO dto = toDTO(entity);
+        dto.setWarnings(warnings);
+        return dto;
     }
 
     /** Consulta un batch por id (usado en endpoint de estado - HU-INT-RF-09). */
