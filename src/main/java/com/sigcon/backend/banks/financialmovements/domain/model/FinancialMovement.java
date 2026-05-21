@@ -81,6 +81,49 @@ public class FinancialMovement {
     @JoinColumn(name = "reconciliation_session_id")
     private BankReconciliationSession reconciliationSession;
 
+    // BNK-HU-035 (ampliacion) E7 / BNK-HU-023 E13: hash SHA-256 por linea para
+    // prevenir duplicados internos (fecha + descripcion + monto + referencia + linea).
+    @Column(name = "line_hash", length = 64)
+    private String lineHash;
+
+    // BNK-HU-035 E6 / BNK-HU-023 E7: hash SHA-256 del archivo origen importado.
+    @Column(name = "import_file_hash", length = 64)
+    private String importFileHash;
+
+    // BNK-HU-068: pre-procesamiento (normalización + extracción + clasificación).
+    @Column(name = "descripcion_normalizada", length = 500)
+    private String descripcionNormalizada;
+
+    @Column(name = "numero_cheque", length = 40)
+    private String numeroCheque;
+
+    @Column(name = "nit_detectado", length = 20)
+    private String nitDetectado;
+
+    @Column(name = "tipo_movimiento", length = 40)
+    private String tipoMovimiento;
+
+    @Column(name = "clasificacion_confianza")
+    private Integer clasificacionConfianza;
+
+    @Column(name = "cuenta_puc_sugerida", length = 20)
+    private String cuentaPucSugerida;
+
+    // BNK-HU-069: estado de conciliación del movimiento.
+    // NO_CONCILIADO | EN_REVISION | CONCILIADO (el estado PENDIENTE de libros se mapea a NO_CONCILIADO).
+    @Column(name = "estado_conciliacion", length = 20)
+    private String estadoConciliacion;
+
+    // BNK-HU-076 E2: almacenamiento dual para cuentas en moneda extranjera (NIC 21).
+    // amount = monto en MONEDA ORIGINAL (el motor de matching opera sobre este, HU-076 E3).
+    // monto_funcional = equivalente en COP usando la TRM de la fecha del movimiento.
+    // trm_aplicada = valor de la TRM usada para convertir. Para cuentas COP: trm=1, funcional=amount.
+    @Column(name = "monto_funcional", precision = 20, scale = 2)
+    private BigDecimal montoFuncional;
+
+    @Column(name = "trm_aplicada", precision = 18, scale = 6)
+    private BigDecimal trmAplicada;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -90,6 +133,7 @@ public class FinancialMovement {
     @PrePersist
     protected void onCreate() {
         if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (this.estadoConciliacion == null) this.estadoConciliacion = "NO_CONCILIADO";
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;

@@ -23,6 +23,18 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
     /** Ultimo registro insertado (para obtener previous_hash). */
     Optional<AuditLog> findTopByOrderByIdDesc();
 
+    /**
+     * BNK-HU-065: lectura cruda de TODA la cadena para verificacion de integridad.
+     * Query NATIVO: bypasea el @Filter de tenant (la verificacion es global). Ordena
+     * por empresa y luego por id, de modo que cada cadena por tenant queda contigua
+     * y en orden de insercion. Columnas: id, company_id, previous_hash, hash,
+     * timestamp, action, entity_type, entity_id, user_id.
+     */
+    @Query(value = "SELECT id, company_id, previous_hash, hash, timestamp, action, "
+            + "entity_type, entity_id, user_id FROM audit_logs "
+            + "ORDER BY company_id ASC NULLS FIRST, id ASC", nativeQuery = true)
+    List<Object[]> findAllForIntegrityCheck();
+
     /** Ultimos N eventos para el dashboard. */
     List<AuditLog> findTop10ByOrderByTimestampDesc();
 

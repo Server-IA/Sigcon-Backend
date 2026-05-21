@@ -108,8 +108,8 @@ public class JournalEntryExportService {
             ReportHeaderBuilder.ReportContext headerCtx = reportContextResolver
                     .baseContext("Comprobante contable " + voucherCode)
                     .addFilter("Fecha del asiento", entry.getEntryDate() != null ? entry.getEntryDate().format(DATE_FMT) : "-")
-                    .addFilter("Estado", entry.getStatus() != null ? entry.getStatus().name() : "-")
-                    .addFilter("Modulo origen", entry.getSourceModule() != null ? entry.getSourceModule().name() : "-")
+                    .addFilter("Estado", entry.getStatus() != null ? entry.getStatus().toLabelEs() : "-")
+                    .addFilter("Modulo origen", entry.getSourceModule() != null ? sourceModuleLabelEs(entry.getSourceModule().name()) : "-")
                     .addTotal("Total Debito", sumD0)
                     .addTotal("Total Credito", sumC0)
                     .build();
@@ -121,10 +121,10 @@ public class JournalEntryExportService {
             head.addCell(headCell("Fecha"));
             head.addCell(valueCell(entry.getEntryDate() != null ? entry.getEntryDate().format(DATE_FMT) : "-"));
             head.addCell(headCell("Estado"));
-            head.addCell(valueCell(entry.getStatus() != null ? entry.getStatus().name() : "-"));
+            head.addCell(valueCell(entry.getStatus() != null ? entry.getStatus().toLabelEs() : "-"));
 
             head.addCell(headCell("Modulo origen"));
-            head.addCell(valueCell(entry.getSourceModule() != null ? entry.getSourceModule().name() : "-"));
+            head.addCell(valueCell(entry.getSourceModule() != null ? sourceModuleLabelEs(entry.getSourceModule().name()) : "-"));
             head.addCell(headCell("Anio fiscal"));
             head.addCell(valueCell(entry.getFiscalYear() != null ? entry.getFiscalYear().toString() : "-"));
 
@@ -264,8 +264,8 @@ public class JournalEntryExportService {
             ReportHeaderBuilder.ReportContext xlsxCtx = reportContextResolver
                     .baseContext("Comprobante contable " + voucherCode)
                     .addFilter("Fecha del asiento", entry.getEntryDate() != null ? entry.getEntryDate().format(DATE_FMT) : "-")
-                    .addFilter("Estado", entry.getStatus() != null ? entry.getStatus().name() : "-")
-                    .addFilter("Modulo origen", entry.getSourceModule() != null ? entry.getSourceModule().name() : "-")
+                    .addFilter("Estado", entry.getStatus() != null ? entry.getStatus().toLabelEs() : "-")
+                    .addFilter("Modulo origen", entry.getSourceModule() != null ? sourceModuleLabelEs(entry.getSourceModule().name()) : "-")
                     .addFilter("Anio fiscal", entry.getFiscalYear() != null ? entry.getFiscalYear().toString() : "-")
                     .addFilter("Descripcion del asiento", safe(entry.getDescription(), "-"))
                     .addTotal("Total Debito", sumDp)
@@ -379,5 +379,116 @@ public class JournalEntryExportService {
 
     private static Cell valueCell(String text) {
         return new Cell().add(new Paragraph(text).setFontSize(9));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // HU-CG-02B E3 (QA 2026-05-19): Exportacion masiva del listado
+    // de comprobantes filtrados. Reutiliza SimpleTableExporter.
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Exporta la lista de comprobantes recibida (ya filtrada) en CSV o XLSX.
+     *
+     * <p>El JSON detallado por linea no se incluye en este export (eso lo
+     * cubre el export por comprobante individual). Aqui solo van campos
+     * identitarios + totales para soporte de auditoria del listado.</p>
+     *
+     * @param entries lista filtrada (de {@code findFilteredAsList})
+     * @param format  "csv" o "xlsx"
+     * @return contenido binario y nombre sugerido
+     */
+    public ListExportResult exportListing(
+            java.util.List<com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO> entries,
+            String format) {
+        java.math.BigDecimal sumDeb = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal sumCre = java.math.BigDecimal.ZERO;
+        for (var d : entries) {
+            if (d.getTotalDebit() != null) sumDeb = sumDeb.add(d.getTotalDebit());
+            if (d.getTotalCredit() != null) sumCre = sumCre.add(d.getTotalCredit());
+        }
+
+        ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Listado de Comprobantes Contables")
+                .addFilter("Total comprobantes", String.valueOf(entries.size()))
+                .addTotal("Total Debitos", sumDeb)
+                .addTotal("Total Creditos", sumCre)
+                .build();
+
+        java.util.List<String> headers = java.util.List.of("ID", "# Comprobante",
+                "Fecha", "Descripcion", "Estado", "Modulo Origen",
+                "Total Debito", "Total Credito");
+        java.util.List<java.util.function.Function<
+                com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO,
+                Object>> cols = new java.util.ArrayList<>();
+        cols.add(d -> d.getId());
+        cols.add(d -> d.getVoucherCode() != null ? d.getVoucherCode()
+                : ("JE-" + (d.getFiscalYear() != null ? d.getFiscalYear() : "?")
+                    + "-" + (d.getEntryNumber() != null ? d.getEntryNumber() : "?")));
+        cols.add(d -> d.getEntryDate() != null ? d.getEntryDate().toString() : "");
+        cols.add(d -> d.getDescription());
+        // QA Bloque BP (HU-CG-02B export): traducir status a espanol
+        // (Borrador / Contabilizado / Reversado) en lugar de DRAFT/POSTED/REVERSED.
+        cols.add(d -> com.sigcon.backend.general.accounting.journal.domain.model.enums
+                .JournalEntryStatus.labelOf(d.getStatus()));
+        // QA Bloque BP (consistencia): traducir modulo origen a etiqueta legible
+        // en espanol (Cuentas por Pagar / Bancos / etc.) en lugar de AP/BNK/AR.
+        cols.add(d -> sourceModuleLabelEs(d.getSourceModule()));
+        cols.add(d -> d.getTotalDebit() != null ? d.getTotalDebit().doubleValue() : 0d);
+        cols.add(d -> d.getTotalCredit() != null ? d.getTotalCredit().doubleValue() : 0d);
+
+        java.util.List<Object> totalsRow = java.util.List.of("TOTAL",
+                "(" + entries.size() + " comprobantes)", "", "", "", "",
+                sumDeb.doubleValue(), sumCre.doubleValue());
+
+        String fmt = format != null ? format.toLowerCase() : "csv";
+        byte[] data;
+        String mime;
+        String fileName;
+        if ("xlsx".equals(fmt)) {
+            data = com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx("Comprobantes", headers, cols, entries, ctx, totalsRow);
+            mime = com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME;
+            fileName = "Comprobantes.xlsx";
+        } else if ("csv".equals(fmt)) {
+            data = com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toCsv(headers, cols, entries, ctx, totalsRow);
+            mime = com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+            fileName = "Comprobantes.csv";
+        } else {
+            throw new IllegalArgumentException("Formato no soportado: " + format
+                    + ". Use csv o xlsx.");
+        }
+        return new ListExportResult(data, fileName, mime);
+    }
+
+    /**
+     * QA Bloque BP (HU-CG-02B export): mapea el codigo de modulo origen a su
+     * etiqueta humana en espanol. Devuelve el codigo original si no se
+     * reconoce (defensivo).
+     */
+    private static String sourceModuleLabelEs(String code) {
+        if (code == null) return "";
+        switch (code) {
+            case "CG":     return "Contabilidad General";
+            case "AP":     return "Cuentas por Pagar";
+            case "AR":     return "Cuentas por Cobrar";
+            case "BNK":    return "Bancos y Cajas";
+            case "ACT":    return "Activos";
+            case "NOM":    return "Nomina";
+            case "INT":    return "Integracion AAEF";
+            case "MANUAL": return "Manual";
+            default:       return code;
+        }
+    }
+
+    public static final class ListExportResult {
+        public final byte[] content;
+        public final String fileName;
+        public final String mime;
+        public ListExportResult(byte[] content, String fileName, String mime) {
+            this.content = content;
+            this.fileName = fileName;
+            this.mime = mime;
+        }
     }
 }

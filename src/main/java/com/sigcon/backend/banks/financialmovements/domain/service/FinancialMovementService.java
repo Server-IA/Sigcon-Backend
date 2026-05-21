@@ -87,6 +87,12 @@ public class FinancialMovementService {
     private final JournalEntryService journalEntryService;
     private final JournalEntryRepository journalEntryRepository;
     private final AuditPublisher auditPublisher;
+    // BNK-HU-062/063: conservar el extracto/CSV importado con hash + retención.
+    private final com.sigcon.backend.banks.archivos_soporte.domain.service.ArchivoSoporteService archivoSoporteService;
+    // BNK-HU-068: pre-procesamiento automático tras la importación.
+    private final com.sigcon.backend.banks.matching.domain.service.PreprocessingService preprocessingService;
+    // BNK-HU-076 E2: conversión dual (monto_funcional + trm_aplicada) para cuentas en moneda extranjera.
+    private final com.sigcon.backend.banks.trm.domain.service.TrmService trmService;
 
     private final UserUtil userUtil;
 
@@ -185,6 +191,8 @@ public class FinancialMovementService {
                 .reconciliationSession(session)
                 .build();
 
+        // BNK-HU-076 E2: si la cuenta es en moneda extranjera, calcula monto_funcional + trm_aplicada.
+        trmService.aplicarTrm(entity);
         financialMovementRepository.save(entity);
         auditPublisher.publishCreate(AuditModule.BNK, "FinancialMovement", entity.getId(), "FinancialMovement creado id=" + entity.getId());
 
@@ -228,10 +236,34 @@ public class FinancialMovementService {
         BankAccount account = assertBankAccount(bankAccountId, user);
         BankReconciliationSession session = resolveSessionForCreate(bankAccountId, user, reconciliationSessionId);
 
+        // BNK-HU-035 (ampliacion) E6: hash SHA-256 del archivo completo + bloqueo de
+        // re-importacion de archivo identico (mismo tratamiento que BNK-HU-023 E7/E8).
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("No se pudo leer el archivo: " + ex.getMessage());
+        }
+        String fileHash = sha256Hex(bytes);
+        if (financialMovementRepository.existsByBankAccount_IdAndImportFileHash(bankAccountId, fileHash)) {
+            FinancialMovement prev = financialMovementRepository
+                    .findFirstByBankAccount_IdAndImportFileHashOrderByIdAsc(bankAccountId, fileHash).orElse(null);
+            String detalle = prev != null
+                    ? " (importado el " + (prev.getCreatedAt() != null ? prev.getCreatedAt().toLocalDate() : "?")
+                        + (prev.getReconciliationSession() != null ? ", sesion " + prev.getReconciliationSession().getId() : "") + ")"
+                    : "";
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+                    Optional.of("BNK-CON-002: Este archivo ya fue importado" + detalle
+                            + ". No se procesa nuevamente.")));
+        }
+
         int imported = 0;
+        int duplicadosOmitidos = 0;
+        List<Integer> lineasDuplicadas = new ArrayList<>();
         List<String> errors = new ArrayList<>();
 
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                new java.io.ByteArrayInputStream(bytes), StandardCharsets.UTF_8))) {
             String line;
             int lineNo = 0;
             while ((line = br.readLine()) != null) {
@@ -266,8 +298,6 @@ public class FinancialMovementService {
                         amtRaw = "0" + amtRaw;
                     }
 
-                    System.out.println("amtRaw: " + amtRaw);
-
                     BigDecimal amt = new BigDecimal(amtRaw);
                     // Movimientos con importe cero no tienen sentido contable, se omiten
                     if (amt.compareTo(BigDecimal.ZERO) == 0) {
@@ -277,6 +307,20 @@ public class FinancialMovementService {
                     String desc = p.length > 2 ? nullIfBlank(p[2]) : null;
                     String ref = p.length > 3 ? nullIfBlank(p[3]) : null;
 
+                    // BNK-HU-035 E7: hash por linea sobre el CONTENIDO del movimiento
+                    // (fecha + descripcion + monto + referencia). NO se incluye el numero
+                    // de linea para que el dedup funcione entre importaciones distintas
+                    // (omitir un movimiento ya cargado aunque venga en otro archivo/posicion).
+                    // Limitacion documentada: dos transacciones reales identicas en
+                    // fecha/monto/desc/ref colapsan (el banco no provee saldo corrido por linea).
+                    String lineHash = sha256Hex((d + "|" + (desc == null ? "" : desc) + "|" + amt.toPlainString()
+                            + "|" + (ref == null ? "" : ref)).getBytes(StandardCharsets.UTF_8));
+                    if (financialMovementRepository.existsByBankAccount_IdAndLineHash(bankAccountId, lineHash)) {
+                        duplicadosOmitidos++;
+                        lineasDuplicadas.add(lineNo);
+                        continue;
+                    }
+
                     FinancialMovement mov = FinancialMovement.builder()
                             .bankAccount(account)
                             .movementDate(d)
@@ -285,7 +329,11 @@ public class FinancialMovementService {
                             .externalReference(ref)
                             .sourceType(FinancialMovementSourceType.BANK_IMPORT)
                             .reconciliationSession(session)
+                            .lineHash(lineHash)
+                            .importFileHash(fileHash)
                             .build();
+                    // BNK-HU-076 E2: conversión dual para cuentas en moneda extranjera.
+                    trmService.aplicarTrm(mov);
                     financialMovementRepository.save(mov);
                     imported++;
                 } catch (Exception ex) {
@@ -296,12 +344,58 @@ public class FinancialMovementService {
             throw new IllegalArgumentException("No se pudo leer el archivo: " + ex.getMessage());
         }
 
+        // BNK-HU-035: auditar la importacion con detalle (mapea accion IMPORTAR -> CREATE por R5).
+        auditPublisher.publishCreate(AuditModule.BNK, "FinancialMovement", account.getId(),
+                "IMPORTAR CSV cuenta=" + bankAccountId + " | importados=" + imported
+                        + " | duplicados_omitidos=" + duplicadosOmitidos + " | hash=" + fileHash);
+
+        // BNK-HU-062 E1/E2 + BNK-HU-063 E1: conservar el archivo original del extracto
+        // con hash SHA-256 y retención 10 años. Defensivo: no rompe el import si falla.
+        try {
+            archivoSoporteService.store(bytes,
+                    file.getOriginalFilename() != null ? file.getOriginalFilename() : "extracto.csv",
+                    file.getContentType() != null ? file.getContentType() : "text/csv",
+                    "CSV_MOVIMIENTOS", bankAccountId,
+                    session != null ? session.getId() : null,
+                    user != null ? user.getId() : null);
+        } catch (RuntimeException ex) {
+            log.warn("BNK-HU-062: no se pudo conservar el soporte del extracto: {}", ex.getMessage());
+        }
+
+        // BNK-HU-068 E1: pre-procesamiento automático tras la importación
+        // (normaliza + extrae referencias + clasifica por reglas). Defensivo.
+        try {
+            preprocessingService.preprocessAccount(bankAccountId);
+        } catch (RuntimeException ex) {
+            log.warn("BNK-HU-068: pre-procesamiento automático falló: {}", ex.getMessage());
+        }
+
         Map<String, Object> payload = new HashMap<>();
         payload.put("imported", imported);
+        payload.put("duplicadosOmitidos", duplicadosOmitidos);
+        payload.put("lineasDuplicadas", lineasDuplicadas);
+        payload.put("hashSha256", fileHash);
         payload.put("errors", errors);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-                Optional.of("Importacion finalizada."),
+                Optional.of("Importacion finalizada. Importados: " + imported
+                        + ", duplicados omitidos: " + duplicadosOmitidos + "."),
                 Optional.of(payload)));
+    }
+
+    /** BNK-HU-035 E6/E7: SHA-256 en hexadecimal (64 chars) de un arreglo de bytes. */
+    private static String sha256Hex(byte[] data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : digest) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 no disponible", e);
+        }
     }
 
     /**

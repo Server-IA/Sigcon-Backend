@@ -117,4 +117,14 @@ public class BankAccountDTO {
 
     @Schema(description = "Indica si la cuenta tiene chequeras o movimientos asociados (frontend deshabilita campos criticos)")
     private Boolean hasAssociatedAccounts;
+
+    // BNK-HU-001 (ampliacion) E5/E6.
+    @Schema(description = "BNK-HU-001 E5: la cuenta esta sujeta al GMF 4x1000")
+    private Boolean aplicaGmf;
+
+    @Schema(description = "BNK-HU-001 E5: accounting_accounts.id para contabilizar el GMF")
+    private Long cuentaGmfPucId;
+
+    @Schema(description = "BNK-HU-001 E6: equivalente de efectivo segun NIC 7")
+    private Boolean esEquivalenteEfectivo;
 }

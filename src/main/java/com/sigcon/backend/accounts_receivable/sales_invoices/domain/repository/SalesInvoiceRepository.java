@@ -56,6 +56,12 @@ public interface SalesInvoiceRepository
     List<SalesInvoice> findByInvoiceDateBetween(@Param("startDate") LocalDate startDate,
                                                  @Param("endDate") LocalDate endDate);
 
+    /** BNK-HU-078 E1: facturas de venta pendientes de cobro en una ventana de fechas. */
+    @Query("SELECT s FROM SalesInvoice s WHERE s.balanceDue > 0 "
+         + "AND s.invoiceDate BETWEEN :from AND :to "
+         + "AND s.status NOT IN ('VOIDED','DRAFT') AND s.deletedAt IS NULL")
+    List<SalesInvoice> findPendingBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
     /** AR-05: listado por estado y rango de fechas. */
     @Query("SELECT s FROM SalesInvoice s WHERE s.status = :status "
          + "AND s.invoiceDate BETWEEN :startDate AND :endDate AND s.deletedAt IS NULL")

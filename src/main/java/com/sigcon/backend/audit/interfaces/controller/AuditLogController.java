@@ -43,6 +43,8 @@ public class AuditLogController {
 
     private final AuditLogService auditLogService;
     private final AuditExportService exportService;
+    // BNK-HU-065: verificacion de integridad de la cadena de hashes.
+    private final com.sigcon.backend.audit.domain.service.AuditIntegrityService integrityService;
 
     @Operation(
         summary = "Listar logs paginados (HU-AU-05 base)",
@@ -300,5 +302,39 @@ public class AuditLogController {
             err.put("message", "No se pudo generar el reporte en el formato solicitado");
             return ResponseEntity.status(500).body(err);
         }
+    }
+
+    @Operation(summary = "Verificar integridad del log de auditoria (BNK-HU-065 E5)",
+               description = "Recorre la cadena de hashes y valida encadenamiento + recalculo de contenido. "
+                       + "Devuelve OK o RUPTURA con el detalle del primer registro inconsistente.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Resultado de la verificacion"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PostMapping("/verify-integrity")
+    public ResponseEntity<?> verifyIntegrity() {
+        String user = "system";
+        try {
+            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) user = auth.getName();
+        } catch (Exception ignored) {}
+        var r = integrityService.verifyAndRecord("MANUAL", user);
+        Map<String, Object> body = new HashMap<>();
+        body.put("result", r.result());
+        body.put("totalVerified", r.totalVerified());
+        body.put("firstBrokenId", r.firstBrokenId());
+        body.put("chainBreaks", r.chainBreaks());
+        body.put("contentMismatches", r.contentMismatches());
+        body.put("durationMs", r.durationMs());
+        body.put("detail", r.detail());
+        return ResponseEntity.ok(body);
+    }
+
+    @Operation(summary = "Historial de verificaciones de integridad (BNK-HU-065 E4)")
+    @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @GetMapping("/integrity/history")
+    public ResponseEntity<?> integrityHistory() {
+        return ResponseEntity.ok(integrityService.history());
     }
 }

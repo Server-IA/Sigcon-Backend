@@ -93,7 +93,12 @@ public class AuditLogService {
             severity = ruleSeverity != null ? ruleSeverity : resolveDefaultSeverity(action);
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        // BNK-HU-065 (2026-05-20): truncar a microsegundos ANTES de calcular el hash.
+        // PostgreSQL almacena timestamp con precision de microsegundos; si se hashea
+        // con nanosegundos el hash deja de ser reproducible al releer (la verificacion
+        // de integridad daria falsa ruptura). Truncar aqui hace la cadena verificable
+        // por recalculo. El encadenamiento (previous_hash) ya era verificable.
+        LocalDateTime now = LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
 
         // HU-AU-09 E2 (2026-04-28): si llega journalEntryId, validar que exista.
         // Antes era una FK logica sin verificacion: cualquier id (o uno borrado)

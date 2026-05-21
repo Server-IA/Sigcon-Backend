@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.sigcon.backend.general.accounting.books.domain.service.AccountingBookExportService;
 import com.sigcon.backend.general.accounting.books.domain.service.AccountingBookPdfService;
 import com.sigcon.backend.general.accounting.books.domain.service.AccountingBookService;
 
@@ -35,6 +36,7 @@ public class AccountingBookController {
 
     private final AccountingBookService accountingBookService;
     private final AccountingBookPdfService accountingBookPdfService;
+    private final AccountingBookExportService accountingBookExportService;
 
     // ─────────────────────────────────────────────────────
     // Libro Diario
@@ -263,5 +265,108 @@ public class AccountingBookController {
                         "inline; filename=Auxiliar_" + accountId + "_" + year + "_"
                                 + String.format("%02d", month) + ".pdf")
                 .body(pdf);
+    }
+
+    // ─────────────────────────────────────────────────────
+    // QA Bloque BP: exportacion Excel/CSV de libros oficiales.
+    // HU-CG-14 E5 (Libro Diario) y HU-CG-15 E5 (Libro Mayor): Nicolas
+    // reporto que no existia opcion de export. PDF ya estaba, faltaban
+    // CSV/XLSX. Cada export deja evento EXPORT en auditoria.
+    // ─────────────────────────────────────────────────────
+
+    @GetMapping("/diario/export/{format}")
+    @Operation(summary = "Exportar Libro Diario a CSV o Excel",
+            description = "HU-CG-14 E5: exporta el Libro Diario del periodo en CSV o XLSX. "
+                    + "Una fila por linea de asiento con totales. Para PDF usar /diario/pdf.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado"),
+            @ApiResponse(responseCode = "400", description = "Formato invalido"),
+            @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportLibroDiario(@org.springframework.web.bind.annotation.PathVariable String format,
+                                                 @RequestParam Integer year,
+                                                 @RequestParam Integer month) {
+        try {
+            AccountingBookExportService.ExportResult r = accountingBookExportService
+                    .exportLibroDiario(year, month, format);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"" + r.fileName + "\"")
+                    .contentType(MediaType.parseMediaType(r.mime))
+                    .body(r.content);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/mayor/export/{format}")
+    @Operation(summary = "Exportar Libro Mayor a CSV o Excel",
+            description = "HU-CG-15 E5: exporta el Libro Mayor del periodo en CSV o XLSX. "
+                    + "Permite filtro opcional por accountId. Para PDF usar /mayor/pdf.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportLibroMayor(@org.springframework.web.bind.annotation.PathVariable String format,
+                                                @RequestParam Integer year,
+                                                @RequestParam Integer month,
+                                                @RequestParam(required = false) Long accountId) {
+        try {
+            AccountingBookExportService.ExportResult r = accountingBookExportService
+                    .exportLibroMayor(year, month, accountId, format);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"" + r.fileName + "\"")
+                    .contentType(MediaType.parseMediaType(r.mime))
+                    .body(r.content);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/balance-comprobacion/export/{format}")
+    @Operation(summary = "Exportar Balance de Comprobacion a CSV o Excel",
+            description = "HU-CG-16 E3: exporta el Balance de Comprobacion del periodo en CSV o XLSX.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportBalanceComprobacion(
+            @org.springframework.web.bind.annotation.PathVariable String format,
+            @RequestParam Integer year,
+            @RequestParam Integer month) {
+        try {
+            AccountingBookExportService.ExportResult r = accountingBookExportService
+                    .exportBalanceComprobacion(year, month, format);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"" + r.fileName + "\"")
+                    .contentType(MediaType.parseMediaType(r.mime))
+                    .body(r.content);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/auxiliares/export/{format}")
+    @Operation(summary = "Exportar Auxiliar de cuenta a CSV o Excel",
+            description = "Exporta el detalle de movimientos con saldo acumulado en CSV o XLSX.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportAuxiliares(
+            @org.springframework.web.bind.annotation.PathVariable String format,
+            @RequestParam Integer year,
+            @RequestParam Integer month,
+            @RequestParam Long accountId) {
+        try {
+            AccountingBookExportService.ExportResult r = accountingBookExportService
+                    .exportAuxiliar(year, month, accountId, format);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"" + r.fileName + "\"")
+                    .contentType(MediaType.parseMediaType(r.mime))
+                    .body(r.content);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
     }
 }

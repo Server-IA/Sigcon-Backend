@@ -2,15 +2,21 @@ package com.sigcon.backend.general.accounting.statements.interfaces.controller;
 
 import java.util.Map;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sigcon.backend.general.accounting.statements.application.ComparativeRequest;
 import com.sigcon.backend.general.accounting.statements.application.StatementRequest;
+import com.sigcon.backend.general.accounting.statements.domain.service.FinancialStatementExportService;
 import com.sigcon.backend.general.accounting.statements.domain.service.FinancialStatementService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,6 +42,7 @@ import lombok.RequiredArgsConstructor;
 public class FinancialStatementController {
 
     private final FinancialStatementService financialStatementService;
+    private final FinancialStatementExportService exportService;
 
     // ─────────────────────────────────────────────────────
     // Balance General
@@ -159,5 +166,121 @@ public class FinancialStatementController {
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // ─────────────────────────────────────────────────────
+    // QA Bloque BP - Exportacion (PDF / Excel / CSV) HU-CG-09 E5,
+    // HU-CG-10 E5, HU-CG-11 E4, HU-CG-18 E5, HU-CG-13 E4.
+    // Cada export tambien registra evento EXPORT en auditoria
+    // (HU-CG-09 E6, HU-CG-10 E6).
+    // ─────────────────────────────────────────────────────
+
+    @GetMapping("/balance-general/export/{format}")
+    @Operation(summary = "Exportar Balance General",
+            description = "HU-CG-09 E5: descarga el Balance General en formato CSV/XLSX/PDF "
+                    + "con encabezado de empresa, totales y auditoria EXPORT registrada.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado"),
+            @ApiResponse(responseCode = "400", description = "Formato invalido"),
+            @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportBalanceGeneral(@PathVariable String format,
+                                                    @RequestParam Integer year,
+                                                    @RequestParam Integer month) {
+        try {
+            FinancialStatementExportService.ExportResult r =
+                    exportService.exportBalanceGeneral(year, month, format);
+            return buildDownload(r);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/estado-resultados/export/{format}")
+    @Operation(summary = "Exportar Estado de Resultados",
+            description = "HU-CG-10 E5: descarga el Estado de Resultados en CSV/XLSX/PDF.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado"),
+            @ApiResponse(responseCode = "400", description = "Formato invalido")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportEstadoResultados(@PathVariable String format,
+                                                      @RequestParam Integer year,
+                                                      @RequestParam Integer month) {
+        try {
+            FinancialStatementExportService.ExportResult r =
+                    exportService.exportEstadoResultados(year, month, format);
+            return buildDownload(r);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/flujo-efectivo/export/{format}")
+    @Operation(summary = "Exportar Flujo de Efectivo",
+            description = "HU-CG-11 E4: descarga el Flujo de Efectivo (NIC 7) en CSV/XLSX/PDF.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportFlujoEfectivo(@PathVariable String format,
+                                                   @RequestParam Integer year,
+                                                   @RequestParam Integer month) {
+        try {
+            FinancialStatementExportService.ExportResult r =
+                    exportService.exportFlujoEfectivo(year, month, format);
+            return buildDownload(r);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/cambios-patrimonio/export/{format}")
+    @Operation(summary = "Exportar Estado de Cambios en el Patrimonio",
+            description = "HU-CG-18: descarga el Estado de Cambios en el Patrimonio en CSV/XLSX/PDF.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportCambiosPatrimonio(@PathVariable String format,
+                                                       @RequestParam Integer year,
+                                                       @RequestParam Integer month) {
+        try {
+            FinancialStatementExportService.ExportResult r =
+                    exportService.exportCambiosPatrimonio(year, month, format);
+            return buildDownload(r);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/comparativo/export/{format}")
+    @Operation(summary = "Exportar Balance Comparativo entre dos periodos",
+            description = "HU-CG-13 E4: descarga el reporte comparativo en CSV/XLSX/PDF.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportComparativo(@PathVariable String format,
+                                                 @RequestParam Integer year1,
+                                                 @RequestParam Integer month1,
+                                                 @RequestParam Integer year2,
+                                                 @RequestParam Integer month2) {
+        try {
+            FinancialStatementExportService.ExportResult r =
+                    exportService.exportComparativo(year1, month1, year2, month2, format);
+            return buildDownload(r);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private ResponseEntity<byte[]> buildDownload(FinancialStatementExportService.ExportResult r) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + r.fileName + "\"")
+                .contentType(MediaType.parseMediaType(r.mime))
+                .body(r.content);
     }
 }

@@ -201,7 +201,9 @@ public class JournalEntryController {
             jakarta.servlet.http.HttpServletRequest httpRequest) {
         try {
             String createdBy = authentication != null ? authentication.getName() : "SYSTEM";
-            JournalEntryDTO result = journalEntryService.reverseEntry(id, request.getDescription(), createdBy);
+            boolean withDraft = Boolean.TRUE.equals(request.getCreateCorrectionDraft());
+            JournalEntryDTO result = journalEntryService.reverseEntry(
+                    id, request.getDescription(), createdBy, withDraft);
             // HU-CG-08B E6: bitacora enriquecida con usuario+rol+IP+motivo+JE original/reversa
             String roles = authentication != null && authentication.getAuthorities() != null
                     ? authentication.getAuthorities().stream()
@@ -435,6 +437,45 @@ public class JournalEntryController {
                     .body(body);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
+        }
+    }
+
+    /**
+     * HU-CG-02B E3 (QA 2026-05-19): exportacion masiva del listado de
+     * comprobantes filtrados. Recibe en el body el mismo DataTableRequest
+     * del listado y devuelve CSV o XLSX con todos los registros filtrados.
+     */
+    @PostMapping("/export/{format}")
+    @Operation(summary = "Exportar listado completo de comprobantes",
+            description = "HU-CG-02B E3: descarga la lista completa de comprobantes que "
+                    + "cumplen los filtros del DataTable en formato CSV o XLSX. PDF por "
+                    + "comprobante individual usa /{id}/pdf.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archivo generado"),
+            @ApiResponse(responseCode = "400", description = "Formato no soportado")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportListing(@org.springframework.web.bind.annotation.PathVariable String format,
+                                            @RequestBody DataTableRequest request) {
+        try {
+            var entries = journalEntryService.findFilteredAsList(request);
+            JournalEntryExportService.ListExportResult result =
+                    journalEntryExportService.exportListing(entries, format);
+            // Audit EXPORT lista
+            try {
+                auditPublisher.publish(AuditAction.EXPORT, AuditModule.CG,
+                        AuditSeverity.LOW, "JournalEntry", null,
+                        "Export listado de comprobantes formato=" + format
+                                + " filas=" + entries.size(), null, null, null);
+            } catch (RuntimeException ignored) { /* audit no rompe */ }
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + result.fileName + "\"")
+                    .contentType(MediaType.parseMediaType(result.mime))
+                    .body(result.content);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(),
+                    "message", e.getMessage(), "msg", e.getMessage()));
         }
     }
 

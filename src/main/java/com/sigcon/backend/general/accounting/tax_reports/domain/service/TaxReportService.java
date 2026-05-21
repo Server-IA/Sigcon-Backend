@@ -56,6 +56,42 @@ public class TaxReportService {
     private final CurrencyTypeRepository currencyTypeRepository;
     private final ExchangeRateRepository exchangeRateRepository;
 
+    /**
+     * Audit publisher opcional - HU-CG-12 E3 / HU-CG-31..34 (registrar
+     * generacion y exportacion de reportes tributarios).
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.audit.domain.service.AuditPublisher auditPublisher;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.utils.export.ReportContextResolver reportContextResolver;
+
+    private void publishViewAudit(String reportType, String period, int rows) {
+        if (auditPublisher == null) return;
+        try {
+            auditPublisher.publish(
+                    com.sigcon.backend.audit.domain.model.enums.AuditAction.VIEW,
+                    com.sigcon.backend.audit.domain.model.enums.AuditModule.CG,
+                    com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                    "TaxReport", null,
+                    "Generacion " + reportType + " " + period + " filas=" + rows,
+                    null, null, null);
+        } catch (RuntimeException ignored) { /* audit no debe romper */ }
+    }
+
+    private void publishExportAudit(String reportType, String period, String format, int rows) {
+        if (auditPublisher == null) return;
+        try {
+            auditPublisher.publish(
+                    com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                    com.sigcon.backend.audit.domain.model.enums.AuditModule.CG,
+                    com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                    "TaxReport", null,
+                    "Export " + reportType + " " + period + " formato=" + format
+                            + " filas=" + rows, null, null, null);
+        } catch (RuntimeException ignored) { /* audit no debe romper */ }
+    }
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -144,13 +180,15 @@ public class TaxReportService {
                 .build());
         }
 
-        return EclProvisionReportDTO.builder()
+        EclProvisionReportDTO result = EclProvisionReportDTO.builder()
             .year(year)
             .totalCartera(totalCartera)
             .totalProvision(totalProvision)
             .buckets(buckets)
             .details(new ArrayList<>(byCustomer.values()))
             .build();
+        publishViewAudit("ECL", String.valueOf(year), result.getDetails() != null ? result.getDetails().size() : 0);
+        return result;
     }
 
     /**
@@ -215,7 +253,7 @@ public class TaxReportService {
 
         String label = MONTH_LABELS[startMonth - 1] + "-" + MONTH_LABELS[endMonth - 1];
 
-        return IvaReportDTO.builder()
+        IvaReportDTO result = IvaReportDTO.builder()
             .year(year)
             .bimester(bimester)
             .bimesterLabel(label)
@@ -226,6 +264,8 @@ public class TaxReportService {
             .countFacturasVenta(countFV)
             .countFacturasCompra(countFC)
             .build();
+        publishViewAudit("IVA bimestral", year + "-B" + bimester, countFV + countFC);
+        return result;
     }
 
     // ================================================================
@@ -356,7 +396,7 @@ public class TaxReportService {
             log.debug("Saltando AP en diferencias en cambio: {}", e.getMessage());
         }
 
-        return ExchangeDifferenceReportDTO.builder()
+        ExchangeDifferenceReportDTO result = ExchangeDifferenceReportDTO.builder()
             .year(year)
             .month(month)
             .totalGanancia(totalGanancia)
@@ -364,6 +404,10 @@ public class TaxReportService {
             .diferenciaNeta(totalGanancia.subtract(totalPerdida))
             .items(items)
             .build();
+        publishViewAudit("Diferencias en cambio",
+                year + "-" + String.format("%02d", month),
+                items.size());
+        return result;
     }
 
     /**
@@ -470,7 +514,7 @@ public class TaxReportService {
                 .build());
         }
 
-        return TaxesSummaryDTO.builder()
+        TaxesSummaryDTO result = TaxesSummaryDTO.builder()
             .year(year)
             .totalIvaGenerado(totalIvaGen)
             .totalIvaDescontable(totalIvaDesc)
@@ -479,6 +523,75 @@ public class TaxReportService {
             .totalRetencionesSoportadas(totalRetSop)
             .monthlySummary(monthly)
             .build();
+        publishViewAudit("Resumen impuestos", String.valueOf(year), 12);
+        return result;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // HU-CG-12 E2 (QA 2026-05-19): exportacion CSV/XLSX del Resumen anual
+    // de impuestos y retenciones (insumo para Formulario 350 DIAN).
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Exporta el resumen anual de impuestos en formato CSV o XLSX. Devuelve
+     * el contenido binario listo para que el controller lo entregue como
+     * archivo descargable.
+     *
+     * @param year   anio gravable
+     * @param format "csv" o "xlsx"
+     */
+    public byte[] exportTaxesSummary(Integer year, String format) {
+        TaxesSummaryDTO data = generateTaxesSummary(year);
+
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = null;
+        if (reportContextResolver != null) {
+            ctx = reportContextResolver.baseContext("Resumen Impuestos " + year)
+                    .addFilter("Anio gravable", String.valueOf(year))
+                    .addTotal("Total IVA Generado", data.getTotalIvaGenerado())
+                    .addTotal("Total IVA Descontable", data.getTotalIvaDescontable())
+                    .addTotal("Saldo IVA Anual", data.getSaldoIvaAnual())
+                    .addTotal("Total Retenciones Practicadas", data.getTotalRetencionesPracticadas())
+                    .build();
+        }
+
+        java.util.List<String> headers = java.util.List.of("Mes",
+                "IVA Generado", "IVA Descontable", "Saldo IVA",
+                "Retenciones Practicadas", "Retenciones Soportadas");
+        java.util.List<java.util.function.Function<TaxesSummaryDTO.MonthlyTaxSummaryDTO, Object>> cols
+                = new ArrayList<>();
+        cols.add(m -> m.getMonthLabel());
+        cols.add(m -> nzD(m.getIvaGenerado()));
+        cols.add(m -> nzD(m.getIvaDescontable()));
+        cols.add(m -> nzD(m.getSaldoIva()));
+        cols.add(m -> nzD(m.getRetencionesPracticadas()));
+        cols.add(m -> nzD(m.getRetencionesSoportadas()));
+
+        java.util.List<Object> totalsRow = java.util.List.of("TOTAL ANUAL",
+                nzD(data.getTotalIvaGenerado()),
+                nzD(data.getTotalIvaDescontable()),
+                nzD(data.getSaldoIvaAnual()),
+                nzD(data.getTotalRetencionesPracticadas()),
+                nzD(data.getTotalRetencionesSoportadas()));
+
+        String fmt = format != null ? format.toLowerCase() : "csv";
+        byte[] content;
+        if ("xlsx".equals(fmt)) {
+            content = com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx("ResumenImpuestos " + year, headers, cols,
+                            data.getMonthlySummary(), ctx, totalsRow);
+        } else if ("csv".equals(fmt)) {
+            content = com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toCsv(headers, cols, data.getMonthlySummary(), ctx, totalsRow);
+        } else {
+            throw new IllegalArgumentException("Formato no soportado: " + format
+                    + ". Use csv o xlsx.");
+        }
+        publishExportAudit("Resumen impuestos", String.valueOf(year), fmt, 12);
+        return content;
+    }
+
+    private static double nzD(BigDecimal v) {
+        return v != null ? v.doubleValue() : 0d;
     }
 
     // ================================================================

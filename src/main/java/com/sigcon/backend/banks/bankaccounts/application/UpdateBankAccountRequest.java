@@ -53,6 +53,16 @@ public class UpdateBankAccountRequest {
     @Schema(description = "ID del centro de costo")
     private Long costCenterId;
 
+    // BNK-HU-001 E5/E6 — editables tras creacion (HU-002 los lista como editables).
+    @Schema(description = "BNK-HU-001 E5: la cuenta esta sujeta al GMF 4x1000")
+    private Boolean aplicaGmf;
+
+    @Schema(description = "BNK-HU-001 E5: accounting_accounts.id para GMF. Obligatorio si aplicaGmf=true")
+    private Long cuentaGmfPucId;
+
+    @Schema(description = "BNK-HU-001 E6: equivalente de efectivo segun NIC 7")
+    private Boolean esEquivalenteEfectivo;
+
     @Size(min = 10, message = "El motivo de cambio debe tener al menos 10 caracteres")
     @Schema(description = "Motivo para cambios sensibles (requerido cuando aplica)")
     private String changeReason;

@@ -92,6 +92,16 @@ public class CreateBankAccountRequest {
     @Schema(description = "Si maneja chequeras", example = "false")
     private Boolean handlesCheckbook;
 
+    // BNK-HU-001 (ampliacion) E5/E6.
+    @Schema(description = "BNK-HU-001 E5: la cuenta esta sujeta al GMF 4x1000 (art. 870 ET)", example = "false")
+    private Boolean aplicaGmf;
+
+    @Schema(description = "BNK-HU-001 E5: accounting_accounts.id para contabilizar el GMF (PUC 530525). Obligatorio si aplicaGmf=true")
+    private Long cuentaGmfPucId;
+
+    @Schema(description = "BNK-HU-001 E6: equivalente de efectivo segun NIC 7 (default TRUE)", example = "true")
+    private Boolean esEquivalenteEfectivo;
+
     @Schema(description = "ID del centro de costo (opcional)")
     private Long costCenterId;
 

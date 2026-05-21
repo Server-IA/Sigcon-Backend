@@ -73,6 +73,36 @@ public class DianReportController {
         }
     }
 
+    @GetMapping("/{format}/{year}/pdf")
+    @Operation(
+        summary = "Descargar reporte DIAN en PDF",
+        description = "HU-CG-19 E4: descarga el reporte DIAN indicado como archivo PDF "
+                + "con encabezado de empresa, tabla por tercero y totales."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Archivo PDF generado"),
+        @ApiResponse(responseCode = "400", description = "Formato o anio invalido"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_READ_DIAN_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> downloadPdf(@PathVariable String format, @PathVariable Integer year) {
+        try {
+            DianReportResponse result = dispatch(format, year);
+            byte[] pdf = dianReportService.exportToPdf(result);
+            String filename = "DIAN_" + format + "_" + year + ".pdf";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", filename);
+            headers.setContentLength(pdf.length);
+
+            return new ResponseEntity<>(pdf, headers, 200);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
     @GetMapping("/{format}/{year}/csv")
     @Operation(
         summary = "Descargar reporte DIAN en CSV",

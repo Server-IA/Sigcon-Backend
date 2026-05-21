@@ -90,6 +90,9 @@ public class BankAccountService {
     private final com.sigcon.backend.banks.checks.domain.repository.CheckRepository checkRepository;
     // QA HU-003 E1: validar movimientos antes de eliminar cuenta bancaria.
     private final com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository financialMovementRepository;
+    // BNK-HU-044 (ampliacion) E7: bloquear inactivacion/suspension si hay sesiones
+    // de conciliacion en curso (DRAFT) para la cuenta.
+    private final com.sigcon.backend.banks.reconciliation.domain.repository.BankReconciliationSessionRepository reconciliationSessionRepository;
     private final AuditPublisher auditPublisher;
 
     private final UserUtil userUtil;
@@ -165,6 +168,9 @@ public class BankAccountService {
             return error("BNK-ERR-001", "Ya existe una cuenta registrada con ese número en ese banco");
         }
 
+        // BNK-HU-001 (ampliacion) E5: validar configuracion GMF (cuenta obligatoria si aplica_gmf).
+        Long gmfAccountId = validateGmfConfig(request.getAplicaGmf(), request.getCuentaGmfPucId());
+
         BankAccount entity = BankAccount.builder()
                 .code(request.getCode().trim())
                 .accountNumber(request.getAccountNumber().trim())
@@ -186,6 +192,11 @@ public class BankAccountService {
                 .handlesCheckbook(Boolean.TRUE.equals(request.getHandlesCheckbook()))
                 .costCenter(costCenter)
                 .bookId(request.getBookId())
+                // BNK-HU-001 E5/E6
+                .aplicaGmf(Boolean.TRUE.equals(request.getAplicaGmf()))
+                .cuentaGmfPucId(gmfAccountId)
+                .esEquivalenteEfectivo(request.getEsEquivalenteEfectivo() == null
+                        ? Boolean.TRUE : request.getEsEquivalenteEfectivo())
                 .status(BankAccountStatus.ACTIVA)
                 .createdBy(getCurrentUserId())
                 .build();
@@ -283,6 +294,9 @@ public class BankAccountService {
             return error("BNK-ERR-004", "Saldo mínimo requerido cuando se activan alertas de saldo bajo");
         }
 
+        // BNK-HU-002 (ampliacion) E7: snapshot del estado ANTES de modificar para auditoria.
+        String snapshotAntes = accountSnapshot(account);
+
         account.setAccountName(request.getAccountName().trim());
         account.setAccountExecutive(emptyToNull(request.getAccountExecutive()));
         // account.setBankPhone(emptyToNull(request.getBankPhone()));
@@ -293,6 +307,21 @@ public class BankAccountService {
         account.setMinimumBalance(request.getMinimumBalance());
         account.setUpdatedBy(getCurrentUserId());
 
+        // BNK-HU-001 (ampliacion) E5/E6: edicion de configuracion GMF y equivalente
+        // de efectivo. HU-002 las lista explicitamente como editables aun con movimientos.
+        if (request.getAplicaGmf() != null) {
+            Long gmfId = validateGmfConfig(request.getAplicaGmf(),
+                    request.getCuentaGmfPucId() != null ? request.getCuentaGmfPucId() : account.getCuentaGmfPucId());
+            account.setAplicaGmf(Boolean.TRUE.equals(request.getAplicaGmf()));
+            account.setCuentaGmfPucId(gmfId);
+        } else if (request.getCuentaGmfPucId() != null) {
+            // Cambiar solo la cuenta GMF preservando el flag aplica_gmf actual.
+            account.setCuentaGmfPucId(validateGmfConfig(account.getAplicaGmf(), request.getCuentaGmfPucId()));
+        }
+        if (request.getEsEquivalenteEfectivo() != null) {
+            account.setEsEquivalenteEfectivo(request.getEsEquivalenteEfectivo());
+        }
+
         // QA Bloque AU (2026-05-06) — Bug 1 + Bug 3: tratar 0 como null y
         // NO permitir borrar la asignacion de centro de costo en update
         // (la HU exige preservar la trazabilidad contable).
@@ -302,7 +331,9 @@ public class BankAccountService {
         // Si llega null o 0, mantenemos el costCenter actual sin cambios.
 
         bankAccountRepository.save(account);
-        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount actualizado id=" + account.getId());
+        // BNK-HU-002 E7: auditar con snapshot antes/despues.
+        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(),
+                "Cuenta bancaria actualizada id=" + account.getId(), snapshotAntes, accountSnapshot(account));
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -347,13 +378,15 @@ public class BankAccountService {
         // QA HU-003 E1: validar tambien movimientos financieros y arqueos.
         // Antes solo se chequeaban chequeras y la HU exige bloquear cualquier
         // dependencia transaccional para preservar la auditoria contable.
+        // BNK-HU-003 (ampliacion) E8: diferenciar eliminacion fisica de cierre.
+        // Con movimientos NO se permite borrado fisico; se dirige al flujo Cerrar
+        // cuenta (BNK-HU-044) que conserva el historico. Mensaje literal del Excel.
         long movements = financialMovementRepository.countByBankAccount_Id(id);
         if (movements > 0) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(
-                            Optional.of("La cuenta no puede eliminarse porque tiene "
-                                    + movements + " movimiento(s) financiero(s) asociado(s). "
-                                    + "Se recomienda desactivar la cuenta en lugar de eliminar."))
+                            Optional.of("Esta cuenta tiene movimientos y no puede eliminarse. "
+                                    + "Use Cerrar cuenta para inhabilitarla conservando el histórico"))
             );
         }
 
@@ -496,6 +529,30 @@ public class BankAccountService {
             return error("BNK-ERR-027", "Motivo requerido para este cambio de estado (mínimo 10 caracteres)");
         }
 
+        // BNK-HU-044 (ampliacion) E7: bloquear inactivacion o suspension si hay
+        // sesiones de conciliacion en curso (estado DRAFT) para la cuenta.
+        if (newStatus == BankAccountStatus.INACTIVA || newStatus == BankAccountStatus.SUSPENDIDA) {
+            var sesionesAbiertas = reconciliationSessionRepository
+                    .findByBankAccount_IdOrderByPeriodEndDesc(id).stream()
+                    .filter(s -> s.getStatus() == com.sigcon.backend.banks.reconciliation.domain.model.enums.ReconciliationSessionStatus.DRAFT)
+                    .toList();
+            if (!sesionesAbiertas.isEmpty()) {
+                String accion = newStatus == BankAccountStatus.INACTIVA ? "inactivar" : "suspender";
+                return error("BNK-ERR-034", "No se puede " + accion
+                        + ": la cuenta tiene conciliaciones en proceso. Finalice o anule la sesión "
+                        + sesionesAbiertas.get(0).getId() + " primero.");
+            }
+        }
+
+        // BNK-HU-044 (ampliacion) E8: reactivar desde SUSPENDIDA exige motivo reforzado
+        // (minimo 30 caracteres). El documento adjunto justificativo requiere el
+        // subsistema de archivos_soporte (pendiente de infraestructura).
+        if (account.getStatus() == BankAccountStatus.SUSPENDIDA && newStatus == BankAccountStatus.ACTIVA) {
+            if (!StringUtils.hasText(motivo) || motivo.trim().length() < 30) {
+                return error("BNK-ERR-035", "Para reactivar una cuenta suspendida ingrese un motivo de al menos 30 caracteres (y adjunte el documento justificativo)");
+            }
+        }
+
         // Validaciones especificas para cierre de cuenta
         if (newStatus == BankAccountStatus.CERRADA) {
             if (closingDate == null) {
@@ -516,10 +573,27 @@ public class BankAccountService {
             account.setClosingDate(closingDate);
         }
 
+        BankAccountStatus estadoAnterior = account.getStatus();
         account.setStatus(newStatus);
         account.setUpdatedBy(getCurrentUserId());
         bankAccountRepository.save(account);
-        auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(), "BankAccount actualizado id=" + account.getId());
+
+        // BNK-HU-044 (ampliacion) E10: la transicion a CERRADA deja huella documental
+        // del cierre en el log de auditoria con accion CERRAR (mapeada a UPDATE por R5,
+        // ya que AuditAction no define CERRAR). NO se genera comprobante "Cierre cuenta
+        // bancaria" vacio: el motor JournalEntry exige partida doble no vacia y, al
+        // requerirse saldo=0 para cerrar, no hay movimiento contable que registrar.
+        if (newStatus == BankAccountStatus.CERRADA) {
+            auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(),
+                    "CERRAR cuenta bancaria id=" + account.getId() + " | saldo=0 | motivo="
+                            + (motivo != null ? motivo : "") + " | huella documental de cierre",
+                    "{status=" + estadoAnterior + "}", "{status=CERRADA, closingDate=" + account.getClosingDate() + "}");
+        } else {
+            auditPublisher.publishUpdate(AuditModule.BNK, "BankAccount", account.getId(),
+                    "Estado de cuenta " + estadoAnterior + " -> " + newStatus
+                            + (motivo != null && !motivo.isBlank() ? " | motivo=" + motivo : ""),
+                    "{status=" + estadoAnterior + "}", "{status=" + newStatus + "}");
+        }
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -587,6 +661,37 @@ public class BankAccountService {
         if (accountingAccount.getPucAccount().getAccountClass() != AccountClass.ASSET) {
             throw new IllegalArgumentException("BNK-ERR-002: Cuenta contable no válida para bancos (debe ser clase ACTIVO).");
         }
+        // BNK-HU-001 (ampliacion) E8: refinamiento — la cuenta del PUC debe pertenecer
+        // al grupo 11 (Disponible) dentro de la clase 1 (Activo). Las cuentas bancarias
+        // y cajas usan 1105/1110/11xx. Mensaje literal del Excel.
+        String pucCode = accountingAccount.getPucAccount().getCode();
+        if (pucCode == null || !pucCode.trim().startsWith("11")) {
+            throw new IllegalArgumentException("La cuenta del PUC seleccionada debe ser de clase 11 (Disponible)");
+        }
+    }
+
+    /**
+     * BNK-HU-001 (ampliacion) E5: valida la configuracion de GMF.
+     * Si aplica_gmf = TRUE, cuenta_gmf_puc_id es obligatoria y debe referenciar una
+     * cuenta contable existente y activa. Mensaje literal del Excel.
+     *
+     * @return el id de cuenta GMF validado (o null si no aplica GMF)
+     */
+    private Long validateGmfConfig(Boolean aplicaGmf, Long cuentaGmfPucId) {
+        if (!Boolean.TRUE.equals(aplicaGmf)) {
+            return null; // GMF desactivado: ignorar cualquier cuenta enviada
+        }
+        if (cuentaGmfPucId == null || cuentaGmfPucId <= 0) {
+            throw new IllegalArgumentException("Debe seleccionar la cuenta del PUC para registrar el GMF");
+        }
+        AccountingAccount gmfAccount = accountingAccountRepository.findById(cuentaGmfPucId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "La cuenta del PUC para GMF no existe en el plan de cuentas"));
+        if (gmfAccount.getStatus() == com.sigcon.backend.lists_accounting.accounting_account.domain.model.enums.AccountStatus.INACTIVE) {
+            throw new IllegalArgumentException(
+                    "La cuenta del PUC para GMF esta inactiva. Active la cuenta antes de asignarla");
+        }
+        return cuentaGmfPucId;
     }
 
     private void validateBankActive(Bank bank) {
@@ -623,6 +728,25 @@ public class BankAccountService {
         java.math.BigDecimal moved = financialMovementRepository.sumAmountByBankAccountId(e.getId());
         if (moved == null) moved = java.math.BigDecimal.ZERO;
         return initial.add(moved);
+    }
+
+    /**
+     * BNK-HU-002 (ampliacion) E7: snapshot compacto de los campos editables/clave
+     * de la cuenta para el log de auditoria (valores_antes / valores_despues).
+     */
+    private String accountSnapshot(BankAccount e) {
+        return "{accountName=" + e.getAccountName()
+                + ", description=" + e.getDescription()
+                + ", allowsOverdraft=" + e.getAllowsOverdraft()
+                + ", creditLimit=" + e.getCreditLimit()
+                + ", notifyLowBalance=" + e.getNotifyLowBalance()
+                + ", minimumBalance=" + e.getMinimumBalance()
+                + ", aplicaGmf=" + e.getAplicaGmf()
+                + ", cuentaGmfPucId=" + e.getCuentaGmfPucId()
+                + ", esEquivalenteEfectivo=" + e.getEsEquivalenteEfectivo()
+                + ", status=" + e.getStatus()
+                + ", costCenterId=" + (e.getCostCenter() != null ? e.getCostCenter().getId() : null)
+                + "}";
     }
 
     /**
@@ -694,6 +818,10 @@ public class BankAccountService {
                 .hasAssociatedAccounts(
                         checkbookRepository.countByBankAccount_Id(e.getId()) > 0
                         || financialMovementRepository.countByBankAccount_Id(e.getId()) > 0)
+                // BNK-HU-001 E5/E6
+                .aplicaGmf(e.getAplicaGmf())
+                .cuentaGmfPucId(e.getCuentaGmfPucId())
+                .esEquivalenteEfectivo(e.getEsEquivalenteEfectivo())
                 .build();
     }
 

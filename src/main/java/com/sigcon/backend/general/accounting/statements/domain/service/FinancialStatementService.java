@@ -50,6 +50,32 @@ public class FinancialStatementService {
 
     private final JournalEntryRepository journalEntryRepository;
 
+    /**
+     * Audit publisher opcional para HU-CG-09 E6 / HU-CG-10 E6 / HU-CG-11 E5 /
+     * HU-CG-18 / HU-CG-13 E5 (registrar generacion de estados financieros).
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.audit.domain.service.AuditPublisher auditPublisher;
+
+    /**
+     * Registra evento VIEW en auditoria al generar un estado. Defensive: si
+     * el publisher falla, NO rompe la generacion del reporte.
+     */
+    private void publishViewAudit(String reportType, Integer year, Integer month, int rows) {
+        if (auditPublisher == null) return;
+        try {
+            auditPublisher.publish(
+                    com.sigcon.backend.audit.domain.model.enums.AuditAction.VIEW,
+                    com.sigcon.backend.audit.domain.model.enums.AuditModule.CG,
+                    com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                    "FinancialStatement", null,
+                    "Generacion " + reportType + " "
+                            + (year != null ? year : "?") + "-"
+                            + (month != null ? String.format("%02d", month) : "??")
+                            + " filas=" + rows, null, null, null);
+        } catch (RuntimeException ignored) { /* audit no debe romper */ }
+    }
+
     // ───────────────────────────────────────────────────────────────
     // Balance General (Estado de Situacion Financiera)
     // ───────────────────────────────────────────────────────────────
@@ -97,6 +123,7 @@ public class FinancialStatementService {
                 .details(details)
                 .build();
 
+        publishViewAudit("BalanceGeneral", year, month, details.size());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Balance General generado correctamente hasta " + year + "-" + String.format("%02d", month)),
                 Optional.of(result)));
@@ -151,6 +178,7 @@ public class FinancialStatementService {
                 .details(details)
                 .build();
 
+        publishViewAudit("EstadoResultados", year, month, details.size());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Estado de Resultados generado correctamente para " + year + "-" + String.format("%02d", month)),
                 Optional.of(result)));
@@ -242,6 +270,7 @@ public class FinancialStatementService {
                 .details(details)
                 .build();
 
+        publishViewAudit("FlujoEfectivo", year, month, details.size());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Flujo de Efectivo generado correctamente para " + year + "-" + String.format("%02d", month)),
                 Optional.of(result)));
@@ -292,6 +321,8 @@ public class FinancialStatementService {
             comparison.add(row);
         }
 
+        publishViewAudit("Comparativo " + year1 + "-" + month1 + " vs " + year2 + "-" + month2,
+                year1, month1, comparison.size());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Balance Comparativo generado correctamente"),
                 Optional.of(comparison)));
@@ -417,6 +448,7 @@ public class FinancialStatementService {
                 .details(details)
                 .build();
 
+        publishViewAudit("CambiosPatrimonio", year, month, details.size());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Estado de Cambios en el Patrimonio generado correctamente para "
                         + year + "-" + String.format("%02d", month)),

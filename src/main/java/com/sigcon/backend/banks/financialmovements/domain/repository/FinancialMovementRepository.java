@@ -100,4 +100,18 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
             + "AND fm.matchedCheckId IS NULL AND fm.matchedVoucherId IS NULL "
             + "AND fm.matchedJournalEntryId IS NULL AND fm.reconciliationSession IS NULL")
     long countUnreconciledByBankId(@Param("bankId") Long bankId);
+
+    /** BNK-HU-035 E7: existe ya una linea con ese hash para la cuenta (anti-duplicado). */
+    boolean existsByBankAccount_IdAndLineHash(Long bankAccountId, String lineHash);
+
+    /** BNK-HU-035 E6: existe ya un movimiento importado con ese hash de archivo en la cuenta. */
+    boolean existsByBankAccount_IdAndImportFileHash(Long bankAccountId, String importFileHash);
+
+    /** BNK-HU-035 E6: primer movimiento del archivo ya importado (para reportar fecha/sesion). */
+    Optional<FinancialMovement> findFirstByBankAccount_IdAndImportFileHashOrderByIdAsc(Long bankAccountId, String importFileHash);
+
+    /** BNK-HU-069: candidatos del motor por cuenta + origen (extracto=BANK_IMPORT, libros=MANUAL). */
+    List<FinancialMovement> findByBankAccount_IdAndSourceType(
+            Long bankAccountId,
+            com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType sourceType);
 }

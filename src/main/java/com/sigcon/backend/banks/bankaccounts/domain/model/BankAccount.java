@@ -103,6 +103,23 @@ public class BankAccount {
     @Builder.Default
     private Boolean handlesCheckbook = false;
 
+    // BNK-HU-001 (ampliacion) E5: la cuenta esta sujeta al GMF 4x1000 (art. 870 ET).
+    // Columna nullable a nivel Hibernate (se garantiza no-null en onCreate + migracion
+    // V9-Zzzzl) para no romper el ddl-auto add column sobre filas existentes.
+    @Column(name = "aplica_gmf")
+    @Builder.Default
+    private Boolean aplicaGmf = false;
+
+    // BNK-HU-001 E5: accounting_accounts.id para contabilizar el GMF (PUC tipico 530525).
+    // Plain Long (no FK rigida) para evitar proxies lazy; se valida en el service.
+    @Column(name = "cuenta_gmf_puc_id")
+    private Long cuentaGmfPucId;
+
+    // BNK-HU-001 E6: equivalente de efectivo segun NIC 7 (default TRUE).
+    @Column(name = "es_equivalente_efectivo")
+    @Builder.Default
+    private Boolean esEquivalenteEfectivo = true;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
@@ -146,6 +163,13 @@ public class BankAccount {
         }
         if (this.handlesCheckbook == null) {
             this.handlesCheckbook = false;
+        }
+        // BNK-HU-001 E5/E6: garantizar no-null en columnas nuevas.
+        if (this.aplicaGmf == null) {
+            this.aplicaGmf = false;
+        }
+        if (this.esEquivalenteEfectivo == null) {
+            this.esEquivalenteEfectivo = true;
         }
     }
 

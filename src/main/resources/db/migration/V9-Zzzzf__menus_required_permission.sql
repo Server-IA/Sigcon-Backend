@@ -38,8 +38,13 @@ UPDATE menus SET required_permission_code = CASE component
     WHEN 'SYSTEM_WITHHOLDINGS' THEN NULL
     WHEN 'TEMPORARY_PERMISSIONS' THEN 'PAR.PERMISOS_TEMPORALES.VER'
     WHEN 'IDENTIDAD_VISUAL'    THEN 'PAR.IDENTIDAD_VISUAL.VER'
-    WHEN 'NAVEGACION'          THEN 'PAR.NAVEGACION.VER'
-    WHEN 'NOTIFICACIONES_ROL'  THEN 'PAR.NOTIFICACIONES_ROL.VER'
+    -- QA Bloque BO (2026-05-18): los codes huerfanos PAR.NAVEGACION.VER y
+    -- PAR.NOTIFICACIONES_ROL.VER nunca existieron. Los reales sembrados por
+    -- V9-ZZW son PAR.NAVEGACION.EDITAR y PAR.NOTIFICACIONES.CONFIGURAR_ROL.
+    -- Con codes huerfanos el filtro de MenuService.getModulesMenu ocultaba
+    -- estos 2 menus para todo non-admin (incluido ADMIN_EMPRESA).
+    WHEN 'NAVEGACION'          THEN 'PAR.NAVEGACION.EDITAR'
+    WHEN 'NOTIFICACIONES_ROL'  THEN 'PAR.NOTIFICACIONES.CONFIGURAR_ROL'
     -- Listas Contables (modulo 2)
     WHEN 'PUC'                 THEN 'CFG.CUENTAS.VER'
     WHEN 'DEPRECIATION_RULES'  THEN 'CFG.DEPRECIACION.VER'

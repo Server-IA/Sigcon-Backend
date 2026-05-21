@@ -150,4 +150,37 @@ public class TaxReportController {
                 ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
+
+    /**
+     * HU-CG-12 E2: descarga del Resumen Anual de Impuestos en CSV o XLSX.
+     * Insumo para Formulario 350 DIAN.
+     */
+    @org.springframework.web.bind.annotation.GetMapping("/taxes-summary/export/{format}")
+    @Operation(summary = "Exportar Resumen de Impuestos (HU-CG-12 E2)",
+        description = "Descarga el resumen anual de impuestos (12 meses + totales) en CSV o XLSX.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Archivo generado"),
+        @ApiResponse(responseCode = "400", description = "Anio o formato invalido"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportTaxesSummary(
+            @org.springframework.web.bind.annotation.PathVariable String format,
+            @RequestParam Integer year) {
+        try {
+            byte[] content = taxReportService.exportTaxesSummary(year, format);
+            String fileName = "ResumenImpuestos_" + year + "." + format.toLowerCase();
+            String mime = "xlsx".equalsIgnoreCase(format)
+                    ? com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME
+                    : com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+            return ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + fileName + "\"")
+                    .contentType(org.springframework.http.MediaType.parseMediaType(mime))
+                    .body(content);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
 }

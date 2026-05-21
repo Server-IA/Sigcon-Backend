@@ -24,7 +24,10 @@ import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
 import com.sigcon.backend.utils.SuccessRespondJson;
 import com.sigcon.backend.utils.UserUtil;
+import com.sigcon.backend.audit.domain.model.enums.AuditAction;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
+import com.sigcon.backend.audit.domain.service.AuditLogService;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
 
 import lombok.RequiredArgsConstructor;
@@ -62,6 +65,9 @@ public class CheckService {
     private final FinancialMovementService financialMovementService;
     private final FinancialMovementRepository financialMovementRepository;
     private final AuditPublisher auditPublisher;
+    // BNK-HU-022 E7: escritura directa de auditoria (REQUIRES_NEW) para que el
+    // log del FALLO sobreviva al rollback de la transaccion que rechaza el cobro.
+    private final AuditLogService auditLogService;
 
 
     private final DataTableSpecificationBuilder<Check> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
@@ -246,7 +252,26 @@ public class CheckService {
         Check check = checkRepository.findWithCheckbookAndBankById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cheque no disponible"));
 
-        if (Boolean.TRUE.equals(check.getBlockPayment()) || check.getStatusCheck() == CheckStatus.EXTRAVIADO) {
+        // BNK-HU-022 (ampliacion) E7: un cheque ANULADO o EXTRAVIADO que aparece cobrado
+        // en el extracto es una ALERTA CRITICA (posible fraude o error del banco). NO se
+        // permite emparejar; se registra en el log con resultado=FALLO y severidad CRITICA
+        // (destinatarios: tesoreria, gerencia, revisor fiscal).
+        if (check.getStatusCheck() == CheckStatus.ANULADO || check.getStatusCheck() == CheckStatus.EXTRAVIADO) {
+            // Escritura directa en transaccion nueva (REQUIRES_NEW): el log del FALLO
+            // debe persistir aunque a continuacion lancemos la excepcion que rollbackea
+            // el cobro (un @TransactionalEventListener AFTER_COMMIT se descartaria).
+            auditLogService.register(AuditAction.UPDATE, AuditModule.BNK, AuditSeverity.CRITICAL,
+                    "Check", check.getId(),
+                    "CHEQUE_INVALIDO_COBRADO resultado=FALLO: cheque #" + check.getNumberCheck()
+                            + " en estado " + check.getStatusCheck() + " aparece cobrado en el extracto. "
+                            + "Destinatarios: tesoreria, gerencia, revisor fiscal.",
+                    null, null, null);
+            throw new IllegalArgumentException("ALERTA CRITICA CHEQUE_INVALIDO_COBRADO: el cheque #"
+                    + check.getNumberCheck() + " esta " + check.getStatusCheck()
+                    + " y aparece cobrado por el banco. No se permite emparejar; resuelva manualmente con tesoreria/revisoria fiscal.");
+        }
+
+        if (Boolean.TRUE.equals(check.getBlockPayment())) {
             throw new IllegalArgumentException("BNK-ERR-EXV-001: Cheque reportado como no cobrable");
         }
         if (check.getStatusCheck() != CheckStatus.EMITIDO) {
@@ -260,6 +285,7 @@ public class CheckService {
         }
 
         FinancialMovement movementToMatch = null;
+        LocalDate collectionDate = request.getCollectionDate();
         if (request.getConciliationMethod() == ConciliationMethod.AUTOMATICA) {
             Long bankAccountId = check.getCheckbook().getBankAccount().getId();
             movementToMatch = financialMovementService
@@ -269,15 +295,32 @@ public class CheckService {
             if (movementToMatch.getMatchedCheckId() != null) {
                 throw new IllegalArgumentException("El movimiento ya fue conciliado con otro cheque.");
             }
-            if (movementToMatch.getAmount().compareTo(check.getValue().negate()) != 0) {
-                throw new IllegalArgumentException(
-                        "El importe del movimiento debe ser el negativo del valor del cheque (egreso en extracto).");
+            // BNK-HU-022 (ampliacion) E8: si el monto cobrado por el banco difiere del
+            // emitido, mostrar la diferencia y exigir confirmacion manual + motivo (>=30).
+            BigDecimal montoEmitido = check.getValue();
+            BigDecimal montoCobrado = movementToMatch.getAmount().abs();
+            BigDecimal diferencia = montoCobrado.subtract(montoEmitido).abs();
+            if (diferencia.compareTo(BigDecimal.ZERO) != 0) {
+                if (!Boolean.TRUE.equals(request.getConfirmAmountDifference())) {
+                    throw new IllegalArgumentException(
+                            "El monto cobrado difiere del emitido. Emitido: $" + montoEmitido
+                                    + " | Cobrado: $" + montoCobrado + " | Diferencia: $" + diferencia
+                                    + ". Confirme manualmente (confirmAmountDifference) e indique el motivo.");
+                }
+                if (request.getDifferenceReason() == null || request.getDifferenceReason().trim().length() < 30) {
+                    throw new IllegalArgumentException(
+                            "Debe indicar un motivo de al menos 30 caracteres para emparejar con diferencia de monto.");
+                }
+            }
+            // BNK-HU-022 E9: fecha_cobro = fecha del movimiento del extracto que lo cobro.
+            if (movementToMatch.getMovementDate() != null) {
+                collectionDate = movementToMatch.getMovementDate();
             }
         } else if (request.getFinancialMovementId() != null) {
             throw new IllegalArgumentException("Solo la conciliacion automatica admite movimiento financiero asociado.");
         }
 
-        check.setCollectionDate(request.getCollectionDate());
+        check.setCollectionDate(collectionDate);
         check.setConciliationMethod(request.getConciliationMethod());
         check.setCollectionReference(request.getCollectionReference().trim());
         check.setStatusCheck(CheckStatus.COBRADO);

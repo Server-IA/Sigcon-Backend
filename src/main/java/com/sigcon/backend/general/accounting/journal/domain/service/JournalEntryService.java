@@ -316,7 +316,37 @@ public class JournalEntryService {
         // al contabilizar el sistema bloquea cualquier irregularidad.
 
         // 1. Periodo abierto (siempre)
-        accountingPeriodService.validatePeriodOpen(entry.getEntryDate());
+        try {
+            accountingPeriodService.validatePeriodOpen(entry.getEntryDate());
+        } catch (IllegalStateException psEx) {
+            // HU-CG-02A E3 (QA 2026-05-18): mensaje contextual para que el
+            // usuario sepa que la operacion fallida fue CONTABILIZACION (no
+            // creacion o edicion). El periodo subyacente sigue siendo el de
+            // la fecha del asiento. Mensaje original conservado para forensia.
+            throw new IllegalStateException(
+                    "No se puede contabilizar el comprobante. " + psEx.getMessage(), psEx);
+        }
+
+        // HU-CG-02A E7 (QA 2026-05-18): validar duplicidad al contabilizar.
+        // Antes solo se validaba al crear, asi que dos DRAFTs identicos
+        // creados antes de contabilizar el primero podian quedar en BD y luego
+        // contabilizarse ambos. Ahora cada postEntry comprueba si ya existe
+        // OTRO POSTED en la misma fecha con totales y descripcion equivalentes.
+        java.util.List<JournalEntry> sameDayPosted = journalEntryRepository
+                .findByEntryDateAndStatus(entry.getEntryDate(), JournalEntryStatus.POSTED);
+        for (JournalEntry existing : sameDayPosted) {
+            if (existing.getId().equals(entry.getId())) continue; // self-skip
+            if (existing.getTotalDebit() != null && existing.getTotalCredit() != null
+                    && existing.getTotalDebit().compareTo(entry.getTotalDebit()) == 0
+                    && existing.getTotalCredit().compareTo(entry.getTotalCredit()) == 0
+                    && safeEquals(existing.getDescription(), entry.getDescription())) {
+                throw new IllegalArgumentException(
+                        "No se puede contabilizar: ya existe un comprobante CONTABILIZADO "
+                        + "con los mismos datos identitarios (fecha " + entry.getEntryDate()
+                        + ", totales y descripcion). Comprobante existente: #"
+                        + existing.getEntryNumber() + ".");
+            }
+        }
 
         // 2. Partida doble cuadrada (siempre)
         if (entry.getTotalDebit() == null || entry.getTotalCredit() == null
@@ -417,6 +447,19 @@ public class JournalEntryService {
      */
     @Transactional
     public JournalEntryDTO reverseEntry(Long id, String description, String createdBy) {
+        return reverseEntry(id, description, createdBy, false);
+    }
+
+    /**
+     * HU-CG-07B E1 (QA 2026-05-18): variante que opcionalmente crea ademas un
+     * DRAFT correctivo clonado del original. Util cuando el contador quiere
+     * corregir un asiento sin tener que re-capturar lineas a mano. El DRAFT
+     * queda vinculado al original via {@code correctionOf} y debe ser
+     * editado/contabilizado por el usuario.
+     */
+    @Transactional
+    public JournalEntryDTO reverseEntry(Long id, String description, String createdBy,
+                                          boolean createCorrectionDraft) {
         JournalEntry original = findByIdOrThrow(id);
         if (original.getStatus() != JournalEntryStatus.POSTED) {
             throw new IllegalStateException("Solo se pueden reversar asientos CONTABILIZADOS.");
@@ -514,6 +557,60 @@ public class JournalEntryService {
             }
         } catch (RuntimeException ignored) { /* notif no rompe el reverse */ }
 
+        // HU-CG-07B E1: si el contador pidio createCorrectionDraft=true,
+        // generamos un nuevo asiento en BORRADOR clonado del original con
+        // correctionOf apuntando al original. El contador podra editarlo y
+        // contabilizarlo con el flujo normal. Si la creacion del DRAFT falla,
+        // el REV ya se persistio y la operacion principal NO se rollbackea.
+        if (createCorrectionDraft) {
+            try {
+                long correctionNumber = voucherSeriesService.consumeNext("JE");
+                JournalEntry correctionDraft = JournalEntry.builder()
+                        .entryNumber(correctionNumber)
+                        .fiscalYear(LocalDate.now().getYear())
+                        .entryDate(LocalDate.now())
+                        .periodYear(LocalDate.now().getYear())
+                        .periodMonth(LocalDate.now().getMonthValue())
+                        .description("Borrador correctivo de asiento #" + original.getEntryNumber()
+                                + " (reversado el " + LocalDate.now() + ")")
+                        .sourceModule(JournalSourceModule.CG)
+                        .sourceId(original.getId())
+                        .status(JournalEntryStatus.DRAFT)
+                        .correctionOf(original)
+                        .totalDebit(original.getTotalDebit())
+                        .totalCredit(original.getTotalCredit())
+                        .createdBy(createdBy)
+                        .build();
+
+                List<JournalEntryLine> draftLines = new ArrayList<>();
+                int orderDraft = 1;
+                for (JournalEntryLine origLine : original.getLines()) {
+                    draftLines.add(JournalEntryLine.builder()
+                            .journalEntry(correctionDraft)
+                            .lineOrder(orderDraft++)
+                            .accountingAccount(origLine.getAccountingAccount())
+                            .debitAmount(origLine.getDebitAmount())
+                            .creditAmount(origLine.getCreditAmount())
+                            .description(origLine.getDescription())
+                            .thirdPartyNit(origLine.getThirdPartyNit())
+                            .costCenter(origLine.getCostCenter())
+                            .build());
+                }
+                correctionDraft.setLines(draftLines);
+                journalEntryRepository.save(correctionDraft);
+                auditPublisher.publishCreate(AuditModule.CG, "JournalEntry",
+                        correctionDraft.getId(),
+                        "Borrador correctivo generado automaticamente tras reverse de #"
+                                + original.getEntryNumber());
+                log.info("HU-CG-07B E1: DRAFT correctivo {} creado tras reverse de {}",
+                        correctionDraft.getId(), original.getId());
+            } catch (RuntimeException corrEx) {
+                log.error("HU-CG-07B E1: no se pudo crear DRAFT correctivo tras reverse {}: {}",
+                        original.getId(), corrEx.getMessage());
+                // No rompemos el reverse; el REV ya se persistio.
+            }
+        }
+
         return toDTO(savedReversal);
     }
 
@@ -593,8 +690,15 @@ public class JournalEntryService {
                     + "Para asientos contabilizados use el endpoint de correccion (/correct).");
         }
 
-        // Validar periodo abierto para la nueva fecha
-        accountingPeriodService.validatePeriodOpen(request.getEntryDate());
+        // HU-CG-02A E3 (QA 2026-05-18): validar periodo abierto para la nueva
+        // fecha con mensaje contextual de EDICION. Asi el usuario distingue
+        // entre fallar al crear, editar o contabilizar.
+        try {
+            accountingPeriodService.validatePeriodOpen(request.getEntryDate());
+        } catch (IllegalStateException psEx) {
+            throw new IllegalStateException(
+                    "No se puede modificar el comprobante con esa fecha. " + psEx.getMessage(), psEx);
+        }
 
         // Validar y construir lineas nuevas
         List<JournalEntryLine> newLines = new ArrayList<>();
@@ -641,6 +745,26 @@ public class JournalEntryService {
             throw new IllegalArgumentException(
                     "Partida doble desbalanceada: debitos (" + totalDebit
                     + ") != creditos (" + totalCredit + ")");
+        }
+
+        // HU-CG-02A E7 (QA 2026-05-18): tambien validar duplicidad al editar
+        // BORRADOR. Si el usuario cambia la descripcion (o totales o fecha)
+        // y queda igual a un POSTED existente, debemos bloquear. Asi se
+        // cierra el escape via edicion posterior.
+        java.util.List<JournalEntry> samePostedAfterEdit = journalEntryRepository
+                .findByEntryDateAndStatus(request.getEntryDate(), JournalEntryStatus.POSTED);
+        for (JournalEntry existing : samePostedAfterEdit) {
+            if (existing.getId().equals(entry.getId())) continue;
+            if (existing.getTotalDebit() != null && existing.getTotalCredit() != null
+                    && existing.getTotalDebit().compareTo(totalDebit) == 0
+                    && existing.getTotalCredit().compareTo(totalCredit) == 0
+                    && safeEquals(existing.getDescription(), request.getDescription())) {
+                throw new IllegalArgumentException(
+                        "No se puede actualizar el comprobante: los nuevos datos "
+                        + "coinciden con un comprobante CONTABILIZADO existente "
+                        + "(#" + existing.getEntryNumber() + "). Para evitar duplicidad "
+                        + "modifique la fecha, los totales o la descripcion.");
+            }
         }
 
         // Reemplazar lineas (orphanRemoval elimina las viejas)
@@ -724,6 +848,26 @@ public class JournalEntryService {
 
         Page<JournalEntryDTO> data = journalEntryRepository.findAll(spec, pageable).map(this::toDTO);
         return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
+    }
+
+    /**
+     * HU-CG-02B E3 (QA 2026-05-19): exportacion masiva del listado completo
+     * de comprobantes filtrados. Reusa el Specification del DataTable para
+     * respetar los filtros activos en pantalla. Devuelve una lista plana
+     * con campos identitarios + totales (NO incluye lineas detalle).
+     *
+     * @param request DataTableRequest con los filtros vigentes
+     * @return lista filtrada y ordenada (sin paginar)
+     */
+    public java.util.List<JournalEntryDTO> findFilteredAsList(DataTableRequest request) {
+        Specification<JournalEntry> spec = specBuilder.build(request);
+        String orderColumn = request.getOrderColumnName();
+        String orderDir = request.getOrderDir();
+        Sort sort = Sort.by(Sort.Direction.fromString(orderDir),
+                orderColumn != null ? orderColumn : "id");
+        return journalEntryRepository.findAll(spec, sort).stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
     }
 
     // ───────────────────────────────────────────────────────────────

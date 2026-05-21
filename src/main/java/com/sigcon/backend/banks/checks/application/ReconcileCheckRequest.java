@@ -28,4 +28,12 @@ public class ReconcileCheckRequest {
     @NotBlank(message = "La referencia de cobro es obligatoria")
     @Size(max = 100, message = "La referencia de cobro no puede superar 100 caracteres")
     private String collectionReference;
+
+    // BNK-HU-022 (ampliacion) E8: confirmacion manual cuando el monto cobrado
+    // difiere del emitido. Sin confirmar, el sistema rechaza con la diferencia.
+    private Boolean confirmAmountDifference;
+
+    // BNK-HU-022 E8: motivo minimo 30 caracteres que justifica la diferencia de monto.
+    @Size(max = 500)
+    private String differenceReason;
 }

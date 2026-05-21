@@ -3,13 +3,40 @@ package com.sigcon.backend.general.accounting.dian_reports.domain.service;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.kernel.colors.ColorConstants;
+import com.itextpdf.kernel.colors.DeviceRgb;
+import com.itextpdf.kernel.font.PdfFont;
+import com.itextpdf.kernel.font.PdfFontFactory;
+import com.itextpdf.kernel.geom.PageSize;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.layout.Document;
+import com.itextpdf.layout.element.Cell;
+import com.itextpdf.layout.element.Paragraph;
+import com.itextpdf.layout.element.Table;
+import com.itextpdf.layout.properties.TextAlignment;
+import com.itextpdf.layout.properties.UnitValue;
+
+import com.sigcon.backend.audit.domain.model.enums.AuditAction;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.general.accounting.dian_reports.application.DianReportResponse;
 import com.sigcon.backend.general.accounting.dian_reports.application.DianReportRow;
+import com.sigcon.backend.utils.export.ReportContextResolver;
+import com.sigcon.backend.utils.export.ReportHeaderBuilder;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -47,6 +74,20 @@ public class DianReportService {
 
     @PersistenceContext
     private EntityManager em;
+
+    /**
+     * Resolver de contexto de reporte (empresa+usuario+filtros). Opcional para
+     * conservar compatibilidad con tests que instancien la clase sin Spring.
+     */
+    @Autowired(required = false)
+    private ReportContextResolver reportContextResolver;
+
+    /**
+     * Audit publisher opcional. Si esta presente, cada CSV/PDF se registra
+     * como EVENT EXPORT (HU-CG-19 E5).
+     */
+    @Autowired(required = false)
+    private AuditPublisher auditPublisher;
 
     // ────────────────────────────────────────────────────────────
     // F1001 - Pagos y retenciones
@@ -103,6 +144,7 @@ public class DianReportService {
             total = total.add(pago);
         }
 
+        publishGenerateAudit("F1001", year, rows.size());
         return DianReportResponse.builder()
                 .format("F1001")
                 .year(year)
@@ -110,6 +152,16 @@ public class DianReportService {
                 .totalRows(rows.size())
                 .totalAmount(total)
                 .build();
+    }
+
+    private void publishGenerateAudit(String format, int year, int rows) {
+        if (auditPublisher == null) return;
+        try {
+            auditPublisher.publish(AuditAction.VIEW, AuditModule.CG, AuditSeverity.LOW,
+                    "DianReport", null,
+                    "Generacion DIAN " + format + " " + year + " filas=" + rows,
+                    null, null, null);
+        } catch (RuntimeException ignored) { /* audit no debe romper */ }
     }
 
     // ────────────────────────────────────────────────────────────
@@ -170,6 +222,7 @@ public class DianReportService {
             total = total.add(ingreso);
         }
 
+        publishGenerateAudit("F1007", year, rows.size());
         return DianReportResponse.builder()
                 .format("F1007")
                 .year(year)
@@ -226,6 +279,7 @@ public class DianReportService {
             total = total.add(saldo);
         }
 
+        publishGenerateAudit("F1008", year, rows.size());
         return DianReportResponse.builder()
                 .format("F1008")
                 .year(year)
@@ -304,6 +358,16 @@ public class DianReportService {
         } catch (Exception e) {
             throw new IllegalStateException("Error al generar CSV: " + e.getMessage(), e);
         }
+        // HU-CG-19 E5: registrar EXPORT en auditoria
+        if (auditPublisher != null) {
+            try {
+                auditPublisher.publish(AuditAction.EXPORT, AuditModule.CG, AuditSeverity.LOW,
+                        "DianReport", null,
+                        "Export DIAN " + response.getFormat() + " " + response.getYear()
+                                + " formato=CSV filas=" + response.getTotalRows(),
+                        null, null, null);
+            } catch (RuntimeException ignored) { /* no romper export */ }
+        }
         return out.toByteArray();
     }
 
@@ -334,5 +398,164 @@ public class DianReportService {
 
     private String asString(Object v) {
         return v == null ? "" : v.toString();
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // HU-CG-19 E4: Exportacion PDF
+    // ────────────────────────────────────────────────────────────
+
+    /**
+     * Genera un PDF formal del reporte DIAN con encabezado de empresa y
+     * tabla. Util para presentar al revisor fiscal junto con el CSV oficial.
+     */
+    public byte[] exportToPdf(DianReportResponse response) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            pdf.setDefaultPageSize(PageSize.A4.rotate());
+            try (Document doc = new Document(pdf)) {
+                PdfFont titleFont = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
+                PdfFont bodyFont = PdfFontFactory.createFont(StandardFonts.HELVETICA);
+
+                // Resolver contexto
+                ReportHeaderBuilder.ReportContext ctx = null;
+                if (reportContextResolver != null) {
+                    ReportHeaderBuilder.ReportContext.Builder b = reportContextResolver
+                            .baseContext("Reporte DIAN " + response.getFormat()
+                                    + " - Anio gravable " + response.getYear());
+                    b.addFilter("Formato", response.getFormat());
+                    b.addFilter("Anio gravable", String.valueOf(response.getYear()));
+                    b.addTotal("Registros", BigDecimal.valueOf(response.getTotalRows()));
+                    if (response.getTotalAmount() != null) {
+                        b.addTotal("Total monto", response.getTotalAmount());
+                    }
+                    ctx = b.build();
+                }
+
+                doc.add(new Paragraph("DIAN - Informacion Exogena " + response.getFormat())
+                        .setFont(titleFont).setFontSize(16)
+                        .setTextAlignment(TextAlignment.CENTER)
+                        .setFontColor(new DeviceRgb(30, 58, 138)));
+
+                if (ctx != null) {
+                    StringBuilder meta = new StringBuilder();
+                    if (ctx.companyName != null) {
+                        meta.append("Empresa: ").append(ctx.companyName);
+                        if (ctx.companyNit != null) meta.append(" - NIT ").append(ctx.companyNit);
+                        meta.append('\n');
+                    }
+                    if (ctx.userEmail != null) {
+                        meta.append("Generado por: ").append(ctx.userEmail);
+                        if (ctx.roles != null && !ctx.roles.isEmpty()) {
+                            meta.append(" (").append(String.join(", ", ctx.roles)).append(")");
+                        }
+                        meta.append('\n');
+                    }
+                    meta.append("Generado: ")
+                            .append(LocalDateTime.now()
+                                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                    doc.add(new Paragraph(meta.toString())
+                            .setFont(bodyFont).setFontSize(9)
+                            .setFontColor(new DeviceRgb(75, 85, 99)));
+                }
+
+                // Tabla
+                String format = response.getFormat();
+                String[] headers;
+                switch (format) {
+                    case "F1001":
+                        headers = new String[]{ "Concepto", "Tipo Doc", "NIT", "DV",
+                                "Razon Social", "Pago/Abono", "Retencion", "IVA Descontable" };
+                        break;
+                    case "F1007":
+                        headers = new String[]{ "Concepto", "Tipo Doc", "NIT", "DV",
+                                "Razon Social", "Ingreso Bruto",
+                                "Devoluciones", "Ing. No Constitutivo" };
+                        break;
+                    case "F1008":
+                        headers = new String[]{ "Concepto", "Tipo Doc", "NIT", "DV",
+                                "Razon Social", "Saldo CxC" };
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Formato no soportado: " + format);
+                }
+                Table table = new Table(UnitValue.createPercentArray(headers.length))
+                        .useAllAvailableWidth();
+                for (String h : headers) {
+                    table.addHeaderCell(new Cell().add(new Paragraph(h)
+                            .setFont(titleFont).setFontSize(9))
+                            .setBackgroundColor(new DeviceRgb(238, 242, 255)));
+                }
+
+                DecimalFormat df = new DecimalFormat("#,##0.00",
+                        new DecimalFormatSymbols(new Locale("es", "CO")));
+                for (DianReportRow row : response.getRows()) {
+                    table.addCell(cell(row.getConcepto(), bodyFont));
+                    table.addCell(cell(row.getTipoDocumento(), bodyFont));
+                    table.addCell(cell(row.getNumeroDocumento(), bodyFont));
+                    table.addCell(cell(row.getDv(), bodyFont));
+                    table.addCell(cell(row.getNombresORazonSocial(), bodyFont));
+                    switch (format) {
+                        case "F1001":
+                            table.addCell(cellNum(row.getPagoOAbono(), df, bodyFont));
+                            table.addCell(cellNum(row.getRetencionEnLaFuente(), df, bodyFont));
+                            table.addCell(cellNum(row.getIvaDescontable(), df, bodyFont));
+                            break;
+                        case "F1007":
+                            table.addCell(cellNum(row.getIngresoBrutoOperacional(), df, bodyFont));
+                            table.addCell(cellNum(row.getDevolucionesRebajasDescuentos(), df, bodyFont));
+                            table.addCell(cellNum(row.getIngresoNoConstitutivo(), df, bodyFont));
+                            break;
+                        case "F1008":
+                            table.addCell(cellNum(row.getSaldoCuentasPorCobrar(), df, bodyFont));
+                            break;
+                        default: break;
+                    }
+                }
+                doc.add(table);
+
+                // Resumen
+                doc.add(new Paragraph(String.format(
+                        "Total registros: %d  |  Total monto: $%s",
+                        response.getTotalRows(),
+                        response.getTotalAmount() != null
+                                ? df.format(response.getTotalAmount())
+                                : "0.00"))
+                        .setFont(titleFont).setFontSize(10)
+                        .setFontColor(new DeviceRgb(30, 58, 138)));
+
+                doc.add(new Paragraph(
+                        "Documento generado automaticamente. Pagina con valor probatorio "
+                      + "para auditoria interna. Para presentacion oficial use el CSV.")
+                        .setFont(bodyFont).setFontSize(7)
+                        .setTextAlignment(TextAlignment.CENTER)
+                        .setFontColor(ColorConstants.GRAY));
+            }
+            // HU-CG-19 E5: registrar EXPORT en auditoria
+            if (auditPublisher != null) {
+                try {
+                    auditPublisher.publish(AuditAction.EXPORT, AuditModule.CG, AuditSeverity.LOW,
+                            "DianReport", null,
+                            "Export DIAN " + response.getFormat() + " "
+                                    + response.getYear() + " formato=PDF filas="
+                                    + response.getTotalRows(),
+                            null, null, null);
+                } catch (RuntimeException ignored) { /* audit no debe romper PDF */ }
+            }
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("Error generando PDF DIAN: " + e.getMessage(), e);
+        }
+    }
+
+    private Cell cell(String text, PdfFont font) {
+        return new Cell().add(new Paragraph(text != null ? text : "")
+                .setFont(font).setFontSize(8));
+    }
+
+    private Cell cellNum(BigDecimal value, DecimalFormat df, PdfFont font) {
+        return new Cell().add(new Paragraph(value != null ? df.format(value) : "0.00")
+                .setFont(font).setFontSize(8)
+                .setTextAlignment(TextAlignment.RIGHT));
     }
 }

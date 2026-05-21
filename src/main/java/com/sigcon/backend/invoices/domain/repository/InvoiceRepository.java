@@ -1,14 +1,26 @@
 package com.sigcon.backend.invoices.domain.repository;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.sigcon.backend.invoices.domain.model.Invoices;
 
 public interface InvoiceRepository extends JpaRepository<Invoices, Long>, JpaSpecificationExecutor<Invoices> {
+
+    /** BNK-HU-078 E2: facturas de compra pendientes de pago en una ventana de fechas. */
+    @Query("SELECT i FROM Invoices i WHERE i.balanceDue > 0 "
+         + "AND i.invoiceDate BETWEEN :from AND :to AND i.deletedAt IS NULL")
+    List<Invoices> findPendingBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /** BNK-HU-078 E7: facturas de compra del período (para el reporte de cumplimiento). */
+    @Query("SELECT i FROM Invoices i WHERE i.invoiceDate BETWEEN :from AND :to AND i.deletedAt IS NULL")
+    List<Invoices> findByInvoiceDateBetweenForReport(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
     /**
      * HU-INT-RF-05: busca una factura de compra por su externalId (DocumentId AAEF).
