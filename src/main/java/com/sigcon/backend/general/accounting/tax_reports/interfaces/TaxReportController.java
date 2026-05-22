@@ -183,4 +183,48 @@ public class TaxReportController {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
+
+    /**
+     * HU-CG-12 E2 (QA Bloque BR): exportacion generica para TODO el modulo de
+     * reportes tributarios en CSV / XLSX / PDF. type ∈
+     * {taxes-summary, iva, ecl, exchange-differences}.
+     */
+    @org.springframework.web.bind.annotation.GetMapping("/{type}/export/{format}")
+    @Operation(summary = "Exportar reporte tributario (HU-CG-12 E2)",
+        description = "Descarga cualquier reporte tributario (Resumen anual, IVA bimestral, "
+                + "ECL cartera, Diferencias en cambio) en CSV, XLSX o PDF.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Archivo generado"),
+        @ApiResponse(responseCode = "400", description = "Tipo, periodo o formato invalido"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_TAX_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> exportTaxReport(
+            @org.springframework.web.bind.annotation.PathVariable String type,
+            @org.springframework.web.bind.annotation.PathVariable String format,
+            @RequestParam Integer year,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer bimester) {
+        try {
+            byte[] content = taxReportService.exportReport(type, year, month, bimester, format);
+            String f = format.toLowerCase();
+            String stamp = "iva".equals(type) ? year + "-B" + bimester
+                    : "exchange-differences".equals(type) ? year + "-" + (month != null ? month : "")
+                    : String.valueOf(year);
+            String fileName = type + "_" + stamp + "." + f;
+            String mime = "xlsx".equals(f)
+                    ? com.sigcon.backend.utils.export.SimpleTableExporter.XLSX_MIME
+                    : "pdf".equals(f)
+                        ? com.sigcon.backend.utils.export.SimpleTableExporter.PDF_MIME
+                        : com.sigcon.backend.utils.export.SimpleTableExporter.CSV_MIME;
+            return ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + fileName + "\"")
+                    .contentType(org.springframework.http.MediaType.parseMediaType(mime))
+                    .body(content);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
 }

@@ -263,11 +263,20 @@ public class FinancialStatementExportService {
         return result;
     }
 
-    /** Exporta el Balance Comparativo entre dos periodos (HU-CG-13). */
-    @SuppressWarnings("unchecked")
+    /** Overload de 2 periodos (compatibilidad). */
     public ExportResult exportComparativo(Integer year1, Integer month1,
                                             Integer year2, Integer month2, String format) {
-        ResponseEntity<?> resp = financialStatementService.getComparativo(year1, month1, year2, month2);
+        return exportComparativo(year1, month1, year2, month2, null, null, format);
+    }
+
+    /** Exporta el Balance Comparativo entre DOS o TRES periodos (HU-CG-13). */
+    @SuppressWarnings("unchecked")
+    public ExportResult exportComparativo(Integer year1, Integer month1,
+                                            Integer year2, Integer month2,
+                                            Integer year3, Integer month3, String format) {
+        boolean tres = year3 != null && month3 != null;
+        ResponseEntity<?> resp = financialStatementService.getComparativo(
+                year1, month1, year2, month2, year3, month3);
         Object data = extractRawData(resp);
         if (!(data instanceof List)) {
             throw new IllegalStateException("Respuesta de comparativo no contiene lista de filas");
@@ -276,14 +285,16 @@ public class FinancialStatementExportService {
 
         String labelA = labelPeriodo(year1, month1);
         String labelB = labelPeriodo(year2, month2);
+        String labelC = tres ? labelPeriodo(year3, month3) : null;
         ReportHeaderBuilder.ReportContext ctx = reportContextResolver
-                .baseContext("Balance Comparativo " + labelA + " vs " + labelB)
+                .baseContext("Balance Comparativo " + labelA + " vs " + labelB
+                        + (tres ? " vs " + labelC : ""))
                 .addFilter("Periodo A", labelA)
                 .addFilter("Periodo B", labelB)
                 .build();
 
-        List<String> headers = List.of("Clase", "Periodo A", "Saldo A",
-                "Periodo B", "Saldo B", "Variacion Absoluta", "Variacion %");
+        List<String> headers = new ArrayList<>(List.of("Clase", "Periodo A", "Saldo A",
+                "Periodo B", "Saldo B", "Var. Abs. A-B", "Var. % A-B"));
         List<Function<java.util.Map<String, Object>, Object>> cols = new ArrayList<>();
         cols.add(m -> m.get("className"));
         cols.add(m -> m.get("period1Label"));
@@ -292,8 +303,16 @@ public class FinancialStatementExportService {
         cols.add(m -> num(m.get("period2Value")));
         cols.add(m -> num(m.get("variacionAbsoluta")));
         cols.add(m -> num(m.get("variacionPorcentual")));
+        if (tres) {
+            headers.addAll(List.of("Periodo C", "Saldo C", "Var. Abs. B-C", "Var. % B-C"));
+            cols.add(m -> m.get("period3Label"));
+            cols.add(m -> num(m.get("period3Value")));
+            cols.add(m -> num(m.get("variacionAbsoluta2")));
+            cols.add(m -> num(m.get("variacionPorcentual2")));
+        }
 
-        ExportResult result = encode("Comparativo", labelA + "-vs-" + labelB,
+        ExportResult result = encode("Comparativo",
+                labelA + "-vs-" + labelB + (tres ? "-vs-" + labelC : ""),
                 format, headers, cols, list, ctx, null);
         publishExportAudit("Comparativo", year1, month1, format, list.size());
         return result;

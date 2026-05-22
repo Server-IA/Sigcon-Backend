@@ -10,6 +10,7 @@ import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMo
 import com.sigcon.backend.banks.matching.domain.model.Emparejamiento;
 import com.sigcon.backend.banks.matching.domain.model.EmparejamientoDetalle;
 import com.sigcon.backend.banks.matching.domain.model.ParametrosMatching;
+import com.sigcon.backend.banks.matching.domain.model.SesionConciliacion;
 import com.sigcon.backend.banks.matching.domain.repository.EmparejamientoDetalleRepository;
 import com.sigcon.backend.banks.matching.domain.repository.EmparejamientoRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
@@ -74,6 +75,7 @@ public class MatchingEngineService {
     private final EmparejamientoDetalleRepository detalleRepository;
     private final ParametrosMatchingService parametrosMatchingService;
     private final BankAccountRepository bankAccountRepository;
+    private final com.sigcon.backend.banks.matching.domain.repository.SesionConciliacionRepository sesionConciliacionRepository;
     private final AuditPublisher auditPublisher;
     private final UserUtil userUtil;
 
@@ -83,15 +85,12 @@ public class MatchingEngineService {
      */
     @Transactional
     public Map<String, Object> runEngine(Long bankAccountId) {
-        long t0 = System.currentTimeMillis();
         User user = userUtil.getUser();
         BankAccount bankAccount = bankAccountRepository.findById(bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada."));
         ParametrosMatching p = parametrosMatchingService.getEffective(bankAccountId);
-
         // E9: re-ejecución limpia lo NO confirmado y vuelve esos movimientos a NO_CONCILIADO.
         resetNonConfirmed(bankAccountId);
-
         // E1: candidatos. extracto = BANK_IMPORT no conciliado; libros = MANUAL no conciliado.
         List<FinancialMovement> extPool = new ArrayList<>(movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId, FinancialMovementSourceType.BANK_IMPORT)
@@ -99,7 +98,41 @@ public class MatchingEngineService {
         List<FinancialMovement> libPool = new ArrayList<>(movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId, FinancialMovementSourceType.MANUAL)
                 .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
+        return runEngineCore(bankAccount, extPool, libPool, p, user);
+    }
 
+    /**
+     * Conciliación Paso 4: ejecuta el motor ACOTADO a una sesión. Extracto = movimientos
+     * importados bajo la sesión (sesion_conciliacion_id); libros = MANUAL dentro del período.
+     * Reutiliza el mismo núcleo de 5 fases que la corrida por cuenta.
+     */
+    @Transactional
+    public Map<String, Object> runEngineForSession(Long sesionId) {
+        User user = userUtil.getUser();
+        SesionConciliacion s = sesionConciliacionRepository.findById(sesionId)
+                .orElseThrow(() -> new IllegalArgumentException("Sesión de conciliación no encontrada."));
+        BankAccount bankAccount = bankAccountRepository.findById(s.getBankAccountId())
+                .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada."));
+        ParametrosMatching p = parametrosMatchingService.getEffective(bankAccount.getId());
+        resetNonConfirmed(bankAccount.getId());
+        List<FinancialMovement> extPool = new ArrayList<>(movementRepository
+                .findBySesionConciliacionIdOrderByMovementDateAscIdAsc(sesionId)
+                .stream().filter(m -> FinancialMovementSourceType.BANK_IMPORT.equals(m.getSourceType())
+                        && !C_OK.equals(m.getEstadoConciliacion())).toList());
+        List<FinancialMovement> libPool = new ArrayList<>(movementRepository
+                .findByBankAccountSourceTypeAndPeriod(bankAccount.getId(), FinancialMovementSourceType.MANUAL,
+                        s.getPeriodStart(), s.getPeriodEnd())
+                .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
+        Map<String, Object> r = runEngineCore(bankAccount, extPool, libPool, p, user);
+        r.put("sesionConciliacionId", sesionId);
+        return r;
+    }
+
+    /** Núcleo de las 5 fases (E2..E5) + score + resumen (E10), compartido por cuenta y por sesión. */
+    private Map<String, Object> runEngineCore(BankAccount bankAccount, List<FinancialMovement> extPool,
+                                              List<FinancialMovement> libPool, ParametrosMatching p, User user) {
+        long t0 = System.currentTimeMillis();
+        Long bankAccountId = bankAccount.getId();
         int totalExtracto = extPool.size();
         int totalLibros = libPool.size();
         List<Emparejamiento> created = new ArrayList<>();

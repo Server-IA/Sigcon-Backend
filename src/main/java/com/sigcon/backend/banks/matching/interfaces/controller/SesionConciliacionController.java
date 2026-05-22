@@ -52,6 +52,27 @@ public class SesionConciliacionController {
         return ResponseEntity.ok(service.detail(id));
     }
 
+    @Operation(summary = "Libros contables del período de la sesión (Paso 2)")
+    @PreAuthorize(VER)
+    @GetMapping("/{id}/libros")
+    public ResponseEntity<?> libros(@PathVariable Long id) {
+        return ResponseEntity.ok(service.librosDelPeriodo(id));
+    }
+
+    @Operation(summary = "Extracto bancario importado bajo la sesión (Paso 3)")
+    @PreAuthorize(VER)
+    @GetMapping("/{id}/extracto")
+    public ResponseEntity<?> extracto(@PathVariable Long id) {
+        return ResponseEntity.ok(service.extractoDelPeriodo(id));
+    }
+
+    @Operation(summary = "Resumen de cierre: conciliación en cero (C1 / Paso 7)")
+    @PreAuthorize(VER)
+    @GetMapping("/{id}/resumen-cierre")
+    public ResponseEntity<?> resumenCierre(@PathVariable Long id) {
+        return ResponseEntity.ok(service.resumenCierre(id));
+    }
+
     @Operation(summary = "Firmar (rol=ELABORADOR|REVISOR), 2 pasos OTP (BNK-HU-066 E2/E3)")
     @PreAuthorize(EDITAR)
     @PostMapping("/{id}/firmar")
@@ -87,6 +108,27 @@ public class SesionConciliacionController {
     @GetMapping("/{id}/verificar-firma")
     public ResponseEntity<?> verify(@PathVariable Long id) {
         return ResponseEntity.ok(service.verificarFirma(id));
+    }
+
+    @Operation(summary = "Conciliaciones cerradas activas de la cuenta (Sec 12)")
+    @PreAuthorize(VER)
+    @GetMapping("/cuenta/{bankAccountId}/cerradas")
+    public ResponseEntity<?> cerradas(@PathVariable Long bankAccountId) {
+        return ResponseEntity.ok(service.listCerradas(bankAccountId));
+    }
+
+    @Operation(summary = "Conciliaciones archivadas de la cuenta (Sec 12, soft-delete a 1 año)")
+    @PreAuthorize(VER)
+    @GetMapping("/cuenta/{bankAccountId}/archivadas")
+    public ResponseEntity<?> archivadas(@PathVariable Long bankAccountId) {
+        return ResponseEntity.ok(service.listArchivadas(bankAccountId));
+    }
+
+    @Operation(summary = "Archivar conciliación cerrada con más de 1 año (Sec 12)")
+    @PreAuthorize(EDITAR)
+    @PostMapping("/{id}/archivar")
+    public ResponseEntity<?> archivar(@PathVariable Long id) {
+        return ResponseEntity.ok(service.archivar(id));
     }
 
     @Operation(summary = "Histórico de versiones (BNK-HU-075 E8)")

@@ -27,4 +27,11 @@ public class JournalEntryLineDTO {
     private String thirdPartyNit;
     private Long costCenterId;
     private String costCenterName;
+
+    /**
+     * HU-CG-05C E3: true si el NIT de la linea corresponde a un tercero que
+     * actualmente esta INACTIVO en el catalogo de Terceros (para mostrar el
+     * aviso en la consulta del comprobante). null/false si no aplica.
+     */
+    private Boolean thirdPartyInactive;
 }

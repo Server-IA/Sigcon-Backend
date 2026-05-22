@@ -246,6 +246,48 @@ public class EmparejamientoService {
         return r;
     }
 
+    /**
+     * Conciliación Paso 5 (7.2): rechazar un emparejamiento automático.
+     * R-1: motivo obligatorio (>=10). R-3: ambos movimientos vuelven a NO_CONCILIADO
+     * (quedan libres para emparejamiento manual). Devuelve los ids del extracto para que
+     * el cliente encadene la generación del asiento de ajuste (R-2) en su propia
+     * transacción (evita el anti-patrón rollback-only de llamar un @Transactional que lanza).
+     */
+    @Transactional
+    public Map<String, Object> rechazar(Long emparejamientoId, String motivo) {
+        if (motivo == null || motivo.trim().length() < 10) {
+            throw new IllegalArgumentException("Debe indicar el motivo del rechazo (mínimo 10 caracteres).");
+        }
+        Emparejamiento emp = emparejamientoRepository.findByIdAndDeletedAtIsNull(emparejamientoId)
+                .orElseThrow(() -> new IllegalArgumentException("Emparejamiento no encontrado."));
+        List<EmparejamientoDetalle> dets = detalleRepository.findByEmparejamientoId(emp.getId());
+        List<Long> extractoMovs = new ArrayList<>();
+        List<Long> librosMovs = new ArrayList<>();
+        for (EmparejamientoDetalle d : dets) {
+            movementRepository.findById(d.getFinancialMovementId()).ifPresent(m -> {
+                m.setEstadoConciliacion(C_NO);
+                movementRepository.save(m);
+            });
+            if (LADO_EXT.equals(d.getLado())) extractoMovs.add(d.getFinancialMovementId());
+            else librosMovs.add(d.getFinancialMovementId());
+            detalleRepository.delete(d);
+        }
+        emp.setEstado(E_DESHECHO);
+        emp.setMotivoMatchManual(motivo.trim());
+        emp.setDeletedAt(LocalDateTime.now());
+        emparejamientoRepository.save(emp);
+        auditPublisher.publishUpdate(AuditModule.BNK, "Emparejamiento", emp.getId(),
+                "RECHAZAR_EMPAREJAMIENTO emparejamiento=" + emp.getId() + " | motivo=" + motivo.trim()
+                        + " | extracto=" + extractoMovs + " libros=" + librosMovs);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("id", emp.getId());
+        r.put("estado", E_DESHECHO);
+        r.put("motivo", motivo.trim());
+        r.put("extractoMovimientos", extractoMovs);
+        r.put("librosMovimientos", librosMovs);
+        return r;
+    }
+
     /** Lista los emparejamientos de una cuenta (workspace). */
     public List<Map<String, Object>> listForAccount(Long bankAccountId) {
         return emparejamientoRepository.findByCuentaBancariaIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId)

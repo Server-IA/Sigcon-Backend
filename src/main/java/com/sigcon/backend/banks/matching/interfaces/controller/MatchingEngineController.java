@@ -24,4 +24,11 @@ public class MatchingEngineController {
     public ResponseEntity<?> run(@PathVariable Long bankAccountId) {
         return ResponseEntity.ok(service.runEngine(bankAccountId));
     }
+
+    @Operation(summary = "Ejecutar el motor acotado a una sesión de conciliación (Paso 4)")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PostMapping("/ejecutar-sesion/{sesionId}")
+    public ResponseEntity<?> runForSession(@PathVariable Long sesionId) {
+        return ResponseEntity.ok(service.runEngineForSession(sesionId));
+    }
 }

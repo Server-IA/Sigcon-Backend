@@ -227,7 +227,7 @@ public class AuditLogController {
                             com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
                             com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
                             null, "AuditLog", null,
-                            "Exportacion " + format + " sin resultados (filtros sin coincidencias)",
+                            "Exportacion " + format + " sin resultados | filtros: " + describeFilters(filter),
                             null, null, null);
                 } catch (Exception ignored) {}
                 return ResponseEntity.ok(body);
@@ -260,12 +260,13 @@ public class AuditLogController {
                     return ResponseEntity.badRequest().body(err);
             }
 
-            // HU-AU-06 E6: registrar evento de exportacion con conteo + filtros.
+            // HU-AU-06 E6: registrar evento de exportacion con conteo + filtros aplicados.
             auditLogService.register(
                     com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
                     com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
                     null, "AuditLog", null,
-                    "Exportacion de logs en formato " + format + " (" + logs.size() + " registros)",
+                    "Exportacion de logs en formato " + format + " (" + logs.size()
+                            + " registros) | filtros: " + describeFilters(filter),
                     null, null, null);
 
             return ResponseEntity.ok()
@@ -275,12 +276,48 @@ public class AuditLogController {
         } catch (Exception e) {
             // HU-AU-06 E5 / HU-AU-08 E8 (2026-04-28): mensaje exacto HU.
             log.error("Error generando export {}: {}", format, e.getMessage(), e);
+            String incidentRef = "AU-EXP-" + System.currentTimeMillis();
+            // HU-AU-01 E7 (QA Bloque AJ-AU): registrar el fallo de exportacion en el
+            // log de auditoria con la referencia del incidente, causa y filtros.
+            try {
+                auditLogService.register(
+                        com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                        com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
+                        com.sigcon.backend.audit.domain.model.enums.AuditSeverity.HIGH,
+                        "AuditLog", null,
+                        "FALLO en exportacion " + format + " [" + incidentRef + "]: "
+                                + e.getMessage() + " | filtros: " + describeFilters(filter),
+                        null, null, null);
+            } catch (Exception ignored) {}
             Map<String, Object> err = new HashMap<>();
             err.put("success", false);
             err.put("message", "No se pudo generar el reporte en el formato solicitado");
-            err.put("incidentRef", "AU-EXP-" + System.currentTimeMillis());
+            err.put("incidentRef", incidentRef);
             return ResponseEntity.status(500).body(err);
         }
+    }
+
+    /**
+     * HU-AU-06 E6: resumen legible de los filtros aplicados a una exportacion,
+     * para dejar trazabilidad en el log de auditoria (qué se exportó realmente).
+     */
+    private String describeFilters(AuditLogFilterRequest f) {
+        if (f == null) return "ninguno";
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (f.getUserEmail() != null && !f.getUserEmail().isBlank()) parts.add("usuario=" + f.getUserEmail());
+        if (f.getUserId() != null) parts.add("userId=" + f.getUserId());
+        if (f.getModule() != null) parts.add("modulo=" + f.getModule());
+        if (f.getModules() != null && !f.getModules().isEmpty()) parts.add("modulos=" + f.getModules());
+        if (f.getAction() != null) parts.add("accion=" + f.getAction());
+        if (f.getSeverity() != null) parts.add("severidad=" + f.getSeverity());
+        if (f.getSeverities() != null && !f.getSeverities().isEmpty()) parts.add("severidades=" + f.getSeverities());
+        if (f.getEntityType() != null && !f.getEntityType().isBlank()) parts.add("entidad=" + f.getEntityType());
+        if (f.getEntityId() != null) parts.add("entidadId=" + f.getEntityId());
+        if (f.getDateFrom() != null) parts.add("desde=" + f.getDateFrom());
+        if (f.getDateTo() != null) parts.add("hasta=" + f.getDateTo());
+        if (f.getIpAddress() != null && !f.getIpAddress().isBlank()) parts.add("ip=" + f.getIpAddress());
+        if (f.getSearchText() != null && !f.getSearchText().isBlank()) parts.add("texto='" + f.getSearchText() + "'");
+        return parts.isEmpty() ? "ninguno" : String.join(", ", parts);
     }
 
     @Operation(summary = "Exportar dashboard como PDF (HU-AU-07 E6)",

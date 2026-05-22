@@ -162,7 +162,8 @@ public class FinancialStatementController {
         try {
             return financialStatementService.getComparativo(
                     request.getYear1(), request.getMonth1(),
-                    request.getYear2(), request.getMonth2());
+                    request.getYear2(), request.getMonth2(),
+                    request.getYear3(), request.getMonth3());
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -266,10 +267,12 @@ public class FinancialStatementController {
                                                  @RequestParam Integer year1,
                                                  @RequestParam Integer month1,
                                                  @RequestParam Integer year2,
-                                                 @RequestParam Integer month2) {
+                                                 @RequestParam Integer month2,
+                                                 @RequestParam(required = false) Integer year3,
+                                                 @RequestParam(required = false) Integer month3) {
         try {
             FinancialStatementExportService.ExportResult r =
-                    exportService.exportComparativo(year1, month1, year2, month2, format);
+                    exportService.exportComparativo(year1, month1, year2, month2, year3, month3, format);
             return buildDownload(r);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

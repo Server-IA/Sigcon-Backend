@@ -573,20 +573,158 @@ public class TaxReportService {
                 nzD(data.getTotalRetencionesPracticadas()),
                 nzD(data.getTotalRetencionesSoportadas()));
 
-        String fmt = format != null ? format.toLowerCase() : "csv";
-        byte[] content;
-        if ("xlsx".equals(fmt)) {
-            content = com.sigcon.backend.utils.export.SimpleTableExporter
-                    .toXlsx("ResumenImpuestos " + year, headers, cols,
-                            data.getMonthlySummary(), ctx, totalsRow);
-        } else if ("csv".equals(fmt)) {
-            content = com.sigcon.backend.utils.export.SimpleTableExporter
-                    .toCsv(headers, cols, data.getMonthlySummary(), ctx, totalsRow);
-        } else {
-            throw new IllegalArgumentException("Formato no soportado: " + format
-                    + ". Use csv o xlsx.");
-        }
+        String fmt = normalizeFmt(format);
+        byte[] content = emit("ResumenImpuestos " + year, headers, cols,
+                data.getMonthlySummary(), ctx, totalsRow, fmt);
         publishExportAudit("Resumen impuestos", String.valueOf(year), fmt, 12);
+        return content;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // QA Bloque BR (HU-CG-12 E2): exportacion completa (CSV/XLSX/PDF) para
+    // TODO el modulo de reportes tributarios — no solo el Resumen anual, sino
+    // tambien IVA bimestral, ECL cartera y Diferencias en cambio.
+    // ──────────────────────────────────────────────────────────
+
+    /** Normaliza el formato y valida que sea uno de los soportados. */
+    private static String normalizeFmt(String format) {
+        String fmt = format != null ? format.toLowerCase() : "csv";
+        if (!"csv".equals(fmt) && !"xlsx".equals(fmt) && !"pdf".equals(fmt)) {
+            throw new IllegalArgumentException("Formato no soportado: " + format
+                    + ". Use csv, xlsx o pdf.");
+        }
+        return fmt;
+    }
+
+    /** Despacha al exporter correcto segun formato (CSV/XLSX/PDF). */
+    private <T> byte[] emit(String title, java.util.List<String> headers,
+                            java.util.List<java.util.function.Function<T, Object>> cols,
+                            java.util.List<T> rows,
+                            com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx,
+                            java.util.List<Object> totalsRow, String fmt) {
+        if ("xlsx".equals(fmt)) {
+            return com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toXlsx(title, headers, cols, rows, ctx, totalsRow);
+        } else if ("pdf".equals(fmt)) {
+            return com.sigcon.backend.utils.export.SimpleTableExporter
+                    .toPdf(title, headers, cols, rows, ctx, totalsRow);
+        }
+        return com.sigcon.backend.utils.export.SimpleTableExporter
+                .toCsv(headers, cols, rows, ctx, totalsRow);
+    }
+
+    /**
+     * HU-CG-12 E2: dispatcher de exportacion por tipo de reporte tributario.
+     *
+     * @param type    taxes-summary | iva | ecl | exchange-differences
+     * @param year    anio gravable
+     * @param month   mes (solo exchange-differences)
+     * @param bimester bimestre (solo iva)
+     * @param format  csv | xlsx | pdf
+     */
+    public byte[] exportReport(String type, Integer year, Integer month, Integer bimester, String format) {
+        String fmt = normalizeFmt(format);
+        switch (type != null ? type : "") {
+            case "taxes-summary":        return exportTaxesSummary(year, fmt);
+            case "iva":                  return exportIva(year, bimester, fmt);
+            case "ecl":                  return exportEcl(year, fmt);
+            case "exchange-differences": return exportExchangeDifferences(year, month, fmt);
+            default:
+                throw new IllegalArgumentException("Tipo de reporte tributario no soportado: " + type
+                        + ". Use taxes-summary, iva, ecl o exchange-differences.");
+        }
+    }
+
+    /** Exporta el IVA bimestral (HU-CG-12 E2). Una fila resumen del bimestre. */
+    public byte[] exportIva(Integer year, Integer bimester, String format) {
+        String fmt = normalizeFmt(format);
+        IvaReportDTO data = generateIvaBimestral(year, bimester);
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = null;
+        if (reportContextResolver != null) {
+            ctx = reportContextResolver.baseContext("IVA Bimestral " + year)
+                    .addFilter("Anio", String.valueOf(year))
+                    .addFilter("Bimestre", String.valueOf(bimester))
+                    .addTotal("IVA Generado", data.getIvaGenerado())
+                    .addTotal("IVA Descontable", data.getIvaDescontable())
+                    .addTotal("Saldo IVA", data.getSaldoIva())
+                    .build();
+        }
+        java.util.List<String> headers = java.util.List.of("Bimestre",
+                "IVA Generado", "IVA Descontable", "Saldo IVA", "Tipo Saldo",
+                "# Fact. Venta", "# Fact. Compra");
+        java.util.List<java.util.function.Function<IvaReportDTO, Object>> cols = new ArrayList<>();
+        cols.add(d -> d.getBimesterLabel());
+        cols.add(d -> nzD(d.getIvaGenerado()));
+        cols.add(d -> nzD(d.getIvaDescontable()));
+        cols.add(d -> nzD(d.getSaldoIva()));
+        cols.add(d -> d.getSaldoTipo());
+        cols.add(d -> d.getCountFacturasVenta());
+        cols.add(d -> d.getCountFacturasCompra());
+        byte[] content = emit("IVA Bimestral " + year, headers, cols,
+                java.util.List.of(data), ctx, null, fmt);
+        publishExportAudit("IVA Bimestral", year + "-B" + bimester, fmt, 1);
+        return content;
+    }
+
+    /** Exporta la provision ECL de cartera por bucket NIIF 9 (HU-CG-12 E2). */
+    public byte[] exportEcl(Integer year, String format) {
+        String fmt = normalizeFmt(format);
+        EclProvisionReportDTO data = generateEclProvision(year);
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = null;
+        if (reportContextResolver != null) {
+            ctx = reportContextResolver.baseContext("ECL Cartera NIIF 9 " + year)
+                    .addFilter("Anio", String.valueOf(year))
+                    .addTotal("Total Cartera", data.getTotalCartera())
+                    .addTotal("Total Provision", data.getTotalProvision())
+                    .build();
+        }
+        java.util.List<String> headers = java.util.List.of("Bucket (mora)",
+                "Saldo Cartera", "Tasa ECL %", "Provision ECL");
+        java.util.List<java.util.function.Function<EclProvisionReportDTO.EclBucketDTO, Object>> cols = new ArrayList<>();
+        cols.add(b -> b.getLabel());
+        cols.add(b -> nzD(b.getTotalBalance()));
+        cols.add(b -> nzD(b.getEclRate()));
+        cols.add(b -> nzD(b.getEclAmount()));
+        java.util.List<Object> totalsRow = java.util.List.of("TOTAL",
+                nzD(data.getTotalCartera()), "", nzD(data.getTotalProvision()));
+        byte[] content = emit("ECL Cartera NIIF 9 " + year, headers, cols,
+                data.getBuckets() != null ? data.getBuckets() : new ArrayList<>(), ctx, totalsRow, fmt);
+        publishExportAudit("ECL Cartera", String.valueOf(year), fmt,
+                data.getBuckets() != null ? data.getBuckets().size() : 0);
+        return content;
+    }
+
+    /** Exporta las diferencias en cambio del periodo por documento (HU-CG-12 E2). */
+    public byte[] exportExchangeDifferences(Integer year, Integer month, String format) {
+        String fmt = normalizeFmt(format);
+        ExchangeDifferenceReportDTO data = generateExchangeDifferences(year, month);
+        com.sigcon.backend.utils.export.ReportHeaderBuilder.ReportContext ctx = null;
+        if (reportContextResolver != null) {
+            ctx = reportContextResolver.baseContext("Diferencias en Cambio " + year + "-" + month)
+                    .addFilter("Anio", String.valueOf(year))
+                    .addFilter("Mes", String.valueOf(month))
+                    .addTotal("Total Ganancia", data.getTotalGanancia())
+                    .addTotal("Total Perdida", data.getTotalPerdida())
+                    .addTotal("Diferencia Neta", data.getDiferenciaNeta())
+                    .build();
+        }
+        java.util.List<String> headers = java.util.List.of("Documento", "Tipo",
+                "Moneda", "Monto ME", "TRM Original", "TRM Actual", "Diferencia", "Efecto");
+        java.util.List<java.util.function.Function<ExchangeDifferenceReportDTO.DifferenceItemDTO, Object>> cols = new ArrayList<>();
+        cols.add(i -> i.getInvoiceNumber());
+        cols.add(i -> i.getDocumentType());
+        cols.add(i -> i.getCurrency());
+        cols.add(i -> nzD(i.getAmountForeign()));
+        cols.add(i -> nzD(i.getOriginalRate()));
+        cols.add(i -> nzD(i.getCurrentRate()));
+        cols.add(i -> nzD(i.getDifferenceAmount()));
+        cols.add(i -> i.getType());
+        java.util.List<Object> totalsRow = java.util.List.of("TOTAL NETO", "", "", "", "", "",
+                nzD(data.getDiferenciaNeta()), "");
+        byte[] content = emit("Diferencias en Cambio " + year + "-" + month, headers, cols,
+                data.getItems() != null ? data.getItems() : new ArrayList<>(), ctx, totalsRow, fmt);
+        publishExportAudit("Diferencias en cambio", year + "-" + month, fmt,
+                data.getItems() != null ? data.getItems().size() : 0);
         return content;
     }
 

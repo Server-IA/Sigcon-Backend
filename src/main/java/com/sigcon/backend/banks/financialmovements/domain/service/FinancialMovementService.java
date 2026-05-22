@@ -93,6 +93,8 @@ public class FinancialMovementService {
     private final com.sigcon.backend.banks.matching.domain.service.PreprocessingService preprocessingService;
     // BNK-HU-076 E2: conversión dual (monto_funcional + trm_aplicada) para cuentas en moneda extranjera.
     private final com.sigcon.backend.banks.trm.domain.service.TrmService trmService;
+    // Conciliación I2/I3: para filtrar el extracto importado por el período de la sesión rica.
+    private final com.sigcon.backend.banks.matching.domain.repository.SesionConciliacionRepository sesionConciliacionRepository;
 
     private final UserUtil userUtil;
 
@@ -228,13 +230,23 @@ public class FinancialMovementService {
      * @throws IllegalArgumentException si el archivo es nulo, vacio o no se puede leer
      */
     @Transactional
-    public ResponseEntity<?> importCsv(Long bankAccountId, Long reconciliationSessionId, MultipartFile file) {
+    public ResponseEntity<?> importCsv(Long bankAccountId, Long reconciliationSessionId, Long sesionConciliacionId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Debe adjuntar un archivo CSV.");
         }
         User user = userUtil.getUser();
         BankAccount account = assertBankAccount(bankAccountId, user);
         BankReconciliationSession session = resolveSessionForCreate(bankAccountId, user, reconciliationSessionId);
+
+        // Conciliación I2/I3: si la importación está asociada a una sesión rica, solo se
+        // importan las filas cuya fecha cae dentro del período de la sesión; las demás se
+        // descartan y se reportan al usuario.
+        LocalDate periodFrom = null, periodTo = null;
+        if (sesionConciliacionId != null) {
+            var sc = sesionConciliacionRepository.findById(sesionConciliacionId).orElse(null);
+            if (sc != null) { periodFrom = sc.getPeriodStart(); periodTo = sc.getPeriodEnd(); }
+        }
+        int fueraDeRango = 0;
 
         // BNK-HU-035 (ampliacion) E6: hash SHA-256 del archivo completo + bloqueo de
         // re-importacion de archivo identico (mismo tratamiento que BNK-HU-023 E7/E8).
@@ -287,6 +299,13 @@ public class FinancialMovementService {
                         continue;
                     }
                     LocalDate d = LocalDate.parse(p[0].trim());
+                    // Conciliación I2: descartar (sin importar ni visualizar) las filas
+                    // cuya fecha cae fuera del rango del período de la sesión.
+                    if (periodFrom != null && periodTo != null
+                            && (d.isBefore(periodFrom) || d.isAfter(periodTo))) {
+                        fueraDeRango++;
+                        continue;
+                    }
                     // Limpiar el importe: quitar espacios, comas de miles y comillas
                     String amtRaw = p[1].trim()
                         .replace(" ", "")
@@ -329,6 +348,7 @@ public class FinancialMovementService {
                             .externalReference(ref)
                             .sourceType(FinancialMovementSourceType.BANK_IMPORT)
                             .reconciliationSession(session)
+                            .sesionConciliacionId(sesionConciliacionId)
                             .lineHash(lineHash)
                             .importFileHash(fileHash)
                             .build();
@@ -374,12 +394,18 @@ public class FinancialMovementService {
         payload.put("imported", imported);
         payload.put("duplicadosOmitidos", duplicadosOmitidos);
         payload.put("lineasDuplicadas", lineasDuplicadas);
+        payload.put("fueraDeRango", fueraDeRango);
         payload.put("hashSha256", fileHash);
         payload.put("errors", errors);
+        // Conciliación I3: mensaje con el conteo de filas descartadas por fecha cuando
+        // la importación está acotada a la sesión.
+        String msg = sesionConciliacionId != null
+                ? "Se importaron " + imported + " movimientos. " + fueraDeRango
+                        + " filas quedaron fuera del rango de fechas de la sesión y no se importaron."
+                : "Importacion finalizada. Importados: " + imported
+                        + ", duplicados omitidos: " + duplicadosOmitidos + ".";
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-                Optional.of("Importacion finalizada. Importados: " + imported
-                        + ", duplicados omitidos: " + duplicadosOmitidos + "."),
-                Optional.of(payload)));
+                Optional.of(msg), Optional.of(payload)));
     }
 
     /** BNK-HU-035 E6/E7: SHA-256 en hexadecimal (64 chars) de un arreglo de bytes. */

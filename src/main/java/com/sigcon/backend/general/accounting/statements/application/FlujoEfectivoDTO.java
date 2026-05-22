@@ -30,6 +30,24 @@ public class FlujoEfectivoDTO {
     /** Flujo neto total del periodo. */
     private BigDecimal flujoNeto;
 
+    /**
+     * HU-CG-11 E2: conciliacion de efectivo NIC 7.
+     * Saldo de efectivo y equivalentes (cuentas PUC clase 11) al inicio del periodo.
+     */
+    private BigDecimal saldoInicialEfectivo;
+
+    /**
+     * Saldo de efectivo y equivalentes al final del periodo.
+     * Debe cumplir: saldoFinalEfectivo = saldoInicialEfectivo + flujoNeto.
+     */
+    private BigDecimal saldoFinalEfectivo;
+
+    /**
+     * true si la conciliacion cuadra (saldoInicial + flujoNeto == saldoFinal calculado
+     * de forma independiente sobre las cuentas de efectivo).
+     */
+    private Boolean conciliado;
+
     /** Detalle de movimientos por tipo de actividad. */
     private List<ActivityDetailDTO> details;
 

@@ -13,6 +13,9 @@ public interface SesionConciliacionRepository extends JpaRepository<SesionConcil
 
     List<SesionConciliacion> findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(Long bankAccountId);
 
+    /** Sec 12: conciliaciones archivadas (soft-delete a 1 año) de la cuenta. */
+    List<SesionConciliacion> findByBankAccountIdAndDeletedAtIsNotNullOrderByIdDesc(Long bankAccountId);
+
     /** HU-075 E8: cadena de versiones (la original + sus reaperturas). */
     List<SesionConciliacion> findBySesionOrigenIdAndDeletedAtIsNullOrderByVersionAsc(Long sesionOrigenId);
 }

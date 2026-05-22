@@ -114,4 +114,22 @@ public interface FinancialMovementRepository extends JpaRepository<FinancialMove
     List<FinancialMovement> findByBankAccount_IdAndSourceType(
             Long bankAccountId,
             com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType sourceType);
+
+    /**
+     * Conciliación Sec 4 (Paso 2): movimientos de la cuenta de un origen dado
+     * (libros=MANUAL / extracto=BANK_IMPORT) cuya fecha cae dentro del rango del
+     * período de la sesión. Aditivo (no reemplaza queries existentes).
+     */
+    @Query("SELECT fm FROM FinancialMovement fm WHERE fm.bankAccount.id = :bankAccountId "
+            + "AND fm.sourceType = :sourceType "
+            + "AND fm.movementDate >= :from AND fm.movementDate <= :to "
+            + "ORDER BY fm.movementDate ASC, fm.id ASC")
+    List<FinancialMovement> findByBankAccountSourceTypeAndPeriod(
+            @Param("bankAccountId") Long bankAccountId,
+            @Param("sourceType") com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType sourceType,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    /** Conciliación I1 (Paso 3): movimientos del extracto importados bajo una sesión rica. */
+    List<FinancialMovement> findBySesionConciliacionIdOrderByMovementDateAscIdAsc(Long sesionConciliacionId);
 }

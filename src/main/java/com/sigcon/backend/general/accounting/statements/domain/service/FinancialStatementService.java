@@ -93,9 +93,9 @@ public class FinancialStatementService {
     public ResponseEntity<?> getBalanceGeneral(Integer year, Integer month) {
         log.info("Generando Balance General acumulado hasta {}-{}", year, String.format("%02d", month));
 
-        // Obtener todos los asientos POSTED hasta el periodo
-        List<JournalEntry> entries = journalEntryRepository.findPostedUpToPeriod(
-                year, month, JournalEntryStatus.POSTED);
+        // Obtener todos los asientos POSTED hasta el periodo (HU-CG-10 E3: sin reversados)
+        List<JournalEntry> entries = soloVivos(journalEntryRepository.findPostedUpToPeriod(
+                year, month, JournalEntryStatus.POSTED));
 
         // Agrupar por clase PUC
         Map<AccountClass, Map<Long, AccountAccumulator>> classMap = new LinkedHashMap<>();
@@ -145,8 +145,9 @@ public class FinancialStatementService {
     public ResponseEntity<?> getEstadoResultados(Integer year, Integer month) {
         log.info("Generando Estado de Resultados para {}-{}", year, String.format("%02d", month));
 
-        List<JournalEntry> entries = journalEntryRepository.findByPeriodAndStatus(
-                year, month, JournalEntryStatus.POSTED);
+        // HU-CG-10 E3: excluir transacciones reversadas (original REVERSED + su REV-XXXX)
+        List<JournalEntry> entries = soloVivos(journalEntryRepository.findByPeriodAndStatus(
+                year, month, JournalEntryStatus.POSTED));
 
         Map<AccountClass, Map<Long, AccountAccumulator>> classMap = new LinkedHashMap<>();
         classifyEntryLines(entries, classMap);
@@ -203,58 +204,64 @@ public class FinancialStatementService {
     public ResponseEntity<?> getFlujoEfectivo(Integer year, Integer month) {
         log.info("Generando Flujo de Efectivo para {}-{}", year, String.format("%02d", month));
 
-        List<JournalEntry> entries = journalEntryRepository.findByPeriodAndStatus(
-                year, month, JournalEntryStatus.POSTED);
+        // HU-CG-10 E3 / HU-CG-11: excluir transacciones reversadas del flujo
+        List<JournalEntry> entries = soloVivos(journalEntryRepository.findByPeriodAndStatus(
+                year, month, JournalEntryStatus.POSTED));
 
-        // Clasificar asientos por tipo de actividad NIC 7
-        Map<String, List<JournalEntry>> activityMap = new LinkedHashMap<>();
-        activityMap.put("OPERATIVA", new ArrayList<>());
-        activityMap.put("INVERSION", new ArrayList<>());
-        activityMap.put("FINANCIACION", new ArrayList<>());
-
-        for (JournalEntry entry : entries) {
-            String activity = classifyActivity(entry.getSourceModule());
-            activityMap.get(activity).add(entry);
+        // HU-CG-11: el Flujo de Efectivo (NIC 7) rastrea SOLO los movimientos que afectan
+        // las cuentas de efectivo y equivalentes (PUC clase 11: Caja 1105, Bancos 1110,
+        // remesas/ahorros 1115/1120...). Cada asiento aporta su DELTA de efectivo
+        // (debitos - creditos sobre las lineas de efectivo); los asientos que no tocan
+        // efectivo (ej. causaciones de nomina D 5105 / C 2505) NO son flujos de caja y se
+        // omiten. Cada flujo se clasifica por la contrapartida (cuenta no-efectivo) segun NIC 7.
+        Map<String, List<FlujoEfectivoDTO.EntryDetailDTO>> entriesByActivity = new LinkedHashMap<>();
+        Map<String, BigDecimal[]> sumsByActivity = new LinkedHashMap<>();
+        for (String a : List.of("OPERATIVA", "INVERSION", "FINANCIACION")) {
+            entriesByActivity.put(a, new ArrayList<>());
+            sumsByActivity.put(a, new BigDecimal[] { BigDecimal.ZERO, BigDecimal.ZERO });
         }
 
-        // Construir detalle por actividad
+        for (JournalEntry entry : entries) {
+            if (entry.getLines() == null) continue;
+            BigDecimal cashDebit = BigDecimal.ZERO;
+            BigDecimal cashCredit = BigDecimal.ZERO;
+            for (JournalEntryLine line : entry.getLines()) {
+                if (!isCashLine(line)) continue;
+                cashDebit = cashDebit.add(line.getDebitAmount() != null ? line.getDebitAmount() : BigDecimal.ZERO);
+                cashCredit = cashCredit.add(line.getCreditAmount() != null ? line.getCreditAmount() : BigDecimal.ZERO);
+            }
+            BigDecimal cashDelta = cashDebit.subtract(cashCredit);
+            // Sin movimiento neto de efectivo (causacion o traspaso interno) => no es flujo
+            if (cashDelta.compareTo(BigDecimal.ZERO) == 0) continue;
+
+            String activity = classifyCashFlowActivity(entry);
+            BigDecimal[] s = sumsByActivity.get(activity);
+            s[0] = s[0].add(cashDebit);
+            s[1] = s[1].add(cashCredit);
+            entriesByActivity.get(activity).add(FlujoEfectivoDTO.EntryDetailDTO.builder()
+                    .entryId(entry.getId())
+                    .entryNumber(entry.getEntryNumber())
+                    .description(entry.getDescription())
+                    .sourceModule(entry.getSourceModule() != null ? entry.getSourceModule().name() : null)
+                    .totalDebit(cashDebit)
+                    .totalCredit(cashCredit)
+                    .build());
+        }
+
         List<FlujoEfectivoDTO.ActivityDetailDTO> details = new ArrayList<>();
         BigDecimal flujoOperativo = BigDecimal.ZERO;
         BigDecimal flujoInversion = BigDecimal.ZERO;
         BigDecimal flujoFinanciacion = BigDecimal.ZERO;
-
-        for (Map.Entry<String, List<JournalEntry>> mapEntry : activityMap.entrySet()) {
-            String activityType = mapEntry.getKey();
-            List<JournalEntry> activityEntries = mapEntry.getValue();
-
-            BigDecimal totalDebit = BigDecimal.ZERO;
-            BigDecimal totalCredit = BigDecimal.ZERO;
-            List<FlujoEfectivoDTO.EntryDetailDTO> entryDetails = new ArrayList<>();
-
-            for (JournalEntry entry : activityEntries) {
-                totalDebit = totalDebit.add(entry.getTotalDebit());
-                totalCredit = totalCredit.add(entry.getTotalCredit());
-
-                entryDetails.add(FlujoEfectivoDTO.EntryDetailDTO.builder()
-                        .entryId(entry.getId())
-                        .entryNumber(entry.getEntryNumber())
-                        .description(entry.getDescription())
-                        .sourceModule(entry.getSourceModule() != null ? entry.getSourceModule().name() : null)
-                        .totalDebit(entry.getTotalDebit())
-                        .totalCredit(entry.getTotalCredit())
-                        .build());
-            }
-
-            BigDecimal netFlow = totalDebit.subtract(totalCredit);
-
+        for (String activityType : List.of("OPERATIVA", "INVERSION", "FINANCIACION")) {
+            BigDecimal[] s = sumsByActivity.get(activityType);
+            BigDecimal netFlow = s[0].subtract(s[1]);
             details.add(FlujoEfectivoDTO.ActivityDetailDTO.builder()
                     .activityType(activityType)
-                    .totalDebit(totalDebit)
-                    .totalCredit(totalCredit)
+                    .totalDebit(s[0])
+                    .totalCredit(s[1])
                     .netFlow(netFlow)
-                    .entries(entryDetails)
+                    .entries(entriesByActivity.get(activityType))
                     .build());
-
             switch (activityType) {
                 case "OPERATIVA" -> flujoOperativo = netFlow;
                 case "INVERSION" -> flujoInversion = netFlow;
@@ -262,11 +269,25 @@ public class FinancialStatementService {
             }
         }
 
+        BigDecimal flujoNeto = flujoOperativo.add(flujoInversion).add(flujoFinanciacion);
+
+        // HU-CG-11 E2: conciliacion de efectivo. Saldo inicial = efectivo acumulado antes
+        // del periodo; saldo final independiente = efectivo acumulado hasta el periodo.
+        BigDecimal saldoInicial = accumulatedCash(soloVivos(
+                journalEntryRepository.findPostedBeforePeriod(year, month, JournalEntryStatus.POSTED)));
+        BigDecimal saldoFinalIndependiente = accumulatedCash(soloVivos(
+                journalEntryRepository.findPostedUpToPeriod(year, month, JournalEntryStatus.POSTED)));
+        BigDecimal saldoFinalCalculado = saldoInicial.add(flujoNeto);
+        boolean conciliado = saldoFinalCalculado.compareTo(saldoFinalIndependiente) == 0;
+
         FlujoEfectivoDTO result = FlujoEfectivoDTO.builder()
                 .flujoOperativo(flujoOperativo)
                 .flujoInversion(flujoInversion)
                 .flujoFinanciacion(flujoFinanciacion)
-                .flujoNeto(flujoOperativo.add(flujoInversion).add(flujoFinanciacion))
+                .flujoNeto(flujoNeto)
+                .saldoInicialEfectivo(saldoInicial)
+                .saldoFinalEfectivo(saldoFinalIndependiente)
+                .conciliado(conciliado)
                 .details(details)
                 .build();
 
@@ -291,24 +312,41 @@ public class FinancialStatementService {
      * @param month2 mes del segundo periodo
      * @return datos comparativos con variaciones absolutas y porcentuales
      */
-    public ResponseEntity<?> getComparativo(Integer year1, Integer month1, Integer year2, Integer month2) {
-        log.info("Generando Balance Comparativo entre {}-{} y {}-{}",
-                year1, String.format("%02d", month1), year2, String.format("%02d", month2));
+    /** Umbral de variacion significativa (HU-CG-13 E3): +/-10%. */
+    private static final BigDecimal UMBRAL_VARIACION = BigDecimal.valueOf(10);
 
-        // Generar balance para ambos periodos
+    /** Overload de 2 periodos (compatibilidad). Delega en la version de 3 periodos. */
+    public ResponseEntity<?> getComparativo(Integer year1, Integer month1, Integer year2, Integer month2) {
+        return getComparativo(year1, month1, year2, month2, null, null);
+    }
+
+    /**
+     * HU-CG-13: Balance General comparativo entre DOS o TRES periodos.
+     * Calcula la variacion absoluta y porcentual del periodo A->B y, si se
+     * indica un tercer periodo, tambien B->C. Marca con {@code umbralExcedido}
+     * las filas cuya variacion porcentual supera +/-10% (E3, para resaltado).
+     *
+     * @param year3  anio del tercer periodo (opcional; null = solo 2 periodos)
+     * @param month3 mes del tercer periodo (opcional)
+     */
+    public ResponseEntity<?> getComparativo(Integer year1, Integer month1,
+                                            Integer year2, Integer month2,
+                                            Integer year3, Integer month3) {
+        boolean tres = year3 != null && month3 != null;
+        log.info("Generando Balance Comparativo {}-{} vs {}-{}{}",
+                year1, String.format("%02d", month1), year2, String.format("%02d", month2),
+                tres ? " vs " + year3 + "-" + String.format("%02d", month3) : "");
+
         Map<String, BigDecimal> balance1 = calculateBalanceTotals(year1, month1);
         Map<String, BigDecimal> balance2 = calculateBalanceTotals(year2, month2);
+        Map<String, BigDecimal> balance3 = tres ? calculateBalanceTotals(year3, month3) : null;
 
-        // Construir comparativo
         List<Map<String, Object>> comparison = new ArrayList<>();
         for (String className : List.of("ACTIVOS", "PASIVOS", "PATRIMONIO")) {
             BigDecimal val1 = balance1.getOrDefault(className, BigDecimal.ZERO);
             BigDecimal val2 = balance2.getOrDefault(className, BigDecimal.ZERO);
             BigDecimal variacionAbsoluta = val2.subtract(val1);
-            BigDecimal variacionPorcentual = val1.compareTo(BigDecimal.ZERO) != 0
-                    ? variacionAbsoluta.multiply(BigDecimal.valueOf(100))
-                        .divide(val1, 2, RoundingMode.HALF_UP)
-                    : BigDecimal.ZERO;
+            BigDecimal variacionPorcentual = pct(variacionAbsoluta, val1);
 
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("className", className);
@@ -318,14 +356,35 @@ public class FinancialStatementService {
             row.put("period2Label", year2 + "-" + String.format("%02d", month2));
             row.put("variacionAbsoluta", variacionAbsoluta);
             row.put("variacionPorcentual", variacionPorcentual);
+            boolean excede = variacionPorcentual.abs().compareTo(UMBRAL_VARIACION) > 0;
+
+            if (tres) {
+                BigDecimal val3 = balance3.getOrDefault(className, BigDecimal.ZERO);
+                BigDecimal variacionAbsoluta2 = val3.subtract(val2);
+                BigDecimal variacionPorcentual2 = pct(variacionAbsoluta2, val2);
+                row.put("period3Value", val3);
+                row.put("period3Label", year3 + "-" + String.format("%02d", month3));
+                row.put("variacionAbsoluta2", variacionAbsoluta2);
+                row.put("variacionPorcentual2", variacionPorcentual2);
+                excede = excede || variacionPorcentual2.abs().compareTo(UMBRAL_VARIACION) > 0;
+            }
+            // HU-CG-13 E3: bandera de variacion significativa (>+/-10%) para resaltado.
+            row.put("umbralExcedido", excede);
             comparison.add(row);
         }
 
-        publishViewAudit("Comparativo " + year1 + "-" + month1 + " vs " + year2 + "-" + month2,
-                year1, month1, comparison.size());
+        publishViewAudit("Comparativo " + year1 + "-" + month1 + " vs " + year2 + "-" + month2
+                + (tres ? " vs " + year3 + "-" + month3 : ""), year1, month1, comparison.size());
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Balance Comparativo generado correctamente"),
                 Optional.of(comparison)));
+    }
+
+    /** Variacion porcentual segura (0 si la base es 0). */
+    private BigDecimal pct(BigDecimal variacion, BigDecimal base) {
+        return base.compareTo(BigDecimal.ZERO) != 0
+                ? variacion.multiply(BigDecimal.valueOf(100)).divide(base, 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -357,16 +416,17 @@ public class FinancialStatementService {
                 year, String.format("%02d", month));
 
         // 1. Saldo inicial: acumulados de cuentas clase 3 antes del periodo
-        List<JournalEntry> entriesBefore = journalEntryRepository.findPostedBeforePeriod(
-                year, month, JournalEntryStatus.POSTED);
+        // HU-CG-10 E3: excluir transacciones reversadas
+        List<JournalEntry> entriesBefore = soloVivos(journalEntryRepository.findPostedBeforePeriod(
+                year, month, JournalEntryStatus.POSTED));
         Map<AccountClass, Map<Long, AccountAccumulator>> beforeMap = new LinkedHashMap<>();
         classifyEntryLines(entriesBefore, beforeMap);
         Map<Long, AccountAccumulator> equityBefore = beforeMap.getOrDefault(
                 AccountClass.EQUITY, new LinkedHashMap<>());
 
         // 2. Movimientos del periodo: cuentas clase 3 durante el mes
-        List<JournalEntry> entriesPeriod = journalEntryRepository.findByPeriodAndStatus(
-                year, month, JournalEntryStatus.POSTED);
+        List<JournalEntry> entriesPeriod = soloVivos(journalEntryRepository.findByPeriodAndStatus(
+                year, month, JournalEntryStatus.POSTED));
         Map<AccountClass, Map<Long, AccountAccumulator>> periodMap = new LinkedHashMap<>();
         classifyEntryLines(entriesPeriod, periodMap);
         Map<Long, AccountAccumulator> equityPeriod = periodMap.getOrDefault(
@@ -562,8 +622,9 @@ public class FinancialStatementService {
      * Calcula los totales del balance general para un periodo (usado en comparativos).
      */
     private Map<String, BigDecimal> calculateBalanceTotals(Integer year, Integer month) {
-        List<JournalEntry> entries = journalEntryRepository.findPostedUpToPeriod(
-                year, month, JournalEntryStatus.POSTED);
+        // HU-CG-10 E3: excluir transacciones reversadas tambien en el comparativo
+        List<JournalEntry> entries = soloVivos(journalEntryRepository.findPostedUpToPeriod(
+                year, month, JournalEntryStatus.POSTED));
         Map<AccountClass, Map<Long, AccountAccumulator>> classMap = new LinkedHashMap<>();
         classifyEntryLines(entries, classMap);
 
@@ -585,6 +646,104 @@ public class FinancialStatementService {
             case BNK -> "FINANCIACION";
             default -> "OPERATIVA";
         };
+    }
+
+    /** Codigo PUC de la cuenta de una linea (null-safe). */
+    private String pucCodeOf(JournalEntryLine line) {
+        if (line.getAccountingAccount() == null
+                || line.getAccountingAccount().getPucAccount() == null) return null;
+        return line.getAccountingAccount().getPucAccount().getCode();
+    }
+
+    /**
+     * HU-CG-11: true si la linea afecta una cuenta de efectivo o equivalentes
+     * (PUC clase 11 = Disponible: 1105 Caja, 1110 Bancos, 1115 Remesas, 1120 Ahorros...).
+     */
+    private boolean isCashLine(JournalEntryLine line) {
+        String code = pucCodeOf(line);
+        return code != null && code.startsWith("11");
+    }
+
+    /**
+     * HU-CG-11: clasifica el flujo de un asiento por la naturaleza de su contrapartida
+     * (cuenta NO-efectivo de mayor monto), conforme NIC 7:
+     * <ul>
+     *   <li>INVERSION: contrapartida en activos no corrientes / inversiones
+     *       (PUC 12 inversiones, 15 PPE, 16 intangibles, 17 diferidos, 18 otros activos, 19).</li>
+     *   <li>FINANCIACION: contrapartida en obligaciones financieras (PUC 21) o patrimonio (clase 3:
+     *       aportes de capital, dividendos).</li>
+     *   <li>OPERATIVA: resto (ingresos 4, gastos 5, costos 6/7, CxC 13, inventarios 14,
+     *       proveedores 22, CxP 23, impuestos 24, obligaciones laborales 25...).</li>
+     * </ul>
+     * Si el asiento no tiene contrapartida no-efectivo (ej. traspaso entre cuentas de
+     * efectivo) se cae al heuristico por modulo origen.
+     */
+    private String classifyCashFlowActivity(JournalEntry entry) {
+        String bestCode = null;
+        BigDecimal bestAmt = BigDecimal.valueOf(-1);
+        if (entry.getLines() != null) {
+            for (JournalEntryLine line : entry.getLines()) {
+                if (isCashLine(line)) continue;
+                String code = pucCodeOf(line);
+                if (code == null) continue;
+                BigDecimal amt = (line.getDebitAmount() != null ? line.getDebitAmount() : BigDecimal.ZERO)
+                        .add(line.getCreditAmount() != null ? line.getCreditAmount() : BigDecimal.ZERO);
+                if (amt.compareTo(bestAmt) > 0) {
+                    bestAmt = amt;
+                    bestCode = code;
+                }
+            }
+        }
+        if (bestCode == null) return classifyActivity(entry.getSourceModule());
+        String g2 = bestCode.length() >= 2 ? bestCode.substring(0, 2) : bestCode;
+        if (bestCode.startsWith("3") || g2.equals("21")) return "FINANCIACION";
+        if (List.of("12", "15", "16", "17", "18", "19").contains(g2)) return "INVERSION";
+        return "OPERATIVA";
+    }
+
+    /**
+     * HU-CG-11 E2: suma el efectivo neto (debitos - creditos sobre cuentas de efectivo)
+     * acumulado en una lista de asientos. Usado para los saldos inicial/final de la
+     * conciliacion de efectivo.
+     */
+    private BigDecimal accumulatedCash(List<JournalEntry> entries) {
+        BigDecimal total = BigDecimal.ZERO;
+        if (entries == null) return total;
+        for (JournalEntry entry : entries) {
+            if (entry.getLines() == null) continue;
+            for (JournalEntryLine line : entry.getLines()) {
+                if (!isCashLine(line)) continue;
+                total = total.add(line.getDebitAmount() != null ? line.getDebitAmount() : BigDecimal.ZERO);
+                total = total.subtract(line.getCreditAmount() != null ? line.getCreditAmount() : BigDecimal.ZERO);
+            }
+        }
+        return total;
+    }
+
+    /**
+     * HU-CG-10 E3: excluye de los estados financieros las transacciones reversadas.
+     *
+     * <p>Una reversion produce DOS asientos: el original pasa a estado {@code REVERSED}
+     * y se genera un contra-asiento {@code REV-XXXX} (identificable por
+     * {@code reversalOf != null}) en el periodo actual ({@code LocalDate.now()}). Las
+     * queries de repositorio incluyen {@code REVERSED} a proposito para que los LIBROS
+     * oficiales (Diario/Mayor) muestren ambos asientos y preserven la trazabilidad
+     * (NIC 1 / Decreto 2649/93). Pero en los ESTADOS FINANCIEROS eso descuadra el caso
+     * cruzado: si el original estaba en abril y el REV cae en mayo, abril seguia contando
+     * el movimiento y mayo contaba el negativo.</p>
+     *
+     * <p>Solucion: para los estados financieros se descartan AMBAS patas de toda
+     * transaccion reversada — el original {@code REVERSED} y su {@code REV-XXXX} — de modo
+     * que una transaccion totalmente reversada no aporta a ningun estado en ningun periodo.
+     * Las correcciones ({@code correctionOf != null}, estado {@code POSTED}) SI se conservan,
+     * porque representan la version corregida que debe reflejarse.</p>
+     */
+    private List<JournalEntry> soloVivos(List<JournalEntry> entries) {
+        if (entries == null || entries.isEmpty()) return entries;
+        return entries.stream()
+                .filter(e -> e.getStatus() != JournalEntryStatus.REVERSED)
+                .filter(e -> e.getReversalOf() == null)
+                .collect(Collectors.toList());
     }
 
     /** Acumulador interno para totales por cuenta contable. */

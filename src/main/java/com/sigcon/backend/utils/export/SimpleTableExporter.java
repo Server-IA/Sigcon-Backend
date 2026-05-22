@@ -3,7 +3,12 @@ package com.sigcon.backend.utils.export;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 
 import org.apache.poi.ss.usermodel.Cell;
@@ -13,6 +18,20 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.kernel.colors.ColorConstants;
+import com.itextpdf.kernel.colors.DeviceRgb;
+import com.itextpdf.kernel.font.PdfFont;
+import com.itextpdf.kernel.font.PdfFontFactory;
+import com.itextpdf.kernel.geom.PageSize;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.layout.Document;
+import com.itextpdf.layout.element.Paragraph;
+import com.itextpdf.layout.element.Table;
+import com.itextpdf.layout.properties.TextAlignment;
+import com.itextpdf.layout.properties.UnitValue;
 
 /**
  * Helper compartido para exportacion tabular sencilla (CSV con BOM UTF-8 y XLSX).
@@ -41,6 +60,9 @@ public final class SimpleTableExporter {
     /** MIME estandar para XLSX. */
     public static final String XLSX_MIME =
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    /** MIME para PDF. */
+    public static final String PDF_MIME = "application/pdf";
 
     /**
      * Genera CSV con BOM UTF-8 (Excel ES detecta acentos correctamente).
@@ -214,6 +236,109 @@ public final class SimpleTableExporter {
             return baos.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("Error generando XLSX: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * QA Bloque BR (HU-CG-12 E2): genera PDF tabular generico con iText 7.
+     * Mismo contrato (headers + columns + rows + ReportContext + totalsRow) que
+     * toCsv/toXlsx, para que cualquier modulo (tributarios, listados CFG, etc.)
+     * tenga exportacion consistente en los 3 formatos. Encabezado A4 con titulo,
+     * datos de empresa/usuario/filtros del ReportContext, tabla con header
+     * resaltado, fila TOTAL opcional y bloque resumen de totales del contexto.
+     *
+     * @param title     titulo del reporte (ej. "Resumen Impuestos 2026")
+     * @param headers   encabezados de columna
+     * @param columns   extractores de valor por columna
+     * @param rows      filas de datos
+     * @param reportCtx contexto (empresa/usuario/filtros/totales); puede ser null
+     * @param totalsRow fila TOTAL precalculada; puede ser null
+     */
+    public static <T> byte[] toPdf(String title,
+                                   List<String> headers,
+                                   List<Function<T, Object>> columns,
+                                   List<T> rows,
+                                   ReportHeaderBuilder.ReportContext reportCtx,
+                                   List<Object> totalsRow) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(baos);
+            PdfDocument pdf = new PdfDocument(writer);
+            pdf.setDefaultPageSize(PageSize.A4);
+            try (Document doc = new Document(pdf)) {
+                PdfFont titleFont = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
+                PdfFont bodyFont = PdfFontFactory.createFont(StandardFonts.HELVETICA);
+
+                doc.add(new Paragraph(title != null ? title : "Reporte")
+                        .setFont(titleFont).setFontSize(16)
+                        .setTextAlignment(TextAlignment.CENTER)
+                        .setFontColor(new DeviceRgb(30, 58, 138)));
+
+                if (reportCtx != null) {
+                    StringBuilder meta = new StringBuilder();
+                    if (reportCtx.companyName != null) {
+                        meta.append("Empresa: ").append(reportCtx.companyName);
+                        if (reportCtx.companyNit != null) meta.append(" - NIT ").append(reportCtx.companyNit);
+                        meta.append('\n');
+                    }
+                    if (reportCtx.userEmail != null) {
+                        meta.append("Generado por: ").append(reportCtx.userEmail);
+                        if (reportCtx.roles != null && !reportCtx.roles.isEmpty()) {
+                            meta.append(" (").append(String.join(", ", reportCtx.roles)).append(")");
+                        }
+                        meta.append('\n');
+                    }
+                    meta.append("Generado: ").append(LocalDateTime.now()
+                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                    if (reportCtx.filters != null && !reportCtx.filters.isEmpty()) {
+                        meta.append("\nFiltros: ");
+                        reportCtx.filters.forEach((k, v) -> meta.append(k).append("=").append(v).append("; "));
+                    }
+                    doc.add(new Paragraph(meta.toString()).setFont(bodyFont).setFontSize(9)
+                            .setFontColor(new DeviceRgb(75, 85, 99)));
+                }
+
+                DecimalFormat df = new DecimalFormat("#,##0.00",
+                        new DecimalFormatSymbols(new Locale("es", "CO")));
+                Table table = new Table(UnitValue.createPercentArray(headers.size()))
+                        .useAllAvailableWidth();
+                for (String h : headers) {
+                    table.addHeaderCell(new com.itextpdf.layout.element.Cell()
+                            .add(new Paragraph(h).setFont(titleFont).setFontSize(9))
+                            .setBackgroundColor(new DeviceRgb(238, 242, 255)));
+                }
+                for (T row : rows) {
+                    for (Function<T, Object> col : columns) {
+                        Object v = col.apply(row);
+                        String text = v == null ? "" : (v instanceof Number n ? df.format(n.doubleValue()) : v.toString());
+                        table.addCell(new com.itextpdf.layout.element.Cell()
+                                .add(new Paragraph(text).setFont(bodyFont).setFontSize(8)));
+                    }
+                }
+                if (totalsRow != null && !totalsRow.isEmpty()) {
+                    for (Object v : totalsRow) {
+                        String text = v == null ? "" : (v instanceof Number n ? df.format(n.doubleValue()) : v.toString());
+                        table.addCell(new com.itextpdf.layout.element.Cell()
+                                .add(new Paragraph(text).setFont(titleFont).setFontSize(9))
+                                .setBackgroundColor(new DeviceRgb(217, 226, 243)));
+                    }
+                }
+                doc.add(table);
+
+                if (reportCtx != null && reportCtx.totals != null && !reportCtx.totals.isEmpty()) {
+                    StringBuilder sum = new StringBuilder("\nResumen:\n");
+                    reportCtx.totals.forEach((k, v) -> sum.append("  ").append(k).append(": ")
+                            .append(v != null ? df.format(v.doubleValue()) : "0.00").append('\n'));
+                    doc.add(new Paragraph(sum.toString()).setFont(bodyFont).setFontSize(9));
+                }
+
+                doc.add(new Paragraph("Documento generado automaticamente. Pagina con valor probatorio.")
+                        .setFont(bodyFont).setFontSize(7)
+                        .setTextAlignment(TextAlignment.CENTER)
+                        .setFontColor(ColorConstants.GRAY));
+            }
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("Error generando PDF: " + e.getMessage(), e);
         }
     }
 

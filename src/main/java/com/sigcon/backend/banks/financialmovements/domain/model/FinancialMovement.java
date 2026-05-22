@@ -114,6 +114,13 @@ public class FinancialMovement {
     @Column(name = "estado_conciliacion", length = 20)
     private String estadoConciliacion;
 
+    // Conciliación I1 (mapeo por R4): sesión rica (SesionConciliacion) bajo la que
+    // se importó este movimiento de extracto. Nullable — los movimientos de libro o
+    // los importados sin sesión no lo usan. Permite mostrar el "Extracto del período"
+    // acotado a la sesión, sin crear una tabla de extracto separada.
+    @Column(name = "sesion_conciliacion_id")
+    private Long sesionConciliacionId;
+
     // BNK-HU-076 E2: almacenamiento dual para cuentas en moneda extranjera (NIC 21).
     // amount = monto en MONEDA ORIGINAL (el motor de matching opera sobre este, HU-076 E3).
     // monto_funcional = equivalente en COP usando la TRM de la fecha del movimiento.

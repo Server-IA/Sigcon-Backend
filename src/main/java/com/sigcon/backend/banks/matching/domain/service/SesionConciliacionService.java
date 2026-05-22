@@ -60,6 +60,16 @@ public class SesionConciliacionService {
 
     @Transactional
     public Map<String, Object> create(Long bankAccountId, LocalDate ps, LocalDate pe, BigDecimal saldoExtracto) {
+        // Conciliación Sec 3.2: validaciones de fechas del período (V1, V2).
+        if (ps == null || pe == null) {
+            throw new IllegalArgumentException("Debe indicar la fecha inicial y la fecha final del período.");
+        }
+        if (pe.isBefore(ps)) {
+            throw new IllegalArgumentException("La fecha final no puede ser anterior a la fecha inicial.");
+        }
+        if (pe.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("La fecha final de conciliación no puede ser una fecha futura.");
+        }
         BankAccount ba = bankAccountRepo.findById(bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
         User u = userUtil.getUser();
@@ -85,6 +95,107 @@ public class SesionConciliacionService {
     public List<Map<String, Object>> list(Long bankAccountId) {
         return sesionRepo.findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId).stream()
                 .map(this::row).toList();
+    }
+
+    /** Conciliación Sec 4 (Paso 2): libros contables (MANUAL) del período de la sesión. */
+    public List<Map<String, Object>> librosDelPeriodo(Long sesionId) {
+        SesionConciliacion s = load(sesionId);
+        return movementRepo.findByBankAccountSourceTypeAndPeriod(
+                        s.getBankAccountId(),
+                        com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
+                        s.getPeriodStart(), s.getPeriodEnd())
+                .stream().map(this::movRow).toList();
+    }
+
+    /** Conciliación Sec 5 (Paso 3): extracto bancario importado bajo la sesión. */
+    public List<Map<String, Object>> extractoDelPeriodo(Long sesionId) {
+        load(sesionId); // valida existencia + tenant
+        return movementRepo.findBySesionConciliacionIdOrderByMovementDateAscIdAsc(sesionId)
+                .stream().map(this::movRow).toList();
+    }
+
+    /**
+     * Conciliación Sec 7 (C1 / Paso 7): resumen para el cierre en cero.
+     * Cuenta extracto (bajo la sesión) y libros (MANUAL del período) y cuántos
+     * de cada lado quedan sin conciliar. enCero = no hay movimientos pendientes.
+     */
+    public Map<String, Object> resumenCierre(Long sesionId) {
+        SesionConciliacion s = load(sesionId);
+        List<FinancialMovement> ext = movementRepo.findBySesionConciliacionIdOrderByMovementDateAscIdAsc(s.getId());
+        List<FinancialMovement> lib = movementRepo.findByBankAccountSourceTypeAndPeriod(
+                s.getBankAccountId(),
+                com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
+                s.getPeriodStart(), s.getPeriodEnd());
+        long extConc = ext.stream().filter(m -> "CONCILIADO".equals(m.getEstadoConciliacion())).count();
+        long libConc = lib.stream().filter(m -> "CONCILIADO".equals(m.getEstadoConciliacion())).count();
+        long pendientes = (ext.size() - extConc) + (lib.size() - libConc);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("sesionId", s.getId());
+        r.put("estado", s.getEstado());
+        r.put("version", s.getVersion());
+        r.put("totalExtracto", ext.size());
+        r.put("extractoConciliado", extConc);
+        r.put("totalLibros", lib.size());
+        r.put("librosConciliado", libConc);
+        r.put("pendientes", pendientes);
+        r.put("enCero", pendientes == 0);
+        r.put("saldoExtracto", s.getSaldoExtracto());
+        r.put("saldoLibros", s.getSaldoLibros());
+        r.put("diferencia", s.getDiferencia());
+        r.put("firmaElaboradorId", s.getFirmaElaboradorId());
+        r.put("firmaRevisorId", s.getFirmaRevisorId());
+        r.put("informeArchivoId", s.getInformeArchivoId());
+        return r;
+    }
+
+    /** C1: movimientos de la sesión (extracto + libros del período) que aún no están CONCILIADO. */
+    private List<FinancialMovement> pendientesDeLaSesion(SesionConciliacion s) {
+        List<FinancialMovement> pend = new ArrayList<>();
+        for (FinancialMovement m : movementRepo.findBySesionConciliacionIdOrderByMovementDateAscIdAsc(s.getId()))
+            if (!"CONCILIADO".equals(m.getEstadoConciliacion())) pend.add(m);
+        for (FinancialMovement m : movementRepo.findByBankAccountSourceTypeAndPeriod(
+                s.getBankAccountId(),
+                com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
+                s.getPeriodStart(), s.getPeriodEnd()))
+            if (!"CONCILIADO".equals(m.getEstadoConciliacion())) pend.add(m);
+        return pend;
+    }
+
+    /** C1: exige conciliación en cero antes de avanzar hacia el cierre. */
+    private void assertConciliacionEnCero(SesionConciliacion s) {
+        List<FinancialMovement> pend = pendientesDeLaSesion(s);
+        if (!pend.isEmpty()) {
+            throw new IllegalStateException("BNK-CON-030: la conciliación no está en cero. Quedan "
+                    + pend.size() + " movimiento(s) sin conciliar en el período. Concílielos o genere los"
+                    + " asientos de ajuste (Paso 6) antes de continuar con el cierre.");
+        }
+    }
+
+    private Map<String, Object> movRow(FinancialMovement m) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("id", m.getId());
+        r.put("fecha", m.getMovementDate() != null ? m.getMovementDate().toString() : null);
+        r.put("importe", m.getAmount());
+        r.put("descripcion", m.getDescription());
+        r.put("referencia", m.getExternalReference());
+        r.put("origen", m.getSourceType() != null ? m.getSourceType().name() : null);
+        r.put("estadoConciliacion", m.getEstadoConciliacion());
+        // HU-068: clasificación del pre-procesamiento (para ver/corregir desde el Paso 3).
+        r.put("descripcionNormalizada", m.getDescripcionNormalizada());
+        r.put("numeroCheque", m.getNumeroCheque());
+        r.put("nitDetectado", m.getNitDetectado());
+        r.put("tipoMovimiento", m.getTipoMovimiento());
+        r.put("clasificacionConfianza", m.getClasificacionConfianza());
+        r.put("cuentaPucSugerida", m.getCuentaPucSugerida());
+        r.put("matchedVoucherId", m.getMatchedVoucherId());
+        r.put("matchedJournalEntryId", m.getMatchedJournalEntryId());
+        r.put("matchedCheckId", m.getMatchedCheckId());
+        // Conciliación V4 / Sec 14: un movimiento ya CONCILIADO se muestra como contexto
+        // bloqueado (solo-lectura), no editable ni re-emparejable.
+        boolean bloqueado = "CONCILIADO".equals(m.getEstadoConciliacion());
+        r.put("bloqueado", bloqueado);
+        r.put("estadoVista", bloqueado ? "YA_CONCILIADO_BLOQUEADO" : m.getEstadoConciliacion());
+        return r;
     }
 
     public Map<String, Object> detail(Long sesionId) {
@@ -119,8 +230,10 @@ public class SesionConciliacionService {
     @Transactional
     public Map<String, Object> sendToReview(Long sesionId) {
         SesionConciliacion s = load(sesionId);
-        if (!"BORRADOR".equals(s.getEstado()))
+        if (!"BORRADOR".equals(s.getEstado()) && !"REABIERTA".equals(s.getEstado()))
             throw new IllegalStateException("Solo se envía a revisión una sesión en BORRADOR (actual: " + s.getEstado() + ").");
+        // C1: no se inicia el flujo de cierre hasta que la conciliación esté en cero.
+        assertConciliacionEnCero(s);
         if (s.getFirmaElaboradorId() == null)
             throw new IllegalStateException("Sin la firma del elaborador no se permite transicionar a EN_REVISION. Firme primero como elaborador.");
         User u = userUtil.getUser();
@@ -156,6 +269,8 @@ public class SesionConciliacionService {
         SesionConciliacion s = load(sesionId);
         if (!"APROBADA".equals(s.getEstado()))
             throw new IllegalStateException("Solo se cierra una sesión APROBADA (actual: " + s.getEstado() + ").");
+        // C1: el cierre solo procede con la conciliación en cero (sin pendientes).
+        assertConciliacionEnCero(s);
         User u = userUtil.getUser();
         if (!hasAnyRole(u, REVIEWER_ROLES))
             throw new IllegalStateException("BNK-CON-013: solo un REVISOR_FISCAL puede cerrar la conciliación.");
@@ -298,9 +413,58 @@ public class SesionConciliacionService {
         }).toList();
     }
 
+    // ===================== archivado (Sec 12: soft-delete a 1 año) =====================
+
+    /** Sec 12: lista de conciliaciones CERRADAS activas de la cuenta (visor "Conciliaciones cerradas"). */
+    public List<Map<String, Object>> listCerradas(Long bankAccountId) {
+        return sesionRepo.findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId).stream()
+                .filter(s -> "CERRADA".equals(s.getEstado()))
+                .map(s -> {
+                    Map<String, Object> m = row(s);
+                    boolean archivable = s.getCerradaAt() != null && s.getCerradaAt().isBefore(LocalDateTime.now().minusYears(1));
+                    m.put("archivable", archivable);
+                    return m;
+                }).toList();
+    }
+
+    /** Sec 12: conciliaciones ya archivadas (read-only; el PDF sigue descargable). */
+    public List<Map<String, Object>> listArchivadas(Long bankAccountId) {
+        return sesionRepo.findByBankAccountIdAndDeletedAtIsNotNullOrderByIdDesc(bankAccountId).stream()
+                .map(s -> {
+                    Map<String, Object> m = row(s);
+                    m.put("archivadaAt", s.getDeletedAt() != null ? s.getDeletedAt().toString() : null);
+                    return m;
+                }).toList();
+    }
+
+    /**
+     * Sec 12: archivar (soft-delete) una conciliación CERRADA con más de 1 año.
+     * NO destruye nada: el informe PDF y la evidencia se conservan en archivos_soporte
+     * (retención 10 años, HU-062/063). Solo la oculta del listado activo.
+     */
+    @Transactional
+    public Map<String, Object> archivar(Long sesionId) {
+        SesionConciliacion s = load(sesionId);
+        if (!"CERRADA".equals(s.getEstado()))
+            throw new IllegalStateException("Solo se puede archivar una conciliación CERRADA (actual: " + s.getEstado() + ").");
+        if (s.getCerradaAt() == null || !s.getCerradaAt().isBefore(LocalDateTime.now().minusYears(1)))
+            throw new IllegalStateException("Solo se archivan conciliaciones cerradas hace más de 1 año. "
+                    + "El informe PDF y la evidencia permanecen en Soportes (retención 10 años).");
+        s.setDeletedAt(LocalDateTime.now());
+        sesionRepo.save(s);
+        auditPublisher.publishUpdate(AuditModule.BNK, "SesionConciliacion", sesionId,
+                "Conciliación archivada (Sec 12, soft-delete a 1 año). Informe y evidencia conservados en Soportes.");
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("id", sesionId); r.put("archivada", true);
+        return r;
+    }
+
     /** BNK-HU-077 E8: descarga del informe PDF firmado + auditoría EXPORTAR. */
     public com.sigcon.backend.banks.archivos_soporte.domain.model.ArchivoSoporte downloadInforme(Long sesionId) {
-        SesionConciliacion s = load(sesionId);
+        // loadAnyState: una conciliación archivada (deletedAt != null) sigue pudiendo
+        // descargar su informe (el PDF está bajo retención 10 años). El @Filter de tenant
+        // y el @PostLoad de la entidad siguen garantizando el aislamiento por empresa.
+        SesionConciliacion s = loadAnyState(sesionId);
         if (s.getInformeArchivoId() == null)
             throw new IllegalStateException("La sesión aún no tiene informe generado (debe estar CERRADA).");
         var archivo = pdfService.fetchInforme(s.getInformeArchivoId());
@@ -419,6 +583,12 @@ public class SesionConciliacionService {
                 .orElseThrow(() -> new IllegalArgumentException("Sesión de conciliación no encontrada: " + id));
     }
 
+    /** Carga una sesión sin filtrar por deletedAt (para leer/descargar archivadas). Tenant-safe vía @Filter + @PostLoad. */
+    private SesionConciliacion loadAnyState(Long id) {
+        return sesionRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Sesión de conciliación no encontrada: " + id));
+    }
+
     private Map<String, Object> row(SesionConciliacion s) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", s.getId());
@@ -434,6 +604,7 @@ public class SesionConciliacionService {
         m.put("createdBy", s.getCreatedBy());
         m.put("enviadaRevisionBy", s.getEnviadaRevisionBy());
         m.put("aprobadaBy", s.getAprobadaBy());
+        m.put("cerradaAt", s.getCerradaAt() != null ? s.getCerradaAt().toString() : null);
         m.put("firmaElaboradorId", s.getFirmaElaboradorId());
         m.put("firmaRevisorId", s.getFirmaRevisorId());
         m.put("informeArchivoId", s.getInformeArchivoId());

@@ -298,8 +298,9 @@ public class BankAccountController {
     public ResponseEntity<?> importFinancialMovementsCsv(
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file,
-            @RequestParam(required = false) Long reconciliationSessionId) {
-        return financialMovementService.importCsv(id, reconciliationSessionId, file);
+            @RequestParam(required = false) Long reconciliationSessionId,
+            @RequestParam(required = false) Long sesionConciliacionId) {
+        return financialMovementService.importCsv(id, reconciliationSessionId, sesionConciliacionId, file);
     }
 
     @GetMapping("/{id}/financial-movements/{movementId}/voucher-suggestions")

@@ -33,4 +33,11 @@ public class ComparativeRequest {
     @Min(value = 1, message = "El mes debe estar entre 1 y 12")
     @Max(value = 12, message = "El mes debe estar entre 1 y 12")
     private Integer month2;
+
+    // HU-CG-13 E1: tercer periodo OPCIONAL (la HU permite comparar hasta 3 periodos).
+    private Integer year3;
+
+    @Min(value = 1, message = "El mes debe estar entre 1 y 12")
+    @Max(value = 12, message = "El mes debe estar entre 1 y 12")
+    private Integer month3;
 }

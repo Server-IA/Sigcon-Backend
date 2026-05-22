@@ -28,6 +28,15 @@ public class GlobalExceptionHandler {
     ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, String> CONSTRAINT_MESSAGES = new HashMap<>();
 
+    /**
+     * HU-AU-07 E2 / HU-AU-08 E2 (QA Bloque AJ-AU): registrar en el log de
+     * auditoria los intentos de acceso NO autorizado al modulo de auditoria.
+     * Opcional (required=false) para no acoplar el handler global a la
+     * disponibilidad del modulo de auditoria.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.sigcon.backend.audit.domain.service.AuditPublisher auditPublisher;
+
     private static class ConstraintMessages {
         private String code;
         private String message;
@@ -236,6 +245,23 @@ public class GlobalExceptionHandler {
             message = "Acceso denegado";
         } else {
             message = "No tiene permisos para realizar esta acción.";
+        }
+        // HU-AU-07 E2 / HU-AU-08 E2: dejar traza del intento NO autorizado al
+        // modulo de auditoria. Defensivo: jamas debe romper la respuesta 403.
+        if (auditPublisher != null && path.contains("/audit")) {
+            try {
+                String user = "anonimo";
+                var auth = org.springframework.security.core.context.SecurityContextHolder
+                        .getContext().getAuthentication();
+                if (auth != null && auth.getName() != null) user = auth.getName();
+                auditPublisher.publish(
+                        com.sigcon.backend.audit.domain.model.enums.AuditAction.VIEW,
+                        com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
+                        com.sigcon.backend.audit.domain.model.enums.AuditSeverity.HIGH,
+                        "AccessDenied", null,
+                        "Intento de acceso NO autorizado a " + path + " por usuario '" + user + "'",
+                        null, null, null);
+            } catch (Exception ignored) { /* la auditoria no debe romper el 403 */ }
         }
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)

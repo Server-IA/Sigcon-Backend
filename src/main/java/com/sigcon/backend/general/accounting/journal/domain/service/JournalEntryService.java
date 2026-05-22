@@ -1104,8 +1104,28 @@ public class JournalEntryService {
                 .creditAmount(line.getCreditAmount())
                 .description(line.getDescription())
                 .thirdPartyNit(line.getThirdPartyNit())
+                .thirdPartyInactive(isThirdPartyInactive(line.getThirdPartyNit()))
                 .costCenterId(line.getCostCenter() != null ? line.getCostCenter().getId() : null)
                 .costCenterName(line.getCostCenter() != null ? line.getCostCenter().getName() : null)
                 .build();
+    }
+
+    /**
+     * HU-CG-05C E3: determina si el NIT de una linea corresponde a un tercero
+     * que actualmente esta INACTIVO en el catalogo de Terceros (scoped a la
+     * empresa via @Filter). Devuelve false si el NIT esta vacio o el tercero no
+     * existe (no se muestra aviso). Defensivo: cualquier error => false.
+     */
+    private Boolean isThirdPartyInactive(String nit) {
+        if (nit == null || nit.isBlank()) return false;
+        try {
+            return thirdPartyRepository.findByNitAndDeletedAtIsNull(nit.trim()).stream()
+                    .findFirst()
+                    .map(tp -> tp.getStatus() != null
+                            && !"ACTIVO".equalsIgnoreCase(tp.getStatus().getName()))
+                    .orElse(false);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 }

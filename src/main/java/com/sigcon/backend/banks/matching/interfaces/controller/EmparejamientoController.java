@@ -55,6 +55,13 @@ public class EmparejamientoController {
         return ResponseEntity.ok(service.undo(id));
     }
 
+    @Operation(summary = "Rechazar un emparejamiento automático con motivo (Paso 5, R-1/R-3)")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PostMapping("/{id}/rechazar")
+    public ResponseEntity<?> rechazar(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
+        return ResponseEntity.ok(service.rechazar(id, body != null ? body.get("motivo") : null));
+    }
+
     @Operation(summary = "Listar emparejamientos de la cuenta (workspace)")
     @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/cuenta/{bankAccountId}")

@@ -43,6 +43,14 @@ public class RiskRuleService {
 
     private final AuditRiskRuleRepository repository;
 
+    /**
+     * HU-AU-04 E3 (QA Bloque AJ-AU): publicar en el log de auditoria los cambios
+     * sobre las propias reglas de riesgo (crear / modificar / activar / eliminar).
+     * Antes el CRUD de reglas NO generaba ningun log — el modulo de auditoria no
+     * se auditaba a si mismo.
+     */
+    private final AuditPublisher auditPublisher;
+
     /** Cache thread-safe de reglas activas ordenadas por prioridad. */
     private final AtomicReference<List<AuditRiskRule>> cachedRules = new AtomicReference<>();
 
@@ -99,6 +107,9 @@ public class RiskRuleService {
         AuditRiskRule saved = repository.save(rule);
         invalidateCache();
         log.info("HU-AU-04: regla creada id={} name='{}'", saved.getId(), saved.getName());
+        auditPublisher.publishCreate(AuditModule.AU, "AuditRiskRule", saved.getId(),
+                "Regla de riesgo creada: '" + saved.getName() + "' (severidad "
+                        + saved.getSeverity() + ", prioridad " + saved.getPriority() + ")");
         return ResponseEntity.ok(saved);
     }
 
@@ -116,6 +127,10 @@ public class RiskRuleService {
         existing.setEnabled(update.getEnabled());
         AuditRiskRule saved = repository.save(existing);
         invalidateCache();
+        auditPublisher.publishUpdate(AuditModule.AU, "AuditRiskRule", saved.getId(),
+                "Regla de riesgo modificada: '" + saved.getName() + "' (severidad "
+                        + saved.getSeverity() + ", prioridad " + saved.getPriority()
+                        + ", activa=" + saved.getEnabled() + ")");
         return ResponseEntity.ok(saved);
     }
 
@@ -126,6 +141,9 @@ public class RiskRuleService {
         existing.setEnabled(!Boolean.TRUE.equals(existing.getEnabled()));
         repository.save(existing);
         invalidateCache();
+        auditPublisher.publishUpdate(AuditModule.AU, "AuditRiskRule", existing.getId(),
+                "Regla de riesgo " + (Boolean.TRUE.equals(existing.getEnabled()) ? "activada" : "desactivada")
+                        + ": '" + existing.getName() + "'");
         return ResponseEntity.ok(existing);
     }
 
@@ -136,6 +154,8 @@ public class RiskRuleService {
         existing.setDeletedAt(LocalDateTime.now());
         repository.save(existing);
         invalidateCache();
+        auditPublisher.publishDelete(AuditModule.AU, "AuditRiskRule", existing.getId(),
+                "Regla de riesgo eliminada: '" + existing.getName() + "'");
         return ResponseEntity.ok().build();
     }
 }
