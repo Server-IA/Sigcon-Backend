@@ -342,8 +342,16 @@ public class PayrollService {
         // Asi sumNet + sumDeductions = sumEarnings, y agregando sumEmployer => coincide con totalDebit
         BigDecimal creditRetenciones = sumDeductions.add(sumEmployer);
 
-        LocalDate entryDate = LocalDate.of(req.getYear(), req.getMonth(), 1)
+        // QA Nomina (2026-05-25) ERR-NOM-002: el JE de nomina se fechaba SIEMPRE
+        // al ultimo dia del periodo. Si se liquida (o se crea una complementaria)
+        // dentro del mes en curso, ese ultimo dia es FUTURO respecto a hoy y
+        // JournalEntryService lo rechaza con "No se permiten comprobantes con
+        // fecha futura", abortando toda la liquidacion. Clampeamos a hoy cuando
+        // el fin de periodo aun no ha llegado (el comprobante no puede ser futuro).
+        LocalDate periodEnd = LocalDate.of(req.getYear(), req.getMonth(), 1)
                 .withDayOfMonth(LocalDate.of(req.getYear(), req.getMonth(), 1).lengthOfMonth());
+        LocalDate today = LocalDate.now();
+        LocalDate entryDate = periodEnd.isAfter(today) ? today : periodEnd;
 
         List<CreateJournalEntryLineRequest> jeLines = new ArrayList<>();
         jeLines.add(CreateJournalEntryLineRequest.builder()

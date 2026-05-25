@@ -168,10 +168,15 @@ public class JournalEntryService {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Cuenta contable no encontrada: " + lineReq.getAccountingAccountId()));
 
-            // HU-CG-02B: en BORRADOR se PERMITE cuenta inactiva (el contador puede
-            // capturar primero y reactivar la cuenta despues). La validacion estricta
-            // se aplica al contabilizar (postEntry). Activable via CG_STRICT_DRAFT.
-            if (!"ACTIVE".equals(account.getStatus().name()) && readBoolParam("CG_STRICT_DRAFT", false)) {
+            // QA CG (2026-05-25) ERR adicional #1: se permitia crear un comprobante
+            // MANUAL con una cuenta inactiva (antes solo bloqueaba con CG_STRICT_DRAFT).
+            // La HU-CG-01A E3 exige rechazarlo. Bloqueamos SIEMPRE en asientos manuales
+            // del CG (sourceModule null o CG). Los asientos automaticos de AP/AR/BNK/
+            // ACT/NOM resuelven sus cuentas via AccountMappingService (ya validadas),
+            // por eso no se les aplica esta restriccion para no romper esos flujos.
+            boolean isManualCgEntry = request.getSourceModule() == null
+                    || request.getSourceModule() == JournalSourceModule.CG;
+            if (!"ACTIVE".equals(account.getStatus().name()) && isManualCgEntry) {
                 throw new IllegalArgumentException(
                         "La cuenta proporcionada está inactiva. "
                         + "Cuenta " + account.getPucAccount().getCode()
@@ -777,6 +782,12 @@ public class JournalEntryService {
         entry.setFiscalYear(request.getEntryDate().getYear());
         entry.setTotalDebit(totalDebit);
         entry.setTotalCredit(totalCredit);
+        // QA CG (2026-05-25) ERR adicional #4: al editar el comprobante, el modulo
+        // origen NO se actualizaba (seguia mostrando el valor antiguo). Lo seteamos
+        // si viene en el request (solo en BORRADOR; este metodo ya exige DRAFT).
+        if (request.getSourceModule() != null) {
+            entry.setSourceModule(request.getSourceModule());
+        }
 
         entry = journalEntryRepository.save(entry);
         auditPublisher.publishUpdate(AuditModule.CG, "JournalEntry", entry.getId(), "JournalEntry actualizado id=" + entry.getId());
@@ -979,6 +990,113 @@ public class JournalEntryService {
                 null, null, id);
         return tree;
     }
+
+    /**
+     * HU-CG-07C E3 (QA 2026-05-25): comparacion detallada entre DOS versiones de
+     * un comprobante. Devuelve los cambios de cabecera (campo, valor anterior,
+     * valor nuevo) y el diff de lineas por cuenta PUC (agregadas / eliminadas /
+     * modificadas en debito/credito/descripcion/tercero). El frontend lo pinta
+     * resaltando lo que cambio.
+     *
+     * @param idA version origen (normalmente la mas antigua)
+     * @param idB version destino (normalmente la mas reciente)
+     */
+    public java.util.Map<String, Object> compareVersions(Long idA, Long idB) {
+        JournalEntry a = findByIdOrThrow(idA);
+        JournalEntry b = findByIdOrThrow(idB);
+
+        // ── Diff de cabecera ──
+        List<java.util.Map<String, Object>> headerDiffs = new ArrayList<>();
+        addHeaderDiff(headerDiffs, "Descripción", a.getDescription(), b.getDescription());
+        addHeaderDiff(headerDiffs, "Fecha", str(a.getEntryDate()), str(b.getEntryDate()));
+        addHeaderDiff(headerDiffs, "Estado", a.getStatus() != null ? a.getStatus().name() : null,
+                b.getStatus() != null ? b.getStatus().name() : null);
+        addHeaderDiff(headerDiffs, "Módulo origen", a.getSourceModule() != null ? a.getSourceModule().name() : null,
+                b.getSourceModule() != null ? b.getSourceModule().name() : null);
+        addHeaderDiff(headerDiffs, "Total débito", str(a.getTotalDebit()), str(b.getTotalDebit()));
+        addHeaderDiff(headerDiffs, "Total crédito", str(a.getTotalCredit()), str(b.getTotalCredit()));
+
+        // ── Diff de lineas (agrupadas por cuenta PUC) ──
+        java.util.Map<String, JournalEntryLine> linesA = indexLinesByAccount(a);
+        java.util.Map<String, JournalEntryLine> linesB = indexLinesByAccount(b);
+        java.util.Set<String> allKeys = new java.util.LinkedHashSet<>();
+        allKeys.addAll(linesA.keySet());
+        allKeys.addAll(linesB.keySet());
+
+        List<java.util.Map<String, Object>> lineDiffs = new ArrayList<>();
+        for (String key : allKeys) {
+            JournalEntryLine la = linesA.get(key);
+            JournalEntryLine lb = linesB.get(key);
+            java.util.Map<String, Object> row = new java.util.HashMap<>();
+            row.put("account", key);
+            if (la != null && lb == null) {
+                row.put("changeType", "REMOVED");
+                row.put("debitA", la.getDebitAmount()); row.put("creditA", la.getCreditAmount());
+                row.put("debitB", null); row.put("creditB", null);
+            } else if (la == null && lb != null) {
+                row.put("changeType", "ADDED");
+                row.put("debitA", null); row.put("creditA", null);
+                row.put("debitB", lb.getDebitAmount()); row.put("creditB", lb.getCreditAmount());
+            } else {
+                boolean changed = !eqAmt(la.getDebitAmount(), lb.getDebitAmount())
+                        || !eqAmt(la.getCreditAmount(), lb.getCreditAmount())
+                        || !safeEquals(la.getDescription(), lb.getDescription())
+                        || !safeEquals(la.getThirdPartyNit(), lb.getThirdPartyNit());
+                row.put("changeType", changed ? "MODIFIED" : "UNCHANGED");
+                row.put("debitA", la.getDebitAmount()); row.put("creditA", la.getCreditAmount());
+                row.put("debitB", lb.getDebitAmount()); row.put("creditB", lb.getCreditAmount());
+            }
+            lineDiffs.add(row);
+        }
+
+        // Auditoria de la consulta de comparacion (HU-CG-07C E4)
+        auditPublisher.publish(
+                com.sigcon.backend.audit.domain.model.enums.AuditAction.VIEW,
+                AuditModule.CG, com.sigcon.backend.audit.domain.model.enums.AuditSeverity.LOW,
+                "JournalEntry", idB,
+                "Comparacion de versiones " + buildVoucherCode(a) + " vs " + buildVoucherCode(b),
+                null, null, idB);
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("versionA", toVersionNode(a, "A", null, 0));
+        result.put("versionB", toVersionNode(b, "B", null, 0));
+        result.put("headerDiffs", headerDiffs);
+        result.put("lineDiffs", lineDiffs);
+        boolean anyChange = headerDiffs.stream().anyMatch(h -> Boolean.TRUE.equals(h.get("changed")))
+                || lineDiffs.stream().anyMatch(l -> !"UNCHANGED".equals(l.get("changeType")));
+        result.put("hasChanges", anyChange);
+        return result;
+    }
+
+    private void addHeaderDiff(List<java.util.Map<String, Object>> diffs, String field, String a, String b) {
+        java.util.Map<String, Object> m = new java.util.HashMap<>();
+        m.put("field", field);
+        m.put("valueA", a);
+        m.put("valueB", b);
+        m.put("changed", !safeEquals(a, b));
+        diffs.add(m);
+    }
+
+    private java.util.Map<String, JournalEntryLine> indexLinesByAccount(JournalEntry e) {
+        java.util.Map<String, JournalEntryLine> map = new java.util.LinkedHashMap<>();
+        if (e.getLines() == null) return map;
+        for (JournalEntryLine l : e.getLines()) {
+            String code = l.getAccountingAccount() != null && l.getAccountingAccount().getPucAccount() != null
+                    ? l.getAccountingAccount().getPucAccount().getCode() : ("ID-" + (l.getId()));
+            String name = l.getAccountingAccount() != null && l.getAccountingAccount().getPucAccount() != null
+                    ? l.getAccountingAccount().getPucAccount().getName() : "";
+            map.put(code + " - " + name, l);
+        }
+        return map;
+    }
+
+    private boolean eqAmt(BigDecimal x, BigDecimal y) {
+        BigDecimal xa = x != null ? x : BigDecimal.ZERO;
+        BigDecimal ya = y != null ? y : BigDecimal.ZERO;
+        return xa.compareTo(ya) == 0;
+    }
+
+    private String str(Object o) { return o != null ? o.toString() : null; }
 
     /** Sube por reversalOf/correctionOf hasta encontrar la raiz original. */
     private JournalEntry findRootAncestor(JournalEntry e) {

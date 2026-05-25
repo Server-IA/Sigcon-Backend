@@ -266,6 +266,18 @@ public class DepreciationCalculationService {
         int month = Integer.parseInt(parts[1]);
         // Usa una fecha del primer dia del mes como referencia para el periodo.
         java.time.LocalDate referenceDate = java.time.LocalDate.of(year, month, 1);
+
+        // QA Activos (2026-05-25) Error 02: la depreciacion requiere un periodo
+        // contable EXISTENTE. Antes, un periodo futuro/inexistente (ej. 2032-02)
+        // pasaba la validacion generica de validatePeriodOpen (que trata el
+        // periodo sin registro como valido) y la pantalla cargaba los mismos
+        // activos en vez de dar error. Ahora se rechaza explicitamente.
+        if (!accountingPeriodService.periodExists(year, month)) {
+            throw new IllegalArgumentException(
+                    "El periodo contable " + period + " no existe o no esta abierto. "
+                    + "Cree y abra el periodo en Contabilidad General antes de calcular la depreciacion.");
+        }
+
         // HU-ACT-02 E5 (QA 2026-05-05): mensaje literal del Excel cuando el
         // periodo de calculo de depreciacion esta cerrado.
         try {

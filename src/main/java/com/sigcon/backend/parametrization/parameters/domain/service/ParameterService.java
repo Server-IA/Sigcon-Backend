@@ -357,6 +357,10 @@ public class ParameterService {
                 DataTableResponse.from(parameters.map(parameter -> ParameterDTO.builder()
                     .id(parameter.getId())
                     .name(parameter.getName())
+                    // QA Nomina (2026-05-25) ERR-NOM-001: el listado NO devolvia el
+                    // value (el DTO se construia sin .value), por eso el modal de
+                    // edicion no podia mostrar/precargar el valor actual (ej. SMLV).
+                    .value(parameter.getValue())
                     .category(parameter.getCategory())
                     .status(parameter.getStatus())
                     .build()), request.getDraw())
@@ -413,12 +417,27 @@ public class ParameterService {
                 );
             }
 
-            if (parameterRepository.existsByNameAndCategoryAndIdNot(request.getName(), request.getCategory(), request.getId())) {
+            // QA Nomina (2026-05-25) ERR-NOM-001: duplicidad scoped a la empresa del
+            // parametro editado. Antes usaba existsByNameAndCategoryAndIdNot (sin
+            // company_id); un PLATFORM_ADMIN veia las copias de TODAS las empresas y
+            // recibia un falso "ya existe" al editar (ej. SMLV existe 1 vez por empresa).
+            if (parameterRepository.existsByNameAndCategoryAndCompanyIdAndIdNot(
+                    request.getName(), request.getCategory(), parameter.getCompanyId(), request.getId())) {
                 return ResponseEntity.badRequest()
                         .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe")));
             }
 
             parameter.setName(request.getName());
+            // QA Nomina (2026-05-25) ERR-NOM-001: el valor del parametro NO se
+            // estaba persistiendo. updateSystemParameter seteaba name/description/
+            // category/status pero OMITIA value, asi que editar (por ejemplo)
+            // sigcon.nomina.smlv respondia "actualizado correctamente" pero
+            // conservaba el valor anterior. Bug transversal: afectaba a TODOS los
+            // parametros del sistema. Solo se persiste si el request trae value
+            // (no lo anulamos si viene null para no perder el valor existente).
+            if (request.getValue() != null) {
+                parameter.setValue(request.getValue());
+            }
             parameter.setDescription(request.getDescription());
             parameter.setCategory(request.getCategory());
             parameter.setStatus(request.getStatus());

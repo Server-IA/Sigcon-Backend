@@ -306,6 +306,78 @@ public class NiifAlertsService {
                     .message(ckRule ? null : "Activo tangible sin regla de depreciacion (NIC 16 §50)")
                     .build());
 
+            // Check 10 (QA Activos 2026-05-25 Error 04): NIC 36 - indicios de
+            // deterioro (§12). Antes la verificacion solo cubria NIC 16/38 y el
+            // usuario percibia que "solo se valida la NIC 16". Evaluamos los
+            // indicios internos detectables con la informacion disponible.
+            List<String> impairmentIndicators = new ArrayList<>();
+            if (asset.getStatus() == AssetStatus.IN_REPAIR) {
+                impairmentIndicators.add("activo en reparacion (posible danio fisico/obsolescencia)");
+            }
+            if (asset.getCurrentBookValue() != null && asset.getAcquisitionValue() != null
+                    && asset.getCurrentBookValue().compareTo(asset.getAcquisitionValue()) > 0) {
+                impairmentIndicators.add("valor en libros superior al de adquisicion");
+            }
+            if (asset.getStatus() == AssetStatus.ACTIVE && asset.getCurrentBookValue() != null
+                    && asset.getDepretationRule() != null) {
+                BigDecimal residual36 = asset.getDepretationRule().getResidualValue() != null
+                        ? asset.getDepretationRule().getResidualValue() : BigDecimal.ZERO;
+                if (asset.getCurrentBookValue().compareTo(residual36) <= 0) {
+                    impairmentIndicators.add("activo totalmente depreciado aun en uso (revisar baja o deterioro)");
+                }
+            }
+            boolean ckImpairment = impairmentIndicators.isEmpty();
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("IMPAIRMENT_NIC36").name("Indicios de deterioro (NIC 36 §12)")
+                    .status(ckImpairment ? "CUMPLE" : "ADVERTENCIA")
+                    .message(ckImpairment
+                            ? "Sin indicios de deterioro detectables"
+                            : "Posibles indicios de deterioro: " + String.join(", ", impairmentIndicators)
+                              + ". NIC 36 exige estimar el valor recuperable del activo.")
+                    .build());
+            if (!ckImpairment) {
+                alerts.add("NIC 36 §12: indicios de deterioro (" + String.join(", ", impairmentIndicators)
+                        + "). Evalue el valor recuperable del activo.");
+                if (result != NiifResult.NON_COMPLIANT) result = NiifResult.WARNING;
+            }
+
+            // Check 11 (QA Activos 2026-05-25 Error 04): NIC 38 - intangibles.
+            // Para activos INTANGIBLE valida amortizacion (§97) y valor residual
+            // presunto cero (§100). Para tangibles el criterio se marca "No aplica".
+            boolean isIntangible = asset.getAssetType() != null
+                    && "INTANGIBLE".equals(asset.getAssetType().name());
+            String nic38Status;
+            String nic38Msg;
+            if (!isIntangible) {
+                nic38Status = "CUMPLE";
+                nic38Msg = "No aplica (activo tangible; rige NIC 16)";
+            } else {
+                List<String> nic38Issues = new ArrayList<>();
+                if (asset.getUsefulLifeMonths() == null || asset.getUsefulLifeMonths() <= 0) {
+                    nic38Issues.add("vida util no definida (NIC 38 §97: los intangibles de vida finita se amortizan)");
+                }
+                if (asset.getDepretationRule() == null) {
+                    nic38Issues.add("sin regla de amortizacion asignada");
+                }
+                if (asset.getDepretationRule() != null
+                        && asset.getDepretationRule().getResidualValue() != null
+                        && asset.getDepretationRule().getResidualValue().compareTo(BigDecimal.ZERO) > 0) {
+                    nic38Issues.add("valor residual > 0 (NIC 38 §100 lo presume cero salvo compromiso de compra)");
+                }
+                if (nic38Issues.isEmpty()) {
+                    nic38Status = "CUMPLE";
+                    nic38Msg = "Intangible cumple criterios de amortizacion (NIC 38)";
+                } else {
+                    nic38Status = "ADVERTENCIA";
+                    nic38Msg = "Intangible: " + String.join(", ", nic38Issues);
+                    alerts.add("NIC 38 (intangibles): " + String.join(", ", nic38Issues) + ".");
+                    if (result != NiifResult.NON_COMPLIANT) result = NiifResult.WARNING;
+                }
+            }
+            criteria.add(NiifVerificationResultDTO.CriterionResult.builder()
+                    .code("INTANGIBLE_NIC38").name("Amortizacion de intangibles (NIC 38)")
+                    .status(nic38Status).message(nic38Msg).build());
+
             // QA-BLOQUE-AY (2026-05-05) HU-ACT-09 E1: enriquecer respuesta con
             // norma aplicable + conteo de criterios + timestamp para que el
             // listado de la UI muestre la trazabilidad NIIF completa, no solo
@@ -314,19 +386,15 @@ public class NiifAlertsService {
             int warningCriteria      = (int) criteria.stream().filter(c -> "ADVERTENCIA".equals(c.getStatus())).count();
             int nonCompliantCriteria = (int) criteria.stream().filter(c -> "NO_CUMPLE".equals(c.getStatus())).count();
 
-            // Norma aplicable: derivada de los criterios involucrados.
-            // HU-ACT-09 menciona NIC 16 (§50, §51), NIC 36 (deterioro) y NIC 38 (intangibles).
+            // Norma aplicable (QA Activos 2026-05-25 Error 04): la verificacion
+            // evalua SIEMPRE las tres normas (NIC 16 PPE, NIC 36 deterioro,
+            // NIC 38 intangibles), por lo que se listan las tres. Antes solo se
+            // mostraba NIC 16 salvo que fallaran ciertos criterios, dando la
+            // impresion de que "solo se valida la NIC 16".
             java.util.Set<String> norms = new java.util.LinkedHashSet<>();
-            norms.add("NIC 16 §50");
-            if (criteria.stream().anyMatch(c -> "ACCOUNTING_ACCOUNT".equals(c.getCode()) && !"CUMPLE".equals(c.getStatus()))) {
-                norms.add("NIC 38 §69");
-            }
-            if (asset.getAssetType() != null && "INTANGIBLE".equals(asset.getAssetType().name())) {
-                norms.add("NIC 38");
-            }
-            if (criteria.stream().anyMatch(c -> "BOOK_VALUE".equals(c.getCode()) && !"CUMPLE".equals(c.getStatus()))) {
-                norms.add("NIC 36 (deterioro)");
-            }
+            norms.add("NIC 16 (PPE §50/§51)");
+            norms.add("NIC 36 (deterioro §12)");
+            norms.add("NIC 38 (intangibles)");
             String applicableNorm = String.join(", ", norms);
 
             results.add(

@@ -79,6 +79,8 @@ public class AaefBatchProcessor {
     private final ArAdvanceService arAdvanceService;
     /** HU-AP-04 E5: payment AP via AAEF. */
     private final com.sigcon.backend.invoices.ap_payments.domain.service.ApPaymentService apPaymentService;
+    /** Fallo 1 (HU-AP-05 E4): anticipo a proveedor (ADV "02 Compra") via AAEF. */
+    private final com.sigcon.backend.invoices.ap_payments.domain.service.ApAdvanceService apAdvanceService;
     /** QA Bloque BJ (HU-INT-RF-05 E5, 2026-05-18): REF/ADJ -> ArNote. */
     private final com.sigcon.backend.accounts_receivable.credit_debit_notes.domain.service.ArNoteService arNoteService;
     /** QA Bloque BJ (HU-INT-RF-05 E5, 2026-05-18): REF/ADJ AP -> ApNote. */
@@ -424,6 +426,16 @@ public class AaefBatchProcessor {
                     }
                 }
                 case AaefTransactionMapper.TYPE_ADV: {
+                    // Fallo 1 (HU-AP-05 E4): si el anticipo es a proveedor (tipo de
+                    // documento "02 Compra"), se registra en AP/CxP (JE Debito 1330 /
+                    // Credito Bancos). En cualquier otro caso (cliente "01 Venta" o
+                    // sin indicador) se mantiene en AR/CxC como antes.
+                    if (transactionMapper.isPurchaseAdvance(tx)) {
+                        com.sigcon.backend.invoices.ap_payments.application.CreateApAdvanceRequest apReq =
+                                transactionMapper.toApAdvanceRequest(tx);
+                        apAdvanceService.registerAdvance(apReq);
+                        return successTransfer(batch, documentId, DocumentType.TRANSACTION, null);
+                    }
                     CreateArAdvanceRequest req = transactionMapper.toArAdvanceRequest(tx);
                     arAdvanceService.registerAdvance(req);
                     return successTransfer(batch, documentId, DocumentType.TRANSACTION, null);

@@ -70,6 +70,16 @@ public class SesionConciliacionService {
         if (pe.isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("La fecha final de conciliación no puede ser una fecha futura.");
         }
+        // CONC-4: no permitir dos sesiones con el MISMO período en la misma cuenta.
+        // La re-conciliación de un período ya cerrado se hace por reapertura/versionado,
+        // no creando otra sesión con las mismas fechas.
+        boolean periodoDuplicado = sesionRepo.findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId)
+                .stream().anyMatch(x -> ps.equals(x.getPeriodStart()) && pe.equals(x.getPeriodEnd()));
+        if (periodoDuplicado) {
+            throw new IllegalArgumentException(
+                "Ya existe una sesión de conciliación para esta cuenta con el período "
+                + ps + " → " + pe + ". Abra la sesión existente o seleccione otras fechas.");
+        }
         BankAccount ba = bankAccountRepo.findById(bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
         User u = userUtil.getUser();

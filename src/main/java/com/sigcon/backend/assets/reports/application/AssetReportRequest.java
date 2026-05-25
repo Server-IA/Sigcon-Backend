@@ -40,4 +40,21 @@ public class AssetReportRequest {
      */
     @Builder.Default
     private String groupBy = "asset";
+
+    // ─── QA Activos (2026-05-25) Error 03: filtros adicionales ───────────────
+    // Antes el reporte SOLO filtraba por rango de fechas; el resto de filtros
+    // que enviaba el frontend se descartaban. Estos campos son opcionales: si
+    // llegan null no se aplican.
+
+    /** Filtra por proveedor (ThirdParty.id). */
+    private Long supplierId;
+
+    /** Filtra por codigo PUC de la cuenta contable (prefijo, ej. "1516"). */
+    private String classificationCode;
+
+    /** Filtra por estado del activo (ACTIVE / IN_REPAIR / DECOMMISSIONED / TRANSFERRED). */
+    private String status;
+
+    /** Filtra por tipo de activo (TANGIBLE / INTANGIBLE). */
+    private String assetType;
 }

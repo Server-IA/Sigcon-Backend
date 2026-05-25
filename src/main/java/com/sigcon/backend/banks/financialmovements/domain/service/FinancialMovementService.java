@@ -546,6 +546,8 @@ public class FinancialMovementService {
         }
 
         mov.setMatchedVoucherId(voucher.getId());
+        // CONC-3b: el movimiento queda CONCILIADO para integrarse con el cierre de la sesión.
+        mov.setEstadoConciliacion("CONCILIADO");
         financialMovementRepository.save(mov);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
@@ -686,6 +688,9 @@ public class FinancialMovementService {
         }
 
         mov.setMatchedJournalEntryId(jeId);
+        // CONC-3b: al emparejar con un asiento contable, el movimiento queda CONCILIADO
+        // para que salga del workspace de conciliación y cuente en el cierre de la sesión.
+        mov.setEstadoConciliacion("CONCILIADO");
         FinancialMovement saved = financialMovementRepository.save(mov);
 
         auditPublisher.publishUpdate(
@@ -725,6 +730,8 @@ public class FinancialMovementService {
         }
         mov.setMatchedVoucherId(null);
         mov.setMatchedJournalEntryId(null);
+        // CONC-3b: liberar también el estado de conciliación de la sesión.
+        mov.setEstadoConciliacion("NO_CONCILIADO");
         financialMovementRepository.save(mov);
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(

@@ -85,6 +85,17 @@ public class AccountingPeriodService {
     }
 
     /**
+     * QA Activos (2026-05-25) Error 02: indica si EXISTE un registro de periodo
+     * contable para el anio-mes dado. A diferencia de {@link #validatePeriodOpen}
+     * (que trata un periodo inexistente como valido para no bloquear a otros
+     * modulos), la depreciacion exige que el periodo exista y este abierto: un
+     * periodo futuro/sin crear (ej. 2032-02) no debe permitir el calculo.
+     */
+    public boolean periodExists(int year, int month) {
+        return repository.findByYearAndMonth(year, month).isPresent();
+    }
+
+    /**
      * QA-2026-05-05: indica si existe algun periodo CLOSED o LOCKED cuya fecha
      * de inicio sea posterior a la fecha indicada. Util para inferir que un
      * periodo previo (sin registro propio) esta cerrado por antiguedad.

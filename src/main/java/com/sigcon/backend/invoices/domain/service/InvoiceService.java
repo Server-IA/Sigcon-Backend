@@ -538,6 +538,12 @@ public class InvoiceService {
         // HU-AP-02 E3: exponer version optimista para que el cliente la reenvie
         // en futuros PUT y se detecten conflictos de edicion concurrente.
         row.put("version", invoice.getVersion());
+        // Fallo 3 (HU-AP-25 E6, informe AgroFusion): exponer el origen (MANUAL/AAEF)
+        // para que el frontend pueda mostrar el mensaje de bloqueo al intentar
+        // anular manualmente una factura originada por integracion AAEF.
+        row.put("source",
+                invoice.getIntegrationSource() != null && invoice.getIntegrationSource().getSource() != null
+                        ? invoice.getIntegrationSource().getSource().name() : "MANUAL");
         try {
             if (invoice.getThirdParty() != null) {
                 row.put("thirdPartyId", invoice.getThirdParty().getId());

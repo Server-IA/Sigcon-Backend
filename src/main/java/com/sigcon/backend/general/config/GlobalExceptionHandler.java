@@ -293,12 +293,28 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ResponseEntity<?> handleHttpMessageNotReadable(
             org.springframework.http.converter.HttpMessageNotReadableException ex) {
-        String msg = ex.getMostSpecificCause() != null
+        String raw = ex.getMostSpecificCause() != null
                 ? ex.getMostSpecificCause().getMessage()
                 : (ex.getMessage() != null ? ex.getMessage() : "Body de la solicitud invalido o ausente");
-        // Truncar si trae stacktrace de Jackson largo
-        if (msg != null && msg.length() > 300) {
-            msg = msg.substring(0, 300) + "...";
+
+        // QA Activos (2026-05-25) Error 01: cuando un campo numerico recibe un
+        // valor fuera del rango del tipo (ej. vida util = 1e+26 -> Integer),
+        // Jackson falla ANTES de la validacion Bean con un mensaje tecnico
+        // incomprensible ("Numeric value (1e+26) out of range of int..."). Lo
+        // traducimos a un mensaje claro para el usuario final.
+        String msg;
+        if (raw != null && (raw.contains("out of range") || raw.contains("Numeric value"))) {
+            msg = "Uno de los valores numericos ingresados esta fuera del rango permitido. "
+                    + "Revise los campos numericos (por ejemplo la vida util en meses debe ser un numero entero razonable).";
+        } else if (raw != null && (raw.contains("Cannot coerce") || raw.contains("Cannot deserialize")
+                || raw.contains("not a valid") || raw.contains("JSON parse"))) {
+            msg = "Hay un valor con formato invalido en la solicitud. Verifique los campos e intente de nuevo.";
+        } else {
+            msg = raw != null ? raw : "Body de la solicitud invalido o ausente";
+            // Quitar la referencia tecnica de Jackson "at [Source: ...]"
+            int srcIdx = msg.indexOf(" at [Source");
+            if (srcIdx > 0) msg = msg.substring(0, srcIdx);
+            if (msg.length() > 300) msg = msg.substring(0, 300) + "...";
         }
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)

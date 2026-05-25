@@ -55,6 +55,8 @@ public class TaxReportService {
     private final InvoiceRepository invoiceRepository;
     private final CurrencyTypeRepository currencyTypeRepository;
     private final ExchangeRateRepository exchangeRateRepository;
+    // QA Bloque AS-CG (2026-05-25): guard de actividad por anio para el ECL.
+    private final com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository journalEntryRepository;
 
     /**
      * Audit publisher opcional - HU-CG-12 E3 / HU-CG-31..34 (registrar
@@ -113,6 +115,33 @@ public class TaxReportService {
      */
     public EclProvisionReportDTO generateEclProvision(Integer year) {
         validateYear(year);
+
+        // QA Bloque AS-CG (2026-05-25): si el anio solicitado no tiene comprobantes
+        // POSTED/REVERSED para este tenant, el ECL aparece en 0. Antes el corte a
+        // 31-dic incluia la cartera de anios anteriores al consultar un anio
+        // inexistente o sin movimientos (ej. 2027), mostrando provision indebida.
+        if (!journalEntryRepository.hasPostedEntriesInYear(year,
+                com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.POSTED)) {
+            BigDecimal[] zeroRates = {
+                new BigDecimal("0.01"), new BigDecimal("0.05"), new BigDecimal("0.20"),
+                new BigDecimal("0.50"), new BigDecimal("1.00")
+            };
+            String[] zeroLabels = {"0-30 dias", "31-60 dias", "61-90 dias", "91-180 dias", "Mas de 180 dias"};
+            List<EclBucketDTO> zeroBuckets = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                zeroBuckets.add(EclBucketDTO.builder()
+                    .label(zeroLabels[i]).totalBalance(BigDecimal.ZERO)
+                    .eclRate(zeroRates[i]).eclAmount(BigDecimal.ZERO).build());
+            }
+            return EclProvisionReportDTO.builder()
+                .year(year)
+                .totalCartera(BigDecimal.ZERO)
+                .totalProvision(BigDecimal.ZERO)
+                .buckets(zeroBuckets)
+                .details(new ArrayList<>())
+                .build();
+        }
+
         LocalDate cutoff = LocalDate.of(year, 12, 31);
 
         // Facturas con saldo pendiente al cierre. Se usa findAll() y se filtra

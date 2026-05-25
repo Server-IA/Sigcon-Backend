@@ -2,6 +2,7 @@ package com.sigcon.backend.assets.assets.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -64,7 +65,8 @@ public class UpdateAssetsDTO {
         private LocalDate acquisitionDate;
 
         @Min(value = 1, message = "Faltan datos requeridos")
-        @Schema(description = "Vida util en meses (opcional en update)", example = "60")
+        @Max(value = 1200, message = "La vida util no puede superar 1200 meses (100 anios).")
+        @Schema(description = "Vida util en meses (opcional en update, 1 a 1200)", example = "60")
         private Integer usefulLifeMonths;
 
         // Opcional en update: si el usuario no la cambia, se mantiene la regla actual.

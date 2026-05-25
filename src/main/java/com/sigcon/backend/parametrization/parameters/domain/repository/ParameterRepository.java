@@ -22,6 +22,20 @@ public interface ParameterRepository extends JpaRepository<Parameter, Long>, Jpa
     boolean existsByNameAndIdNot(String name, Long id);
     boolean existsByNameAndCategoryAndIdNot(String name, CategoryParameter category, Long id);
 
+    /**
+     * QA Nomina (2026-05-25) ERR-NOM-001: duplicidad scoped por empresa.
+     *
+     * <p>El check anterior {@link #existsByNameAndCategoryAndIdNot} no incluia
+     * company_id. Para un PLATFORM_ADMIN (que bypassa el tenant filter) veia las
+     * copias del mismo parametro de TODAS las empresas (ej. 7 filas
+     * sigcon.nomina.smlv, una por empresa) y rechazaba la edicion con un falso
+     * "ya existe". Este metodo limita la verificacion a la MISMA empresa del
+     * parametro editado, que es el comportamiento correcto en multi-tenant
+     * (cada empresa tiene su propia copia del parametro).
+     */
+    boolean existsByNameAndCategoryAndCompanyIdAndIdNot(
+            String name, CategoryParameter category, Long companyId, Long id);
+
     List<Parameter> findByCategoryAndDeletedAtIsNull(CategoryParameter category);
     Optional<Parameter> findByNameAndDeletedAtIsNull(String name);
 

@@ -71,6 +71,18 @@ public class AccountingBookService {
      */
     public ResponseEntity<?> getLibroDiario(Integer year, Integer month,
                                               Long accountId, String dateFrom, String dateTo) {
+        return getLibroDiario(year, month, accountId, dateFrom, dateTo, null, null);
+    }
+
+    /**
+     * HU-CG-17 E1 / QA adic#5 (2026-05-25): variante con filtros adicionales por
+     * tipo de comprobante (sourceModule) y centro de costo (costCenterId), ademas
+     * de cuenta y rango de fechas. Permite la personalizacion de filtrado de libros
+     * que pedia el escenario 1 de la HU-CG-17.
+     */
+    public ResponseEntity<?> getLibroDiario(Integer year, Integer month,
+                                              Long accountId, String dateFrom, String dateTo,
+                                              String sourceModule, Long costCenterId) {
         List<LibroDiarioDTO> result = buildLibroDiario(year, month);
         // Filtrado en memoria: aceptable porque el resultado de buildLibroDiario ya
         // esta acotado al periodo. Si se requiere optimizar, el filter podria moverse
@@ -87,6 +99,19 @@ public class AccountingBookService {
             result = result.stream()
                     .filter(d -> d.getLines() != null && d.getLines().stream()
                             .anyMatch(l -> accountId.equals(l.getAccountingAccountId())))
+                    .collect(Collectors.toList());
+        }
+        // CG-17: filtro por tipo de comprobante (modulo origen)
+        if (sourceModule != null && !sourceModule.isBlank()) {
+            result = result.stream()
+                    .filter(d -> sourceModule.equalsIgnoreCase(d.getSourceModule()))
+                    .collect(Collectors.toList());
+        }
+        // CG-17: filtro por centro de costo (al menos una linea con ese CC)
+        if (costCenterId != null) {
+            result = result.stream()
+                    .filter(d -> d.getLines() != null && d.getLines().stream()
+                            .anyMatch(l -> costCenterId.equals(l.getCostCenterId())))
                     .collect(Collectors.toList());
         }
         String periodo = (from != null || to != null)
@@ -140,6 +165,8 @@ public class AccountingBookService {
                                 .creditAmount(line.getCreditAmount())
                                 .description(line.getDescription())
                                 .thirdPartyNit(line.getThirdPartyNit())
+                                .costCenterId(line.getCostCenter() != null
+                                        ? line.getCostCenter().getId() : null)
                                 .costCenterName(line.getCostCenter() != null
                                         ? line.getCostCenter().getName() : null)
                                 .build())
@@ -153,6 +180,7 @@ public class AccountingBookService {
                     .date(entry.getEntryDate())
                     .description(entry.getDescription())
                     .status(entry.getStatus().name())
+                    .sourceModule(entry.getSourceModule() != null ? entry.getSourceModule().name() : null)
                     .totalDebit(entry.getTotalDebit())
                     .totalCredit(entry.getTotalCredit())
                     .lines(lineDTOs)
@@ -359,6 +387,14 @@ public class AccountingBookService {
     public List<BalanceComprobacionDTO> buildBalanceComprobacion(Integer year, Integer month) {
         log.info("Generando Balance de Comprobacion para periodo {}-{}",
                 year, String.format("%02d", month));
+
+        // QA Bloque AS-CG (2026-05-25): si el anio solicitado no tiene comprobantes
+        // POSTED/REVERSED para este tenant, NO se genera nada. Antes se arrastraban
+        // los saldos del anio anterior como "saldo anterior" al consultar un anio
+        // inexistente o sin movimientos (ej. 2027), lo cual confundia al usuario.
+        if (!journalEntryRepository.hasPostedEntriesInYear(year, JournalEntryStatus.POSTED)) {
+            return java.util.Collections.emptyList();
+        }
 
         // 1. Calcular saldos anteriores (todos los periodos antes de este)
         List<JournalEntry> previousEntries = journalEntryRepository.findPostedBeforePeriod(

@@ -352,6 +352,30 @@ public class JournalEntryController {
     }
 
     /**
+     * HU-CG-07C E3 (QA 2026-05-25): comparacion detallada entre DOS versiones.
+     * Devuelve el diff de cabecera (campo, valor anterior/nuevo) y de lineas
+     * (agregadas/eliminadas/modificadas) para que el auditor identifique los
+     * cambios especificos entre dos versiones del comprobante.
+     */
+    @GetMapping("/{idA}/versions/compare/{idB}")
+    @Operation(
+            summary = "Comparar dos versiones de un comprobante (HU-CG-07C E3)",
+            description = "Retorna las diferencias de cabecera y de lineas entre dos versiones "
+                        + "del comprobante, resaltando campos modificados, valores anteriores y nuevos.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Comparacion generada"),
+            @ApiResponse(responseCode = "400", description = "Alguna version no existe")
+    })
+    @PreAuthorize("hasAuthority('PERM_VIEW_ACCOUNTING') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> compareVersions(@PathVariable Long idA, @PathVariable Long idB) {
+        try {
+            return ResponseEntity.ok(Map.of("data", journalEntryService.compareVersions(idA, idB)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage(), "msg", e.getMessage()));
+        }
+    }
+
+    /**
      * HU-AU-09 E5 (2026-04-28): consulta inversa via FK bidireccional.
      * Retorna el log de auditoria principal del JE + todos los logs vinculados
      * (los que tengan journal_entry_id apuntando a este id).

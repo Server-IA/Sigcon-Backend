@@ -227,6 +227,58 @@ public class AaefTransactionMapper {
                 .build();
     }
 
+    /**
+     * Fallo 1 (HU-AP-05 E4): determina si un anticipo (Type=ADV) es a un
+     * PROVEEDOR (modulo AP/CxP) en lugar de a un cliente (AR/CxC).
+     *
+     * <p>La señal primaria es el tipo de documento inicial enviado por
+     * AgroFusion en {@code RelatedInvoiceType.Code}:
+     * <ul>
+     *   <li>"02" (Compra) → AP (proveedor)</li>
+     *   <li>"01" (Venta) o ausente → AR (cliente, comportamiento por defecto)</li>
+     * </ul>
+     * Como respaldo (por si AgroFusion rotula el destino en el Name del tipo o
+     * del metodo), tambien detecta las palabras "compra"/"proveedor".
+     */
+    public boolean isPurchaseAdvance(AaefTransactionDTO tx) {
+        if (tx == null) return false;
+        AaefTransactionDTO.Type rit = tx.getRelatedInvoiceType();
+        if (rit != null && rit.getCode() != null && "02".equals(rit.getCode().trim())) {
+            return true;
+        }
+        if (rit != null && mentionsPurchase(rit.getName())) return true;
+        // Respaldo: algunos emisores rotulan el destino en el Name del propio metodo.
+        if (tx.getType() != null && mentionsPurchase(tx.getType().getName())) return true;
+        return false;
+    }
+
+    private boolean mentionsPurchase(String s) {
+        if (s == null) return false;
+        String x = s.toLowerCase();
+        return x.contains("compra") || x.contains("proveedor");
+    }
+
+    /**
+     * Fallo 1 (HU-AP-05 E4): mapea un ADV "a proveedor" a CreateApAdvanceRequest.
+     * El service genera el JE Debito Anticipos a proveedores (PUC 1330) /
+     * Credito Bancos. No se envia cuenta bancaria/caja (AAEF no la trae), por lo
+     * que el credito usa la cuenta de bancos por defecto via AccountMappingService.
+     */
+    public com.sigcon.backend.invoices.ap_payments.application.CreateApAdvanceRequest
+            toApAdvanceRequest(AaefTransactionDTO tx) {
+        ThirdParty resolved = thirdPartyResolver.findOrCreate(
+                tx.getThirdParty().getNit(),
+                null,
+                tx.getThirdParty().getName());
+        String ref = tx.getDocumentId() != null ? " (ref: " + tx.getDocumentId() + ")" : "";
+        return com.sigcon.backend.invoices.ap_payments.application.CreateApAdvanceRequest.builder()
+                .thirdPartyId(resolved.getId())
+                .amount(tx.getAmount())
+                .advanceDate(tx.getDate())
+                .notes("Importado desde AAEF" + ref + " - " + (tx.getNotes() != null ? tx.getNotes() : ""))
+                .build();
+    }
+
     /** Helper inmutable con resultado de resolver una factura externa. */
     public static class ResolvedInvoice {
         private final InvoiceScope scope;

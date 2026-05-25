@@ -2,6 +2,7 @@ package com.sigcon.backend.assets.assets.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -61,7 +62,12 @@ public class CreateAssetsDTO {
 
         @NotNull(message = "La vida util es obligatoria (en meses).")
         @Min(value = 1, message = "La vida util debe ser de al menos 1 mes.")
-        @Schema(description = "Vida util en meses", example = "60")
+        // QA Activos (2026-05-25) Error 01: tope superior razonable. Sin @Max un
+        // valor absurdo (ej. 1e+26) reventaba la deserializacion Jackson con un
+        // error tecnico incomprensible. 1200 meses = 100 anios cubre cualquier
+        // activo real (incluso edificaciones).
+        @Max(value = 1200, message = "La vida util no puede superar 1200 meses (100 anios).")
+        @Schema(description = "Vida util en meses (1 a 1200)", example = "60")
         private Integer usefulLifeMonths;
 
         @NotNull(message = "La regla de depreciacion es obligatoria.")

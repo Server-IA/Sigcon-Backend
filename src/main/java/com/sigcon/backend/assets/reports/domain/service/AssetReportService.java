@@ -10,8 +10,11 @@ import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.UnitValue;
 import com.sigcon.backend.assets.assets.domain.model.Assets;
+import com.sigcon.backend.assets.assets.domain.model.enums.AssetStatus;
+import com.sigcon.backend.assets.assets.domain.model.enums.AssetType;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
 import com.sigcon.backend.assets.reports.application.AssetReportDTO;
+import com.sigcon.backend.assets.reports.application.AssetReportRequest;
 import com.sigcon.backend.reports.domain.service.ReportPdfService;
 
 import lombok.RequiredArgsConstructor;
@@ -65,7 +68,18 @@ public class AssetReportService {
     public Map<String, List<AssetReportDTO>> generateAssetReport(LocalDate startDate,
                                                                   LocalDate endDate,
                                                                   String groupBy) {
-        List<Assets> assets = fetchAssetsByDateRange(startDate, endDate);
+        return generateAssetReport(AssetReportRequest.builder()
+                .startDate(startDate).endDate(endDate).groupBy(groupBy).build());
+    }
+
+    /**
+     * QA Activos (2026-05-25) Error 03: genera el reporte aplicando TODOS los
+     * filtros del request (fechas + proveedor + clasificacion PUC + estado +
+     * tipo), no solo el rango de fechas como hacia antes.
+     */
+    public Map<String, List<AssetReportDTO>> generateAssetReport(AssetReportRequest req) {
+        String groupBy = req.getGroupBy();
+        List<Assets> assets = fetchAssets(req);
         List<AssetReportDTO> dtos = assets.stream()
                 .map(this::toReportDTO)
                 .collect(Collectors.toList());
@@ -110,25 +124,64 @@ public class AssetReportService {
     public byte[] generateAssetReportPdf(LocalDate startDate,
                                           LocalDate endDate,
                                           String groupBy) throws IOException {
-        Map<String, List<AssetReportDTO>> grouped = generateAssetReport(startDate, endDate, groupBy);
-        List<Paragraph> bodyContent = buildPdfBody(grouped, startDate, endDate);
+        return generateAssetReportPdf(AssetReportRequest.builder()
+                .startDate(startDate).endDate(endDate).groupBy(groupBy).build());
+    }
+
+    /** QA Activos (2026-05-25) Error 03: PDF con todos los filtros aplicados. */
+    public byte[] generateAssetReportPdf(AssetReportRequest req) throws IOException {
+        Map<String, List<AssetReportDTO>> grouped = generateAssetReport(req);
+        List<Paragraph> bodyContent = buildPdfBody(grouped, req.getStartDate(), req.getEndDate());
 
         String title = "Reporte de Activos Fijos ("
-                + startDate.format(DATE_FMT) + " - " + endDate.format(DATE_FMT) + ")";
+                + req.getStartDate().format(DATE_FMT) + " - " + req.getEndDate().format(DATE_FMT) + ")";
         return reportPdfService.generateReport(title, bodyContent);
     }
 
     // ─── Metodos privados ───────────────────────────────────────────────────
 
     /**
-     * Consulta activos con fecha de adquisicion en el rango dado y sin eliminacion logica.
+     * Consulta activos aplicando el rango de fechas de adquisicion y los filtros
+     * opcionales del request (proveedor, codigo PUC, estado, tipo). Cada filtro
+     * solo se aplica si llega informado; sin eliminacion logica.
+     *
+     * <p>QA Activos (2026-05-25) Error 03: antes solo se filtraba por rango de
+     * fechas y el resto de filtros del frontend se ignoraban (ej. al elegir un
+     * proveedor especifico salian activos de otro proveedor).</p>
      */
-    private List<Assets> fetchAssetsByDateRange(LocalDate startDate, LocalDate endDate) {
-        Specification<Assets> spec = (root, query, cb) -> cb.and(
-                cb.greaterThanOrEqualTo(root.get("acquisitionDate"), startDate),
-                cb.lessThanOrEqualTo(root.get("acquisitionDate"), endDate),
-                cb.isNull(root.get("deletedAt"))
-        );
+    private List<Assets> fetchAssets(AssetReportRequest req) {
+        Specification<Assets> spec = (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.greaterThanOrEqualTo(root.get("acquisitionDate"), req.getStartDate()));
+            predicates.add(cb.lessThanOrEqualTo(root.get("acquisitionDate"), req.getEndDate()));
+            predicates.add(cb.isNull(root.get("deletedAt")));
+
+            // Proveedor
+            if (req.getSupplierId() != null) {
+                predicates.add(cb.equal(root.get("supplier").get("id"), req.getSupplierId()));
+            }
+            // Estado del activo (enum AssetStatus) — se ignora si el valor no es valido
+            if (req.getStatus() != null && !req.getStatus().isBlank()) {
+                try {
+                    predicates.add(cb.equal(root.get("status"),
+                            AssetStatus.valueOf(req.getStatus().trim().toUpperCase())));
+                } catch (IllegalArgumentException ignored) { /* valor invalido -> no filtra */ }
+            }
+            // Tipo de activo (enum AssetType TANGIBLE/INTANGIBLE)
+            if (req.getAssetType() != null && !req.getAssetType().isBlank()) {
+                try {
+                    predicates.add(cb.equal(root.get("assetType"),
+                            AssetType.valueOf(req.getAssetType().trim().toUpperCase())));
+                } catch (IllegalArgumentException ignored) { /* valor invalido -> no filtra */ }
+            }
+            // Clasificacion contable: prefijo del codigo PUC de la cuenta del activo
+            if (req.getClassificationCode() != null && !req.getClassificationCode().isBlank()) {
+                predicates.add(cb.like(
+                        root.get("accountingAccount").get("pucAccount").get("code"),
+                        req.getClassificationCode().trim() + "%"));
+            }
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
         return assetsRepository.findAll(spec);
     }
 

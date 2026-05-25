@@ -55,11 +55,11 @@ public class AuditExportService {
             csv.append(l.getId()).append(';')
                .append(l.getTimestamp()).append(';')
                .append(nz(l.getUserEmail())).append(';')
-               .append(nz(l.getAction())).append(';')
-               .append(nz(l.getEntityType())).append(';')
+               .append(nz(AuditLabels.action(l.getAction()))).append(';')
+               .append(nz(AuditLabels.entity(l.getEntityType()))).append(';')
                .append(l.getEntityId() != null ? l.getEntityId() : "").append(';')
-               .append(nz(l.getModule())).append(';')
-               .append(nz(l.getSeverity())).append(';')
+               .append(nz(AuditLabels.module(l.getModule()))).append(';')
+               .append(nz(AuditLabels.severity(l.getSeverity()))).append(';')
                .append(nz(l.getDescription())).append(';')
                .append(nz(l.getIpAddress())).append(';')
                .append(nz(l.getHash())).append('\n');
@@ -100,11 +100,11 @@ public class AuditExportService {
                 row.createCell(0).setCellValue(l.getId() != null ? l.getId() : 0);
                 row.createCell(1).setCellValue(l.getTimestamp() != null ? l.getTimestamp().toString() : "");
                 row.createCell(2).setCellValue(nz(l.getUserEmail()));
-                row.createCell(3).setCellValue(nz(l.getAction()));
-                row.createCell(4).setCellValue(nz(l.getEntityType()));
+                row.createCell(3).setCellValue(nz(AuditLabels.action(l.getAction())));
+                row.createCell(4).setCellValue(nz(AuditLabels.entity(l.getEntityType())));
                 row.createCell(5).setCellValue(l.getEntityId() != null ? l.getEntityId() : 0);
-                row.createCell(6).setCellValue(nz(l.getModule()));
-                row.createCell(7).setCellValue(nz(l.getSeverity()));
+                row.createCell(6).setCellValue(nz(AuditLabels.module(l.getModule())));
+                row.createCell(7).setCellValue(nz(AuditLabels.severity(l.getSeverity())));
                 row.createCell(8).setCellValue(nz(l.getDescription()));
                 row.createCell(9).setCellValue(nz(l.getIpAddress()));
                 row.createCell(10).setCellValue(nz(l.getHash()));
@@ -166,10 +166,10 @@ public class AuditExportService {
                 table.addCell(cellSm(fontReg, String.valueOf(l.getId() == null ? "" : l.getId())));
                 table.addCell(cellSm(fontReg, fecha));
                 table.addCell(cellSm(fontReg, nz(l.getUserEmail())));
-                table.addCell(cellSm(fontReg, nz(l.getAction())));
-                table.addCell(cellSm(fontReg, nz(l.getEntityType())));
-                table.addCell(cellSm(fontReg, nz(l.getModule())));
-                table.addCell(cellSm(fontReg, nz(l.getSeverity())));
+                table.addCell(cellSm(fontReg, nz(AuditLabels.action(l.getAction()))));
+                table.addCell(cellSm(fontReg, nz(AuditLabels.entity(l.getEntityType()))));
+                table.addCell(cellSm(fontReg, nz(AuditLabels.module(l.getModule()))));
+                table.addCell(cellSm(fontReg, nz(AuditLabels.severity(l.getSeverity()))));
                 table.addCell(cellSm(fontReg, nz(l.getDescription())));
             }
             doc.add(table);
@@ -222,7 +222,7 @@ public class AuditExportService {
             sevT.addHeaderCell(headerCell(fontBold, "Semaforo"));
             if (data.getCountBySeverity() != null) {
                 data.getCountBySeverity().forEach((k, v) -> {
-                    sevT.addCell(cellSm(fontReg, k));
+                    sevT.addCell(cellSm(fontReg, AuditLabels.severity(k)));
                     sevT.addCell(cellSm(fontReg, String.valueOf(v)));
                     String emoji = switch (k.toUpperCase()) {
                         case "CRITICAL" -> "ROJO";
@@ -241,7 +241,7 @@ public class AuditExportService {
             modT.addHeaderCell(headerCell(fontBold, "Cantidad"));
             if (data.getCountByModule() != null) {
                 data.getCountByModule().forEach((k, v) -> {
-                    modT.addCell(cellSm(fontReg, k));
+                    modT.addCell(cellSm(fontReg, AuditLabels.module(k)));
                     modT.addCell(cellSm(fontReg, String.valueOf(v)));
                 });
             }
@@ -253,7 +253,7 @@ public class AuditExportService {
             actT.addHeaderCell(headerCell(fontBold, "Cantidad"));
             if (data.getCountByAction() != null) {
                 data.getCountByAction().forEach((k, v) -> {
-                    actT.addCell(cellSm(fontReg, k));
+                    actT.addCell(cellSm(fontReg, AuditLabels.action(k)));
                     actT.addCell(cellSm(fontReg, String.valueOf(v)));
                 });
             }

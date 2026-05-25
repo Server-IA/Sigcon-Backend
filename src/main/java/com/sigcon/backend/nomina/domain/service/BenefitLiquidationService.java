@@ -190,9 +190,16 @@ public class BenefitLiquidationService {
                 .divide(new BigDecimal("720"), 2, RoundingMode.HALF_UP);
 
         // Indemnizacion si aplica (CST Art. 64 - sin justa causa, contrato indefinido)
+        // QA Nomina (2026-05-25) ERR-NOM-006: la indemnizacion salia SIEMPRE en 0
+        // porque la condicion solo aceptaba contractType "INDEFINIDO", pero los
+        // empleados sembrados/migrados usan "PERMANENT" (mismo concepto: contrato
+        // a termino indefinido). Aceptamos ambos para que Art. 64 se calcule.
         BigDecimal severancePay = BigDecimal.ZERO;
-        if ("SIN_JUSTA_CAUSA".equalsIgnoreCase(terminationType)
-                && "INDEFINIDO".equalsIgnoreCase(emp.getContractType())) {
+        String contract = emp.getContractType() != null ? emp.getContractType().trim() : "";
+        boolean indefiniteContract = "INDEFINIDO".equalsIgnoreCase(contract)
+                || "PERMANENT".equalsIgnoreCase(contract)
+                || "INDEFINITE".equalsIgnoreCase(contract);
+        if ("SIN_JUSTA_CAUSA".equalsIgnoreCase(terminationType) && indefiniteContract) {
             long years = Math.max(1, totalDays / 360);
             BigDecimal daysPay;
             BigDecimal smlmv10 = new BigDecimal("14235000"); // ~10 SMLMV 2026
@@ -265,8 +272,14 @@ public class BenefitLiquidationService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return null;
         Long debitAcc = accountMappingService.resolveOrThrow(debitConcept);
         Long creditAcc = accountMappingService.resolveOrThrow(creditConcept);
+        // QA Nomina (2026-05-25) ERR-NOM-002: el JE no puede tener fecha futura.
+        // Las cesantias se fechan a fin de anio (31-dic) y la prima a fin de
+        // semestre; si se liquidan antes de esa fecha, JournalEntryService las
+        // rechazaba con "No se permiten comprobantes con fecha futura". Clampeamos.
+        LocalDate safeEntryDate = entryDate != null && entryDate.isAfter(LocalDate.now())
+                ? LocalDate.now() : entryDate;
         CreateJournalEntryRequest req = CreateJournalEntryRequest.builder()
-                .entryDate(entryDate)
+                .entryDate(safeEntryDate)
                 .description(description)
                 .sourceModule(JournalSourceModule.NOM)
                 .lines(java.util.List.of(

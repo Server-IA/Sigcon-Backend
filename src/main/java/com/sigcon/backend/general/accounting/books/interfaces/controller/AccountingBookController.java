@@ -60,8 +60,11 @@ public class AccountingBookController {
             // HU-CG-06C E3: filtros adicionales opcionales por cuenta y rango de fechas
             @Parameter(description = "ID de cuenta contable (opcional)") @RequestParam(required = false) Long accountId,
             @Parameter(description = "Fecha desde (yyyy-MM-dd, opcional, prevalece sobre year/month)") @RequestParam(required = false) String dateFrom,
-            @Parameter(description = "Fecha hasta (yyyy-MM-dd, opcional, prevalece sobre year/month)") @RequestParam(required = false) String dateTo) {
-        return accountingBookService.getLibroDiario(year, month, accountId, dateFrom, dateTo);
+            @Parameter(description = "Fecha hasta (yyyy-MM-dd, opcional, prevalece sobre year/month)") @RequestParam(required = false) String dateTo,
+            // HU-CG-17 E1 / QA adic#5: filtros por tipo de comprobante y centro de costo
+            @Parameter(description = "Tipo de comprobante / modulo origen (AP, AR, BNK, ACT, NOM, CG)") @RequestParam(required = false) String sourceModule,
+            @Parameter(description = "ID de centro de costo (opcional)") @RequestParam(required = false) Long costCenterId) {
+        return accountingBookService.getLibroDiario(year, month, accountId, dateFrom, dateTo, sourceModule, costCenterId);
     }
 
     // ─────────────────────────────────────────────────────

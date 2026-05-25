@@ -23,6 +23,7 @@ import com.itextpdf.kernel.geom.PageSize;
 import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.layout.Document;
+import com.itextpdf.layout.borders.Border;
 import com.itextpdf.layout.element.Cell;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
@@ -311,11 +312,50 @@ public class FinancialStatementExportService {
             cols.add(m -> num(m.get("variacionPorcentual2")));
         }
 
-        ExportResult result = encode("Comparativo",
-                labelA + "-vs-" + labelB + (tres ? "-vs-" + labelC : ""),
-                format, headers, cols, list, ctx, null);
+        String periodLabel = labelA + "-vs-" + labelB + (tres ? "-vs-" + labelC : "");
+        ExportResult result;
+        String fmt = format != null ? format.toLowerCase() : "csv";
+        if ("pdf".equals(fmt)) {
+            // HU-CG-13 E4: el PDF del comparativo incluye una grafica de barras
+            // por clase comparando los periodos. CSV/XLSX siguen tabulares.
+            List<ChartBar> bars = buildComparativoBars(list, tres);
+            byte[] pdfBytes = buildPdf("Comparativo", periodLabel, ctx,
+                    headers, cols, list, null, bars);
+            result = new ExportResult(pdfBytes, "Comparativo-" + periodLabel + ".pdf", PDF_MIME);
+        } else {
+            result = encode("Comparativo", periodLabel, format, headers, cols, list, ctx, null);
+        }
         publishExportAudit("Comparativo", year1, month1, format, list.size());
         return result;
+    }
+
+    /**
+     * HU-CG-13 E4: construye las barras de la grafica del comparativo a partir
+     * de las filas (una barra-grupo por clase, una serie por periodo). Se omiten
+     * las clases sin valor en ningun periodo para no ensuciar la grafica.
+     */
+    private List<ChartBar> buildComparativoBars(
+            List<java.util.Map<String, Object>> list, boolean tres) {
+        List<ChartBar> bars = new ArrayList<>();
+        for (java.util.Map<String, Object> row : list) {
+            String name = str(row.get("className"));
+            double a = num(row.get("period1Value"));
+            double b = num(row.get("period2Value"));
+            double c = tres ? num(row.get("period3Value")) : 0d;
+            if (a == 0d && b == 0d && c == 0d) continue;
+            List<ChartSeries> series = new ArrayList<>();
+            series.add(new ChartSeries(str(row.get("period1Label")), a, new int[]{59, 130, 246}));
+            series.add(new ChartSeries(str(row.get("period2Label")), b, new int[]{16, 185, 129}));
+            if (tres) {
+                series.add(new ChartSeries(str(row.get("period3Label")), c, new int[]{245, 158, 11}));
+            }
+            bars.add(new ChartBar(name, series));
+        }
+        return bars;
+    }
+
+    private static String str(Object v) {
+        return v == null ? "" : v.toString();
     }
 
     // ──────────────────────────────────────────────────────────
@@ -425,12 +465,23 @@ public class FinancialStatementExportService {
         }
     }
 
+    /** Delegado sin grafica (Balance General, Estado Resultados, etc.). */
     private <T> byte[] buildPdf(String title, String period,
                                   ReportHeaderBuilder.ReportContext ctx,
                                   List<String> headers,
                                   List<Function<T, Object>> cols,
                                   List<T> rows,
                                   List<Object> totalsRow) {
+        return buildPdf(title, period, ctx, headers, cols, rows, totalsRow, null);
+    }
+
+    private <T> byte[] buildPdf(String title, String period,
+                                  ReportHeaderBuilder.ReportContext ctx,
+                                  List<String> headers,
+                                  List<Function<T, Object>> cols,
+                                  List<T> rows,
+                                  List<Object> totalsRow,
+                                  List<ChartBar> chartBars) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             PdfWriter writer = new PdfWriter(baos);
             PdfDocument pdf = new PdfDocument(writer);
@@ -527,6 +578,11 @@ public class FinancialStatementExportService {
                     doc.add(new Paragraph(sum.toString()).setFont(bodyFont).setFontSize(9));
                 }
 
+                // HU-CG-13 E4: grafica de barras por clase (solo comparativo)
+                if (chartBars != null && !chartBars.isEmpty()) {
+                    renderBarChart(doc, chartBars, titleFont, bodyFont, df);
+                }
+
                 // Footer
                 Paragraph footer = new Paragraph("Documento generado automaticamente. Pagina con valor probatorio.")
                         .setFont(bodyFont).setFontSize(7)
@@ -540,7 +596,100 @@ public class FinancialStatementExportService {
         }
     }
 
+    /**
+     * HU-CG-13 E4: dibuja una grafica de barras horizontales nativa en iText
+     * (sin librerias de charts). Una barra-grupo por clase; dentro, una barra
+     * por periodo, con ancho proporcional al valor absoluto sobre el maximo
+     * global. Cada periodo tiene su color (A azul, B verde, C ambar).
+     */
+    private void renderBarChart(Document doc, List<ChartBar> bars,
+                                 PdfFont titleFont, PdfFont bodyFont, DecimalFormat df) {
+        doc.add(new Paragraph("\nGrafica comparativa por clase")
+                .setFont(titleFont).setFontSize(12)
+                .setFontColor(new DeviceRgb(30, 58, 138)));
+
+        double maxAbs = 0d;
+        for (ChartBar b : bars) {
+            for (ChartSeries s : b.series) {
+                maxAbs = Math.max(maxAbs, Math.abs(s.value));
+            }
+        }
+        if (maxAbs <= 0d) maxAbs = 1d;
+
+        // Leyenda de colores por periodo
+        if (!bars.isEmpty()) {
+            Table legend = new Table(UnitValue.createPercentArray(
+                    new float[]{1f, 99f})).useAllAvailableWidth();
+            for (ChartSeries s : bars.get(0).series) {
+                Cell swatch = new Cell()
+                        .setBackgroundColor(new DeviceRgb(s.rgb[0], s.rgb[1], s.rgb[2]))
+                        .setHeight(8f).setBorder(Border.NO_BORDER);
+                Cell lbl = new Cell()
+                        .add(new Paragraph("  " + s.label).setFont(bodyFont).setFontSize(7))
+                        .setBorder(Border.NO_BORDER);
+                legend.addCell(swatch);
+                legend.addCell(lbl);
+            }
+            doc.add(legend);
+        }
+
+        for (ChartBar b : bars) {
+            doc.add(new Paragraph(b.groupLabel)
+                    .setFont(titleFont).setFontSize(8)
+                    .setFontColor(new DeviceRgb(55, 65, 81)));
+            Table chart = new Table(UnitValue.createPercentArray(
+                    new float[]{16f, 60f, 24f})).useAllAvailableWidth();
+            for (ChartSeries s : b.series) {
+                chart.addCell(new Cell()
+                        .add(new Paragraph(s.label).setFont(bodyFont).setFontSize(7))
+                        .setBorder(Border.NO_BORDER));
+
+                double pct = Math.abs(s.value) / maxAbs * 100d;
+                Cell barCell = new Cell().setBorder(Border.NO_BORDER);
+                if (pct >= 0.5d) {
+                    float fill = (float) Math.min(100d, Math.max(1d, pct));
+                    float rest = Math.max(0.01f, 100f - fill);
+                    Table bar = new Table(UnitValue.createPercentArray(
+                            new float[]{fill, rest})).useAllAvailableWidth();
+                    bar.addCell(new Cell()
+                            .setBackgroundColor(new DeviceRgb(s.rgb[0], s.rgb[1], s.rgb[2]))
+                            .setHeight(9f).setBorder(Border.NO_BORDER));
+                    bar.addCell(new Cell().setBorder(Border.NO_BORDER));
+                    barCell.add(bar);
+                }
+                chart.addCell(barCell);
+
+                chart.addCell(new Cell()
+                        .add(new Paragraph(df.format(s.value))
+                                .setFont(bodyFont).setFontSize(7)
+                                .setTextAlignment(TextAlignment.RIGHT))
+                        .setBorder(Border.NO_BORDER));
+            }
+            doc.add(chart);
+        }
+    }
+
     // Tipos auxiliares (clases con campos publicos para uso desde lambdas).
+
+    /** HU-CG-13: una serie (periodo) dentro de una barra-grupo. */
+    private static final class ChartSeries {
+        public final String label;
+        public final double value;
+        public final int[] rgb;
+        ChartSeries(String label, double value, int[] rgb) {
+            this.label = label; this.value = value; this.rgb = rgb;
+        }
+    }
+
+    /** HU-CG-13: una barra-grupo (clase) con sus series por periodo. */
+    private static final class ChartBar {
+        public final String groupLabel;
+        public final List<ChartSeries> series;
+        ChartBar(String groupLabel, List<ChartSeries> series) {
+            this.groupLabel = groupLabel; this.series = series;
+        }
+    }
+
     private static final class ClassRow {
         public final String section;
         public final String code;

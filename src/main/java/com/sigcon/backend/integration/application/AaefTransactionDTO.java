@@ -33,6 +33,19 @@ public class AaefTransactionDTO {
     @JsonProperty("Type")
     private Type type;
 
+    /**
+     * Fallo 1 (HU-AP-05 E4): tipo de documento inicial al que corresponde un
+     * anticipo (Type=ADV), para distinguir el modulo destino:
+     * <ul>
+     *   <li>Code "01" (Venta)  → anticipo de CLIENTE   → AR / CxC (PUC 2805)</li>
+     *   <li>Code "02" (Compra) → anticipo a PROVEEDOR  → AP / CxP (PUC 1330)</li>
+     * </ul>
+     * Si viene ausente, por compatibilidad el anticipo se trata como de cliente (AR).
+     * Solo aplica a transacciones ADV; los demas tipos lo ignoran.
+     */
+    @JsonProperty("RelatedInvoiceType")
+    private Type relatedInvoiceType;
+
     @JsonProperty("Date")
     @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
     private LocalDate date;

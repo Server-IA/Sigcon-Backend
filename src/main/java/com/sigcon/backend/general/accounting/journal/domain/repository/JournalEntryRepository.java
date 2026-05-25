@@ -77,6 +77,20 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
             @Param("status") JournalEntryStatus status);
 
     /**
+     * QA Bloque AS-CG (2026-05-25): indica si el tenant tiene actividad contable
+     * (asientos POSTED o REVERSED) en el anio indicado. Se usa como guard en
+     * Balance de Comprobacion, Balance General y ECL de cartera: si el anio no
+     * tiene comprobantes, esos reportes devuelven vacio/0 en lugar de arrastrar
+     * los saldos del anio anterior (que confundian al usuario al consultar un
+     * periodo inexistente como 2027). JPQL => respeta el @Filter multi-tenant.
+     */
+    @Query("SELECT COUNT(je) > 0 FROM JournalEntry je WHERE je.deletedAt IS NULL "
+         + "AND je.status IN (:status, com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalEntryStatus.REVERSED) "
+         + "AND je.periodYear = :year")
+    boolean hasPostedEntriesInYear(@Param("year") Integer year,
+                                   @Param("status") JournalEntryStatus status);
+
+    /**
      * Obtiene todos los asientos contabilizados hasta un periodo dado (inclusive).
      * Usado para calcular saldos acumulados en estados financieros.
      * Incluye REVERSED — ver nota en findByPeriodAndStatus (HU-CG-08A E1).

@@ -76,22 +76,26 @@ CREATE TABLE IF NOT EXISTS audit_retention_policies (
     deleted_at          TIMESTAMP NULL
 );
 
--- Politicas semilla (Decreto 2649/1993 Art. 134: 10 anios; Habeas Data 5 anios)
+-- Politicas semilla (Decreto 2649/1993 Art. 134: 10 anos; Habeas Data 5 anos)
+-- QA Bloque AU (2026-05-25): nombres/descripciones en espanol. Las tildes se
+-- construyen con chr() (independiente del charset con que el loader lea el .sql,
+-- ya que DataInitializer lee con charset por defecto). El guard usa el nombre
+-- nuevo para que el re-seed en cada arranque NO duplique tras el rename de V9-Zzzzzf.
 INSERT INTO audit_retention_policies (name, description, match_module, match_severity, retention_days, legal_basis, enabled, created_by, created_at, updated_at)
-SELECT 'Logs CRITICOS - 10 anios', 'Eventos CRITICAL se retienen 10 anios (Decreto 2649/1993 Art. 134)', NULL, 'CRITICAL', 3650, 'Decreto 2649/1993 Art. 134', true, 'system', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name='Logs CRITICOS - 10 anios');
+SELECT 'Logs cr' || chr(237) || 'ticos - 10 a' || chr(241) || 'os', 'Eventos de severidad cr' || chr(237) || 'tica se retienen 10 a' || chr(241) || 'os (Decreto 2649/1993 Art. 134)', NULL, 'CRITICAL', 3650, 'Decreto 2649/1993 Art. 134', true, 'system', NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name = 'Logs cr' || chr(237) || 'ticos - 10 a' || chr(241) || 'os');
 
 INSERT INTO audit_retention_policies (name, description, match_module, match_severity, retention_days, legal_basis, enabled, created_by, created_at, updated_at)
-SELECT 'Logs ALTO - 5 anios', 'Eventos HIGH se retienen 5 anios (Estatuto Tributario)', NULL, 'HIGH', 1825, 'Estatuto Tributario Art. 632', true, 'system', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name='Logs ALTO - 5 anios');
+SELECT 'Logs severidad alta - 5 a' || chr(241) || 'os', 'Eventos de severidad alta se retienen 5 a' || chr(241) || 'os (Estatuto Tributario)', NULL, 'HIGH', 1825, 'Estatuto Tributario Art. 632', true, 'system', NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name = 'Logs severidad alta - 5 a' || chr(241) || 'os');
 
 INSERT INTO audit_retention_policies (name, description, match_module, match_severity, retention_days, legal_basis, enabled, created_by, created_at, updated_at)
-SELECT 'Logs MEDIO/BAJO - 2 anios', 'Eventos MEDIUM y LOW se retienen 2 anios', NULL, 'MEDIUM', 730, 'Politica interna', true, 'system', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name='Logs MEDIO/BAJO - 2 anios');
+SELECT 'Logs severidad media/baja - 2 a' || chr(241) || 'os', 'Eventos de severidad media y baja se retienen 2 a' || chr(241) || 'os', NULL, 'MEDIUM', 730, 'Politica interna', true, 'system', NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name = 'Logs severidad media/baja - 2 a' || chr(241) || 'os');
 
 INSERT INTO audit_retention_policies (name, description, match_module, match_severity, retention_days, legal_basis, enabled, created_by, created_at, updated_at)
-SELECT 'Logs BAJO - 1 anio', 'Eventos LOW (login/view/export) se retienen 1 anio', NULL, 'LOW', 365, 'Politica interna', true, 'system', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name='Logs BAJO - 1 anio');
+SELECT 'Logs severidad baja - 1 a' || chr(241) || 'o', 'Eventos de severidad baja (inicio de sesi' || chr(243) || 'n/vista/exportaci' || chr(243) || 'n) se retienen 1 a' || chr(241) || 'o', NULL, 'LOW', 365, 'Politica interna', true, 'system', NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM audit_retention_policies WHERE name = 'Logs severidad baja - 1 a' || chr(241) || 'o');
 
 
 -- ==========================================================================

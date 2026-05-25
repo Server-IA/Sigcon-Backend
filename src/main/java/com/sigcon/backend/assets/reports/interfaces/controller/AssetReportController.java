@@ -74,10 +74,10 @@ public class AssetReportController {
         }
 
         try {
-            var reportData = assetReportService.generateAssetReport(
-                    request.getStartDate(),
-                    request.getEndDate(),
-                    request.getGroupBy());
+            // QA Activos (2026-05-25) Error 03: pasar el request completo para
+            // que se apliquen TODOS los filtros (proveedor, clasificacion PUC,
+            // estado, tipo), no solo el rango de fechas.
+            var reportData = assetReportService.generateAssetReport(request);
 
             // HU-ACT-04 E3 (QA 2026-05-05): si el reporte sale vacio devolver
             // mensaje literal del Excel para que el frontend no genere archivo.
@@ -132,10 +132,8 @@ public class AssetReportController {
         }
 
         try {
-            byte[] pdfBytes = assetReportService.generateAssetReportPdf(
-                    request.getStartDate(),
-                    request.getEndDate(),
-                    request.getGroupBy());
+            // QA Activos (2026-05-25) Error 03: PDF con todos los filtros aplicados.
+            byte[] pdfBytes = assetReportService.generateAssetReportPdf(request);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_PDF);

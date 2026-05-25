@@ -40,6 +40,9 @@ public class LibroDiarioDTO {
     /** Estado del asiento (POSTED). */
     private String status;
 
+    /** QA CG (2026-05-25) CG-17/adic#5: modulo origen (tipo de comprobante) para filtrar. */
+    private String sourceModule;
+
     /** Total debitos del asiento. */
     private BigDecimal totalDebit;
 
@@ -66,6 +69,7 @@ public class LibroDiarioDTO {
         private BigDecimal creditAmount;
         private String description;
         private String thirdPartyNit;
+        private Long costCenterId;
         private String costCenterName;
     }
 }

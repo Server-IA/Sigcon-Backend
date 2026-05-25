@@ -44,8 +44,26 @@ public class AssetsController {
         @ExceptionHandler(HttpMessageNotReadableException.class)
         public ResponseEntity<?> handleJsonParseError(HttpMessageNotReadableException ex) {
                 Throwable rootCause = ex.getMostSpecificCause();
+                String raw = rootCause != null ? rootCause.getMessage() : ex.getMessage();
+                // QA Activos (2026-05-25) Error 01: un valor numerico fuera del
+                // rango del tipo (ej. vida util = 1e+26 -> Integer) hacia que
+                // Jackson fallara con un mensaje tecnico incomprensible. Lo
+                // traducimos a un mensaje claro para el contador.
+                String msg;
+                if (raw != null && (raw.contains("out of range") || raw.contains("Numeric value"))) {
+                        msg = "Uno de los valores numericos ingresados esta fuera del rango permitido. "
+                                + "Revise los campos numericos (por ejemplo, la vida util en meses debe ser un numero entero razonable, maximo 1200).";
+                } else if (raw != null && (raw.contains("Cannot coerce") || raw.contains("Cannot deserialize")
+                                || raw.contains("not a valid") || raw.contains("JSON parse"))) {
+                        msg = "Hay un valor con formato invalido en la solicitud. Verifique los campos e intente de nuevo.";
+                } else {
+                        msg = raw != null ? raw : "Body de la solicitud invalido o ausente";
+                        int srcIdx = msg.indexOf(" at [Source");
+                        if (srcIdx > 0) msg = msg.substring(0, srcIdx);
+                        if (msg.length() > 300) msg = msg.substring(0, 300) + "...";
+                }
                 return ResponseEntity.badRequest().body(
-                                ErrorRespondJson.getErrorRespondMessage(Optional.of(rootCause.getMessage())));
+                                ErrorRespondJson.getErrorRespondMessage(Optional.of(msg)));
         }
 
         @PostMapping("/store")

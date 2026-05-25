@@ -93,6 +93,24 @@ public class FinancialStatementService {
     public ResponseEntity<?> getBalanceGeneral(Integer year, Integer month) {
         log.info("Generando Balance General acumulado hasta {}-{}", year, String.format("%02d", month));
 
+        // QA Bloque AS-CG (2026-05-25): si el anio solicitado no tiene comprobantes
+        // POSTED/REVERSED para este tenant, el Balance General aparece en 0 (no se
+        // arrastran los saldos acumulados del anio anterior al consultar un periodo
+        // inexistente o sin movimientos como 2027).
+        if (!journalEntryRepository.hasPostedEntriesInYear(year, JournalEntryStatus.POSTED)) {
+            BalanceGeneralDTO vacio = BalanceGeneralDTO.builder()
+                    .totalActivos(BigDecimal.ZERO)
+                    .totalPasivos(BigDecimal.ZERO)
+                    .totalPatrimonio(BigDecimal.ZERO)
+                    .isBalanced(true)
+                    .details(new ArrayList<>())
+                    .build();
+            return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                    Optional.of("El periodo " + year + "-" + String.format("%02d", month)
+                            + " no tiene comprobantes registrados."),
+                    Optional.of(vacio)));
+        }
+
         // Obtener todos los asientos POSTED hasta el periodo (HU-CG-10 E3: sin reversados)
         List<JournalEntry> entries = soloVivos(journalEntryRepository.findPostedUpToPeriod(
                 year, month, JournalEntryStatus.POSTED));
