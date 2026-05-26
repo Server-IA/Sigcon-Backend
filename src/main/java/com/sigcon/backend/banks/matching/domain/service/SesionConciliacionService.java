@@ -71,15 +71,29 @@ public class SesionConciliacionService {
         if (pe.isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("La fecha final de conciliación no puede ser una fecha futura.");
         }
-        // CONC-4: no permitir dos sesiones con el MISMO período en la misma cuenta.
-        // La re-conciliación de un período ya cerrado se hace por reapertura/versionado,
-        // no creando otra sesión con las mismas fechas.
-        boolean periodoDuplicado = sesionRepo.findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId)
-                .stream().anyMatch(x -> ps.equals(x.getPeriodStart()) && pe.equals(x.getPeriodEnd()));
-        if (periodoDuplicado) {
+        // CONC-4 (QA reeval Q3): NO permitir que el período de la nueva sesión se SOLAPE
+        // con el de otra sesión existente de la misma cuenta. Antes solo se bloqueaba
+        // cuando las fechas eran EXACTAMENTE iguales (4→20 vs 4→21 pasaba), lo que permitía
+        // conciliar dos veces los mismos días. Dos rangos [ps,pe] y [xs,xe] se solapan si
+        // ps <= xe && xs <= pe. La re-conciliación de un período ya cerrado se hace por
+        // reapertura/versionado, no creando otra sesión solapada.
+        SesionConciliacion solapada = sesionRepo.findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId)
+                .stream()
+                .filter(x -> x.getPeriodStart() != null && x.getPeriodEnd() != null
+                        && !ps.isAfter(x.getPeriodEnd()) && !x.getPeriodStart().isAfter(pe))
+                .findFirst().orElse(null);
+        if (solapada != null) {
+            // Si el conflicto es con un BORRADOR, el usuario puede eliminarlo para
+            // reajustar las fechas sin interrumpir el flujo (se permite borrar borradores).
+            String ayuda = "BORRADOR".equals(solapada.getEstado())
+                    ? " Puede eliminar esa sesión en borrador (#" + solapada.getId()
+                      + ") y volver a crear la conciliación con las fechas ajustadas."
+                    : " Para re-conciliar ese período use la opción de reapertura sobre la sesión existente.";
             throw new IllegalArgumentException(
-                "Ya existe una sesión de conciliación para esta cuenta con el período "
-                + ps + " → " + pe + ". Abra la sesión existente o seleccione otras fechas.");
+                "El período " + ps + " → " + pe + " se solapa con la sesión #" + solapada.getId()
+                + " (" + solapada.getPeriodStart() + " → " + solapada.getPeriodEnd()
+                + ", estado " + solapada.getEstado() + "). Una conciliación no debe contener fechas"
+                + " que ya están cubiertas por otra sesión." + ayuda);
         }
         BankAccount ba = bankAccountRepo.findById(bankAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta bancaria no encontrada"));
@@ -101,6 +115,32 @@ public class SesionConciliacionService {
         auditPublisher.publishCreate(AuditModule.BNK, "SesionConciliacion", s.getId(),
                 "Sesión de conciliación creada (BORRADOR) cuenta=" + bankAccountId);
         return detail(s.getId());
+    }
+
+    /**
+     * QA reeval Q3: eliminar (soft-delete) una sesión en BORRADOR. Permite al usuario
+     * reajustar fechas cuando un borrador solapa el rango que quiere conciliar, sin
+     * interrumpir el flujo de sobre-poner fechas. Solo BORRADOR: las sesiones en revisión,
+     * aprobadas, cerradas o reabiertas conservan su trazabilidad (usar reapertura/versionado).
+     */
+    @Transactional
+    public Map<String, Object> deleteBorrador(Long sesionId) {
+        SesionConciliacion s = load(sesionId);
+        if (!"BORRADOR".equals(s.getEstado())) {
+            throw new IllegalStateException(
+                "Solo se pueden eliminar sesiones en estado BORRADOR (actual: " + s.getEstado()
+                + "). Las conciliaciones en revisión, aprobadas o cerradas conservan su trazabilidad.");
+        }
+        s.setDeletedAt(LocalDateTime.now());
+        sesionRepo.save(s);
+        auditPublisher.publish(AuditAction.DELETE, AuditModule.BNK, AuditSeverity.MEDIUM,
+                "SesionConciliacion", sesionId,
+                "Sesión de conciliación en BORRADOR eliminada (período "
+                + s.getPeriodStart() + " → " + s.getPeriodEnd() + ")", null, null, null);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("deleted", true);
+        r.put("id", sesionId);
+        return r;
     }
 
     public List<Map<String, Object>> list(Long bankAccountId) {
@@ -388,6 +428,56 @@ public class SesionConciliacionService {
         log.info("HU-075 E1: notificar a REVISOR_FISCAL la solicitud {} (sin SMTP: solo log).", sol.getId());
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("solicitudId", sol.getId()); r.put("estado", "PENDIENTE");
+        return r;
+    }
+
+    /**
+     * QA reeval Q3: REAPERTURA DIRECTA en UN SOLO PASO, sin segregación de funciones.
+     * Decisión del negocio: este software NO exige dos personas (solicitante + aprobador)
+     * para reabrir una conciliación. El mismo usuario la reabre indicando el motivo. Se crea
+     * una nueva versión REABIERTA preservando la anterior intacta (versionado). Mantiene el
+     * bloqueo de período contable LOCKED por ser una regla contable (NIC 8), no de segregación.
+     * La evidencia es opcional. Reemplaza el flujo solicitar/aprobar para el uso normal.
+     */
+    @Transactional
+    public Map<String, Object> reabrir(Long sesionId, String motivo,
+                                       String evidenciaFileName, String evidenciaHash) {
+        SesionConciliacion orig = load(sesionId);
+        if (!"CERRADA".equals(orig.getEstado()))
+            throw new IllegalStateException("Solo se puede reabrir una sesión CERRADA (actual: " + orig.getEstado() + ").");
+        if (motivo == null || motivo.trim().length() < 20)
+            throw new IllegalArgumentException("Indique el motivo de la reapertura (mínimo 20 caracteres).");
+        // Regla contable (NIC 8): no reabrir si el período contable está bloqueado definitivamente.
+        if (orig.getPeriodEnd() != null) {
+            Optional<AccountingPeriod> p = periodRepo.findByYearAndMonth(
+                    orig.getPeriodEnd().getYear(), orig.getPeriodEnd().getMonthValue());
+            if (p.isPresent() && "LOCKED".equals(p.get().getStatus().name())) {
+                throw new IllegalStateException("El período " + orig.getPeriodEnd().getYear() + "-"
+                        + String.format("%02d", orig.getPeriodEnd().getMonthValue())
+                        + " está bloqueado definitivamente. Los ajustes deben hacerse como hechos del período actual con notas explicativas (NIC 8 — corrección de errores).");
+            }
+        }
+        User u = userUtil.getUser();
+        Long rootId = orig.getSesionOrigenId() != null ? orig.getSesionOrigenId() : orig.getId();
+        SesionConciliacion nueva = SesionConciliacion.builder()
+                .companyId(orig.getCompanyId()).bankAccountId(orig.getBankAccountId())
+                .periodStart(orig.getPeriodStart()).periodEnd(orig.getPeriodEnd())
+                .estado("REABIERTA").version(orig.getVersion() + 1).sesionOrigenId(rootId)
+                .saldoExtracto(orig.getSaldoExtracto()).saldoLibros(orig.getSaldoLibros()).diferencia(orig.getDiferencia())
+                .hashExtracto(orig.getHashExtracto())
+                .createdBy(u != null ? u.getId() : null)
+                .notas("Reabierta desde sesión #" + orig.getId() + ". Motivo: " + motivo.trim()
+                        + (evidenciaFileName != null && !evidenciaFileName.isBlank() ? " | evidencia: " + evidenciaFileName : ""))
+                .build();
+        nueva = sesionRepo.save(nueva);
+        auditPublisher.publish(AuditAction.CREATE, AuditModule.BNK, AuditSeverity.HIGH,
+                "SesionConciliacion", nueva.getId(),
+                "Reapertura directa: nueva versión v" + nueva.getVersion() + " desde sesión #" + orig.getId()
+                        + " | motivo: " + motivo.trim(), null, null, null);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("nuevaSesionId", nueva.getId());
+        r.put("version", nueva.getVersion());
+        r.put("estado", "REABIERTA");
         return r;
     }
 

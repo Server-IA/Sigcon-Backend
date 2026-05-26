@@ -14,6 +14,28 @@ import java.util.function.Function;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xddf.usermodel.chart.AxisPosition;
+import org.apache.poi.xddf.usermodel.chart.BarDirection;
+import org.apache.poi.xddf.usermodel.chart.ChartTypes;
+import org.apache.poi.xddf.usermodel.chart.LegendPosition;
+import org.apache.poi.xddf.usermodel.chart.XDDFBarChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
+import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
+import org.apache.poi.xssf.usermodel.XSSFChart;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.colors.DeviceRgb;
 import com.itextpdf.kernel.font.PdfFont;
@@ -323,10 +345,167 @@ public class FinancialStatementExportService {
                     headers, cols, list, null, bars);
             result = new ExportResult(pdfBytes, "Comparativo-" + periodLabel + ".pdf", PDF_MIME);
         } else {
-            result = encode("Comparativo", periodLabel, format, headers, cols, list, ctx, null);
+            // HU-CG-13 E4 (QA reeval Q3): la grafica comparativa antes SOLO salia en el
+            // PDF. QA confirmo que XLSX y CSV no la incluian. Ahora:
+            //  - XLSX: tabla + grafica de barras NATIVA de Excel (XSSFChart) en una hoja
+            //    "Grafica", una serie por periodo, editable por el contador.
+            //  - CSV: tabla + seccion con los datos por clase/periodo que alimentan la
+            //    grafica (un CSV no admite imagenes, pero si los datos de la grafica).
+            List<ChartBar> bars = buildComparativoBars(list, tres);
+            if ("xlsx".equals(fmt)) {
+                byte[] xlsx = buildComparativoXlsxWithChart(ctx, headers, cols, list, bars);
+                result = new ExportResult(xlsx, "Comparativo-" + periodLabel + ".xlsx",
+                        SimpleTableExporter.XLSX_MIME);
+            } else {
+                byte[] csv = buildComparativoCsvWithChartData(ctx, headers, cols, list, bars);
+                result = new ExportResult(csv, "Comparativo-" + periodLabel + ".csv",
+                        SimpleTableExporter.CSV_MIME);
+            }
         }
         publishExportAudit("Comparativo", year1, month1, format, list.size());
         return result;
+    }
+
+    /**
+     * HU-CG-13 E4 (QA reeval Q3): construye el XLSX del comparativo con la tabla en
+     * la hoja "Comparativo" y la grafica de barras NATIVA de Excel en la hoja
+     * "Grafica" (datos + {@link XSSFChart}). La grafica queda editable en Excel.
+     */
+    private byte[] buildComparativoXlsxWithChart(
+            ReportHeaderBuilder.ReportContext ctx,
+            List<String> headers,
+            List<Function<java.util.Map<String, Object>, Object>> cols,
+            List<java.util.Map<String, Object>> list,
+            List<ChartBar> bars) {
+        try (XSSFWorkbook wb = new XSSFWorkbook();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            XSSFSheet sheet = wb.createSheet("Comparativo");
+            CellStyle headerStyle = wb.createCellStyle();
+            Font bold = wb.createFont();
+            bold.setBold(true);
+            headerStyle.setFont(bold);
+
+            int startRow = 0;
+            if (ctx != null) {
+                startRow = ReportHeaderBuilder.writeXlsxHeader(wb, sheet, ctx, headers.size());
+            }
+            Row hr = sheet.createRow(startRow);
+            for (int i = 0; i < headers.size(); i++) {
+                org.apache.poi.ss.usermodel.Cell c = hr.createCell(i);
+                c.setCellValue(headers.get(i));
+                c.setCellStyle(headerStyle);
+            }
+            sheet.createFreezePane(0, startRow + 1);
+            int r = startRow + 1;
+            for (java.util.Map<String, Object> row : list) {
+                Row xr = sheet.createRow(r++);
+                for (int i = 0; i < cols.size(); i++) {
+                    Object v = cols.get(i).apply(row);
+                    org.apache.poi.ss.usermodel.Cell c = xr.createCell(i);
+                    if (v == null) {
+                        c.setBlank();
+                    } else if (v instanceof Number n) {
+                        c.setCellValue(n.doubleValue());
+                    } else {
+                        c.setCellValue(v.toString());
+                    }
+                }
+            }
+            for (int i = 0; i < headers.size(); i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            if (bars != null && !bars.isEmpty()) {
+                buildChartSheet(wb, bars);
+            }
+            wb.write(baos);
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Error generando XLSX comparativo con grafica: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Crea la hoja "Grafica" con los datos (clase x periodo) y una grafica de
+     * barras nativa de Excel ({@link XSSFChart}) que referencia esos datos.
+     */
+    private void buildChartSheet(XSSFWorkbook wb, List<ChartBar> bars) {
+        XSSFSheet sheet = wb.createSheet("Grafica");
+        int nSeries = bars.get(0).series.size();   // 2 (A vs B) o 3 (A vs B vs C)
+        // Encabezado: Clase | <labelA> | <labelB> [| <labelC>]
+        Row head = sheet.createRow(0);
+        head.createCell(0).setCellValue("Clase");
+        for (int s = 0; s < nSeries; s++) {
+            head.createCell(s + 1).setCellValue(bars.get(0).series.get(s).label);
+        }
+        // Datos: una fila por clase
+        for (int i = 0; i < bars.size(); i++) {
+            Row row = sheet.createRow(i + 1);
+            row.createCell(0).setCellValue(bars.get(i).groupLabel);
+            for (int s = 0; s < nSeries; s++) {
+                row.createCell(s + 1).setCellValue(bars.get(i).series.get(s).value);
+            }
+        }
+        for (int i = 0; i <= nSeries; i++) sheet.autoSizeColumn(i);
+
+        int lastRow = bars.size();   // datos en filas 1..lastRow (0-based)
+        XSSFDrawing drawing = sheet.createDrawingPatriarch();
+        XSSFClientAnchor anchor = drawing.createAnchor(
+                0, 0, 0, 0, nSeries + 2, 0, nSeries + 14, 22);
+        XSSFChart chart = drawing.createChart(anchor);
+        chart.setTitleText("Comparativo por clase contable");
+        chart.setTitleOverlay(false);
+        XDDFChartLegend legend = chart.getOrAddLegend();
+        legend.setPosition(LegendPosition.BOTTOM);
+
+        XDDFCategoryAxis catAx = chart.createCategoryAxis(AxisPosition.BOTTOM);
+        XDDFValueAxis valAx = chart.createValueAxis(AxisPosition.LEFT);
+        XDDFDataSource<String> cats = XDDFDataSourcesFactory.fromStringCellRange(
+                sheet, new CellRangeAddress(1, lastRow, 0, 0));
+        XDDFBarChartData bar = (XDDFBarChartData) chart.createData(ChartTypes.BAR, catAx, valAx);
+        bar.setBarDirection(BarDirection.COL);
+        for (int s = 0; s < nSeries; s++) {
+            XDDFNumericalDataSource<Double> vals = XDDFDataSourcesFactory.fromNumericCellRange(
+                    sheet, new CellRangeAddress(1, lastRow, s + 1, s + 1));
+            XDDFChartData.Series series = bar.addSeries(cats, vals);
+            series.setTitle(bars.get(0).series.get(s).label, null);
+        }
+        chart.plot(bar);
+    }
+
+    /**
+     * HU-CG-13 E4 (QA reeval Q3): CSV del comparativo = tabla + seccion con los
+     * datos que alimentan la grafica (por clase y periodo). Un CSV no admite
+     * imagenes, pero si los datos de la grafica para analisis externo.
+     */
+    private byte[] buildComparativoCsvWithChartData(
+            ReportHeaderBuilder.ReportContext ctx,
+            List<String> headers,
+            List<Function<java.util.Map<String, Object>, Object>> cols,
+            List<java.util.Map<String, Object>> list,
+            List<ChartBar> bars) {
+        byte[] table = SimpleTableExporter.toCsv(headers, cols, list, ctx, null);
+        if (bars == null || bars.isEmpty()) return table;
+        DecimalFormat df = new DecimalFormat("#,##0.00",
+                new DecimalFormatSymbols(new Locale("es", "CO")));
+        int nSeries = bars.get(0).series.size();
+        StringBuilder sb = new StringBuilder();
+        sb.append('\n');
+        sb.append("GRAFICA COMPARATIVA POR CLASE (datos)").append('\n');
+        sb.append("Clase");
+        for (int s = 0; s < nSeries; s++) sb.append(';').append(bars.get(0).series.get(s).label);
+        sb.append('\n');
+        for (ChartBar b : bars) {
+            sb.append(b.groupLabel);
+            for (int s = 0; s < nSeries; s++) sb.append(';').append(df.format(b.series.get(s).value));
+            sb.append('\n');
+        }
+        byte[] extra = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] out = new byte[table.length + extra.length];
+        System.arraycopy(table, 0, out, 0, table.length);
+        System.arraycopy(extra, 0, out, table.length, extra.length);
+        return out;
     }
 
     /**

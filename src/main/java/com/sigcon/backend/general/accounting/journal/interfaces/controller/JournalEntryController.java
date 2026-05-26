@@ -201,9 +201,14 @@ public class JournalEntryController {
             jakarta.servlet.http.HttpServletRequest httpRequest) {
         try {
             String createdBy = authentication != null ? authentication.getName() : "SYSTEM";
-            boolean withDraft = Boolean.TRUE.equals(request.getCreateCorrectionDraft());
+            // HU-CG-07B E1 (QA reeval Q3): el borrador correctivo es OBLIGATORIO en el
+            // flujo del contador. Antes dependia del flag createCorrectionDraft del
+            // request (opcional); si el usuario no lo marcaba terminaba recapturando el
+            // asiento con el mismo error. Forzamos true SIEMPRE en este endpoint REST
+            // (usado solo desde la UI de comprobantes). Los flujos internos AAEF/AP que
+            // NO deben generar borrador llaman directo al service con la firma de 3 args.
             JournalEntryDTO result = journalEntryService.reverseEntry(
-                    id, request.getDescription(), createdBy, withDraft);
+                    id, request.getDescription(), createdBy, true);
             // HU-CG-08B E6: bitacora enriquecida con usuario+rol+IP+motivo+JE original/reversa
             String roles = authentication != null && authentication.getAuthorities() != null
                     ? authentication.getAuthorities().stream()

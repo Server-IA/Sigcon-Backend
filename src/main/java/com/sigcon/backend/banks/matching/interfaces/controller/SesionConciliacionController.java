@@ -38,6 +38,13 @@ public class SesionConciliacionController {
         return ResponseEntity.ok(service.create(req.getBankAccountId(), req.getPeriodStart(), req.getPeriodEnd(), req.getSaldoExtracto()));
     }
 
+    @Operation(summary = "Eliminar una sesión en BORRADOR (QA reeval Q3: reajustar fechas)")
+    @PreAuthorize(EDITAR)
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteBorrador(@PathVariable Long id) {
+        return ResponseEntity.ok(service.deleteBorrador(id));
+    }
+
     @Operation(summary = "Listar sesiones de la cuenta")
     @PreAuthorize(VER)
     @GetMapping("/cuenta/{bankAccountId}")
@@ -164,6 +171,14 @@ public class SesionConciliacionController {
     @PostMapping("/{id}/reapertura/solicitar")
     public ResponseEntity<?> solicitarReapertura(@PathVariable Long id, @RequestBody SolicitudReaperturaRequest req) {
         return ResponseEntity.ok(service.solicitarReapertura(id, req.getMotivo(), req.getTipoCambioEsperado(),
+                req.getEvidenciaFileName(), req.getEvidenciaHash()));
+    }
+
+    @Operation(summary = "Reabrir conciliación en 1 paso, con motivo, sin segregación (QA reeval Q3)")
+    @PreAuthorize(EDITAR)
+    @PostMapping("/{id}/reabrir")
+    public ResponseEntity<?> reabrir(@PathVariable Long id, @RequestBody SolicitudReaperturaRequest req) {
+        return ResponseEntity.ok(service.reabrir(id, req.getMotivo(),
                 req.getEvidenciaFileName(), req.getEvidenciaHash()));
     }
 
