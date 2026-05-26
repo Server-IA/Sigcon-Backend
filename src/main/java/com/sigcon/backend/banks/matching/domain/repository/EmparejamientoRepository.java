@@ -13,4 +13,11 @@ public interface EmparejamientoRepository extends JpaRepository<Emparejamiento, 
     List<Emparejamiento> findByCuentaBancariaIdAndDeletedAtIsNullOrderByIdDesc(Long cuentaBancariaId);
 
     List<Emparejamiento> findByCuentaBancariaIdAndEstadoAndDeletedAtIsNull(Long cuentaBancariaId, String estado);
+
+    /**
+     * QA Conciliación (2026-05-25) Bug 1: emparejamientos acotados a una sesión.
+     * El Paso 5 (Aceptar/Rechazar) usa este filtro para no arrastrar emparejamientos
+     * de otra sesión de la misma cuenta.
+     */
+    List<Emparejamiento> findByReconciliationSessionIdAndDeletedAtIsNullOrderByIdDesc(Long reconciliationSessionId);
 }

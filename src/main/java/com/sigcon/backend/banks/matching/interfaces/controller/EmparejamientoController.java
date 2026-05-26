@@ -75,4 +75,18 @@ public class EmparejamientoController {
     public ResponseEntity<?> workspace(@PathVariable Long bankAccountId) {
         return ResponseEntity.ok(service.getWorkspace(bankAccountId));
     }
+
+    @Operation(summary = "Emparejamientos de UNA sesión (Paso 5, acotado por sesión)")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @GetMapping("/sesion/{sesionId}")
+    public ResponseEntity<?> listForSession(@PathVariable Long sesionId) {
+        return ResponseEntity.ok(service.listForSession(sesionId));
+    }
+
+    @Operation(summary = "Workspace de conciliación ACOTADO a una sesión (Paso 6, sin residuos)")
+    @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @GetMapping("/workspace-sesion/{sesionId}")
+    public ResponseEntity<?> workspaceForSession(@PathVariable Long sesionId) {
+        return ResponseEntity.ok(service.getWorkspaceForSession(sesionId));
+    }
 }

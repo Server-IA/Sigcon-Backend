@@ -725,15 +725,17 @@ public class InvoiceService {
             invoice.setResolutionInvoice(request.getResolutionInvoice());
         }
 
-        // HU-AP-02 (Bloque AT): permitir editar lineas/monto SOLO en PENDING
-        // sin pagos. Si la factura tiene pagos parciales, los montos quedan
-        // bloqueados (la conciliacion contable se rompe). El frontend valida
-        // tambien pero el backend es la fuente de verdad.
+        // HU-AP-02 (Bloque AT) + QA FALLO-AP-ED-001 (2026-05-26): permitir editar
+        // lineas/monto SOLO cuando la factura esta en estado PENDING. Una factura
+        // PENDING, por definicion del estado, NO tiene pagos aplicados (al registrar
+        // un pago pasa a PARTIALLY_PAID/PAID). El chequeo anterior tambien exigia
+        // balanceDue == totalPayment, pero esos campos DIFIEREN legitimamente cuando
+        // hay retenciones (balanceDue es el neto), por lo que rechazaba por error la
+        // edicion de facturas PENDING con retencion. La contabilizacion (JE POSTED) NO
+        // bloquea: mas abajo se reversa el JE viejo y se regenera (HU-AP-13 E2).
         boolean linesProvided = request.getLineInvoices() != null
                 && !request.getLineInvoices().isEmpty();
-        boolean canEditLines = invoice.getStatus() == StatusesInvoices.PENDING
-                && (invoice.getBalanceDue() == null
-                    || invoice.getBalanceDue().equals(invoice.getTotalPayment()));
+        boolean canEditLines = invoice.getStatus() == StatusesInvoices.PENDING;
 
         if (linesProvided && !canEditLines) {
             throw new IllegalStateException(

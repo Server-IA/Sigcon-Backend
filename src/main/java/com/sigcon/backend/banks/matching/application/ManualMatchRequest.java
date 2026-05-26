@@ -22,4 +22,11 @@ public class ManualMatchRequest {
 
     /** Obligatorio (>=30 chars) para N:M o cuando hay diferencia tolerada (HU-070 E4/E5). */
     private String motivo;
+
+    /**
+     * QA Conciliación (2026-05-25) Bug 1/4: sesión a la que pertenece el emparejamiento.
+     * Permite que el Paso 5 (Aceptar/Rechazar) liste SOLO los emparejamientos de la
+     * sesión seleccionada y no los de toda la cuenta (residuos de otra sesión).
+     */
+    private Long reconciliationSessionId;
 }

@@ -493,6 +493,10 @@ public class FinancialMovementService {
         if (bindingResult.hasErrors()) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
+        // QA Conciliación (2026-05-25) Bug 7: motivo obligatorio (>=10) al emparejar.
+        if (request.getMotivo() == null || request.getMotivo().trim().length() < 10) {
+            throw new IllegalArgumentException("Debe indicar el motivo del emparejamiento (mínimo 10 caracteres).");
+        }
         User user = userUtil.getUser();
         assertBankAccount(bankAccountId, user);
 
@@ -549,6 +553,10 @@ public class FinancialMovementService {
         // CONC-3b: el movimiento queda CONCILIADO para integrarse con el cierre de la sesión.
         mov.setEstadoConciliacion("CONCILIADO");
         financialMovementRepository.save(mov);
+
+        // Bug 7: auditar el emparejamiento con el motivo indicado por el usuario.
+        auditPublisher.publishUpdate(AuditModule.BNK, "FinancialMovement", mov.getId(),
+                "Emparejado con comprobante id=" + voucher.getId() + " | motivo=" + request.getMotivo().trim());
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Movimiento emparejado con comprobante."),
@@ -629,6 +637,10 @@ public class FinancialMovementService {
      */
     @Transactional
     public ResponseEntity<?> matchJournalEntry(Long bankAccountId, Long movementId, MatchVoucherRequest request) {
+        // QA Conciliación (2026-05-25) Bug 7: motivo obligatorio (>=10) al emparejar con asiento.
+        if (request.getMotivo() == null || request.getMotivo().trim().length() < 10) {
+            throw new IllegalArgumentException("Debe indicar el motivo del emparejamiento (mínimo 10 caracteres).");
+        }
         User user = userUtil.getUser();
         BankAccount bankAccount = assertBankAccount(bankAccountId, user);
 
@@ -696,7 +708,7 @@ public class FinancialMovementService {
         auditPublisher.publishUpdate(
                 com.sigcon.backend.audit.domain.model.enums.AuditModule.BNK,
                 "FinancialMovement", saved.getId(),
-                "Emparejado con JournalEntry id=" + jeId);
+                "Emparejado con JournalEntry id=" + jeId + " | motivo=" + request.getMotivo().trim());
 
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Movimiento emparejado con asiento contable."),

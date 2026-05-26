@@ -98,7 +98,7 @@ public class MatchingEngineService {
         List<FinancialMovement> libPool = new ArrayList<>(movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId, FinancialMovementSourceType.MANUAL)
                 .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
-        return runEngineCore(bankAccount, extPool, libPool, p, user);
+        return runEngineCore(bankAccount, extPool, libPool, p, user, null);
     }
 
     /**
@@ -123,14 +123,15 @@ public class MatchingEngineService {
                 .findByBankAccountSourceTypeAndPeriod(bankAccount.getId(), FinancialMovementSourceType.MANUAL,
                         s.getPeriodStart(), s.getPeriodEnd())
                 .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
-        Map<String, Object> r = runEngineCore(bankAccount, extPool, libPool, p, user);
+        Map<String, Object> r = runEngineCore(bankAccount, extPool, libPool, p, user, sesionId);
         r.put("sesionConciliacionId", sesionId);
         return r;
     }
 
     /** Núcleo de las 5 fases (E2..E5) + score + resumen (E10), compartido por cuenta y por sesión. */
     private Map<String, Object> runEngineCore(BankAccount bankAccount, List<FinancialMovement> extPool,
-                                              List<FinancialMovement> libPool, ParametrosMatching p, User user) {
+                                              List<FinancialMovement> libPool, ParametrosMatching p, User user,
+                                              Long sesionId) {
         long t0 = System.currentTimeMillis();
         Long bankAccountId = bankAccount.getId();
         int totalExtracto = extPool.size();
@@ -216,6 +217,16 @@ public class MatchingEngineService {
                     libPool.remove(lib);
                     extPool.removeAll(subset);
                 }
+            }
+        }
+
+        // QA Conciliación (2026-05-25) Bug 1: marcar cada emparejamiento con la sesión
+        // de la corrida, para que el Paso 5 los liste acotados a la sesión (y no a toda
+        // la cuenta). En la corrida por cuenta (sesionId == null) no se marca.
+        if (sesionId != null) {
+            for (Emparejamiento e : created) {
+                e.setReconciliationSessionId(sesionId);
+                emparejamientoRepository.save(e);
             }
         }
 

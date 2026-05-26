@@ -103,6 +103,13 @@ public class SesionConciliacionController {
         return ResponseEntity.ok(service.close(id));
     }
 
+    @Operation(summary = "Cerrar con firma ÚNICA de responsable (sin segregación) + PDF")
+    @PreAuthorize(EDITAR)
+    @PostMapping("/{id}/cerrar-responsable")
+    public ResponseEntity<?> cerrarResponsable(@PathVariable Long id) {
+        return ResponseEntity.ok(service.cerrarComoResponsable(id));
+    }
+
     @Operation(summary = "Verificar firmas de la sesión (BNK-HU-066 E6)")
     @PreAuthorize(VER)
     @GetMapping("/{id}/verificar-firma")

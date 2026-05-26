@@ -65,10 +65,9 @@ public class AaefTransactionDTO {
     private String currency;
 
     /**
-     * REFUSED | COMPLETED (estados aceptados en AAEF v1.1).
-     *
-     * <p>QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion solo emite
-     * REFUSED o COMPLETED. Antes aceptabamos COMPLETED/REVERSED.
+     * COMPLETED | REVERSED (estados validos de transaccion en AAEF v1.1).
+     * COMPLETED = aplicada exitosamente; REVERSED = revertida o anulada.
+     * (QA Integracion 2026-05-26: alineado al manual vigente.)
      */
     @JsonProperty("Status")
     private String status;

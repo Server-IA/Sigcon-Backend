@@ -60,10 +60,9 @@ public class AaefInvoiceDTO {
         @JsonDeserialize(using = FlexibleLocalDateDeserializer.class)
         private LocalDate dueDate;
         /**
-         * PAID | PENDING (estados aceptados en AAEF v1.1).
-         *
-         * <p>QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion solo
-         * emite PAID o PENDING. Antes aceptabamos ACTIVE/CANCELLED/PARTIAL.
+         * ACTIVE | PAID | PARTIAL | CANCELLED (estados validos de factura en AAEF v1.1).
+         * Se rechazan DRAFT, PENDING y PROCESSING (INVALID_STATUS): documentos no
+         * definitivos. (QA Integracion 2026-05-26: alineado al manual vigente.)
          */
         @JsonProperty("Status") private String status;
         /** Fecha de ultima actualizacion. Tolerante a multiples formatos (Bloque AX). */

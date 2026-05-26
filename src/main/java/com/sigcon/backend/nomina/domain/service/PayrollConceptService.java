@@ -92,6 +92,13 @@ public class PayrollConceptService {
         PayrollConcept c = conceptRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Concepto no encontrado"));
         validateAccounts(req.getAccountingAccountDebitId(), req.getAccountingAccountCreditId());
+
+        // QA Nomina (2026-05-25) ERR-NOM-003: capturar snapshot ANTERIOR para que la
+        // auditoria registre "valor anterior -> valor nuevo" (la HU exige quien, valor
+        // anterior, valor nuevo y fecha), no solo una descripcion generica. El campo
+        // `code` es inmutable en update.
+        String oldValues = snapshotJson(c);
+
         c.setName(req.getName());
         c.setConceptType(req.getConceptType());
         c.setBaseCalculation(req.getBaseCalculation());
@@ -103,9 +110,25 @@ public class PayrollConceptService {
         c.setLegalReference(req.getLegalReference());
         if (req.getStatus() != null) c.setStatus(req.getStatus());
         PayrollConcept saved = conceptRepository.save(c);
+
+        String newValues = snapshotJson(saved);
         auditPublisher.publishUpdate(AuditModule.NOM, "PayrollConcept", saved.getId(),
-                "Concepto de nomina actualizado: " + saved.getCode() + " - " + saved.getName());
+                "Concepto de nomina actualizado: " + saved.getCode() + " - " + saved.getName(),
+                oldValues, newValues);
         return ResponseEntity.ok(PayrollConceptDTO.from(saved));
+    }
+
+    /** ERR-NOM-003: snapshot JSON de los campos auditables del concepto. */
+    private String snapshotJson(PayrollConcept c) {
+        return String.format(
+                "{\"name\":\"%s\",\"percentage\":%s,\"fixedAmount\":%s,\"status\":\"%s\","
+                + "\"debitId\":%s,\"creditId\":%s}",
+                jsonSafe(c.getName()), c.getPercentage(), c.getFixedAmount(), jsonSafe(c.getStatus()),
+                c.getAccountingAccountDebitId(), c.getAccountingAccountCreditId());
+    }
+
+    private String jsonSafe(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "'");
     }
 
     @Transactional

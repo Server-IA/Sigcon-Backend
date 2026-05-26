@@ -8,6 +8,7 @@ import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.banks.bankaccounts.domain.model.BankAccount;
 import com.sigcon.backend.banks.bankaccounts.domain.repository.BankAccountRepository;
 import com.sigcon.backend.banks.financialmovements.domain.model.FinancialMovement;
+import com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType;
 import com.sigcon.backend.banks.financialmovements.domain.repository.FinancialMovementRepository;
 import com.sigcon.backend.banks.matching.domain.model.*;
 import com.sigcon.backend.banks.matching.domain.repository.*;
@@ -149,9 +150,11 @@ public class SesionConciliacionService {
         r.put("librosConciliado", libConc);
         r.put("pendientes", pendientes);
         r.put("enCero", pendientes == 0);
-        r.put("saldoExtracto", s.getSaldoExtracto());
-        r.put("saldoLibros", s.getSaldoLibros());
-        r.put("diferencia", s.getDiferencia());
+        // Bug 6: saldos recalculados por sesión (no el valor almacenado).
+        BigDecimal[] saldos = computeSaldos(s);
+        r.put("saldoExtracto", saldos[0]);
+        r.put("saldoLibros", saldos[1]);
+        r.put("diferencia", saldos[2]);
         r.put("firmaElaboradorId", s.getFirmaElaboradorId());
         r.put("firmaRevisorId", s.getFirmaRevisorId());
         r.put("informeArchivoId", s.getInformeArchivoId());
@@ -230,7 +233,19 @@ public class SesionConciliacionService {
         Map<String, Object> res = signatureService.sign(s, rolFirma, payload, u, documento, tp, metodo, otp);
         if (Boolean.FALSE.equals(res.get("otpRequired")) && res.get("firmaId") != null) {
             Long firmaId = ((Number) res.get("firmaId")).longValue();
-            if ("REVISOR".equals(rolFirma)) s.setFirmaRevisorId(firmaId); else s.setFirmaElaboradorId(firmaId);
+            if ("RESPONSABLE".equals(rolFirma)) {
+                // QA Conciliación (2026-05-25) Bug 2/5: firma ÚNICA de responsable. El
+                // negocio no exige segregación; una sola persona firma y cierra. Se
+                // registra como ambas firmas (elaborador y revisor apuntan a la misma)
+                // para satisfacer la verificación de firmas y el PDF firmado sin pedir
+                // un segundo firmante distinto.
+                s.setFirmaElaboradorId(firmaId);
+                s.setFirmaRevisorId(firmaId);
+            } else if ("REVISOR".equals(rolFirma)) {
+                s.setFirmaRevisorId(firmaId);
+            } else {
+                s.setFirmaElaboradorId(firmaId);
+            }
             sesionRepo.save(s);
         }
         return res;
@@ -296,6 +311,43 @@ public class SesionConciliacionService {
         sesionRepo.save(s);
         auditPublisher.publishUpdate(AuditModule.BNK, "SesionConciliacion", sesionId,
                 "Cerrada por user=" + u.getId() + " | informe=" + archivo.getId() + " | hash=" + archivo.getHashSha256());
+        Map<String, Object> r = detail(sesionId);
+        r.put("informeArchivoId", archivo.getId());
+        r.put("informeHash", archivo.getHashSha256());
+        return r;
+    }
+
+    /**
+     * QA Conciliación (2026-05-25) Bug 2/5: cierre con firma ÚNICA de "Responsable".
+     * El negocio NO exige segregación de funciones — la misma persona firma y cierra.
+     * Transiciona BORRADOR/REABIERTA -> CERRADA en un solo paso (sin EN_REVISION ni
+     * APROBADA), exige conciliación en cero + la firma del responsable, y genera el
+     * informe PDF firmado. No aplica {@code checkSegregation} ni "aprobador distinto".
+     */
+    @Transactional
+    public Map<String, Object> cerrarComoResponsable(Long sesionId) {
+        SesionConciliacion s = load(sesionId);
+        // Se cierra desde cualquier estado abierto (BORRADOR/REABIERTA y también
+        // EN_REVISION/APROBADA de sesiones previas al cambio de flujo). Solo se rechaza
+        // si ya está CERRADA.
+        if ("CERRADA".equals(s.getEstado()))
+            throw new IllegalStateException("La conciliación ya está cerrada.");
+        // C1: el cierre solo procede con la conciliación en cero (sin pendientes).
+        assertConciliacionEnCero(s);
+        if (s.getFirmaElaboradorId() == null)
+            throw new IllegalStateException("Debe firmar como responsable antes de cerrar la conciliación.");
+        User u = userUtil.getUser();
+        var archivo = pdfService.generateAndStore(s, u != null ? u.getId() : null);
+        s.setInformeArchivoId(archivo.getId());
+        s.setEstado("CERRADA");
+        s.setAprobadaBy(u != null ? u.getId() : null);
+        s.setAprobadaAt(LocalDateTime.now());
+        s.setCerradaBy(u != null ? u.getId() : null);
+        s.setCerradaAt(LocalDateTime.now());
+        sesionRepo.save(s);
+        auditPublisher.publishUpdate(AuditModule.BNK, "SesionConciliacion", sesionId,
+                "Cerrada por responsable user=" + (u != null ? u.getId() : null)
+                        + " | informe=" + archivo.getId() + " | hash=" + archivo.getHashSha256());
         Map<String, Object> r = detail(sesionId);
         r.put("informeArchivoId", archivo.getId());
         r.put("informeHash", archivo.getHashSha256());
@@ -576,9 +628,11 @@ public class SesionConciliacionService {
         payload.put("sesion_id", s.getId());
         payload.put("cuenta_enmascarada", cuentaMask);
         payload.put("periodo", String.valueOf(s.getPeriodStart()) + "/" + s.getPeriodEnd());
-        payload.put("saldo_extracto", s.getSaldoExtracto());
-        payload.put("saldo_libros", s.getSaldoLibros());
-        payload.put("diferencia", s.getDiferencia());
+        // Bug 6: el informe firmado lleva los saldos recalculados por sesión.
+        BigDecimal[] saldosFirma = computeSaldos(s);
+        payload.put("saldo_extracto", saldosFirma[0]);
+        payload.put("saldo_libros", saldosFirma[1]);
+        payload.put("diferencia", saldosFirma[2]);
         payload.put("total_partidas", totalPartidas);
         payload.put("partidas_pendientes", pendientes);
         payload.put("movimientos_conciliados", conciliados);
@@ -599,7 +653,28 @@ public class SesionConciliacionService {
                 .orElseThrow(() -> new IllegalArgumentException("Sesión de conciliación no encontrada: " + id));
     }
 
+    /**
+     * QA Conciliación (2026-05-25) Bug 6: recalcula los saldos de la sesión a partir de
+     * SUS movimientos, no del valor almacenado (que se fijó una sola vez con TODOS los
+     * movimientos de la cuenta, dando el mismo $11M en todas las sesiones).
+     *   [0] saldoExtracto = suma de importes del extracto asignado a la sesión.
+     *   [1] saldoLibros   = suma de importes de los libros (MANUAL) del período.
+     *   [2] diferencia    = saldoExtracto - saldoLibros.
+     */
+    private BigDecimal[] computeSaldos(SesionConciliacion s) {
+        BigDecimal ext = movementRepo.findBySesionConciliacionIdOrderByMovementDateAscIdAsc(s.getId())
+                .stream().map(m -> m.getAmount() == null ? BigDecimal.ZERO : m.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal lib = movementRepo.findByBankAccountSourceTypeAndPeriod(
+                        s.getBankAccountId(), FinancialMovementSourceType.MANUAL,
+                        s.getPeriodStart(), s.getPeriodEnd())
+                .stream().map(m -> m.getAmount() == null ? BigDecimal.ZERO : m.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new BigDecimal[]{ ext, lib, ext.subtract(lib) };
+    }
+
     private Map<String, Object> row(SesionConciliacion s) {
+        BigDecimal[] saldos = computeSaldos(s);
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", s.getId());
         m.put("bankAccountId", s.getBankAccountId());
@@ -608,9 +683,9 @@ public class SesionConciliacionService {
         m.put("estado", s.getEstado());
         m.put("version", s.getVersion());
         m.put("sesionOrigenId", s.getSesionOrigenId());
-        m.put("saldoExtracto", s.getSaldoExtracto());
-        m.put("saldoLibros", s.getSaldoLibros());
-        m.put("diferencia", s.getDiferencia());
+        m.put("saldoExtracto", saldos[0]);
+        m.put("saldoLibros", saldos[1]);
+        m.put("diferencia", saldos[2]);
         m.put("createdBy", s.getCreatedBy());
         m.put("enviadaRevisionBy", s.getEnviadaRevisionBy());
         m.put("aprobadaBy", s.getAprobadaBy());

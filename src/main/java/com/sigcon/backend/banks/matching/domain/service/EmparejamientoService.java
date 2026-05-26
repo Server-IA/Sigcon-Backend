@@ -10,8 +10,10 @@ import com.sigcon.backend.banks.matching.application.ManualMatchRequest;
 import com.sigcon.backend.banks.matching.domain.model.Emparejamiento;
 import com.sigcon.backend.banks.matching.domain.model.EmparejamientoDetalle;
 import com.sigcon.backend.banks.matching.domain.model.ParametrosMatching;
+import com.sigcon.backend.banks.matching.domain.model.SesionConciliacion;
 import com.sigcon.backend.banks.matching.domain.repository.EmparejamientoDetalleRepository;
 import com.sigcon.backend.banks.matching.domain.repository.EmparejamientoRepository;
+import com.sigcon.backend.banks.matching.domain.repository.SesionConciliacionRepository;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.utils.UserUtil;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +44,7 @@ public class EmparejamientoService {
     private final EmparejamientoDetalleRepository detalleRepository;
     private final ParametrosMatchingService parametrosMatchingService;
     private final BankAccountRepository bankAccountRepository;
+    private final SesionConciliacionRepository sesionConciliacionRepository;
     private final AuditPublisher auditPublisher;
     private final UserUtil userUtil;
 
@@ -134,6 +137,9 @@ public class EmparejamientoService {
         Emparejamiento emp = Emparejamiento.builder()
                 .companyId(ba.getCompanyId())
                 .cuentaBancariaId(ba.getId())
+                // QA Conciliación (2026-05-25) Bug 1: acotar a la sesión para que el Paso 5
+                // liste este emparejamiento manual solo dentro de su sesión.
+                .reconciliationSessionId(req.getReconciliationSessionId())
                 .tipoEmparejamiento(tipo)
                 .metodo("MANUAL")
                 .score(100)
@@ -328,6 +334,61 @@ public class EmparejamientoService {
                 .stream().map(e -> detail(e.getId())).toList();
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("cuentaBancariaId", bankAccountId);
+        r.put("extracto", extracto);
+        r.put("libros", libros);
+        r.put("emparejamientos", emparejamientos);
+        return r;
+    }
+
+    /**
+     * QA Conciliación (2026-05-25) Bug 1: emparejamientos de UNA sesión (Paso 5).
+     * Reemplaza a {@link #listForAccount} en el flujo guiado para que al cambiar de
+     * sesión no se arrastren los emparejamientos de la sesión anterior.
+     */
+    public List<Map<String, Object>> listForSession(Long sesionId) {
+        return emparejamientoRepository.findByReconciliationSessionIdAndDeletedAtIsNullOrderByIdDesc(sesionId)
+                .stream().map(e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", e.getId());
+                    m.put("tipo", e.getTipoEmparejamiento());
+                    m.put("metodo", e.getMetodo());
+                    m.put("score", e.getScore());
+                    m.put("estado", e.getEstado());
+                    m.put("sumaExtracto", e.getSumaExtracto());
+                    m.put("sumaLibros", e.getSumaLibros());
+                    m.put("diferencia", e.getDiferencia());
+                    return m;
+                }).toList();
+    }
+
+    /**
+     * QA Conciliación (2026-05-25) Bug 4: workspace ACOTADO a una sesión (Paso 6).
+     * Extracto = movimientos importados bajo la sesión (sesion_conciliacion_id);
+     * libros = MANUAL dentro del período de la sesión. Ambos NO_CONCILIADO. Replica
+     * exactamente el pooling del motor (runEngineForSession), de modo que "Libros
+     * libres" no muestre movimientos de otras sesiones ni del ámbito global.
+     */
+    public Map<String, Object> getWorkspaceForSession(Long sesionId) {
+        SesionConciliacion s = sesionConciliacionRepository.findByIdAndDeletedAtIsNull(sesionId)
+                .orElseThrow(() -> new IllegalArgumentException("Sesión de conciliación no encontrada."));
+        List<Map<String, Object>> extracto = movementRepository
+                .findBySesionConciliacionIdOrderByMovementDateAscIdAsc(sesionId)
+                .stream()
+                .filter(m -> com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.BANK_IMPORT.equals(m.getSourceType()))
+                .filter(m -> C_NO.equals(m.getEstadoConciliacion()) || m.getEstadoConciliacion() == null)
+                .map(this::movRow).toList();
+        List<Map<String, Object>> libros = movementRepository
+                .findByBankAccountSourceTypeAndPeriod(s.getBankAccountId(),
+                        com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
+                        s.getPeriodStart(), s.getPeriodEnd())
+                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacion()) || m.getEstadoConciliacion() == null)
+                .map(this::movRow).toList();
+        List<Map<String, Object>> emparejamientos = emparejamientoRepository
+                .findByReconciliationSessionIdAndDeletedAtIsNullOrderByIdDesc(sesionId)
+                .stream().map(e -> detail(e.getId())).toList();
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("sesionId", sesionId);
+        r.put("cuentaBancariaId", s.getBankAccountId());
         r.put("extracto", extracto);
         r.put("libros", libros);
         r.put("emparejamientos", emparejamientos);

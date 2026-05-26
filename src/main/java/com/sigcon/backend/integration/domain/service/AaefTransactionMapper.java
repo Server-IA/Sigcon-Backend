@@ -38,11 +38,11 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AaefTransactionMapper {
 
-    // QA Bloque PA Bug 70 (HU-INT-13, 2026-05-09): AgroFusion comunico que
-    // los unicos status validos para pagos (PAY/ADV/REF/ADJ) son REFUSED y
-    // COMPLETED. Antes aceptabamos COMPLETED/REVERSED pero AgroFusion no
-    // emite REVERSED — usa REF como tipo de transaccion para reversiones.
-    private static final Set<String> VALID_STATUSES = Set.of("REFUSED", "COMPLETED");
+    // QA Integracion (2026-05-26): el manual AAEF v1.1 define los estados validos de
+    // transaccion como COMPLETED (aplicada exitosamente) y REVERSED (revertida o
+    // anulada). (Esto revierte el Bug 70 del 2026-05-09 que habia dejado {REFUSED,
+    // COMPLETED}, en conflicto con el manual vigente que usa REVERSED.)
+    private static final Set<String> VALID_STATUSES = Set.of("COMPLETED", "REVERSED");
 
     public static final String TYPE_PAY = "PAY";
     public static final String TYPE_ADV = "ADV";
