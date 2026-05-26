@@ -16,4 +16,14 @@ public interface ThirdPartyRepository extends JpaRepository<ThirdParty, Long>, J
 
     List<ThirdParty> findByNitAndDeletedAtIsNull(String nit);
     boolean existsByNitAndIdNotAndDeletedAtIsNull(String nit, Long id);
+
+    /**
+     * QA Integracion (2026-05-26): busqueda por codigo interno. Usado por
+     * {@code ThirdPartyResolver} como fallback determinista para reencontrar
+     * terceros auto-creados desde AAEF (codigo {@code AAEF-{nit}}) cuando la
+     * busqueda por NIT no coincide (p.ej. el NIT quedo almacenado con ceros a
+     * la izquierda). Evita el choque con {@code uk_third_parties_company_code_active}
+     * al reprocesar el mismo cliente en lotes posteriores.
+     */
+    List<ThirdParty> findByThirdPartyCodeAndDeletedAtIsNull(String thirdPartyCode);
 }

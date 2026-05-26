@@ -36,6 +36,15 @@ public class AaefMappingException extends RuntimeException {
      */
     public static final String DUPLICATE_DOCUMENT_ID = "DUPLICATE_DOCUMENT_ID";
 
+    /**
+     * QA Integracion (2026-05-26): coherencia estado factura vs transacciones.
+     * Una factura llega con Status=PAID o PARTIAL pero el lote NO trae la
+     * transaccion PAY que respalde ese estado (PAID exige PAY del 100%, PARTIAL
+     * exige PAY parcial). No recuperable desde SIGCON: AgroFusion debe reenviar
+     * el lote incluyendo la transaccion PAY correspondiente.
+     */
+    public static final String MISSING_PAYMENT = "MISSING_PAYMENT";
+
     private final String errorCode;
     private final boolean retryAllowed;
 
@@ -66,7 +75,8 @@ public class AaefMappingException extends RuntimeException {
             INVALID_ACCOUNTING_ACCOUNT,
             ACCOUNT_NOT_FOUND,
             MISSING_ORIGINAL_REF,
-            DUPLICATE_DOCUMENT_ID
+            DUPLICATE_DOCUMENT_ID,
+            MISSING_PAYMENT
     );
 
     /**

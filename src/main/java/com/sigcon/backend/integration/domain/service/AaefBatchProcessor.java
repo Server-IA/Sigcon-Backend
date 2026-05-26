@@ -35,10 +35,13 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -74,6 +77,10 @@ public class AaefBatchProcessor {
     private final SalesInvoiceRepository salesInvoiceRepository;
     private final InvoiceService invoiceService;
     private final InvoiceRepository invoiceRepository;
+    // QA Integracion (2026-05-26): para CONTABILIZAR (POSTED) el comprobante de la
+    // factura AAEF recien creada, de modo que el PAY del mismo lote pueda aplicarse
+    // (ApPaymentService/ArPaymentService exigen factura contabilizada).
+    private final com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService journalEntryService;
     private final TypeInvoiceRepository typeInvoiceRepository;
     private final ArPaymentService arPaymentService;
     private final ArAdvanceService arAdvanceService;
@@ -170,6 +177,13 @@ public class AaefBatchProcessor {
         int processed = 0;
         int failed = 0;
 
+        // QA Integracion (2026-05-26): coherencia Status de factura vs transacciones.
+        // Mapa de cobertura de pago por factura referenciada (RelatedInvoiceId ->
+        // suma de Amount de las transacciones PAY con Status=COMPLETED del lote).
+        // Permite validar que una factura PAID traiga un PAY del 100% y una PARTIAL
+        // un PAY parcial, dentro del mismo lote.
+        Map<String, BigDecimal> payCoverage = buildPayCoverage(payload);
+
         // QA Bloque BJ (HU-INT-RF-03 E4, 2026-05-18): detectar DocumentId
         // duplicados intra-batch. Solo procesa la PRIMERA ocurrencia. Las
         // ocurrencias subsiguientes generan transfer FAILED con errorCode
@@ -189,7 +203,7 @@ public class AaefBatchProcessor {
                     failed++;
                     continue;
                 }
-                IntegrationTransfer t = processInvoiceDocument(batch, invoiceNode);
+                IntegrationTransfer t = processInvoiceDocument(batch, invoiceNode, payCoverage);
                 transfers.add(t);
                 if (t.getTransferStatus() == TransferStatus.PROCESSED) processed++;
                 else failed++;
@@ -270,7 +284,8 @@ public class AaefBatchProcessor {
 
     // ======== Procesamiento de un invoice ========
 
-    private IntegrationTransfer processInvoiceDocument(IntegrationBatch batch, JsonNode node) {
+    private IntegrationTransfer processInvoiceDocument(IntegrationBatch batch, JsonNode node,
+                                                       Map<String, BigDecimal> payCoverage) {
         String documentId = null;
         try {
             AaefInvoiceDTO invoice = objectMapper.treeToValue(node, AaefInvoiceDTO.class);
@@ -281,6 +296,29 @@ public class AaefBatchProcessor {
             // alias como "INVOICE" + Name="Factura de Venta" se mapea a "01"
             // y entra correctamente a la rama isSalesInvoice.
             invoiceMapper.validateTypeCode(invoice);
+
+            // QA Integracion (2026-05-26): POLITICA estado factura vs transacciones.
+            // El Status declarado debe reflejarse en el estado operativo de CxC/CxP:
+            //   - CANCELLED -> la factura se crea y se ANULA (VOIDED + reverso del JE).
+            //   - PAID      -> exige PAY del 100% en el lote; si falta -> MISSING_PAYMENT.
+            //   - PARTIAL   -> exige PAY parcial (0 < pago < total); si falta -> MISSING_PAYMENT.
+            //   - ACTIVE    -> factura abierta normal.
+            // La validacion de cobertura se hace ANTES de crear (rechazo temprano).
+            String aaefStatus = invoice.getHeader() != null && invoice.getHeader().getStatus() != null
+                    ? invoice.getHeader().getStatus().trim().toUpperCase() : "";
+            boolean isCancelled = "CANCELLED".equals(aaefStatus);
+            boolean creatable = invoiceMapper.isSalesInvoice(invoice)
+                    || invoiceMapper.isPurchaseInvoice(invoice)
+                    || invoiceMapper.isFeesInvoice(invoice);
+            if (creatable && ("PAID".equals(aaefStatus) || "PARTIAL".equals(aaefStatus))) {
+                AaefMappingException coverageError =
+                        validatePaymentCoverage(invoice, aaefStatus, documentId, payCoverage);
+                if (coverageError != null) {
+                    return failedTransfer(batch, documentId, DocumentType.INVOICE,
+                            coverageError.getErrorCode(), coverageError.getMessage(),
+                            coverageError.isRetryAllowed());
+                }
+            }
 
             if (invoiceMapper.isSalesInvoice(invoice)) {
                 // Type=01 Venta
@@ -295,6 +333,16 @@ public class AaefBatchProcessor {
                         .build());
                 salesInvoiceRepository.save(created);
 
+                // QA Integracion (2026-05-26): CANCELLED -> anular la factura de venta
+                // (VOIDED + reverso del JE) para reflejar la anulacion real en CxC.
+                if (isCancelled) {
+                    salesInvoiceService.voidInvoice(created.getId());
+                    log.info("AAEF invoice {} Status=CANCELLED -> SalesInvoice {} ANULADA (VOIDED)",
+                            documentId, created.getId());
+                } else {
+                    // Contabilizar el comprobante para habilitar el cobro (PAY) del mismo lote.
+                    postCreatedInvoiceEntry(created.getJournalEntryId(), documentId);
+                }
                 return successTransfer(batch, documentId, DocumentType.INVOICE,
                         created.getJournalEntryId());
             } else if (invoiceMapper.isPurchaseInvoice(invoice)) {
@@ -323,6 +371,18 @@ public class AaefBatchProcessor {
                         .build());
                 invoiceRepository.save(created);
 
+                // QA Integracion (2026-05-26): CANCELLED -> anular la factura de compra
+                // (VOIDED + reverso del JE) para reflejar la anulacion real en CxP.
+                if (isCancelled) {
+                    invoiceService.voidInvoice(created.getId(),
+                            "Anulada via integracion AAEF (Status=CANCELLED) - DocumentId: " + documentId,
+                            true);
+                    log.info("AAEF invoice {} Status=CANCELLED -> Invoices {} ANULADA (VOIDED)",
+                            documentId, created.getId());
+                } else {
+                    // Contabilizar el comprobante para habilitar el pago (PAY) del mismo lote.
+                    postCreatedInvoiceEntry(created.getJournalEntryId(), documentId);
+                }
                 return successTransfer(batch, documentId, DocumentType.INVOICE,
                         created.getJournalEntryId());
             } else if (invoiceMapper.isFeesInvoice(invoice)) {
@@ -355,6 +415,17 @@ public class AaefBatchProcessor {
                             (created.getNotes() != null ? created.getNotes() : "")).trim());
                 }
                 invoiceRepository.save(created);
+                // QA Integracion (2026-05-26): CANCELLED -> anular tambien honorarios (AP).
+                if (isCancelled) {
+                    invoiceService.voidInvoice(created.getId(),
+                            "Anulada via integracion AAEF (Status=CANCELLED, honorarios) - DocumentId: " + documentId,
+                            true);
+                    log.info("AAEF invoice {} Status=CANCELLED (honorarios) -> Invoices {} ANULADA (VOIDED)",
+                            documentId, created.getId());
+                } else {
+                    // Contabilizar el comprobante para habilitar el pago (PAY) del mismo lote.
+                    postCreatedInvoiceEntry(created.getJournalEntryId(), documentId);
+                }
                 return successTransfer(batch, documentId, DocumentType.INVOICE,
                         created.getJournalEntryId());
             } else if (invoiceMapper.isCreditNote(invoice) || invoiceMapper.isDebitNote(invoice)) {
@@ -407,6 +478,20 @@ public class AaefBatchProcessor {
             documentId = tx.getDocumentId();
             transactionMapper.validate(tx);
             String typeCode = transactionMapper.getTypeCode(tx);
+
+            // QA Integracion (2026-05-26): una transaccion con Status=REVERSED
+            // representa un evento revertido en ORIGEN. NO debe aplicar efecto
+            // operativo en CxC/CxP (no registra pago, anticipo ni nota), para
+            // evitar que la factura quede en un estado parcial inesperado
+            // (incidencia #3 del reporte de integracion). Se reconoce como
+            // PROCESSED sin alterar el saldo: la factura conserva el estado que
+            // determinan su propio Status y las transacciones COMPLETED.
+            String txStatus = tx.getStatus() == null ? "" : tx.getStatus().trim().toUpperCase();
+            if ("REVERSED".equals(txStatus)) {
+                log.info("AAEF transaction {} Status=REVERSED -> reconocida sin efecto en saldo (Type={})",
+                        documentId, typeCode);
+                return successTransfer(batch, documentId, DocumentType.TRANSACTION, null);
+            }
 
             switch (typeCode) {
                 case AaefTransactionMapper.TYPE_PAY: {
@@ -538,6 +623,94 @@ public class AaefBatchProcessor {
             b.setProcessedAt(LocalDateTime.now());
             batchRepository.save(b);
         });
+    }
+
+    /**
+     * QA Integracion (2026-05-26): construye el mapa de cobertura de pagos del lote.
+     * Suma el {@code Amount} de las transacciones {@code Type=PAY} con
+     * {@code Status=COMPLETED}, agrupado por {@code RelatedInvoiceId}. Las PAY con
+     * {@code Status=REVERSED} NO se cuentan (evento revertido en origen).
+     */
+    private Map<String, BigDecimal> buildPayCoverage(AaefBatchRequest payload) {
+        Map<String, BigDecimal> coverage = new HashMap<>();
+        if (payload == null || payload.getTransactions() == null) return coverage;
+        for (JsonNode txNode : payload.getTransactions()) {
+            try {
+                AaefTransactionDTO tx = objectMapper.treeToValue(txNode, AaefTransactionDTO.class);
+                String type = transactionMapper.getTypeCode(tx);
+                String status = tx.getStatus() == null ? "" : tx.getStatus().trim().toUpperCase();
+                if (AaefTransactionMapper.TYPE_PAY.equals(type)
+                        && "COMPLETED".equals(status)
+                        && tx.getRelatedInvoiceId() != null
+                        && !tx.getRelatedInvoiceId().isBlank()
+                        && tx.getAmount() != null) {
+                    coverage.merge(tx.getRelatedInvoiceId().trim(), tx.getAmount(), BigDecimal::add);
+                }
+            } catch (Exception ignore) {
+                // best-effort: si una transaccion no parsea aqui, se valida/registra
+                // individualmente en processTransactionDocument.
+            }
+        }
+        return coverage;
+    }
+
+    /**
+     * QA Integracion (2026-05-26): valida que el {@code Status} PAID/PARTIAL de la
+     * factura este respaldado por la transaccion PAY correspondiente en el MISMO lote.
+     *
+     * @return {@code null} si la cobertura es coherente; una {@link AaefMappingException}
+     *         (no lanzada, solo portadora del codigo/mensaje) si no lo es.
+     */
+    private AaefMappingException validatePaymentCoverage(AaefInvoiceDTO invoice, String status,
+                                                         String documentId,
+                                                         Map<String, BigDecimal> payCoverage) {
+        BigDecimal total = invoice.getTotals() != null && invoice.getTotals().getTotalPayment() != null
+                ? invoice.getTotals().getTotalPayment() : BigDecimal.ZERO;
+        BigDecimal covered = documentId != null
+                ? payCoverage.getOrDefault(documentId, BigDecimal.ZERO) : BigDecimal.ZERO;
+        BigDecimal tol = new BigDecimal("0.01");
+
+        if ("PAID".equals(status)) {
+            if (covered.compareTo(total.subtract(tol)) < 0) {
+                return new AaefMappingException(AaefMappingException.MISSING_PAYMENT,
+                        "La factura " + documentId + " llega con Status=PAID pero el lote no incluye una "
+                        + "transaccion PAY (COMPLETED) que cubra el 100% del valor. Total=" + total
+                        + ", pago recibido=" + covered + ". Para marcarla pagada, envie en el MISMO lote "
+                        + "una transaccion Type=PAY (Status=COMPLETED) con RelatedInvoiceId='" + documentId
+                        + "' por el valor total de la factura.", false);
+            }
+        } else if ("PARTIAL".equals(status)) {
+            if (covered.compareTo(tol) <= 0) {
+                return new AaefMappingException(AaefMappingException.MISSING_PAYMENT,
+                        "La factura " + documentId + " llega con Status=PARTIAL pero el lote no incluye una "
+                        + "transaccion PAY (COMPLETED) parcial asociada. Para reflejar un pago parcial real, "
+                        + "envie una transaccion Type=PAY con RelatedInvoiceId='" + documentId + "' por el "
+                        + "monto abonado. Sin pago asociado, la factura no se marca como parcial.", false);
+            }
+            if (covered.compareTo(total.add(tol)) >= 0) {
+                return new AaefMappingException(AaefMappingException.INVALID_STATUS,
+                        "La factura " + documentId + " llega con Status=PARTIAL pero el PAY asociado cubre el "
+                        + "100% del valor (Total=" + total + ", pago=" + covered + "). Use Status=PAID para "
+                        + "un pago total.", false);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * QA Integracion (2026-05-26): contabiliza (POSTED) el comprobante de la factura
+     * AAEF recien creada. Las facturas AAEF son documentos YA autorizados por
+     * AgroFusion, por lo que su asiento se contabiliza automaticamente. Ademas, esto
+     * es REQUISITO para que una transaccion PAY del mismo lote pueda registrarse:
+     * {@code ApPaymentService}/{@code ArPaymentService} rechazan pagos sobre facturas
+     * cuyo comprobante sigue en BORRADOR. Se ejecuta en la misma transaccion del lote,
+     * de modo que el PAY (procesado despues) ya ve el asiento en POSTED.
+     */
+    private void postCreatedInvoiceEntry(Long journalEntryId, String documentId) {
+        if (journalEntryId == null) return;
+        journalEntryService.postEntry(journalEntryId);
+        log.info("AAEF invoice {} -> comprobante {} CONTABILIZADO (POSTED) automaticamente",
+                documentId, journalEntryId);
     }
 
     // QA Bloque BJ (HU-INT-RF-03 E4, 2026-05-18): helpers para deteccion de duplicados.

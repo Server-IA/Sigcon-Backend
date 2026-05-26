@@ -1152,6 +1152,19 @@ public class InvoiceService {
      */
     @Transactional
     public ResponseEntity<?> voidInvoice(Long id, String reason) {
+        // Anulacion MANUAL (UI/controller): NO permite anular facturas AAEF
+        // (deben corregirse via Pull+Diff de AgroFusion). Ver guard E6.
+        return voidInvoice(id, reason, false);
+    }
+
+    /**
+     * QA Integracion (2026-05-26): variante interna de anulacion.
+     * {@code allowAaefSource=true} permite anular una factura originada por AAEF
+     * SOLO desde el flujo de cancelacion AAEF (Status=CANCELLED en el lote), que es
+     * el mecanismo legitimo para reflejar la anulacion en CxP. La UI sigue usando
+     * la variante de 2 argumentos, que bloquea las facturas AAEF (guard E6).
+     */
+    public ResponseEntity<?> voidInvoice(Long id, String reason, boolean allowAaefSource) {
         Invoices invoice = invoiceRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("La factura no fue encontrada."));
 
@@ -1170,8 +1183,10 @@ public class InvoiceService {
                 Optional.of("La factura ya se encuentra anulada"), Optional.of(idem)));
         }
 
-        // E6: AAEF bloqueada
-        if (invoice.getIntegrationSource() != null
+        // E6: AAEF bloqueada para anulacion MANUAL. El flujo de cancelacion AAEF
+        // (Status=CANCELLED del lote) pasa allowAaefSource=true porque ESA es la
+        // via legitima para reflejar la anulacion de una factura AAEF en CxP.
+        if (!allowAaefSource && invoice.getIntegrationSource() != null
                 && invoice.getIntegrationSource().getSource() != null
                 && "AAEF".equals(invoice.getIntegrationSource().getSource().name())) {
             throw new IllegalStateException(
@@ -1236,8 +1251,12 @@ public class InvoiceService {
                     + "se restaura a PENDING + balanceDue=totalPayment para anulacion", id);
         }
 
-        // E5: periodo cerrado bloqueado (mensaje literal HU)
-        if (invoice.getInvoiceDate() != null) {
+        // E5: periodo cerrado bloqueado (mensaje literal HU). Se OMITE en el flujo de
+        // cancelacion AAEF (allowAaefSource=true): la factura se acaba de crear en el
+        // mismo lote y createInvoiceFromAaef ya valido que el periodo este abierto, asi
+        // que re-validarlo aqui es redundante (y en el contexto @Async la consulta de
+        // periodo puede fallar por el filtro multi-tenant, enmascarandose como "cerrado").
+        if (!allowAaefSource && invoice.getInvoiceDate() != null) {
             try {
                 accountingPeriodService.validatePeriodOpen(invoice.getInvoiceDate());
             } catch (RuntimeException ex) {

@@ -62,11 +62,26 @@ public class ThirdPartyResolver {
         }
 
         String cleanNit = nit.trim();
+        // Codigo interno unico determinista para terceros AAEF.
+        String internalCode = "AAEF-" + cleanNit;
 
-        // 1. Buscar existente
+        // 1. Buscar existente por NIT
         List<ThirdParty> existing = thirdPartyRepository.findByNitAndDeletedAtIsNull(cleanNit);
         if (!existing.isEmpty()) {
             return existing.get(0);
+        }
+
+        // 1-bis. QA Integracion (2026-05-26): fallback determinista por codigo
+        // interno AAEF-{nit}. Cubre el caso en que el NIT quedo almacenado con un
+        // formato distinto al recibido (p.ej. ceros a la izquierda) y la busqueda
+        // por NIT no coincide, pero el tercero AAEF ya existe de un lote previo.
+        // Sin esto, el reproceso del MISMO cliente intentaba un INSERT que chocaba
+        // con uk_third_parties_company_code_active y abortaba la factura con
+        // MAPPING_ERROR (bug de produccion: clientes recurrentes via AAEF).
+        List<ThirdParty> byCode =
+                thirdPartyRepository.findByThirdPartyCodeAndDeletedAtIsNull(internalCode);
+        if (!byCode.isEmpty()) {
+            return byCode.get(0);
         }
 
         // 2. Auto-crear con datos minimos
@@ -87,9 +102,6 @@ public class ThirdPartyResolver {
                 : "Tercero AAEF " + cleanNit;
 
         String safeDv = (dv != null && !dv.trim().isEmpty()) ? dv.trim() : "0";
-
-        // Codigo interno unico: AAEF-{nit}
-        String internalCode = "AAEF-" + cleanNit;
 
         ThirdParty newThird = ThirdParty.builder()
                 .nit(cleanNit)
