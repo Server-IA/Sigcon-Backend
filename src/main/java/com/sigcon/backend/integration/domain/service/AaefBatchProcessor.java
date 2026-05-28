@@ -476,22 +476,22 @@ public class AaefBatchProcessor {
         try {
             AaefTransactionDTO tx = objectMapper.treeToValue(node, AaefTransactionDTO.class);
             documentId = tx.getDocumentId();
-            transactionMapper.validate(tx);
             String typeCode = transactionMapper.getTypeCode(tx);
-
-            // QA Integracion (2026-05-26): una transaccion con Status=REVERSED
-            // representa un evento revertido en ORIGEN. NO debe aplicar efecto
-            // operativo en CxC/CxP (no registra pago, anticipo ni nota), para
-            // evitar que la factura quede en un estado parcial inesperado
-            // (incidencia #3 del reporte de integracion). Se reconoce como
-            // PROCESSED sin alterar el saldo: la factura conserva el estado que
-            // determinan su propio Status y las transacciones COMPLETED.
             String txStatus = tx.getStatus() == null ? "" : tx.getStatus().trim().toUpperCase();
+
+            // QA Integracion AAEF (2026-05-27): una transaccion con Status=REVERSED
+            // se procesa de forma DETERMINISTA revirtiendo el efecto financiero del
+            // pago original (incidencia "REVERSED inconsistente"). Antes solo se
+            // reconocia "sin efecto", lo que dejaba la factura PAID aunque el pago
+            // se hubiera reversado en origen. Se enruta a un handler dedicado ANTES
+            // de la validacion estandar (que exige NIT para ALTAS; una reversion no
+            // crea terceros, asi que no debe exigir NIT).
             if ("REVERSED".equals(txStatus)) {
-                log.info("AAEF transaction {} Status=REVERSED -> reconocida sin efecto en saldo (Type={})",
-                        documentId, typeCode);
-                return successTransfer(batch, documentId, DocumentType.TRANSACTION, null);
+                return processReversedTransaction(batch, tx, documentId, typeCode);
             }
+
+            // Camino COMPLETED: validacion estandar (incluye Status valido) + alta.
+            transactionMapper.validate(tx);
 
             switch (typeCode) {
                 case AaefTransactionMapper.TYPE_PAY: {
@@ -579,6 +579,68 @@ public class AaefBatchProcessor {
             return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
                     AaefMappingException.MAPPING_ERROR,
                     "Error interno: " + e.getMessage(), true);
+        }
+    }
+
+    /**
+     * QA Integracion AAEF (2026-05-27): handler DETERMINISTA para transacciones con
+     * {@code Status=REVERSED}. Revierte el efecto financiero del pago original
+     * (Type=PAY) en CxC o CxP de forma trazable, validando precondiciones explicitas
+     * y devolviendo codigos de error claros:
+     * <ul>
+     *   <li>falta RelatedInvoiceId -> {@code MISSING_INVOICE_REF}</li>
+     *   <li>factura no encontrada -> {@code ORIGINAL_NOT_FOUND}</li>
+     *   <li>no existe pago previo con esa referencia -> {@code MISSING_PAYMENT}</li>
+     *   <li>transicion no permitida (ej. periodo cerrado) -> {@code PERIOD_CLOSED}</li>
+     *   <li>tipo distinto de PAY -> {@code UNSUPPORTED_TYPE} (use Pull+Diff)</li>
+     * </ul>
+     * No exige NIT: una reversion opera sobre un documento existente, no crea terceros.
+     */
+    private IntegrationTransfer processReversedTransaction(IntegrationBatch batch, AaefTransactionDTO tx,
+                                                           String documentId, String typeCode) {
+        if (tx.getAmount() == null) {
+            return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                    AaefMappingException.MAPPING_ERROR, "Amount es obligatorio para una reversion.", false);
+        }
+        if (!AaefTransactionMapper.TYPE_PAY.equals(typeCode)) {
+            return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                    AaefMappingException.UNSUPPORTED_TYPE,
+                    "Reversion (Status=REVERSED) soportada solo para Type=PAY. Para revertir " + typeCode
+                    + " use el flujo Pull+Diff (AgroFusionExchangeUpdate con changeType=CANCELLED) "
+                    + "o una nota de ajuste.", false);
+        }
+        if (tx.getRelatedInvoiceId() == null || tx.getRelatedInvoiceId().trim().isEmpty()) {
+            return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                    AaefMappingException.MISSING_INVOICE_REF,
+                    "Type=PAY con Status=REVERSED requiere RelatedInvoiceId para identificar la "
+                    + "factura del pago a revertir.", false);
+        }
+
+        AaefTransactionMapper.ResolvedInvoice inv;
+        try {
+            inv = transactionMapper.resolveInvoiceByExternalId(tx.getRelatedInvoiceId());
+        } catch (AaefMappingException e) {
+            return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                    e.getErrorCode(), e.getMessage(), e.isRetryAllowed());
+        }
+
+        String reason = "Reversion AAEF de pago " + documentId
+                + (tx.getNotes() != null && !tx.getNotes().isBlank() ? " - " + tx.getNotes() : "");
+        try {
+            Long jeId = (inv.getScope() == AaefTransactionMapper.InvoiceScope.AR)
+                    ? arPaymentService.reversePaymentByReference(inv.getId(), documentId, tx.getAmount(), reason)
+                    : apPaymentService.reversePaymentByReference(inv.getId(), documentId, tx.getAmount(), reason);
+            log.info("AAEF transaction {} Status=REVERSED -> pago revertido (scope={}, revJE={})",
+                    documentId, inv.getScope(), jeId);
+            return successTransfer(batch, documentId, DocumentType.TRANSACTION, jeId);
+        } catch (IllegalArgumentException notFound) {
+            // Precondicion no cumplida: no existe pago previo con esa referencia.
+            return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                    AaefMappingException.MISSING_PAYMENT, notFound.getMessage(), false);
+        } catch (IllegalStateException blocked) {
+            // Transicion no permitida (ej. periodo contable cerrado al revertir).
+            return failedTransfer(batch, documentId, DocumentType.TRANSACTION,
+                    AaefMappingException.PERIOD_CLOSED, blocked.getMessage(), false);
         }
     }
 

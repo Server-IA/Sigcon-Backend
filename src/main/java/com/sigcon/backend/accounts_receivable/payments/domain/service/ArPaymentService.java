@@ -220,6 +220,76 @@ public class ArPaymentService {
     }
 
     /**
+     * QA Integracion AAEF (2026-05-27): revierte de forma DETERMINISTA un cobro (AR)
+     * registrado via AAEF, identificado por su referencia (= DocumentId del PAY
+     * original). Es el efecto que debe producir una transaccion AAEF
+     * {@code Type=PAY, Status=REVERSED}: deshace el asiento contable (deleteEntry si
+     * el JE esta en BORRADOR, reverseEntry/storno si esta CONTABILIZADO), restaura el
+     * saldo de la factura y recalcula su estado (ISSUED si queda sin abonos,
+     * PARTIALLY_PAID si conserva otros), y marca el cobro como REVERSED preservando
+     * la fila para auditoria.
+     *
+     * <p>Precondiciones explicitas (reporte de integracion): factura existente +
+     * cobro previo con esa referencia. Si no hay un cobro ACTIVO con esa referencia
+     * sobre la factura, lanza {@link IllegalArgumentException} con mensaje claro (el
+     * procesador AAEF lo traduce a errorCode {@code MISSING_PAYMENT}).
+     *
+     * @return id del asiento de reversion (REV) si el JE del cobro estaba
+     *         CONTABILIZADO, o {@code null} si estaba en BORRADOR y se elimino.
+     */
+    @Transactional
+    public Long reversePaymentByReference(Long invoiceId, String reference,
+                                          BigDecimal expectedAmount, String reason) {
+        SalesInvoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "La factura referenciada no fue encontrada para revertir el cobro."));
+
+        ArPayment target = paymentRepository.findByInvoiceIdAndDeletedAtIsNull(invoiceId).stream()
+                .filter(p -> reference != null && reference.equals(p.getPaymentReference()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No se encontro un cobro activo con referencia '" + reference + "' sobre la factura "
+                        + invoice.getInvoiceNumber() + " para revertir. Para revertir un cobro via AAEF, "
+                        + "reenvie la transaccion con Status=REVERSED usando el mismo DocumentId del pago original."));
+
+        // 1. Deshacer el asiento contable del cobro: delete si DRAFT, reverse si POSTED.
+        Long reversalJeId = null;
+        if (target.getJournalEntryId() != null) {
+            try {
+                journalEntryService.deleteEntry(target.getJournalEntryId());
+            } catch (IllegalStateException posted) {
+                JournalEntryDTO rev = journalEntryService.reverseEntry(
+                        target.getJournalEntryId(),
+                        "Reversion cobro AAEF (ref " + reference + "): " + reason, "sistema-aaef");
+                reversalJeId = rev != null ? rev.getId() : null;
+            }
+        }
+
+        // 2. Restaurar saldo y recalcular estado de la factura.
+        BigDecimal restored = (invoice.getBalanceDue() != null
+                ? invoice.getBalanceDue() : BigDecimal.ZERO).add(target.getAmount());
+        invoice.setBalanceDue(restored);
+        BigDecimal total = invoice.getTotalAmount() != null ? invoice.getTotalAmount() : restored;
+        invoice.setStatus(restored.compareTo(total) >= 0
+                ? SalesInvoiceStatus.ISSUED : SalesInvoiceStatus.PARTIALLY_PAID);
+        invoiceRepository.save(invoice);
+
+        // 3. Marcar el cobro como revertido (preserva la fila para auditoria).
+        target.setStatus("REVERSED");
+        target.setDeletedAt(java.time.LocalDateTime.now());
+        paymentRepository.save(target);
+
+        auditPublisher.publishUpdate(AuditModule.AR, "ArPayment", target.getId(),
+                "Cobro revertido via AAEF (ref " + reference + "). Factura "
+                + invoice.getInvoiceNumber() + ": saldo restaurado a $" + restored
+                + ", estado -> " + invoice.getStatus());
+
+        log.info("AAEF reverse cobro ref={} factura={} -> estado {} saldo {} (revJE={})",
+                reference, invoice.getInvoiceNumber(), invoice.getStatus(), restored, reversalJeId);
+        return reversalJeId;
+    }
+
+    /**
      * Consulta cobros con paginacion y filtros DataTable.
      *
      * @param request parametros de busqueda y paginacion

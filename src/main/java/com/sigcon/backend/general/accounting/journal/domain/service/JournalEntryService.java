@@ -497,7 +497,17 @@ public class JournalEntryService {
                 .entryDate(LocalDate.now())
                 .periodYear(LocalDate.now().getYear())
                 .periodMonth(LocalDate.now().getMonthValue())
-                .description(description != null ? description : "Reversion de asiento #" + original.getEntryNumber())
+                // QA reeval Q4 (2026-05-27): el asiento de reversion es un STORNO
+                // (lineas espejo con debito/credito invertidos) que neutraliza el
+                // original; NO es un duplicado. Antes la descripcion mostraba solo
+                // el motivo crudo y, como los totales de un storno son identicos a
+                // los del original (debito total = credito total), un revisor podia
+                // leerlo como "comprobante contabilizado duplicado". Prefijamos la
+                // descripcion en el origen para que sea autoexplicativa en listado,
+                // exportaciones (Excel/CSV/PDF) y auditoria.
+                .description("Reversión de " + buildVoucherCode(original)
+                        + " (asiento inverso): "
+                        + (description != null ? description : "asiento #" + original.getEntryNumber()))
                 .sourceModule(original.getSourceModule())
                 .sourceId(original.getSourceId())
                 .status(JournalEntryStatus.POSTED)

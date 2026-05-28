@@ -39,6 +39,8 @@ import com.sigcon.backend.invoices.domain.model.enums.StatusesInvoices;
 import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountMappingService;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
@@ -71,6 +73,7 @@ public class ApPaymentService {
     private final FinancialMovementRepository financialMovementRepository;
     private final BankAccountRepository bankAccountRepository;
     private final CashRepository cashRepository;
+    private final AuditPublisher auditPublisher;
 
     private final DataTableSpecificationBuilder<ApPayment> specBuilder = new DataTableSpecificationBuilder<>();
 
@@ -340,6 +343,100 @@ public class ApPaymentService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Pago registrado exitosamente"), Optional.of(toDTO(payment))));
+    }
+
+    /**
+     * QA Integracion AAEF (2026-05-27): revierte de forma DETERMINISTA un pago (AP)
+     * registrado via AAEF, identificado por su referencia (= DocumentId del PAY
+     * original). Es el efecto que debe producir {@code Type=PAY, Status=REVERSED}:
+     * <ol>
+     *   <li>deshace el asiento contable del pago (deleteEntry si BORRADOR,
+     *       reverseEntry/storno si CONTABILIZADO);</li>
+     *   <li>anula el movimiento financiero (egreso) que el pago genero en BNK,
+     *       restaurando el saldo de la cuenta/caja;</li>
+     *   <li>restaura el saldo de la factura y recalcula su estado (PENDING si no
+     *       quedan abonos, PARTIALLY_PAID si conserva otros);</li>
+     *   <li>marca el pago como REVERSED preservando la fila para auditoria.</li>
+     * </ol>
+     *
+     * <p>Si no hay un pago ACTIVO con esa referencia sobre la factura, lanza
+     * {@link IllegalArgumentException} con mensaje claro (el procesador AAEF lo
+     * traduce a errorCode {@code MISSING_PAYMENT}).
+     *
+     * @return id del asiento de reversion (REV) si el JE del pago estaba
+     *         CONTABILIZADO, o {@code null} si estaba en BORRADOR y se elimino.
+     */
+    @Transactional
+    public Long reversePaymentByReference(Long invoiceId, String reference,
+                                          BigDecimal expectedAmount, String reason) {
+        Invoices invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "La factura referenciada no fue encontrada para revertir el pago."));
+
+        ApPayment target = paymentRepository.findByInvoiceIdAndDeletedAtIsNull(invoiceId).stream()
+                .filter(p -> reference != null && reference.equals(p.getPaymentReference()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No se encontro un pago activo con referencia '" + reference + "' sobre la factura "
+                        + invoice.getResolutionInvoice() + " para revertir. Para revertir un pago via AAEF, "
+                        + "reenvie la transaccion con Status=REVERSED usando el mismo DocumentId del pago original."));
+
+        // 1. Deshacer el asiento contable del pago: delete si DRAFT, reverse si POSTED.
+        Long reversalJeId = null;
+        if (target.getJournalEntryId() != null) {
+            try {
+                journalEntryService.deleteEntry(target.getJournalEntryId());
+            } catch (IllegalStateException posted) {
+                JournalEntryDTO rev = journalEntryService.reverseEntry(
+                        target.getJournalEntryId(),
+                        "Reversion pago AAEF (ref " + reference + "): " + reason, "sistema-aaef");
+                reversalJeId = rev != null ? rev.getId() : null;
+            }
+        }
+
+        // 2. Compensar el movimiento financiero (egreso BNK) que genero el pago
+        //    creando un movimiento inverso (ingreso) que restaura el saldo de la
+        //    cuenta/caja. FinancialMovement no es soft-delete; el inverso preserva
+        //    la trazabilidad (equivale en BNK al storno contable del JE).
+        if (target.getBankMovementId() != null) {
+            financialMovementRepository.findById(target.getBankMovementId()).ifPresent(orig -> {
+                FinancialMovement comp = FinancialMovement.builder()
+                        .bankAccount(orig.getBankAccount())
+                        .cash(orig.getCash())
+                        .movementDate(java.time.LocalDate.now())
+                        .amount(orig.getAmount().negate())
+                        .description("Reversion pago AAEF (ref " + reference
+                                + ") - compensa movimiento #" + orig.getId())
+                        .externalReference(reference)
+                        .sourceType(FinancialMovementSourceType.MANUAL)
+                        .flowActivity(orig.getFlowActivity())
+                        .build();
+                financialMovementRepository.save(comp);
+            });
+        }
+
+        // 3. Restaurar saldo de la factura.
+        double restored = invoice.getBalanceDue() + target.getAmount().doubleValue();
+        invoice.setBalanceDue(restored);
+
+        // 4. Marcar el pago como revertido (preserva la fila para auditoria).
+        target.setStatus("REVERSED");
+        target.setDeletedAt(java.time.LocalDateTime.now());
+        paymentRepository.save(target);
+
+        // 5. Recalcular estado: si quedan abonos activos -> PARTIALLY_PAID, si no -> PENDING.
+        boolean hayAbonos = !paymentRepository.findByInvoiceIdAndDeletedAtIsNull(invoiceId).isEmpty();
+        invoice.setStatus(hayAbonos ? StatusesInvoices.PARTIALLY_PAID : StatusesInvoices.PENDING);
+        invoiceRepository.save(invoice);
+
+        auditPublisher.publishUpdate(AuditModule.AP, "ApPayment", target.getId(),
+                "Pago revertido via AAEF (ref " + reference + "). Factura "
+                + invoice.getResolutionInvoice() + ": saldo restaurado a $" + restored
+                + ", estado -> " + invoice.getStatus());
+
+        log.info("AAEF reverse pago ref={} factura={} -> estado {} saldo {} (revJE={})",
+                reference, invoice.getResolutionInvoice(), invoice.getStatus(), restored, reversalJeId);
+        return reversalJeId;
     }
 
     /**
