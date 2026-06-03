@@ -86,6 +86,10 @@ public class CommercialDataService {
                             Optional.of("CD_002: Ya existen datos comerciales vigentes para este tercero.")));
         }
 
+        // PT-03 (TER-RF-11): limite de credito > 0 si se informa; moneda
+        // obligatoria cuando hay limite de credito.
+        validateCreditLimitAndCurrency(request);
+
         // 5. Resolver moneda (opcional)
         CurrencyType currency = resolveCurrency(request.getCurrencyId());
 
@@ -143,6 +147,10 @@ public class CommercialDataService {
                         // HU-TER-12 E3.0 (Bloque AN, 2026-05-04): mensaje literal Excel.
                         "Este tercero aun no tiene condiciones comerciales registradas"));
 
+        // PT-03 (TER-RF-11): el limite de credito, si se informa, debe ser > 0;
+        // y si hay limite de credito, la moneda es obligatoria.
+        validateCreditLimitAndCurrency(request);
+
         // 5. Resolver moneda (opcional)
         CurrencyType currency = resolveCurrency(request.getCurrencyId());
 
@@ -151,7 +159,7 @@ public class CommercialDataService {
 
         // 7. Capturar valores previos para historial
         CommercialDataDTO dto = mapToDTO(request);
-        List<CommercialDataHistory> changes = trackChanges(current, dto, paymentTerm, currency);
+        List<CommercialDataHistory> changes = trackChanges(current, dto, paymentTerm, currency, reason.trim());
 
         // 8. Actualizar campos
         current.setPaymentTerm(paymentTerm);
@@ -161,7 +169,9 @@ public class CommercialDataService {
         current.setValidityFrom(request.getValidityFrom());
         current.setValidityTo(request.getValidityTo());
         CommercialData updated = commercialDataRepository.save(current);
-        auditPublisher.publishUpdate(AuditModule.TER, "CommercialData", current.getId(), "CommercialData actualizado id=" + current.getId());
+        // PT-03 (TER-RF-12): incluir el motivo del cambio en la auditoria.
+        auditPublisher.publishUpdate(AuditModule.TER, "CommercialData", current.getId(),
+                "CommercialData actualizado id=" + current.getId() + " | motivo=" + reason.trim());
 
         // 9. Persistir historial de cambios
         if (!changes.isEmpty()) {
@@ -194,7 +204,15 @@ public class CommercialDataService {
     /*
      * Eliminar (soft delete) datos comerciales de un tercero.
      */
-    public ResponseEntity<?> delete(Long thirdPartyId) {
+    public ResponseEntity<?> delete(Long thirdPartyId, String justification) {
+
+        // PT-10 (TER-RF-12, 2026-06-02): justificacion obligatoria (minimo 30
+        // caracteres) para eliminar las condiciones comerciales.
+        if (justification == null || justification.trim().length() < 30) {
+            throw new IllegalArgumentException(
+                    "Debe ingresar la justificacion de eliminacion de las condiciones comerciales (minimo 30 caracteres)");
+        }
+        String reason = justification.trim();
 
         CommercialData commercialData = commercialDataRepository
                 .findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId)
@@ -214,9 +232,22 @@ public class CommercialDataService {
                   + "vigentes en Cuentas por Cobrar.");
         }
 
+        // PT-10: dejar evidencia de la baja en el historial (estructura de
+        // trazabilidad) con la justificacion ingresada.
+        CommercialDataHistory deletionMark = CommercialDataHistory.builder()
+                .commercialDataId(commercialData.getId())
+                .fieldName("ELIMINACION")
+                .oldValue("VIGENTE")
+                .newValue("ELIMINADO")
+                .changedBy(resolveCurrentUserIdSafe())
+                .changeReason(reason)
+                .build();
+        commercialDataHistoryRepository.save(deletionMark);
+
         commercialDataRepository.delete(commercialData);
+        // PT-10: la auditoria de eliminacion incluye la justificacion.
         auditPublisher.publishDelete(AuditModule.TER, "CommercialData", commercialData.getId(),
-                "CommercialData eliminado id=" + commercialData.getId());
+                "CommercialData eliminado id=" + commercialData.getId() + " | justificacion=" + reason);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -248,6 +279,7 @@ public class CommercialDataService {
                         .newValue(h.getNewValue())
                         .changedBy(h.getChangedBy())
                         .changedAt(h.getChangedAt())
+                        .changeReason(h.getChangeReason())
                         .build())
                 .toList();
 
@@ -364,8 +396,37 @@ public class CommercialDataService {
     /**
      * TER-12: Compara valores anteriores y nuevos para generar registros de historial.
      */
+    /**
+     * PT-03 (TER-RF-11, 2026-06-02): valida el limite de credito y la moneda.
+     * El limite no es obligatorio (decision de negocio pendiente), pero si se
+     * informa debe ser mayor que cero; y cuando hay limite de credito la moneda
+     * es obligatoria.
+     */
+    private void validateCreditLimitAndCurrency(CommercialDataRequest request) {
+        BigDecimal limit = request.getLimitCredit();
+        if (limit != null) {
+            if (limit.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException(
+                        "El limite de credito debe ser mayor que cero");
+            }
+            if (request.getCurrencyId() == null) {
+                throw new IllegalArgumentException(
+                        "Debe seleccionar la moneda cuando registra un limite de credito");
+            }
+        }
+    }
+
+    /** Obtiene el id del usuario actual sin fallar si no hay sesion. */
+    private Long resolveCurrentUserIdSafe() {
+        try {
+            return userUtil.getUser().getId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private List<CommercialDataHistory> trackChanges(CommercialData current, CommercialDataDTO dto,
-            PaymentTerms newPaymentTerm, CurrencyType newCurrency) {
+            PaymentTerms newPaymentTerm, CurrencyType newCurrency, String reason) {
         List<CommercialDataHistory> changes = new ArrayList<>();
         Long currentUserId = null;
         try {
@@ -412,6 +473,8 @@ public class CommercialDataService {
                     String.valueOf(dto.getValidityTo()), currentUserId));
         }
 
+        // PT-03 (TER-RF-12): persistir el motivo del cambio en cada registro.
+        changes.forEach(h -> h.setChangeReason(reason));
         return changes;
     }
 

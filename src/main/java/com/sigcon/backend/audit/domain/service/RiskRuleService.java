@@ -78,14 +78,37 @@ public class RiskRuleService {
         return true;
     }
 
-    /** Obtiene reglas desde cache o BD. */
+    /**
+     * Obtiene reglas desde cache o BD. AU-RF-03: orden prioridad DESC y, a igual
+     * prioridad, created_at DESC (la regla mas reciente gana el desempate).
+     */
     private List<AuditRiskRule> getRules() {
         List<AuditRiskRule> cached = cachedRules.get();
         if (cached == null) {
-            cached = repository.findByEnabledTrueOrderByPriorityDesc();
+            cached = repository.findByEnabledTrueOrderByPriorityDescCreatedAtDesc();
             cachedRules.set(cached);
         }
         return cached;
+    }
+
+    /**
+     * AU-RF-03 (QA 2026-06-02): la prioridad es un entero entre 1 y 1000.
+     * Antes no se validaba y se podian crear reglas con prioridad 9999 (fuera de
+     * las bandas semanticas definidas: 1-99 fondo, 100-199 generales,
+     * 200-499 especificas, 500-999 criticas/regulatorias).
+     */
+    private void validatePriority(AuditRiskRule rule) {
+        Integer p = rule.getPriority();
+        if (p == null) {
+            rule.setPriority(100); // default banda "generales"
+            return;
+        }
+        if (p < 1 || p > 1000) {
+            throw new IllegalArgumentException(
+                    "La prioridad debe ser un entero entre 1 y 1000. "
+                    + "Bandas: 1-99 fondo, 100-199 generales, 200-499 especificas, "
+                    + "500-999 criticas/regulatorias.");
+        }
     }
 
     /** Invalida el cache (llamar tras crear/editar/borrar reglas). */
@@ -101,9 +124,9 @@ public class RiskRuleService {
 
     @Transactional
     public ResponseEntity<?> create(AuditRiskRule rule, String createdBy) {
+        validatePriority(rule); // AU-RF-03: rango 1-1000
         rule.setCreatedBy(createdBy);
         rule.setEnabled(rule.getEnabled() == null ? true : rule.getEnabled());
-        rule.setPriority(rule.getPriority() == null ? 100 : rule.getPriority());
         AuditRiskRule saved = repository.save(rule);
         invalidateCache();
         log.info("HU-AU-04: regla creada id={} name='{}'", saved.getId(), saved.getName());
@@ -115,6 +138,7 @@ public class RiskRuleService {
 
     @Transactional
     public ResponseEntity<?> update(Long id, AuditRiskRule update) {
+        validatePriority(update); // AU-RF-03: rango 1-1000
         AuditRiskRule existing = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Regla no encontrada"));
         existing.setName(update.getName());

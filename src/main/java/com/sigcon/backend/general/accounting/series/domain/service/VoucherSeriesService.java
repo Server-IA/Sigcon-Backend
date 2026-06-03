@@ -212,6 +212,51 @@ public class VoucherSeriesService {
         return next;
     }
 
+    /**
+     * Bug ACT-RF-01 (2026-06-01): adelanta el contador de la serie {@code type}
+     * a AL MENOS {@code min} (nunca lo retrocede). Self-heal contra la
+     * DESINCRONIZACION entre la serie y el MAX real de consecutivos: cuando seeds
+     * u otros flujos insertan comprobantes directamente sin consumir la serie, el
+     * contador queda atrasado y {@link #consumeNext} devolveria un numero que YA
+     * existe -> "duplicate key uk_journal_entries_company_fy_num". El llamador
+     * (JournalEntryService) calcula {@code min} = MAX(entry_number) del tenant
+     * para el anio fiscal y sincroniza ANTES de consumir.
+     *
+     * <p>{@code synchronized} sobre la misma instancia que {@link #consumeNext},
+     * de modo que la secuencia sync->consume del mismo hilo es consistente y los
+     * hilos concurrentes se serializan (single-node).</p>
+     */
+    @Transactional
+    public synchronized void syncToAtLeast(String voucherType, long min) {
+        String type = voucherType != null ? voucherType.toUpperCase() : "JE";
+        VoucherSeriesConfig s = repository.findByVoucherTypeAndDeletedAtIsNull(type).orElse(null);
+        if (s == null) {
+            // RF-15/18 (Notas Tecnicas CXP, 2026-06-02): si la serie AUN NO existe
+            // (caso de tipos que no se siembran como OC/RC/DV en su primer uso) y ya
+            // hay consecutivos previos (min>0, p.ej. seeds), auto-provisionamos la
+            // serie arrancando en `min`, para que el primer consumeNext entregue
+            // min+1 y NO reutilice un consecutivo ya usado. Si min<=0 no hacemos nada:
+            // consumeNext la creara en 0 y entregara 1 (BD limpia, sin colisiones).
+            if (min <= 0) return;
+            s = VoucherSeriesConfig.builder()
+                    .voucherType(type).prefix(type)
+                    .startNumber(1L).endNumber(999999L).currentNumber(min)
+                    .alertThresholdPct(80)
+                    .description("Auto-provisionada por sincronizacion al MAX existente")
+                    .status("ACTIVE")
+                    .build();
+            repository.save(s);
+            log.info("Serie {} auto-provisionada y sincronizada al MAX existente ({})", type, min);
+            return;
+        }
+        if (s.getCurrentNumber() < min) {
+            log.info("Serie {} sincronizada: current_number {} -> {} (estaba atrasada respecto al MAX real)",
+                    type, s.getCurrentNumber(), min);
+            s.setCurrentNumber(min);
+            repository.save(s);
+        }
+    }
+
     /** Calcula el porcentaje usado y el flag de alerta para enriquecer el DTO. */
     private VoucherSeriesConfigDTO toDto(VoucherSeriesConfig s) {
         long range = s.getEndNumber() - s.getStartNumber() + 1;

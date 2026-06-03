@@ -61,8 +61,16 @@ public class UserController {
 
     @PostMapping("/deleteUser/{userId}")
     @PreAuthorize("hasAuthority('PERM_DELETE_USER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
-        return userService.deleteUser(userId);
+    public ResponseEntity<?> deleteUser(@PathVariable Long userId,
+                                        @RequestParam(value = "reason", required = false) String reasonParam,
+                                        @RequestBody(required = false) java.util.Map<String, Object> body) {
+        // PA-RF-30: el motivo de desactivacion puede venir como query param o en el
+        // cuerpo {reason}. El frontend de administracion lo exige (minimo 30 chars).
+        String reason = reasonParam;
+        if ((reason == null || reason.isBlank()) && body != null && body.get("reason") != null) {
+            reason = String.valueOf(body.get("reason"));
+        }
+        return userService.deleteUser(userId, reason);
     }
 
     @GetMapping("/avatars/{filename}")

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sigcon.backend.third_parties.commercial_data.application.CommercialDataRequest;
@@ -92,8 +93,11 @@ public class CommercialDataController {
     })
     @DeleteMapping("/{thirdPartyId}")
     @PreAuthorize("hasAuthority('PERM_DELETE_COMMERCIAL_DATA') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    public ResponseEntity<?> delete(@PathVariable Long thirdPartyId) {
-        return commercialDataService.delete(thirdPartyId);
+    public ResponseEntity<?> delete(@PathVariable Long thirdPartyId,
+            @RequestParam(value = "justification", required = false) String justification) {
+        // PT-10 (TER-RF-12): justificacion obligatoria (minimo 30 caracteres),
+        // validada en el service.
+        return commercialDataService.delete(thirdPartyId, justification);
     }
 
     /**

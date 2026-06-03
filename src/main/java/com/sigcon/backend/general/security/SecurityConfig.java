@@ -34,6 +34,8 @@ public class SecurityConfig {
     private final AgroFusionJwtFilter agroFusionJwtFilter;
     private final AaefPayloadSizeFilter aaefPayloadSizeFilter;
     private final AaefRateLimitFilter aaefRateLimitFilter;
+    // PA-RNF-10 (Pendientes PA): rate limit por IP sobre POST /auth/login.
+    private final IpLoginRateLimitFilter ipLoginRateLimitFilter;
     private final TenantContextFilter tenantContextFilter;
     private final SessionInvalidationFilter sessionInvalidationFilter;
     private final EffectivePermissionsFilter effectivePermissionsFilter;
@@ -159,6 +161,11 @@ public class SecurityConfig {
                 );
 
         http.addFilterBefore(blackListFilter, UsernamePasswordAuthenticationFilter.class);
+
+        // PA-RNF-10 (Pendientes PA): rate limit por IP en POST /auth/login (10/min
+        // -> 429 + Retry-After). shouldNotFilter restringe el alcance al login; el
+        // resto de requests pasan sin tocar. Va antes de UPA como los demas filtros.
+        http.addFilterBefore(ipLoginRateLimitFilter, UsernamePasswordAuthenticationFilter.class);
 
         // HU-INT-RF-11/12: Orden de filtros en /api/contabilidad/** es importante:
         //   1. AgroFusionJwtFilter (JWT RS256 con JWKS) - tiene prioridad

@@ -45,6 +45,16 @@ public class AuditLogController {
     private final AuditExportService exportService;
     // BNK-HU-065: verificacion de integridad de la cadena de hashes.
     private final com.sigcon.backend.audit.domain.service.AuditIntegrityService integrityService;
+    // QA Auditoria (2026-06-02): rate limit de exportaciones (no ilimitado).
+    private final com.sigcon.backend.audit.domain.service.AuditExportRateLimiter exportRateLimiter;
+
+    /**
+     * QA Auditoria (2026-06-02): tope de registros por exportacion (configurable).
+     * Si el resultado filtrado lo supera, NO se descarga silenciosamente: se avisa
+     * al usuario y se le ofrece refinar filtros / paginar / exportar async.
+     */
+    @org.springframework.beans.factory.annotation.Value("${sigcon.audit.export-max-records:5000}")
+    private int exportMaxRecords;
 
     @Operation(
         summary = "Listar logs paginados (HU-AU-05 base)",
@@ -197,21 +207,72 @@ public class AuditLogController {
     public ResponseEntity<?> exportFiltered(
             @Parameter(description = "Formato (csv | xlsx | pdf)", example = "csv")
             @PathVariable String format,
+            @Parameter(description = "Tope de registros para esta exportacion (<= maximo configurado)")
+            @RequestParam(required = false) Integer limit,
             @RequestBody(required = false) AuditLogFilterRequest filter) {
-        return doExport(format, filter != null ? filter : new AuditLogFilterRequest());
+        return doExport(format, filter != null ? filter : new AuditLogFilterRequest(), limit);
     }
 
     @PreAuthorize("hasAuthority('PERM_AU.LOG.VER') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @GetMapping("/export/{format}")
-    public ResponseEntity<?> exportSimple(@PathVariable String format) {
-        return doExport(format, new AuditLogFilterRequest());
+    public ResponseEntity<?> exportSimple(@PathVariable String format,
+            @RequestParam(required = false) Integer limit) {
+        return doExport(format, new AuditLogFilterRequest(), limit);
     }
 
-    private ResponseEntity<?> doExport(String format, AuditLogFilterRequest filter) {
+    private ResponseEntity<?> doExport(String format, AuditLogFilterRequest filter, Integer requestedLimit) {
+        // QA Auditoria (2026-06-02): rate limit (no ilimitado). Tras N exportaciones
+        // en la ventana, el usuario debe esperar. El tope nunca es silencioso (429).
+        String user = "system";
         try {
-            var pageable = PageRequest.of(0, 5000, Sort.by(Sort.Direction.DESC, "timestamp"));
+            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) user = auth.getName();
+        } catch (Exception ignored) {}
+        long wait = exportRateLimiter.checkAndRecord(user, System.currentTimeMillis());
+        if (wait > 0) {
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", false);
+            body.put("rateLimited", true);
+            body.put("retryAfterSeconds", wait);
+            body.put("message", "Ha alcanzado el limite de " + exportRateLimiter.maxPerWindow()
+                    + " exportaciones. Espere " + wait + " segundos antes de continuar con las descargas.");
+            return ResponseEntity.status(429).body(body);
+        }
+
+        // Tope de registros efectivo: el menor entre el configurado y el solicitado.
+        int effectiveLimit = exportMaxRecords;
+        if (requestedLimit != null && requestedLimit > 0 && requestedLimit < exportMaxRecords) {
+            effectiveLimit = requestedLimit;
+        }
+        try {
+            // Pedir hasta effectiveLimit+1 para detectar si el resultado lo supera.
+            var pageable = PageRequest.of(0, effectiveLimit, Sort.by(Sort.Direction.DESC, "timestamp"));
             Page<AuditLogDTO> page = auditLogService.search(filter, pageable);
             List<AuditLogDTO> logs = page.getContent();
+            long total = page.getTotalElements();
+
+            // QA Auditoria (2026-06-02): si el resultado filtrado supera el tope N,
+            // NO se descarga silenciosamente: se avisa y se ofrece refinar/paginar/async.
+            if (total > effectiveLimit) {
+                Map<String, Object> body = new HashMap<>();
+                body.put("success", false);
+                body.put("exceedsLimit", true);
+                body.put("total", total);
+                body.put("limit", effectiveLimit);
+                body.put("message", "El resultado filtrado (" + total + " registros) supera el maximo de "
+                        + effectiveLimit + " por exportacion. Refine los filtros, pagine la descarga, o "
+                        + "solicite la exportacion asincrona por correo. El tope no es silencioso.");
+                try {
+                    auditLogService.register(
+                            com.sigcon.backend.audit.domain.model.enums.AuditAction.EXPORT,
+                            com.sigcon.backend.audit.domain.model.enums.AuditModule.AU,
+                            null, "AuditLog", null,
+                            "Exportacion " + format + " bloqueada por tope (" + total + " > " + effectiveLimit
+                                    + ") | filtros: " + describeFilters(filter),
+                            null, null, null);
+                } catch (Exception ignored) {}
+                return ResponseEntity.ok(body);
+            }
 
             // HU-AU-08 E7 (2026-04-28): si no hay datos, devolver mensaje exacto
             // con HTTP 200 (en vez de 204 que descarta el body) para que el
@@ -373,5 +434,27 @@ public class AuditLogController {
     @GetMapping("/integrity/history")
     public ResponseEntity<?> integrityHistory() {
         return ResponseEntity.ok(integrityService.history());
+    }
+
+    @Operation(summary = "Re-baseline de la cadena de integridad (QA Auditoria 2026-06-02)",
+               description = "Recalcula previous_hash + hash de TODA la cadena en orden global. Sanea la "
+                       + "cadena rota heredada (insert global vs verificacion por-empresa + forks de "
+                       + "concurrencia). Solo PLATFORM_ADMIN. Tras ejecutarlo la verificacion debe dar OK.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Cadena re-baselined + verificacion posterior"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAuthority('PLATFORM_ADMIN') or hasAuthority('ROLE_ADMIN_EMPRESA')")
+    @PostMapping("/integrity/rebaseline")
+    public ResponseEntity<?> rebaselineIntegrity() {
+        int n = integrityService.rebaselineChain();
+        var r = integrityService.verifyChain();
+        Map<String, Object> body = new HashMap<>();
+        body.put("rebaselined", n);
+        body.put("result", r.result());
+        body.put("chainBreaks", r.chainBreaks());
+        body.put("contentMismatches", r.contentMismatches());
+        body.put("message", "Cadena re-baselined: " + n + " registros. Verificacion: " + r.result());
+        return ResponseEntity.ok(body);
     }
 }

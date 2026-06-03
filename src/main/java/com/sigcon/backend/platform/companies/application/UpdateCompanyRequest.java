@@ -22,7 +22,10 @@ public class UpdateCompanyRequest {
     @Pattern(regexp = "^[0-9]?$", message = "DV debe ser un digito")
     private String dv;
 
-    @Size(max = 200)
+    @Size(max = 200, message = "La razon social no puede superar 200 caracteres")
+    // Pendientes PA 2026-05-30: letras, numeros, espacios y los simbolos & . ( ) /.
+    @Pattern(regexp = "(?U)^[\\p{L}\\p{N} &.()/]+$",
+            message = "La razon social solo admite letras, numeros, espacios y los simbolos & . ( ) /")
     private String businessName;
 
     @Size(max = 200)

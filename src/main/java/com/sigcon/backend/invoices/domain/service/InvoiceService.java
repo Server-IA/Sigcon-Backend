@@ -528,6 +528,10 @@ public class InvoiceService {
         row.put("supplierInvoiceNumber", invoice.getSupplierInvoiceNumber());
         row.put("invoiceDate", invoice.getInvoiceDate());
         row.put("invoiceDueDay", invoice.getInvoiceDueDay());
+        // RF-24 (Notas Tecnicas CXP, 2026-06-02): exponer la fecha real de
+        // vencimiento (no solo el dia 1-31) para que la exportacion de
+        // informacion exogena DIAN (F1001) salga con la fecha correcta.
+        row.put("dueDate", computeDueDate(invoice.getInvoiceDate(), invoice.getInvoiceDueDay()));
         row.put("status", invoice.getStatus() != null ? invoice.getStatus().name() : null);
         row.put("totalAmount", invoice.getTotalAmount());
         row.put("totalTax", invoice.getTotalTax());
@@ -564,6 +568,26 @@ public class InvoiceService {
             }
         } catch (Exception ignored) { /* noop */ }
         return row;
+    }
+
+    /**
+     * RF-24 (Notas Tecnicas CXP): calcula la fecha de vencimiento real de una
+     * factura de compra. Regla: la factura vence el dia {@code dueDay} del mes
+     * SIGUIENTE a la fecha de emision. Si ese dia no existe en el mes destino
+     * (ej. dia 31 en febrero), se usa el ultimo dia del mes.
+     *
+     * @param invoiceDate fecha de emision
+     * @param dueDay      dia del mes de vencimiento (1-31)
+     * @return fecha de vencimiento, o {@code null} si falta algun dato
+     */
+    private static java.time.LocalDate computeDueDate(java.time.LocalDate invoiceDate, Integer dueDay) {
+        if (invoiceDate == null || dueDay == null) {
+            return null;
+        }
+        java.time.LocalDate target = invoiceDate.plusMonths(1);
+        int lastDay = target.lengthOfMonth();
+        int day = Math.min(Math.max(dueDay, 1), lastDay);
+        return target.withDayOfMonth(day);
     }
     // ========================= CRUD adicional
 
@@ -1476,23 +1500,25 @@ public class InvoiceService {
             throw new IllegalArgumentException("El archivo debe contener al menos un encabezado y una fila de datos");
         }
 
-        int totalRows = rows.size() - 1; // Excluir encabezado
+        // ---- RF-22 (Notas Tecnicas CXP, 2026-06-02): carga masiva CON lineas de detalle.
+        // Antes el parser solo leia la cabecera y creaba la factura con
+        // lineInvoices(new ArrayList<>()) -> facturas SIN lineas, totalPayment=0
+        // y asiento contable invalido. Ahora cada fila aporta UNA linea y se
+        // agrupan por (thirdPartyId | resolutionInvoice | invoiceDate); cada
+        // grupo = una factura con N lineas, delegada a createInvoice() que ya
+        // calcula impuestos, retenciones UVT, balanceDue y genera el JE.
+        // Columnas esperadas (>=11):
+        //   0 thirdPartyId, 1 paymentFormId, 2 resolutionInvoice, 3 invoiceDate,
+        //   4 invoiceDueDay, 5 supplierInvoiceNumber, 6 notes,
+        //   7 lineAccountId, 8 lineDescription, 9 lineQuantity, 10 lineUnitPrice,
+        //   11 lineTaxRuleIds (IDs de reglas tributarias separados por '|', opcional)
+        int totalDataRows = rows.size() - 1; // Excluir encabezado
         int[] successCount = { 0 };
         List<com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError> errors = new ArrayList<>();
 
-        // HU-AP-22 (Bloque AU): TransactionTemplate por fila. Cada fila tiene
-        // su propio TX REQUIRES_NEW. Si una falla, su TX se rollbackea SOLO,
-        // sin contaminar las demas.
-        org.springframework.transaction.support.TransactionTemplate tt =
-                new org.springframework.transaction.support.TransactionTemplate(txManager);
-        tt.setPropagationBehavior(
-                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        // Capturar el tenant actual ANTES del loop. Cada TX nueva debe
-        // re-establecer el TenantContext porque corre en una sesion JPA
-        // distinta (el filter de tenant lee del TenantContext en cada query).
-        Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
-        boolean wasPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
-
+        // 1) Agrupar filas por factura, preservando el orden de aparicion.
+        java.util.LinkedHashMap<String, List<String[]>> groups = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Integer> groupFirstRow = new java.util.LinkedHashMap<>();
         for (int i = 1; i < rows.size(); i++) {
             String[] fields = rows.get(i);
             if (fields == null || fields.length == 0) continue;
@@ -1503,23 +1529,59 @@ public class InvoiceService {
             if (allEmpty) continue;
 
             final int rowNum = i + 1;
-            final String[] f = fields;
+            if (fields.length < 11) {
+                errors.add(com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError.builder()
+                        .row(rowNum)
+                        .message("Numero insuficiente de columnas (minimo 11: cabecera + linea). "
+                                + "Descargue la plantilla actualizada.")
+                        .build());
+                continue;
+            }
+            String key = safeCell(fields, 0) + "|" + safeCell(fields, 2) + "|" + safeCell(fields, 3);
+            groups.computeIfAbsent(key, k -> new ArrayList<>()).add(fields);
+            groupFirstRow.putIfAbsent(key, rowNum);
+        }
+
+        int totalInvoices = groups.size();
+
+        // HU-AP-22 (Bloque AU): TransactionTemplate por factura. Cada grupo tiene
+        // su propio TX REQUIRES_NEW. Si una factura falla, su TX se rollbackea
+        // SOLO, sin contaminar las demas.
+        org.springframework.transaction.support.TransactionTemplate tt =
+                new org.springframework.transaction.support.TransactionTemplate(txManager);
+        tt.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        // Capturar el tenant actual ANTES del loop. Cada TX nueva debe
+        // re-establecer el TenantContext porque corre en una sesion JPA
+        // distinta (el filter de tenant lee del TenantContext en cada query).
+        Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        boolean wasPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+
+        // 2) Procesar cada grupo (factura) en su propia TX.
+        for (java.util.Map.Entry<String, List<String[]>> entry : groups.entrySet()) {
+            final int rowNum = groupFirstRow.get(entry.getKey());
+            final List<String[]> groupRows = entry.getValue();
             try {
                 tt.executeWithoutResult(status -> {
                     // Reasegurar tenant en la TX nueva
                     if (wasPlatform) com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
                     if (tenantId != null) com.sigcon.backend.platform.tenant.TenantContext.setCompanyId(tenantId);
 
-                    if (f.length < 5) {
-                        throw new IllegalArgumentException("Numero insuficiente de campos (minimo 5)");
+                    String[] head = groupRows.get(0);
+                    Long thirdPartyId = Long.parseLong(head[0].trim());
+                    Long paymentFormId = Long.parseLong(head[1].trim());
+                    String resolutionInvoice = head[2].trim();
+                    java.time.LocalDate invoiceDate = java.time.LocalDate.parse(head[3].trim());
+                    Integer invoiceDueDay = Integer.parseInt(head[4].trim());
+                    String supplierInvoiceNumber = head.length > 5 && !head[5].trim().isEmpty()
+                            ? head[5].trim() : null;
+                    String notes = head.length > 6 && !head[6].trim().isEmpty()
+                            ? head[6].trim() : null;
+
+                    List<LineInvoiceRequestDTO> lines = new ArrayList<>();
+                    for (String[] r : groupRows) {
+                        lines.add(buildBulkLine(r));
                     }
-                    Long thirdPartyId = Long.parseLong(f[0].trim());
-                    Long paymentFormId = Long.parseLong(f[1].trim());
-                    String resolutionInvoice = f[2].trim();
-                    java.time.LocalDate invoiceDate = java.time.LocalDate.parse(f[3].trim());
-                    Integer invoiceDueDay = Integer.parseInt(f[4].trim());
-                    String supplierInvoiceNumber = f.length > 5 ? f[5].trim() : null;
-                    String notes = f.length > 6 ? f[6].trim() : null;
 
                     InvoiceFCRequestDTO request = InvoiceFCRequestDTO.builder()
                             .thirdPartyId(thirdPartyId)
@@ -1529,7 +1591,7 @@ public class InvoiceService {
                             .invoiceDueDay(invoiceDueDay)
                             .supplierInvoiceNumber(supplierInvoiceNumber)
                             .notes(notes)
-                            .lineInvoices(new ArrayList<>())
+                            .lineInvoices(lines)
                             .build();
 
                     Long fcTypeId = typeInvoiceRepository.findByCodeAndDeletedAtIsNull("FC")
@@ -1545,20 +1607,20 @@ public class InvoiceService {
                 if (msg == null) msg = e.toString();
                 errors.add(com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError.builder()
                         .row(rowNum).message(msg).build());
-                log.warn("HU-AP-22 fila {} fallo: {}", rowNum, msg);
+                log.warn("RF-22 factura (fila {}) fallo: {}", rowNum, msg);
             }
         }
 
         com.sigcon.backend.invoices.application.BulkImportResultDTO result =
                 com.sigcon.backend.invoices.application.BulkImportResultDTO.builder()
-                        .totalRows(totalRows)
+                        .totalRows(totalInvoices)
                         .successCount(successCount[0])
                         .errorCount(errors.size())
                         .errors(errors)
                         .build();
 
-        log.info("Importacion masiva completada: {}/{} exitosas, {} errores",
-                successCount[0], totalRows, errors.size());
+        log.info("RF-22 carga masiva: {} filas de datos -> {} facturas, {} OK, {} errores",
+                totalDataRows, totalInvoices, successCount[0], errors.size());
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
@@ -1610,6 +1672,58 @@ public class InvoiceService {
             throw new IllegalArgumentException("No se pudo leer el archivo XLSX: " + e.getMessage());
         }
         return result;
+    }
+
+    /** RF-22: lee de forma segura la celda {@code idx} (trim, "" si falta). */
+    private static String safeCell(String[] f, int idx) {
+        return (f != null && idx < f.length && f[idx] != null) ? f[idx].trim() : "";
+    }
+
+    /**
+     * RF-22 (Notas Tecnicas CXP): construye una linea de factura desde una fila
+     * de carga masiva. Columnas: 7 lineAccountId, 8 lineDescription,
+     * 9 lineQuantity, 10 lineUnitPrice, 11 lineTaxRuleIds (IDs separados por '|').
+     * El porcentaje de cada regla tributaria se resuelve desde la entidad para
+     * que createLineInvoice aplique impuestos/retenciones (con tope UVT).
+     */
+    private LineInvoiceRequestDTO buildBulkLine(String[] r) {
+        String accStr = safeCell(r, 7);
+        if (accStr.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Falta la cuenta contable de la linea (columna lineAccountId)");
+        }
+        Long accountId = Long.parseLong(accStr);
+        String desc = safeCell(r, 8);
+        String qtyStr = safeCell(r, 9);
+        String priceStr = safeCell(r, 10);
+        double qty = Double.parseDouble(qtyStr.isEmpty() ? "0" : qtyStr);
+        double price = Double.parseDouble(priceStr.isEmpty() ? "0" : priceStr);
+        if (qty <= 0) throw new IllegalArgumentException("La cantidad de la linea debe ser mayor a 0");
+        if (price <= 0) throw new IllegalArgumentException("El precio de la linea debe ser mayor a 0");
+
+        List<LineInvoiceRulerTaxRequestDTO> taxes = new ArrayList<>();
+        String taxStr = safeCell(r, 11);
+        if (!taxStr.isEmpty()) {
+            for (String t : taxStr.split("\\|")) {
+                final String ts = t.trim();
+                if (ts.isEmpty()) continue;
+                Long taxId = Long.parseLong(ts);
+                TaxRulerEntity rule = taxRulerRepository.findById(taxId).orElseThrow(
+                        () -> new IllegalArgumentException("La regla tributaria " + ts + " no existe"));
+                taxes.add(LineInvoiceRulerTaxRequestDTO.builder()
+                        .taxId(taxId)
+                        .percentage(rule.getPercentage())
+                        .build());
+            }
+        }
+
+        return LineInvoiceRequestDTO.builder()
+                .accountingAccountId(accountId)
+                .description(desc)
+                .quantity(qty)
+                .price(price)
+                .taxRulesIds(taxes)
+                .build();
     }
 
     // ========================= Helpers

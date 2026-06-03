@@ -210,6 +210,14 @@ public class ApReportService {
      * @throws IllegalArgumentException si el proveedor no existe
      */
     public ResponseEntity<?> getSupplierStatement(Long thirdPartyId) {
+        return ResponseEntity.ok(buildSupplierStatement(thirdPartyId));
+    }
+
+    /**
+     * RF-11 (Notas Tecnicas CXP, 2026-06-02): construye el DTO del estado de
+     * cuenta del proveedor. Reutilizado por el endpoint JSON y por el PDF.
+     */
+    private SupplierStatementDTO buildSupplierStatement(Long thirdPartyId) {
         ThirdParty supplier = thirdPartyRepository.findById(thirdPartyId)
                 .orElseThrow(() -> new IllegalArgumentException("El proveedor no fue encontrado"));
 
@@ -279,7 +287,56 @@ public class ApReportService {
 
         log.info("Estado de cuenta generado para proveedor {} ({}): {} movimientos",
                 supplierName, supplier.getNit(), lines.size());
-        return ResponseEntity.ok(statement);
+        return statement;
+    }
+
+    /**
+     * RF-11 (Notas Tecnicas CXP, 2026-06-02): estado de cuenta del proveedor en
+     * PDF (iText7), con el mismo render estandar (encabezado empresa/usuario/
+     * totales) que el reporte de aging. Reemplaza el window.print del frontend.
+     *
+     * @param thirdPartyId proveedor
+     * @return ResponseEntity con el PDF
+     * @throws IOException si la generacion falla
+     */
+    public ResponseEntity<?> generateSupplierStatementPdf(Long thirdPartyId) throws IOException {
+        SupplierStatementDTO st = buildSupplierStatement(thirdPartyId);
+        List<Paragraph> body = new ArrayList<>();
+        body.add(new Paragraph("Proveedor: " + (st.getSupplierName() != null ? st.getSupplierName() : "-")
+                + (st.getSupplierNit() != null ? " (NIT " + st.getSupplierNit() + ")" : "")));
+        body.add(new Paragraph("Total Facturado: $" + bd(st.getTotalInvoiced())));
+        body.add(new Paragraph("Total Pagado: $" + bd(st.getTotalPaid())));
+        body.add(new Paragraph("Saldo Pendiente: $" + bd(st.getTotalBalance())));
+        body.add(new Paragraph(" "));
+        body.add(new Paragraph("Movimientos:"));
+        if (st.getLines() == null || st.getLines().isEmpty()) {
+            body.add(new Paragraph("Sin movimientos."));
+        } else {
+            for (SupplierStatementDTO.StatementLineDTO l : st.getLines()) {
+                body.add(new Paragraph(
+                        (l.getType() != null ? l.getType() : "-") + " | "
+                        + (l.getDocumentNumber() != null ? l.getDocumentNumber() : "-") + " | "
+                        + (l.getDate() != null ? l.getDate().toString() : "-")
+                        + " | Monto: $" + bd(l.getAmount())
+                        + (l.getBalance() != null ? " | Saldo: $" + l.getBalance() : "")));
+            }
+        }
+        ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Estado de Cuenta Proveedor - Cuentas por Pagar")
+                .addFilter("Proveedor", st.getSupplierName() != null ? st.getSupplierName() : "-")
+                .addTotal("Saldo Pendiente", bd(st.getTotalBalance()))
+                .build();
+        byte[] pdfBytes = reportPdfService.generateEnhancedReport(
+                "Estado de Cuenta Proveedor - Cuentas por Pagar", ctx, body);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=estado_cuenta_proveedor.pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
+    }
+
+    /** RF-11: helper null-safe para BigDecimal. */
+    private static BigDecimal bd(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     // ========================= Helpers privados =========================
@@ -309,6 +366,12 @@ public class ApReportService {
      */
     public ResponseEntity<?> getPurchaseOrdersReport(Long thirdPartyId, String status,
                                                      LocalDate dateFrom, LocalDate dateTo) {
+        return ResponseEntity.ok(buildPurchaseOrdersReport(thirdPartyId, status, dateFrom, dateTo));
+    }
+
+    /** RF-11: construye el Map del reporte de OCs (reutilizado por JSON y PDF). */
+    private Map<String, Object> buildPurchaseOrdersReport(Long thirdPartyId, String status,
+                                                          LocalDate dateFrom, LocalDate dateTo) {
         List<PurchaseOrder> orders = purchaseOrderRepository.findAll().stream()
                 .filter(o -> thirdPartyId == null
                         || (o.getThirdParty() != null && thirdPartyId.equals(o.getThirdParty().getId())))
@@ -375,6 +438,58 @@ public class ApReportService {
                 "dateFrom", dateFrom == null ? "" : dateFrom.toString(),
                 "dateTo", dateTo == null ? "" : dateTo.toString()
         ));
-        return ResponseEntity.ok(resp);
+        return resp;
+    }
+
+    /**
+     * RF-11 (Notas Tecnicas CXP, 2026-06-02): reporte de Ordenes de Compra en PDF
+     * (iText7). Reemplaza el window.print del frontend.
+     *
+     * @return ResponseEntity con el PDF
+     * @throws IOException si la generacion falla
+     */
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<?> generatePurchaseOrdersReportPdf(Long thirdPartyId, String status,
+                                                             LocalDate dateFrom, LocalDate dateTo) throws IOException {
+        Map<String, Object> data = buildPurchaseOrdersReport(thirdPartyId, status, dateFrom, dateTo);
+        List<Map<String, Object>> summary =
+                (List<Map<String, Object>>) data.getOrDefault("summaryByStatus", new ArrayList<>());
+        List<Map<String, Object>> rows =
+                (List<Map<String, Object>>) data.getOrDefault("orders", new ArrayList<>());
+        BigDecimal grandTotal = (BigDecimal) data.getOrDefault("totalAmount", BigDecimal.ZERO);
+
+        List<Paragraph> body = new ArrayList<>();
+        body.add(new Paragraph("Resumen por estado:"));
+        for (Map<String, Object> s : summary) {
+            body.add(new Paragraph("  " + s.get("status") + ": " + s.get("count")
+                    + " OC(s) | $" + s.get("amount")));
+        }
+        body.add(new Paragraph("TOTAL: " + data.get("totalCount") + " OC(s) | $" + grandTotal));
+        body.add(new Paragraph(" "));
+        body.add(new Paragraph("Detalle:"));
+        if (rows.isEmpty()) {
+            body.add(new Paragraph("No se encontraron registros con los criterios seleccionados."));
+        } else {
+            for (Map<String, Object> r : rows) {
+                body.add(new Paragraph(
+                        r.getOrDefault("orderNumber", "-") + " | "
+                        + r.getOrDefault("orderDate", "-") + " | "
+                        + r.getOrDefault("thirdPartyName", "-") + " | NIT "
+                        + r.getOrDefault("thirdPartyNit", "-") + " | "
+                        + r.getOrDefault("status", "-") + " | $"
+                        + r.getOrDefault("totalAmount", "0")));
+            }
+        }
+        ReportHeaderBuilder.ReportContext ctx = reportContextResolver
+                .baseContext("Reporte de Ordenes de Compra - Cuentas por Pagar")
+                .addFilter("Ordenes", String.valueOf(data.getOrDefault("totalCount", 0)))
+                .addTotal("Monto Total", grandTotal)
+                .build();
+        byte[] pdfBytes = reportPdfService.generateEnhancedReport(
+                "Reporte de Ordenes de Compra - Cuentas por Pagar", ctx, body);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=reporte_ordenes_compra.pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
     }
 }

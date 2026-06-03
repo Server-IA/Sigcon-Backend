@@ -178,6 +178,28 @@ public class PayrollController {
         return ResponseEntity.ok(payrollService.updateLine(id, lineId, amount));
     }
 
+    /** HAL-07 + HAL-01: anadir una linea de concepto a un recibo en DRAFT. */
+    @Operation(summary = "Anadir concepto a recibo en BORRADOR (HAL-07 / NOM-RF-03 E2)",
+            description = "Agrega una linea con un concepto ACTIVO (incluidos los personalizados) "
+                    + "a un recibo en DRAFT y recalcula los totales. El tipo de linea se toma del "
+                    + "tipo del concepto. Asi cualquier concepto activo queda disponible para "
+                    + "incluirse en la liquidacion (NOM-RF-02).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Concepto agregado"),
+            @ApiResponse(responseCode = "400", description = "Recibo no en DRAFT, concepto inexistente/inactivo, duplicado o monto invalido")
+    })
+    @PreAuthorize("hasAuthority('PERM_NOM.LIQUIDACION.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PostMapping("/{id}/lineas")
+    public ResponseEntity<?> addLine(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> body) {
+        String conceptCode = body.get("conceptCode") != null ? body.get("conceptCode").toString() : null;
+        java.math.BigDecimal amount = body.get("amount") != null
+                ? new java.math.BigDecimal(body.get("amount").toString())
+                : java.math.BigDecimal.ZERO;
+        return ResponseEntity.ok(payrollService.addLine(id, conceptCode, amount));
+    }
+
     /** HU-NOM-03 DEF#2 (2026-04-28): eliminar linea SOLO en DRAFT. */
     @Operation(summary = "Eliminar linea (HU-NOM-03 DEF#2)",
             description = "Soft-delete de una linea de recibo en DRAFT y recalcula totales.")

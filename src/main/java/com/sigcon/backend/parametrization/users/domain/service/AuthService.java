@@ -4,7 +4,10 @@ import com.sigcon.backend.general.config.EmailService;
 import com.sigcon.backend.general.security.JwtService;
 import com.sigcon.backend.general.storage.AvatarStorageService;
 import com.sigcon.backend.parametrization.users.application.auth.AuthRequest;
+import com.sigcon.backend.parametrization.users.application.auth.RefreshTokenRequest;
 import com.sigcon.backend.parametrization.users.application.auth.ResetPasswordRequest;
+import com.sigcon.backend.parametrization.users.application.auth.TooManyRequestsException;
+import com.sigcon.backend.parametrization.users.domain.model.UserSession;
 import com.sigcon.backend.parametrization.users.domain.model.BlackListedToken;
 import com.sigcon.backend.parametrization.users.domain.model.PasswordResetToken;
 import com.sigcon.backend.parametrization.users.domain.model.Role;
@@ -62,6 +65,20 @@ public class AuthService implements UserDetailsService {
     private final CompanyRepository companyRepository;
     private final AuditPublisher auditPublisher;
     private final TemporaryPermissionService temporaryPermissionService;
+    private final PasswordPolicyService passwordPolicyService;
+    private final SessionService sessionService;
+    private final PasswordResetRateLimiter passwordResetRateLimiter;
+    // PA-RNF-10 (Pendientes PA): notificar al usuario tras el 3er intento fallido.
+    private final com.sigcon.backend.parametrization.notifications.domain.service.NotificationService notificationService;
+
+    /**
+     * PA-RNF-10 (Pendientes PA) punto 4: umbrales de fuerza bruta como constantes
+     * (antes hardcodeados inline). Primer paso hacia su parametrizacion por empresa
+     * (tabla parameters category='SECURITY'), que queda como mejora futura.
+     */
+    private static final int MAX_FAILED_ATTEMPTS = 5;   // bloqueo de cuenta
+    private static final int LOCK_MINUTES = 15;          // duracion del bloqueo
+    private static final int CAPTCHA_THRESHOLD = 3;      // a partir de aqui: notif + captcha
 
     /**
      * Publica un audit log en el contexto del tenant del usuario afectado.
@@ -239,7 +256,26 @@ public class AuthService implements UserDetailsService {
      * Autentica al usuario y genera un token JWT.
      * Implementa contador de intentos fallidos: tras 5 intentos, la cuenta se bloquea por 15 minutos.
      */
-    public ResponseEntity<?> login(AuthRequest request){
+    public ResponseEntity<?> login(AuthRequest request) {
+        return login(request, null, null);
+    }
+
+    /**
+     * PA-RF-01 v3.0 (Control de Cambios PA, 2026-05-29): autentica al usuario,
+     * registra una sesion activa (con limite FIFO de 3, metadata de dispositivo
+     * e IP) y emite access token (JWT) + refresh token + sessionId.
+     *
+     * @param ipAddress       IP del cliente (la extrae el controller)
+     * @param userAgentHeader User-Agent del header (fallback si el body no lo trae)
+     */
+    public ResponseEntity<?> login(AuthRequest request, String ipAddress, String userAgentHeader){
+        // H-09 (PA-RNF, Pendientes PA 2026-05-30): contexto de auditoria con IP +
+        // User-Agent para TODOS los eventos de login (exitoso, bloqueado, empresa
+        // inactiva, intento fallido). El controller extrae la IP (X-Forwarded-For).
+        String userAgent = (request.getUserAgent() != null && !request.getUserAgent().isBlank())
+                ? request.getUserAgent() : userAgentHeader;
+        String auditCtx = " | ip=" + (ipAddress == null ? "-" : ipAddress)
+                + " | ua=" + (userAgent == null ? "-" : userAgent);
         // Verificar si la cuenta esta bloqueada
         Optional<User> userOpt = userRepository.findByUsernameOrEmail(
                 request.getUsernameOrEmail(), request.getUsernameOrEmail());
@@ -247,7 +283,10 @@ public class AuthService implements UserDetailsService {
         if (userOpt.isPresent()) {
             User foundUser = userOpt.get();
             if (foundUser.getLockedUntil() != null && foundUser.getLockedUntil().isAfter(LocalDateTime.now())) {
-                return ResponseEntity.badRequest().body(
+                // PA-RF-01 punto 5 (v3.0): cuenta bloqueada -> HTTP 423 Locked
+                // (antes 400). Codigo semantico para que el frontend distinga
+                // "credenciales malas" de "cuenta bloqueada".
+                return ResponseEntity.status(org.springframework.http.HttpStatus.LOCKED).body(
                         ErrorRespondJson.getErrorRespondMessage(
                                 Optional.of("Cuenta bloqueada temporalmente por multiples intentos fallidos. Intente de nuevo mas tarde."))
                 );
@@ -257,7 +296,7 @@ public class AuthService implements UserDetailsService {
             // con BadCredentialsException porque isEnabled()=false (mensaje generico).
             if (foundUser.getStatus() == com.sigcon.backend.parametrization.users.domain.model.enums.Status.BLOCKED) {
                 auditUserEvent(foundUser, AuditAction.LOGIN, AuditSeverity.HIGH,
-                        "USER_BLOCKED: intento de login bloqueado, usuario con status=BLOCKED");
+                        "USER_BLOCKED: intento de login bloqueado, usuario con status=BLOCKED" + auditCtx);
                 return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(
                                 "Tu cuenta esta bloqueada por el administrador. Contacta al administrador para mas informacion.")));
@@ -276,7 +315,7 @@ public class AuthService implements UserDetailsService {
             // de INACTIVE soft-delete y de lockedUntil temporal).
             if (user.getStatus() == com.sigcon.backend.parametrization.users.domain.model.enums.Status.BLOCKED) {
                 auditUserEvent(user, AuditAction.LOGIN, AuditSeverity.HIGH,
-                        "USER_BLOCKED: intento de login bloqueado, usuario con status=BLOCKED");
+                        "USER_BLOCKED: intento de login bloqueado, usuario con status=BLOCKED" + auditCtx);
                 return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(
                                 "Tu cuenta esta bloqueada por el administrador. Contacta al administrador para mas informacion.")));
@@ -293,7 +332,7 @@ public class AuthService implements UserDetailsService {
                         || company.getStatus() != com.sigcon.backend.platform.companies.domain.model.Company.CompanyStatus.ACTIVE) {
                     auditUserEvent(user, AuditAction.LOGIN, AuditSeverity.HIGH,
                             "COMPANY_INACTIVE: intento de login bloqueado, empresa desactivada (companyId="
-                              + user.getCompanyId() + ")");
+                              + user.getCompanyId() + ")" + auditCtx);
                     return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
                             ErrorRespondJson.getErrorRespondMessage(Optional.of(
                                     "La empresa a la que pertenece esta cuenta está desactivada. "
@@ -306,14 +345,25 @@ public class AuthService implements UserDetailsService {
             user.setLockedUntil(null);
             userRepository.save(user);
 
-            // HU-AU-01: registrar login exitoso con severidad LOW
+            // HU-AU-01: registrar login exitoso con severidad LOW (H-09: + ip/ua)
             auditUserEvent(user, AuditAction.LOGIN, AuditSeverity.LOW,
-                    "Login exitoso: " + user.getUsername() + " (" + user.getEmail() + ")");
+                    "Login exitoso: " + user.getUsername() + " (" + user.getEmail() + ")" + auditCtx);
 
-            String token = jwtService.generateToken(user);
+            // PA-RF-01 v3.0: crear la sesion activa (limite FIFO de 3) con metadata
+            // de dispositivo + IP, y emitir refresh token + sessionId. El access
+            // token (JWT) lleva el claim sessionId para permitir logout por sesion.
+            SessionService.IssuedSession session = sessionService.createSession(
+                    user.getId(), request.getDeviceId(), userAgent, ipAddress);
+
+            String token = jwtService.generateToken(user, java.util.Map.of("sessionId", session.sessionId()));
 
             Map<String, Object> response = new HashMap<String, Object>();
             response.put("token", token);
+            // PA-RF-01 puntos 1/6: refresh token + sessionId persistidos como parte
+            // de la sesion activa registrada.
+            response.put("refreshToken", session.refreshToken());
+            response.put("sessionId", session.sessionId());
+            response.put("refreshTokenExpiresAt", session.expiresAt().toString());
             // Bloque F: expone tenant info para que el frontend mantenga Redux actualizado
             // sin necesidad de decodificar el JWT.
             response.put("userId", user.getId());
@@ -341,29 +391,68 @@ public class AuthService implements UserDetailsService {
 
         } catch (AuthenticationException e) {
 
+            boolean requireCaptcha = false;
             // Incrementar contador de intentos fallidos
             if (userOpt.isPresent()) {
                 User foundUser = userOpt.get();
                 int attempts = (foundUser.getFailedLoginAttempts() != null ? foundUser.getFailedLoginAttempts() : 0) + 1;
                 foundUser.setFailedLoginAttempts(attempts);
                 boolean locked = false;
-                if (attempts >= 5) {
-                    foundUser.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                if (attempts >= MAX_FAILED_ATTEMPTS) {
+                    foundUser.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_MINUTES));
                     locked = true;
                 }
                 userRepository.save(foundUser);
                 // HU-AU-01 forense: registrar intento fallido (severidad MEDIUM) o bloqueo (HIGH)
                 auditUserEvent(foundUser, AuditAction.LOGIN,
                         locked ? AuditSeverity.HIGH : AuditSeverity.MEDIUM,
-                        locked
+                        (locked
                             ? "Cuenta bloqueada tras " + attempts + " intentos fallidos: " + foundUser.getUsername()
-                            : "Intento de login fallido (" + attempts + "/5) para: " + foundUser.getUsername());
+                            : "Intento de login fallido (" + attempts + "/" + MAX_FAILED_ATTEMPTS + ") para: "
+                                + foundUser.getUsername()) + auditCtx);
+                // PA-RNF-10 punto 3: a partir del umbral, pedir CAPTCHA al frontend.
+                requireCaptcha = attempts >= CAPTCHA_THRESHOLD;
+                // PA-RNF-10 punto 2: notificar al usuario en el 3er intento (solo tenant
+                // users; PLATFORM_ADMIN no tiene company_id para la notificacion in-app).
+                if (attempts == CAPTCHA_THRESHOLD && foundUser.getCompanyId() != null) {
+                    notifyFailedLoginAttempts(foundUser);
+                }
             }
 
-            return ResponseEntity.badRequest()
-                    .body(
-                        ErrorRespondJson.getErrorRespondMessage(Optional.of("Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña."))
-                    );
+            // PA-RNF-10 punto 3: cuerpo de error con flag requireCaptcha, conservando
+            // el shape que lee el frontend (message/msg). El flag se incluye siempre
+            // (false antes del umbral) para que el cliente lo evalue de forma uniforme.
+            String msg = "Credenciales inválidas. Por favor, verifica tu correo electrónico y contraseña.";
+            java.util.Map<String, Object> body = new java.util.HashMap<>();
+            body.put("success", false);
+            body.put("code", 400);
+            body.put("error", "Error en la operación");
+            body.put("message", msg);
+            body.put("msg", msg);
+            body.put("requireCaptcha", requireCaptcha);
+            return ResponseEntity.badRequest().body(body);
+        }
+    }
+
+    /**
+     * PA-RNF-10 punto 2: notifica al usuario (in-app) cuando alcanza el umbral de
+     * intentos fallidos. NUNCA rompe el login: cualquier fallo se traga con log.
+     * Sin actionUrl para evitar navegacion a una ruta que pudiera no existir; el
+     * cuerpo del mensaje indica la accion (cambiar contrasena).
+     */
+    private void notifyFailedLoginAttempts(User u) {
+        try {
+            notificationService.publishToUser(u.getId(),
+                    com.sigcon.backend.parametrization.notifications.application.PublishEventRequest.builder()
+                            .companyId(u.getCompanyId())
+                            .eventKey("LOGIN_FAILED_ALERT")
+                            .title("Intentos fallidos de inicio de sesion")
+                            .body("Se detectaron " + CAPTCHA_THRESHOLD + " intentos fallidos de inicio de sesion en "
+                                + "tu cuenta. Si no fuiste tu, cambia tu contrasena cuanto antes.")
+                            .build());
+        } catch (Exception ex) {
+            log.warn("PA-RNF-10: no se pudo notificar intentos fallidos a userId={}: {}",
+                    u.getId(), ex.getMessage());
         }
     }
 
@@ -374,22 +463,68 @@ public class AuthService implements UserDetailsService {
      * @param request contiene el email del usuario que solicita el restablecimiento
      * @throws RuntimeException si el email no esta registrado o falla el envio del correo
      */
-    public void sendResetPasswordLink(AuthRequest request){
-        try {
-            User user = userRepository.findByEmail(request.getEmail())
-                    .orElseThrow(() -> new RuntimeException("No se encontró un usuario con el correo proporcionado."));
+    public void sendResetPasswordLink(AuthRequest request) {
+        sendResetPasswordLink(request, null);
+    }
 
-            String token = UUID.randomUUID().toString();
+    /**
+     * PA-RF-02 v3.0 (Control de Cambios PA, 2026-05-29): genera y envia el enlace
+     * de recuperacion endurecido:
+     * <ul>
+     *   <li>Anti-enumeracion: si el email no existe, sale en silencio.</li>
+     *   <li>Rate limiting por email + IP.</li>
+     *   <li>Token unico: invalida los tokens previos no usados.</li>
+     *   <li>Trazabilidad: guarda IP y deviceId en el token.</li>
+     *   <li>Auditoria: registra el evento FORGOT_PASSWORD_REQUESTED.</li>
+     * </ul>
+     */
+    public void sendResetPasswordLink(AuthRequest request, String ipAddress){
+        String email = request.getEmail() == null ? null : request.getEmail().trim();
 
-            PasswordResetToken resetToken = PasswordResetToken.builder()
-                    .token(token)
-                    .user(user)
-                    .expiryDate(LocalDateTime.now().plusMinutes(10))
-                    .used(false)
-                    .build();
-            tokenRepository.save(resetToken);
+        // PA-RF-02 punto 2: rate limiting anti-abuso (por email + IP).
+        if (!passwordResetRateLimiter.allow(email, ipAddress)) {
+            throw new TooManyRequestsException(
+                    "Demasiadas solicitudes de recuperacion. Intente de nuevo mas tarde.");
+        }
 
-            String resetLink = frontendUrl + "/reset-password/" + token; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
+        Optional<User> userOpt = (email == null || email.isBlank())
+                ? Optional.empty() : userRepository.findByEmail(email);
+
+        // PA-RF-02 punto 1: ANTI-ENUMERACION. Si el email no existe, NO revelamos
+        // nada; salimos en silencio y el controller responde el mismo mensaje
+        // generico que en el caso exitoso.
+        if (userOpt.isEmpty()) {
+            log.info("FORGOT_PASSWORD_REQUESTED: email no registrado (anti-enumeracion) ip={}", ipAddress);
+            return;
+        }
+
+        User user = userOpt.get();
+
+        // PA-RF-02 punto 3: token unico por usuario. Invalidar tokens previos
+        // no usados antes de emitir el nuevo.
+        java.util.List<PasswordResetToken> previous = tokenRepository.findByUser_IdAndUsedFalse(user.getId());
+        if (previous != null && !previous.isEmpty()) {
+            previous.forEach(t -> t.setUsed(true));
+            tokenRepository.saveAll(previous);
+        }
+
+        String token = UUID.randomUUID().toString();
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .token(token)
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusMinutes(10))
+                .used(false)
+                .ipAddress(ipAddress)              // PA-RF-02 punto 6
+                .deviceId(request.getDeviceId())   // PA-RF-02 punto 6
+                .build();
+        tokenRepository.save(resetToken);
+
+        // PA-RF-02 punto 5: auditoria forense del evento.
+        auditUserEvent(user, AuditAction.UPDATE, AuditSeverity.MEDIUM,
+                "FORGOT_PASSWORD_REQUESTED: solicitud de recuperacion para "
+                        + user.getUsername() + " (ip=" + ipAddress + ")");
+
+        String resetLink = frontendUrl + "/reset-password/" + token; //Aqui toca poner un redireccionamiento en el front para que el usuario pueda cambiar la contraseña
 
             String subject = "Restablecimiento de contraseña - SIGCON";
             String message = """
@@ -438,11 +573,15 @@ public class AuthService implements UserDetailsService {
                     </body>
                 </html>
             """.formatted(user.getName(), resetLink);
-            emailService.sendEmail(user.getEmail(), subject, message);
-        } catch (Exception e) {
-            throw new RuntimeException(e.getMessage());
-        }
 
+        // PA-RF-02 punto 1: si el envio del correo falla, NO propagamos el error
+        // (anti-enumeracion + no romper el flujo). Se loguea para diagnostico.
+        try {
+            emailService.sendEmail(user.getEmail(), subject, message);
+        } catch (Exception mailEx) {
+            log.warn("FORGOT_PASSWORD: fallo el envio de correo para userId={}: {}",
+                    user.getId(), mailEx.getMessage());
+        }
     }
 
     /**
@@ -457,37 +596,40 @@ public class AuthService implements UserDetailsService {
         PasswordResetToken resetToken = tokenRepository.findByTokenAndUsedFalse(request.getToken())
                 .orElseThrow(() -> new RuntimeException("El token es inválido o ya ha sido utilizado."));
 
+        User user = resetToken.getUser();
+
         if (resetToken.isExpired()){
+            // PA-RF-02 punto 5: PASSWORD_RESET_FAILED_EXPIRED_TOKEN
+            auditUserEvent(user, AuditAction.UPDATE, AuditSeverity.MEDIUM,
+                    "PASSWORD_RESET_FAILED_EXPIRED_TOKEN: intento con token expirado para " + user.getUsername());
             throw new RuntimeException("El token ha expirado. Por favor, solicita un nuevo restablecimiento de contraseña.");
         }
 
-        User user = resetToken.getUser();
+        // PA-RF-01 punto 3 / PA-RF-02 punto 7 (v3.0): politica unificada de
+        // contrasenas (>=8, mayuscula, numero, simbolo) + no reutilizar la
+        // contrasena actual ni las ultimas 5. Reemplaza la validacion inline
+        // de 6 caracteres del original.
+        passwordPolicyService.assertAllowedForUser(
+                user.getId(), user.getPassword(), request.getNewPassword());
 
-        if (request.getNewPassword().isEmpty() || request.getNewPassword().length() < 6) {
-            throw new RuntimeException("La contraseña debe tener al menos 6 caracteres.");
-        }
-        if (!request.getNewPassword().matches(".*[A-Z].*")) {
-            throw new RuntimeException("La contraseña debe tener una letra mayúscula.");
-        }
-        if (!request.getNewPassword().matches(".*[a-z].*")) {
-            throw new RuntimeException("La contraseña debe tener una letra minúscula.");
-        }
-        if (!request.getNewPassword().matches(".*[0-9].*")) {
-            throw new RuntimeException("La contraseña debe tener un número.");
-        }
-        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
-            throw new RuntimeException("La contraseña no puede ser la misma que la anterior.");
-        }
-
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        String encodedPassword = passwordEncoder.encode(request.getNewPassword());
+        user.setPassword(encodedPassword);
+        // PA-RF-02 punto 4: invalidar access tokens vivos marcando el corte; el
+        // SessionInvalidationFilter expulsa los JWT emitidos antes de este instante.
+        user.setSessionInvalidatedAt(LocalDateTime.now());
         userRepository.save(user);
+        passwordPolicyService.record(user.getId(), encodedPassword);
+
+        // PA-RF-02 punto 4: revocar TODOS los refresh tokens / sessionIds activos.
+        int revokedSessions = sessionService.revokeAllForUser(user.getId());
 
         resetToken.setUsed(true);
         tokenRepository.save(resetToken);
 
-        // HU-AU-01: cambio de credenciales por token de recuperacion (severidad HIGH, sensible)
+        // PA-RF-02 punto 5 / HU-AU-01: PASSWORD_RESET_SUCCESS (severidad HIGH, sensible)
         auditUserEvent(user, AuditAction.UPDATE, AuditSeverity.HIGH,
-                "Contrasenia restablecida via token de recuperacion para " + user.getUsername());
+                "PASSWORD_RESET_SUCCESS: contrasena restablecida via token para "
+                        + user.getUsername() + " (" + revokedSessions + " sesiones revocadas)");
     }
 
     /**
@@ -498,6 +640,16 @@ public class AuthService implements UserDetailsService {
      * @return ResponseEntity con mensaje de exito o error si el token ya fue invalidado
      */
     public ResponseEntity<?> logout(String token){
+        return logout(token, null);
+    }
+
+    /**
+     * PA-RF-27 (Pendientes PA): cierra la sesion invalidando el token. Ademas del
+     * token completo (que valida el BlackListFilter), persiste el jti y la
+     * expiracion para que {@code BlacklistCleanupScheduler} purgue las entradas
+     * vencidas. El audit del LOGOUT incluye la IP del cliente (punto 5).
+     */
+    public ResponseEntity<?> logout(String token, String ipAddress){
         if (token == null || token.isEmpty()) {
             return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("Token no proporcionado para cerrar sesión."))
@@ -505,14 +657,28 @@ public class AuthService implements UserDetailsService {
         }
 
         if (!blackListedTokenRepository.existsByToken(token)) {
-            BlackListedToken blackListedToken = BlackListedToken.builder().token(token).build();
+            // PA-RF-27: guardar jti + expiracion (claim exp) ademas del token.
+            String jti = jwtService.getJti(token);
+            java.util.Date exp = jwtService.getExpiration(token);
+            java.time.LocalDateTime expLdt = (exp == null) ? null
+                    : java.time.LocalDateTime.ofInstant(exp.toInstant(), java.time.ZoneId.systemDefault());
+            BlackListedToken blackListedToken = BlackListedToken.builder()
+                    .token(token).jti(jti).expiresAt(expLdt).build();
             blackListedTokenRepository.save(blackListedToken);
-            // HU-AU-01: registrar LOGOUT resolviendo el usuario desde el JWT
+            // PA-RF-01 v3.0: revocar la sesion activa asociada al token (por su
+            // claim sessionId) para que su refresh token deje de funcionar.
+            try {
+                String sid = jwtService.getSessionId(token);
+                if (sid != null) sessionService.revokeBySessionId(sid);
+            } catch (Exception ignored) { /* no bloquear logout por esto */ }
+            // HU-AU-01: registrar LOGOUT resolviendo el usuario desde el JWT.
+            // PA-RF-27 punto 5 + H-09: incluir la IP en el description del audit.
+            String auditCtx = " | ip=" + (ipAddress == null ? "-" : ipAddress);
             try {
                 String username = jwtService.getUsername(token);
                 userRepository.findByUsernameOrEmail(username, username).ifPresent(u ->
                         auditUserEvent(u, AuditAction.LOGOUT, AuditSeverity.LOW,
-                                "Logout de " + u.getUsername()));
+                                "Logout de " + u.getUsername() + auditCtx));
             } catch (Exception ignored) {
                 // Token invalido o malformado: no bloquear el logout por esto
             }
@@ -524,6 +690,51 @@ public class AuthService implements UserDetailsService {
                     ErrorRespondJson.getErrorRespondMessage(Optional.of("El token ya ha sido invalidado."))
             );
         }
+    }
+
+    /**
+     * PA-RF-01 v3.0 (Control de Cambios PA, 2026-05-29): renueva el access token
+     * a partir de un refresh token valido (no revocado, no expirado). Valida que
+     * el usuario siga ACTIVE y su empresa ACTIVE. Actualiza last_used_at.
+     */
+    public ResponseEntity<?> refresh(RefreshTokenRequest request) {
+        if (request == null || request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Refresh token no proporcionado.")));
+        }
+        Optional<UserSession> sessionOpt = sessionService.validateRefreshToken(request.getRefreshToken());
+        if (sessionOpt.isEmpty()) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Refresh token invalido o expirado. Inicie sesion nuevamente.")));
+        }
+        UserSession session = sessionOpt.get();
+        User user = userRepository.findById(session.getUserId()).orElse(null);
+        if (user == null
+                || user.getStatus() != com.sigcon.backend.parametrization.users.domain.model.enums.Status.ACTIVE) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "La cuenta no esta disponible. Inicie sesion nuevamente.")));
+        }
+        // Empresa activa (PA-RF-01 punto 5 / HU-PA-01 E3)
+        if (user.getCompanyId() != null) {
+            var company = companyRepository.findById(user.getCompanyId()).orElse(null);
+            if (company == null
+                    || company.getStatus() != com.sigcon.backend.platform.companies.domain.model.Company.CompanyStatus.ACTIVE) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(
+                        ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "La empresa a la que pertenece esta cuenta está desactivada.")));
+            }
+        }
+        sessionService.touch(session);
+        String token = jwtService.generateToken(user,
+                java.util.Map.of("sessionId", session.getSessionId()));
+        Map<String, Object> response = new HashMap<>();
+        response.put("token", token);
+        response.put("sessionId", session.getSessionId());
+        response.put("effectivePermissions", buildEffectivePermissions(user));
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.of("Token renovado."), Optional.of(response)));
     }
 
     private String resolveAvatarFilename(String avatarValue) {

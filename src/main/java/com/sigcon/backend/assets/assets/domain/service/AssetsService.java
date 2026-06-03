@@ -166,6 +166,33 @@ public class AssetsService {
     private final com.sigcon.backend.general.accounting.AccountingPeriodService accountingPeriodService;
     private final DataTableSpecificationBuilder<Assets> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
+    // HU-ACT-01 (QA 2026-06-02): por decision del lider, el "Numero de factura"
+    // del activo debe seguir el formato PREFIJO-CONSECUTIVO (ej: FE-0001,
+    // FAC-2026-00125). El patron acepta un prefijo que inicia con letra
+    // (alfanumerico), uno o mas segmentos separados por guion, y termina en un
+    // consecutivo numerico. Se valida SOLO en el registro de activos; el numero
+    // de factura del proveedor en el modulo AP manual sigue siendo de formato libre.
+    private static final java.util.regex.Pattern INVOICE_NUMBER_PATTERN =
+            java.util.regex.Pattern.compile("^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*-[0-9]+$");
+
+    /**
+     * Valida que el numero de factura del activo siga el formato
+     * PREFIJO-CONSECUTIVO (HU-ACT-01). Solo valida cuando hay un valor; el
+     * caracter obligatorio del campo lo controla cada flujo (a credito es
+     * requerido). Lanza IllegalArgumentException con el mensaje literal si el
+     * formato no es valido.
+     */
+    private void validateInvoiceNumberFormat(String invoiceNumber) {
+        if (invoiceNumber == null || invoiceNumber.isBlank()) {
+            return;
+        }
+        if (!INVOICE_NUMBER_PATTERN.matcher(invoiceNumber.trim()).matches()) {
+            throw new IllegalArgumentException(
+                    "El número de factura debe tener el formato PREFIJO-CONSECUTIVO "
+                    + "(por ejemplo: FE-0001 o FAC-2026-00125).");
+        }
+    }
+
     @Transactional
     public ViewAssetsDTO create(CreateAssetsDTO request) {
 
@@ -194,6 +221,10 @@ public class AssetsService {
             throw new IllegalArgumentException("El metodo de pago es requerido cuando la forma de pago es CONTADO.");
         }
 
+        // HU-ACT-01 (QA 2026-06-02): forzar formato PREFIJO-CONSECUTIVO del numero
+        // de factura cuando se ingresa un valor (a credito es obligatorio).
+        validateInvoiceNumberFormat(request.getResolutionInvoice());
+
         // QA-2026-05-05: pre-validar typeRegimen del proveedor cuando es CREDITO
         // ANTES de crear el activo. Si no se valida aqui, generateApInvoiceIfCredit
         // lanza IllegalStateException dentro de un @Transactional que marca la TX
@@ -205,6 +236,18 @@ public class AssetsService {
                 throw new IllegalArgumentException(
                     "El proveedor no tiene clasificacion tributaria configurada. "
                     + "Edite el tercero en el modulo de Terceros y asigne el tipo de regimen antes de crear el activo a credito.");
+            }
+
+            // HU-ACT-01 E3 (QA 2026-06-01): a CREDITO se genera una factura de compra
+            // en AP con el numero de factura ingresado. Pre-validar el duplicado AQUI
+            // (antes de crear el activo) para devolver un mensaje claro en vez del opaco
+            // "Transaction silently rolled back" que salia cuando InvoiceService rechazaba
+            // el duplicado dentro del mismo @Transactional.
+            String numFactura = request.getResolutionInvoice();
+            if (numFactura != null && !numFactura.isBlank()
+                    && (invoiceRepository.existsByResolutionInvoiceAndDeletedAtIsNull(numFactura.trim())
+                     || invoiceRepository.existsBySupplierInvoiceNumberAndDeletedAtIsNull(numFactura.trim()))) {
+                throw new IllegalArgumentException("El número de factura ingresado ya existe");
             }
         }
 
@@ -365,14 +408,24 @@ public class AssetsService {
         // generar automaticamente la factura de compra en AP que respalda la
         // adquisicion del activo. Sin esta factura, el contador no podria
         // registrar el pago al proveedor desde Cuentas por Pagar.
+        // Bug ACT-RF-01 (2026-06-01): antes esta llamada estaba envuelta en un
+        // try/catch que TRAGABA la excepcion para "no abortar la creacion del
+        // activo". Pero como InvoiceService.createInvoice es @Transactional (misma
+        // TX), al fallar marcaba la transaccion como rollback-only; el swallow
+        // continuaba y el commit explotaba con el opaco "Transaction silently
+        // rolled back" / "JournalEntry has a null identifier". Ahora la creacion
+        // del activo a credito es ATOMICA con su factura AP: si la factura no se
+        // puede crear, se propaga el motivo REAL y se revierte todo limpiamente.
         try {
             generateApInvoiceIfCredit(request, savedAsset, totalAmount);
+        } catch (IllegalArgumentException | IllegalStateException biz) {
+            throw biz; // mensaje de negocio claro (ej. duplicado, periodo cerrado)
         } catch (RuntimeException ex) {
-            // No abortar la creacion del activo por un fallo en la factura AP.
-            // El contador puede registrarla manualmente. Auditamos la falla.
             org.slf4j.LoggerFactory.getLogger(AssetsService.class)
-                    .warn("HU-ACT-01 E5: no se pudo generar factura AP automatica para activo {}: {}",
+                    .error("HU-ACT-01 E5: fallo generando factura AP para activo {}: {}",
                             savedAsset.getId(), ex.getMessage());
+            throw new IllegalStateException(
+                    "No se pudo registrar el activo a credito: " + ex.getMessage(), ex);
         }
 
         return toViewDTO(savedAsset);
@@ -609,6 +662,10 @@ public class AssetsService {
             throw new IllegalStateException("No es posible editar el activo. El activo se encuentra en estado '"
                 + existingAsset.getStatus() + "' y no permite modificaciones.");
         }
+
+        // HU-ACT-01 (QA 2026-06-02): forzar formato PREFIJO-CONSECUTIVO del numero
+        // de factura tambien al editar (cuando el cliente lo envia).
+        validateInvoiceNumberFormat(request.getResolutionInvoice());
 
         // HU-ACT-06 E4 (QA 2026-05-05): mensaje literal libro contable cerrado.
         if (request.getAcquisitionDate() != null) {

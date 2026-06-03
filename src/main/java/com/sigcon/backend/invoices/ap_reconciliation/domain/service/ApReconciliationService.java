@@ -199,12 +199,18 @@ public class ApReconciliationService {
             throw new IllegalStateException("El pago no esta conciliado");
         }
 
+        // RF-08 (Notas Tecnicas CXP): capturar el bankMovementId ANTES de
+        // nulificarlo para que la auditoria registre tanto el pago como el
+        // movimiento bancario desvinculado.
+        Long unlinkedMovementId = payment.getBankMovementId();
+
         payment.setBankMovementId(null);
         payment.setReconciledAt(null);
         paymentRepository.save(payment);
 
         auditPublisher.publishDelete(AuditModule.AP, "ApPaymentReconciliation", paymentId,
-                "Conciliacion del pago AP #" + paymentId + " revertida");
+                "Conciliacion del pago AP #" + paymentId + " revertida (movimiento BNK #"
+                        + unlinkedMovementId + " desvinculado)");
         log.info("AP-09: Conciliacion de pago {} revertida", paymentId);
         return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
                 Optional.of("Conciliacion revertida"), Optional.of(payment)));

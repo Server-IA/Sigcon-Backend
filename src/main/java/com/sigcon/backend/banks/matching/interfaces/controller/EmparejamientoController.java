@@ -48,11 +48,12 @@ public class EmparejamientoController {
         return ResponseEntity.ok(service.confirm(id));
     }
 
-    @Operation(summary = "Deshacer/rechazar todo el emparejamiento como un bloque (BNK-HU-070 E6 / HU-069 E8)")
+    @Operation(summary = "Deshacer el cruce movimiento-comprobante con motivo (BNK-RF-36)")
     @PreAuthorize("hasAuthority('PERM_BNK.CUENTAS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> undo(@PathVariable Long id) {
-        return ResponseEntity.ok(service.undo(id));
+    public ResponseEntity<?> undo(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
+        // BNK-RF-36: el motivo (10-500) es obligatorio; el cliente lo envía en el body.
+        return ResponseEntity.ok(service.undo(id, body != null ? body.get("motivo") : null));
     }
 
     @Operation(summary = "Rechazar un emparejamiento automático con motivo (Paso 5, R-1/R-3)")

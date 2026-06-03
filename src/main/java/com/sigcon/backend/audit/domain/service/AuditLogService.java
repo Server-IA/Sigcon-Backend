@@ -47,6 +47,26 @@ public class AuditLogService {
     private final UserUtil userUtil;
     private final RiskRuleService riskRuleService;
     private final RetentionService retentionService;
+
+    /**
+     * QA Auditoria (2026-06-02): lock JVM para SERIALIZAR la insercion de logs y
+     * evitar "forks" en la cadena de hashes. Sin esto, dos eventos casi simultaneos
+     * (ej. dos LOGIN, o un VIEW de busqueda) leen el mismo getLastHash() y producen
+     * dos registros con el mismo previous_hash -> RUPTURA en la verificacion.
+     *
+     * <p>Se envuelve la llamada al PROXY transaccional ({@code self.registerTx})
+     * para que el lock se libere DESPUES del commit (el siguiente hilo lee la
+     * cadena ya extendida). Un advisory lock dentro del @Transactional no bastaba
+     * porque {@code search()} llama a register() por self-invocation y bypasea el
+     * proxy REQUIRES_NEW. Lock justo (fair) para preservar el orden. Single-node.
+     */
+    private final java.util.concurrent.locks.ReentrantLock chainLock =
+            new java.util.concurrent.locks.ReentrantLock(true);
+
+    /** Auto-referencia al proxy para que registerTx() respete @Transactional. */
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private AuditLogService self;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository journalEntryRepository;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -68,9 +88,29 @@ public class AuditLogService {
      * @param journalEntryId id del asiento contable vinculado (null si no aplica)
      * @return el log registrado
      */
+    public AuditLog register(AuditAction action, AuditModule module,
+                              AuditSeverity severity, String entityType,
+                              Long entityId, String description,
+                              String oldValues, String newValues,
+                              Long journalEntryId) {
+        // QA Auditoria (2026-06-02): serializa la cadena con un lock JVM que envuelve
+        // la llamada al PROXY transaccional. El lock se libera DESPUES del commit de
+        // registerTx (el siguiente hilo lee la cadena ya extendida -> sin forks).
+        // self = proxy, asi registerTx() respeta @Transactional aunque register()
+        // se invoque por self-invocation (ej. desde search()).
+        chainLock.lock();
+        try {
+            return self.registerTx(action, module, severity, entityType, entityId,
+                    description, oldValues, newValues, journalEntryId);
+        } finally {
+            chainLock.unlock();
+        }
+    }
+
+    /** Cuerpo transaccional de register(). NO llamar directo: usar register() (toma el lock). */
     @org.springframework.transaction.annotation.Transactional(
         propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public AuditLog register(AuditAction action, AuditModule module,
+    public AuditLog registerTx(AuditAction action, AuditModule module,
                               AuditSeverity severity, String entityType,
                               Long entityId, String description,
                               String oldValues, String newValues,
@@ -400,6 +440,9 @@ public class AuditLogService {
                 .hash(e.getHash())
                 .previousHash(e.getPreviousHash())
                 .journalEntryId(e.getJournalEntryId())
+                .legalHold(e.getLegalHold())
+                .legalHoldReason(e.getLegalHoldReason())
+                .retentionUntil(e.getRetentionUntil())
                 .build();
     }
 

@@ -157,14 +157,23 @@ public class FinancialStatementExportService {
         ResponseEntity<?> resp = financialStatementService.getEstadoResultados(year, month);
         EstadoResultadosDTO data = extractData(resp, EstadoResultadosDTO.class);
         String label = labelPeriodo(year, month);
+        // HU-CG-10: presentacion financiera NIC 1 (clasificacion granular por subgrupo PUC).
         ReportHeaderBuilder.ReportContext ctx = reportContextResolver
                 .baseContext("Estado de Resultados - " + label)
                 .addFilter("Periodo", label)
-                .addTotal("Total Ingresos", data.getTotalIngresos())
-                .addTotal("Total Gastos", data.getTotalGastos())
-                .addTotal("Total Costos", data.getTotalCostos())
-                .addTotal("Utilidad Bruta", data.getUtilidadBruta())
-                .addTotal("Utilidad Neta", data.getUtilidadNeta())
+                .addTotal("Ingresos operacionales", data.getIngresosOperacionales())
+                .addTotal("(-) Costos", data.getTotalCostos())
+                .addTotal("= Utilidad bruta", data.getUtilidadBrutaOperacional())
+                .addTotal("(-) Gastos de administracion", data.getGastosAdministracion())
+                .addTotal("(-) Gastos de ventas", data.getGastosVentas())
+                .addTotal("= Utilidad operacional", data.getUtilidadOperacional())
+                .addTotal("(+) Ingresos financieros", data.getIngresosFinancieros())
+                .addTotal("(+) Otros ingresos", data.getOtrosIngresos())
+                .addTotal("(-) Gastos financieros", data.getGastosFinancieros())
+                .addTotal("(-) Otros gastos", data.getOtrosGastos())
+                .addTotal("= Utilidad antes de impuestos", data.getUtilidadAntesImpuestos())
+                .addTotal("(-) Impuesto de renta", data.getImpuestoRenta())
+                .addTotal("= Utilidad neta", data.getUtilidadNeta())
                 .build();
 
         List<ClassRow> rows = new ArrayList<>();

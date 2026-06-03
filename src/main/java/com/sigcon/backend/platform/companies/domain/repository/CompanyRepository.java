@@ -36,4 +36,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long>,
     boolean existsByNit(@org.springframework.data.repository.query.Param("nit") String nit);
 
     List<Company> findByStatusAndDeletedAtIsNull(CompanyStatus status);
+
+    /**
+     * PA-RF-PLAT-01 v3.0 (Control de Cambios PA, 2026-05-29): resolver empresa por
+     * Idempotency-Key para no reprocesar un alta repetida.
+     */
+    Optional<Company> findByIdempotencyKeyAndDeletedAtIsNull(String idempotencyKey);
 }

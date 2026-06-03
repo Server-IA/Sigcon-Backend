@@ -39,8 +39,11 @@ public class CreateCompanyWithAdminRequest {
     @Schema(example = "ana.martinez", requiredMode = Schema.RequiredMode.REQUIRED)
     private String adminUsername;
 
+    // PA-RF-PLAT-01 punto 6 / PA-RF-01 punto 3 (v3.0): la contrasena del primer
+    // admin debe cumplir la politica de seguridad (>=8, mayuscula, numero, simbolo).
+    // El piso de @Size es 8; la complejidad completa la valida PasswordPolicyService.
     @NotBlank(message = "La password del admin es obligatoria")
-    @Size(min = 6, max = 100, message = "Password entre 6 y 100 caracteres")
+    @Size(min = 8, max = 100, message = "Password entre 8 y 100 caracteres")
     @Schema(example = "Passw0rd!", requiredMode = Schema.RequiredMode.REQUIRED)
     private String adminPassword;
 }

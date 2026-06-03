@@ -15,6 +15,8 @@ import com.sigcon.backend.general.accounting.journal.application.JournalEntryDTO
 import com.sigcon.backend.general.accounting.journal.domain.model.enums.JournalSourceModule;
 import com.sigcon.backend.general.accounting.journal.domain.repository.JournalEntryRepository;
 import com.sigcon.backend.general.accounting.journal.domain.service.JournalEntryService;
+import com.sigcon.backend.invoices.domain.model.Invoices;
+import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountMappingService;
 import com.sigcon.backend.parametrization.account_mappings.domain.service.AccountingConcept;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -53,6 +55,7 @@ public class AssetDisposalService {
 
     private final AssetDisposalRepository disposalRepository;
     private final AssetsRepository assetsRepository;
+    private final InvoiceRepository invoiceRepository;
     private final AccountingPeriodService accountingPeriodService;
     private final JournalEntryService journalEntryService;
     private final JournalEntryRepository journalEntryRepository;
@@ -143,10 +146,21 @@ public class AssetDisposalService {
                     Optional.of("Este activo no puede darse de baja en estado inactivo."));
         }
 
-        // HU-ACT-03 E2 (QA 2026-05-05): mensaje literal del Excel para saldos pendientes.
+        // HU-ACT-03 E2 (QA 2026-06-01): bloquear la baja SOLO si la factura AP del
+        // activo tiene un SALDO PENDIENTE real (balanceDue > 0), no por la mera
+        // existencia de la referencia. Antes (regresion) cualquier activo con
+        // accountsPayableReferenceId != null se bloqueaba aunque la factura ya
+        // estuviera PAGADA (balanceDue=0) o anulada. Un activo de contado (ref null)
+        // o de credito ya pagado debe poder darse de baja sin problema.
         if (asset.getAccountsPayableReferenceId() != null) {
-            return ErrorRespondJson.getErrorRespondMessage(
-                    Optional.of("No es posible dar de baja este activo: tiene saldos pendientes en Cuentas por Pagar o Cuentas por Cobrar."));
+            Invoices apInvoice = invoiceRepository.findById(asset.getAccountsPayableReferenceId()).orElse(null);
+            boolean tieneSaldoPendiente = apInvoice != null
+                    && apInvoice.getBalanceDue() != null
+                    && apInvoice.getBalanceDue() > 0.0;
+            if (tieneSaldoPendiente) {
+                return ErrorRespondJson.getErrorRespondMessage(
+                        Optional.of("No es posible dar de baja este activo: tiene saldos pendientes en Cuentas por Pagar o Cuentas por Cobrar."));
+            }
         }
 
         // HU-ACT-03 E5: periodo contable cerrado, mensaje literal.

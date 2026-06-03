@@ -79,7 +79,7 @@ public class EmparejamientoService {
 
         // No reutilizar movimientos ya emparejados en un emparejamiento activo.
         for (FinancialMovement m : concat(ext, lib)) {
-            if (C_OK.equals(m.getEstadoConciliacion())) {
+            if (C_OK.equals(m.getEstadoConciliacionSesion())) {
                 throw new IllegalArgumentException("El movimiento #" + m.getId()
                         + " ya está conciliado. Deshaga su emparejamiento antes de volver a usarlo.");
             }
@@ -161,8 +161,13 @@ public class EmparejamientoService {
                 + ",\"librosIds\":" + req.getLibrosIds() + ",\"sumaExtracto\":" + sumExt
                 + ",\"sumaLibros\":" + sumLib + ",\"diferencia\":" + diff
                 + ",\"motivo\":\"" + (emp.getMotivoMatchManual() == null ? "" : emp.getMotivoMatchManual().replace("\"", "'")) + "\"}";
+        // BNK-RF-35 (QA Bloque BNK 2026-06-03): el motivo de la conciliación manual DEBE
+        // quedar en la DESCRIPCIÓN del log de auditoría (no solo en newValues), porque la
+        // pantalla de Auditoría muestra la columna Descripción al usuario.
+        String motivoDesc = emp.getMotivoMatchManual();
         auditPublisher.publishUpdate(AuditModule.BNK, "Emparejamiento", emp.getId(),
-                "EMPAREJAR manual " + tipo + " cuenta=" + ba.getId() + " emparejamiento=" + emp.getId(),
+                "EMPAREJAR manual " + tipo + " cuenta=" + ba.getId() + " emparejamiento=" + emp.getId()
+                        + (motivoDesc != null && !motivoDesc.isBlank() ? " | motivo: " + motivoDesc : ""),
                 null, newValues);
 
         return detail(emp.getId());
@@ -214,7 +219,7 @@ public class EmparejamientoService {
         emparejamientoRepository.save(emp);
         for (EmparejamientoDetalle d : detalleRepository.findByEmparejamientoId(emp.getId())) {
             movementRepository.findById(d.getFinancialMovementId()).ifPresent(m -> {
-                m.setEstadoConciliacion(C_OK);
+                m.setEstadoConciliacionSesion(C_OK);
                 movementRepository.save(m);
             });
         }
@@ -223,32 +228,71 @@ public class EmparejamientoService {
         return detail(emp.getId());
     }
 
-    /** BNK-HU-070 E6: deshacer todo el emparejamiento como un solo bloque. */
+    /**
+     * BNK-RF-36 (Deshacer el cruce entre movimiento y comprobante): deshace todo el
+     * emparejamiento como un bloque. Reglas del requerimiento:
+     * - Motivo obligatorio (10-500 caracteres).
+     * - Si la sesión de conciliación asociada está CERRADA, se rechaza (reabrir primero).
+     * - Si algún movimiento fue cruzado por cheque, se deriva al módulo de cheques.
+     * - No modifica el comprobante ni el asiento contable (solo se desvincula).
+     * - Los movimientos vuelven a NO_CONCILIADO y queda auditado con el motivo.
+     */
     @Transactional
-    public Map<String, Object> undo(Long emparejamientoId) {
+    public Map<String, Object> undo(Long emparejamientoId, String motivo) {
         Emparejamiento emp = emparejamientoRepository.findByIdAndDeletedAtIsNull(emparejamientoId)
                 .orElseThrow(() -> new IllegalArgumentException("Emparejamiento no encontrado."));
+        // BNK-RF-36: motivo obligatorio 10-500.
+        if (motivo == null || motivo.trim().length() < 10) {
+            throw new IllegalArgumentException("Debe indicar el motivo del desemparejamiento (mínimo 10 caracteres).");
+        }
+        if (motivo.trim().length() > 500) {
+            throw new IllegalArgumentException("El motivo del desemparejamiento no puede exceder 500 caracteres.");
+        }
         List<EmparejamientoDetalle> dets = detalleRepository.findByEmparejamientoId(emp.getId());
+        // BNK-RF-36: si la sesión de conciliación asociada está CERRADA, no se puede desvincular.
+        if (emp.getReconciliationSessionId() != null) {
+            SesionConciliacion ses = sesionConciliacionRepository
+                    .findByIdAndDeletedAtIsNull(emp.getReconciliationSessionId()).orElse(null);
+            if (ses != null && "CERRADA".equals(ses.getEstado())) {
+                String periodo = ses.getPeriodEnd() != null
+                        ? ses.getPeriodEnd().getYear() + "-" + String.format("%02d", ses.getPeriodEnd().getMonthValue())
+                        : "(sin período)";
+                throw new IllegalStateException("La sesión de conciliación del período " + periodo
+                        + " está cerrada. Reabra la sesión para deshacer el cruce.");
+            }
+        }
+        // BNK-RF-36: si algún movimiento del cruce está asociado a un cheque, derivar al módulo de cheques.
+        for (EmparejamientoDetalle d : dets) {
+            FinancialMovement m = movementRepository.findById(d.getFinancialMovementId()).orElse(null);
+            if (m != null && m.getNumeroCheque() != null && !m.getNumeroCheque().isBlank()) {
+                throw new IllegalStateException("No se puede desvincular un cruce realizado por cheque. "
+                        + "Use el módulo de cheques para gestionar este caso.");
+            }
+        }
         List<Long> movIds = new ArrayList<>();
         for (EmparejamientoDetalle d : dets) {
             movementRepository.findById(d.getFinancialMovementId()).ifPresent(m -> {
-                m.setEstadoConciliacion(C_NO);
+                m.setEstadoConciliacionSesion(C_NO);
                 movementRepository.save(m);
             });
             movIds.add(d.getFinancialMovementId());
             detalleRepository.delete(d);
         }
         emp.setEstado(E_DESHECHO);
+        emp.setMotivoMatchManual(motivo.trim());
         emp.setDeletedAt(LocalDateTime.now());
         emparejamientoRepository.save(emp);
 
+        // BNK-RF-36: auditar con el motivo en la descripción (Fecha/Usuario/Acción/Entidad/Módulo/Severidad/IP).
         auditPublisher.publishUpdate(AuditModule.BNK, "Emparejamiento", emp.getId(),
-                "DESHACER emparejamiento=" + emp.getId() + " movimientos=" + movIds);
+                "Deshacer cruce movimiento-comprobante emparejamiento=" + emp.getId()
+                        + " movimientos=" + movIds + " | motivo: " + motivo.trim());
 
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("id", emp.getId());
         r.put("estado", E_DESHECHO);
         r.put("movimientosLiberados", movIds);
+        r.put("motivo", motivo.trim());
         return r;
     }
 
@@ -271,7 +315,7 @@ public class EmparejamientoService {
         List<Long> librosMovs = new ArrayList<>();
         for (EmparejamientoDetalle d : dets) {
             movementRepository.findById(d.getFinancialMovementId()).ifPresent(m -> {
-                m.setEstadoConciliacion(C_NO);
+                m.setEstadoConciliacionSesion(C_NO);
                 movementRepository.save(m);
             });
             if (LADO_EXT.equals(d.getLado())) extractoMovs.add(d.getFinancialMovementId());
@@ -322,12 +366,12 @@ public class EmparejamientoService {
         List<Map<String, Object>> extracto = movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId,
                         com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.BANK_IMPORT)
-                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacion()) || m.getEstadoConciliacion() == null)
+                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacionSesion()) || m.getEstadoConciliacionSesion() == null)
                 .map(this::movRow).toList();
         List<Map<String, Object>> libros = movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId,
                         com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL)
-                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacion()) || m.getEstadoConciliacion() == null)
+                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacionSesion()) || m.getEstadoConciliacionSesion() == null)
                 .map(this::movRow).toList();
         List<Map<String, Object>> emparejamientos = emparejamientoRepository
                 .findByCuentaBancariaIdAndDeletedAtIsNullOrderByIdDesc(bankAccountId)
@@ -375,13 +419,13 @@ public class EmparejamientoService {
                 .findBySesionConciliacionIdOrderByMovementDateAscIdAsc(sesionId)
                 .stream()
                 .filter(m -> com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.BANK_IMPORT.equals(m.getSourceType()))
-                .filter(m -> C_NO.equals(m.getEstadoConciliacion()) || m.getEstadoConciliacion() == null)
+                .filter(m -> C_NO.equals(m.getEstadoConciliacionSesion()) || m.getEstadoConciliacionSesion() == null)
                 .map(this::movRow).toList();
         List<Map<String, Object>> libros = movementRepository
                 .findByBankAccountSourceTypeAndPeriod(s.getBankAccountId(),
                         com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
                         s.getPeriodStart(), s.getPeriodEnd())
-                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacion()) || m.getEstadoConciliacion() == null)
+                .stream().filter(m -> C_NO.equals(m.getEstadoConciliacionSesion()) || m.getEstadoConciliacionSesion() == null)
                 .map(this::movRow).toList();
         List<Map<String, Object>> emparejamientos = emparejamientoRepository
                 .findByReconciliationSessionIdAndDeletedAtIsNullOrderByIdDesc(sesionId)
@@ -405,7 +449,7 @@ public class EmparejamientoService {
         r.put("cheque", m.getNumeroCheque());
         r.put("nit", m.getNitDetectado());
         r.put("tipoMovimiento", m.getTipoMovimiento());
-        r.put("estadoConciliacion", m.getEstadoConciliacion());
+        r.put("estadoConciliacion", m.getEstadoConciliacionSesion());
         return r;
     }
 
@@ -419,7 +463,7 @@ public class EmparejamientoService {
                 .lado(lado)
                 .monto(m.getAmount())
                 .build());
-        m.setEstadoConciliacion(C_OK);
+        m.setEstadoConciliacionSesion(C_OK);
         movementRepository.save(m);
     }
 

@@ -47,6 +47,8 @@ public class SesionConciliacionService {
     private final SolicitudReaperturaRepository solicitudRepo;
     private final FirmaElectronicaRepository firmaRepo;
     private final PartidaConciliatoriaRepository partidaRepo;
+    private final EmparejamientoRepository emparejamientoRepo;
+    private final EmparejamientoDetalleRepository emparejamientoDetalleRepo;
     private final FinancialMovementRepository movementRepo;
     private final BankAccountRepository bankAccountRepo;
     private final AccountingPeriodRepository periodRepo;
@@ -131,15 +133,37 @@ public class SesionConciliacionService {
                 "Solo se pueden eliminar sesiones en estado BORRADOR (actual: " + s.getEstado()
                 + "). Las conciliaciones en revisión, aprobadas o cerradas conservan su trazabilidad.");
         }
+        // QA Bloque BNK (2026-06-03) Bug 1 (BNK-RF-23): un BORRADOR que se abandona NO debe
+        // dejar sus movimientos marcados como CONCILIADO. Al eliminar el borrador, se revierten
+        // los emparejamientos de la sesión (soft-delete) y sus movimientos vuelven a
+        // NO_CONCILIADO, de modo que queden disponibles para una conciliación posterior.
+        int movRevertidos = 0;
+        for (Emparejamiento emp : emparejamientoRepo
+                .findByReconciliationSessionIdAndDeletedAtIsNullOrderByIdDesc(sesionId)) {
+            for (EmparejamientoDetalle d : emparejamientoDetalleRepo.findByEmparejamientoId(emp.getId())) {
+                FinancialMovement m = movementRepo.findById(d.getFinancialMovementId()).orElse(null);
+                if (m != null && "CONCILIADO".equals(m.getEstadoConciliacionSesion())) {
+                    m.setEstadoConciliacionSesion("NO_CONCILIADO");
+                    movementRepo.save(m);
+                    movRevertidos++;
+                }
+                emparejamientoDetalleRepo.delete(d);
+            }
+            emp.setEstado("DESHECHO");
+            emp.setDeletedAt(LocalDateTime.now());
+            emparejamientoRepo.save(emp);
+        }
         s.setDeletedAt(LocalDateTime.now());
         sesionRepo.save(s);
         auditPublisher.publish(AuditAction.DELETE, AuditModule.BNK, AuditSeverity.MEDIUM,
                 "SesionConciliacion", sesionId,
                 "Sesión de conciliación en BORRADOR eliminada (período "
-                + s.getPeriodStart() + " → " + s.getPeriodEnd() + ")", null, null, null);
+                + s.getPeriodStart() + " → " + s.getPeriodEnd() + "). Movimientos revertidos a NO_CONCILIADO: "
+                + movRevertidos, null, null, null);
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("deleted", true);
         r.put("id", sesionId);
+        r.put("movimientosRevertidos", movRevertidos);
         return r;
     }
 
@@ -177,8 +201,8 @@ public class SesionConciliacionService {
                 s.getBankAccountId(),
                 com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
                 s.getPeriodStart(), s.getPeriodEnd());
-        long extConc = ext.stream().filter(m -> "CONCILIADO".equals(m.getEstadoConciliacion())).count();
-        long libConc = lib.stream().filter(m -> "CONCILIADO".equals(m.getEstadoConciliacion())).count();
+        long extConc = ext.stream().filter(m -> "CONCILIADO".equals(m.getEstadoConciliacionSesion())).count();
+        long libConc = lib.stream().filter(m -> "CONCILIADO".equals(m.getEstadoConciliacionSesion())).count();
         long pendientes = (ext.size() - extConc) + (lib.size() - libConc);
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("sesionId", s.getId());
@@ -205,12 +229,12 @@ public class SesionConciliacionService {
     private List<FinancialMovement> pendientesDeLaSesion(SesionConciliacion s) {
         List<FinancialMovement> pend = new ArrayList<>();
         for (FinancialMovement m : movementRepo.findBySesionConciliacionIdOrderByMovementDateAscIdAsc(s.getId()))
-            if (!"CONCILIADO".equals(m.getEstadoConciliacion())) pend.add(m);
+            if (!"CONCILIADO".equals(m.getEstadoConciliacionSesion())) pend.add(m);
         for (FinancialMovement m : movementRepo.findByBankAccountSourceTypeAndPeriod(
                 s.getBankAccountId(),
                 com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
                 s.getPeriodStart(), s.getPeriodEnd()))
-            if (!"CONCILIADO".equals(m.getEstadoConciliacion())) pend.add(m);
+            if (!"CONCILIADO".equals(m.getEstadoConciliacionSesion())) pend.add(m);
         return pend;
     }
 
@@ -224,6 +248,33 @@ public class SesionConciliacionService {
         }
     }
 
+    /**
+     * QA Bloque BNK (2026-06-03) Bug 1: COMMIT del estado oficial al CERRAR la conciliación.
+     * Es el ÚNICO punto donde los movimientos cambian su estado OFICIAL (`estado_conciliacion`,
+     * la "trazabilidad actual" que leen DIAN/TRM/otros módulos). Toma el estado de TRABAJO de la
+     * sesión (`estado_conciliacion_sesion`) y, para los movimientos del período conciliados en la
+     * sesión, lo refleja en el oficial. Como el cierre exige conciliación en cero, todos quedan
+     * oficialmente CONCILIADO tras la firma + cierre.
+     */
+    private int commitConciliacionOficial(SesionConciliacion s) {
+        int n = 0;
+        List<FinancialMovement> movs = new ArrayList<>();
+        movs.addAll(movementRepo.findBySesionConciliacionIdOrderByMovementDateAscIdAsc(s.getId()));
+        movs.addAll(movementRepo.findByBankAccountSourceTypeAndPeriod(
+                s.getBankAccountId(),
+                com.sigcon.backend.banks.financialmovements.domain.model.enums.FinancialMovementSourceType.MANUAL,
+                s.getPeriodStart(), s.getPeriodEnd()));
+        for (FinancialMovement m : movs) {
+            if ("CONCILIADO".equals(m.getEstadoConciliacionSesion())
+                    && !"CONCILIADO".equals(m.getEstadoConciliacion())) {
+                m.setEstadoConciliacion("CONCILIADO");
+                movementRepo.save(m);
+                n++;
+            }
+        }
+        return n;
+    }
+
     private Map<String, Object> movRow(FinancialMovement m) {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("id", m.getId());
@@ -233,6 +284,7 @@ public class SesionConciliacionService {
         r.put("referencia", m.getExternalReference());
         r.put("origen", m.getSourceType() != null ? m.getSourceType().name() : null);
         r.put("estadoConciliacion", m.getEstadoConciliacion());
+        r.put("estadoConciliacionSesion", m.getEstadoConciliacionSesion());
         // HU-068: clasificación del pre-procesamiento (para ver/corregir desde el Paso 3).
         r.put("descripcionNormalizada", m.getDescripcionNormalizada());
         r.put("numeroCheque", m.getNumeroCheque());
@@ -243,11 +295,14 @@ public class SesionConciliacionService {
         r.put("matchedVoucherId", m.getMatchedVoucherId());
         r.put("matchedJournalEntryId", m.getMatchedJournalEntryId());
         r.put("matchedCheckId", m.getMatchedCheckId());
-        // Conciliación V4 / Sec 14: un movimiento ya CONCILIADO se muestra como contexto
-        // bloqueado (solo-lectura), no editable ni re-emparejable.
+        // QA Bloque BNK (2026-06-03) Bug 1: el bloqueo "Ya conciliado" 🔒 (solo-lectura) SOLO
+        // aplica cuando el estado OFICIAL del registro está CONCILIADO, es decir, cuando una
+        // sesión ANTERIOR ya cerró y commiteó. Mientras la sesión actual está abierta, los
+        // movimientos emparejados muestran su estado de TRABAJO (Conciliado/No conciliado en
+        // sesión) pero NO quedan bloqueados ni tocan la trazabilidad oficial.
         boolean bloqueado = "CONCILIADO".equals(m.getEstadoConciliacion());
         r.put("bloqueado", bloqueado);
-        r.put("estadoVista", bloqueado ? "YA_CONCILIADO_BLOQUEADO" : m.getEstadoConciliacion());
+        r.put("estadoVista", bloqueado ? "YA_CONCILIADO_BLOQUEADO" : m.getEstadoConciliacionSesion());
         return r;
     }
 
@@ -349,8 +404,11 @@ public class SesionConciliacionService {
         s.setCerradaBy(u.getId());
         s.setCerradaAt(LocalDateTime.now());
         sesionRepo.save(s);
+        // Bug 1: SOLO al cerrar se commitea el estado oficial de los registros.
+        int committed = commitConciliacionOficial(s);
         auditPublisher.publishUpdate(AuditModule.BNK, "SesionConciliacion", sesionId,
-                "Cerrada por user=" + u.getId() + " | informe=" + archivo.getId() + " | hash=" + archivo.getHashSha256());
+                "Cerrada por user=" + u.getId() + " | informe=" + archivo.getId() + " | hash=" + archivo.getHashSha256()
+                        + " | registros conciliados oficialmente=" + committed);
         Map<String, Object> r = detail(sesionId);
         r.put("informeArchivoId", archivo.getId());
         r.put("informeHash", archivo.getHashSha256());
@@ -385,9 +443,12 @@ public class SesionConciliacionService {
         s.setCerradaBy(u != null ? u.getId() : null);
         s.setCerradaAt(LocalDateTime.now());
         sesionRepo.save(s);
+        // Bug 1: SOLO al cerrar se commitea el estado oficial de los registros.
+        int committed = commitConciliacionOficial(s);
         auditPublisher.publishUpdate(AuditModule.BNK, "SesionConciliacion", sesionId,
                 "Cerrada por responsable user=" + (u != null ? u.getId() : null)
-                        + " | informe=" + archivo.getId() + " | hash=" + archivo.getHashSha256());
+                        + " | informe=" + archivo.getId() + " | hash=" + archivo.getHashSha256()
+                        + " | registros conciliados oficialmente=" + committed);
         Map<String, Object> r = detail(sesionId);
         r.put("informeArchivoId", archivo.getId());
         r.put("informeHash", archivo.getHashSha256());
@@ -706,7 +767,7 @@ public class SesionConciliacionService {
         long pendientes = partidaRepo.findByBankAccountIdAndEstadoAndDeletedAtIsNullOrderByIdDesc(s.getBankAccountId(), "PENDIENTE").size();
         long totalPartidas = partidaRepo.findByBankAccountIdAndDeletedAtIsNullOrderByIdDesc(s.getBankAccountId()).size();
         long conciliados = movementRepo.findAllByBankAccountIdOrdered(s.getBankAccountId()).stream()
-                .filter(m -> "CONCILIADO".equals(m.getEstadoConciliacion())).count();
+                .filter(m -> "CONCILIADO".equals(m.getEstadoConciliacionSesion())).count();
         Map<String, Object> firmante = new LinkedHashMap<>();
         firmante.put("id", u != null ? u.getId() : null);
         firmante.put("nombre", u != null ? (nz(u.getName()) + " " + nz(u.getLastname())).trim() : null);

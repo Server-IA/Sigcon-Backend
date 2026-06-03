@@ -3,6 +3,7 @@ package com.sigcon.backend.banks.cash_audits.interfaces.controller;
 import com.sigcon.backend.banks.cash_audits.application.ApproveCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.CreateCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.DeleteCashAuditRequest;
+import com.sigcon.backend.banks.cash_audits.application.UpdateCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.VoidCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.domain.service.CashAuditService;
 import com.sigcon.backend.utils.DataTableRequest;
@@ -69,6 +70,25 @@ public class CashAuditController {
     @PreAuthorize("hasAnyAuthority('PERM_CREATE_CASH_AUDIT','TEMP_PERM_CREATE_CASH_AUDIT','TEMP_CREATE_CASH_AUDIT','PERM_BNK.ARQUEOS.CREAR','TEMP_PERM_BNK.ARQUEOS.CREAR','TEMP_BNK.ARQUEOS.CREAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
     public ResponseEntity<?> store(@Valid @RequestBody CreateCashAuditRequest request) {
         return cashAuditService.create(request);
+    }
+
+    /**
+     * Modifica un arqueo de caja en estado BORRADOR o RECHAZADO (BNK-HU-030).
+     * Solo cambia fecha, saldo fisico y notas; el saldo del sistema y la
+     * diferencia se recalculan automaticamente.
+     */
+    @PutMapping("/{id}")
+    @Operation(summary = "Modificar arqueo de caja",
+               description = "Edita un arqueo en estado BORRADOR o RECHAZADO. El saldo del sistema y la "
+                       + "diferencia se recalculan. Un arqueo RECHAZADO vuelve a BORRADOR al editarse.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Arqueo actualizado correctamente"),
+        @ApiResponse(responseCode = "400", description = "Arqueo no encontrado o estado no editable"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAnyAuthority('PERM_UPDATE_CASH_AUDIT','TEMP_PERM_UPDATE_CASH_AUDIT','TEMP_UPDATE_CASH_AUDIT','PERM_BNK.ARQUEOS.EDITAR','TEMP_PERM_BNK.ARQUEOS.EDITAR','TEMP_BNK.ARQUEOS.EDITAR','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UpdateCashAuditRequest request) {
+        return cashAuditService.update(id, request);
     }
 
     /**

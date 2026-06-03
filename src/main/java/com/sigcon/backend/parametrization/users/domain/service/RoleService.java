@@ -138,8 +138,8 @@ public class RoleService {
 
             return ResponseEntity.ok(DataTableResponse.from(data, request.getDraw()));
         } catch (Exception e) {
-            // HU-PA-03 E6: error tecnico al cargar listado -> mensaje generico
-            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(
+            // PA-RF-03 punto 6 (v3.0): error tecnico de BD -> HTTP 500 generico.
+            return ResponseEntity.status(500).body(ErrorRespondJson.getErrorRespondMessage(
                     Optional.of("No fue posible cargar los roles. Intente de nuevo o contacte al administrador.")));
         }
     }
@@ -172,77 +172,89 @@ public class RoleService {
      * @param request datos del rol (nombre, IDs de permisos opcionales)
      * @return ResponseEntity con el rol creado o mensaje de error por duplicidad
      */
+    @Transactional
     public ResponseEntity<?> createRole(RoleRequest request) {
         try {
-            if (request.getName() == null || request.getName().isBlank()) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El nombre del rol es obligatorio"))
-                );
-            }
-
-            // HU-PA-04 E5: validar al menos un permiso seleccionado.
-            // (HU dice "Mostrar mensaje 'Debe asignar al menos un permiso al rol'")
-            if (request.getPermissionIds() == null || request.getPermissionIds().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of("Debe asignar al menos un permiso al rol"))
-                );
-            }
-
-            // HU-PA-04 E3 / Bug 4 (2026-05-09): unicidad por TENANT, no global.
-            // PLATFORM_ADMIN crea roles globales (companyId=NULL). ADMIN_EMPRESA
-            // crea roles del tenant actual.
-            final Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
-            final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
-            final Long targetCompanyId = isPlatform ? null : tenantId;
-
-            if (!isPlatform && tenantId == null) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                        "El usuario actual no pertenece a una empresa; no puede crear roles."))
-                );
-            }
-
-            // HU-PA-04 E3: validar nombre unico solo dentro del scope (companyId)
-            String upper = request.getName().toUpperCase().trim();
-            if (roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(upper, targetCompanyId).isPresent()) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Ya existe un rol con ese nombre en " + (targetCompanyId == null ? "el sistema" : "esta empresa") + "."))
-                );
-            }
-
-            // HU-PA-04 E3: ADMIN_EMPRESA NO puede usar nombres reservados de roles globales
-            if (!isPlatform && Role.SYSTEM_GLOBAL_NAMES.contains(upper)) {
-                return ResponseEntity.badRequest().body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                            "Ese nombre esta reservado para roles del sistema."))
-                );
-            }
-
-            Set<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds())
-                    .stream().collect(Collectors.toSet());
-
-            Role role = Role.builder()
-                    .name(upper)
-                    .description(request.getDescription())
-                    .companyId(targetCompanyId)
-                    .permissions(permissions)
-                    .status(Status.ACTIVE)
-                    .createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now())
-                    .build();
-
-            roleRepository.save(role);
-            auditPublisher.publishCreate(AuditModule.PA, "Role", role.getId(),
-                    "Role creado: " + role.getName() + " (companyId=" + role.getCompanyId() + ")");
-
+            Role role = createRoleCore(request);
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Rol creado exitosamente"), Optional.of(toRequest(role)))
             );
-
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
+    }
+
+    /**
+     * PA-RF-04 v3.0 (Control de Cambios PA, 2026-05-29): creacion REST atomica
+     * que retorna el id del rol creado. Reutiliza {@link #createRoleCore} (ACID
+     * por la anotacion @Transactional). Las validaciones lanzan
+     * {@link IllegalArgumentException} para que el controller responda 400.
+     */
+    @Transactional
+    public Long createRoleReturningId(RoleRequest request) {
+        return createRoleCore(request).getId();
+    }
+
+    /**
+     * Logica nucleo de creacion de rol (ACID): validaciones de nombre/permisos +
+     * unicidad por tenant + validacion de catalogo + persistencia + auditoria.
+     * Lanza {@link IllegalArgumentException} con mensaje funcional si algo falla.
+     */
+    private Role createRoleCore(RoleRequest request) {
+        if (request.getName() == null || request.getName().isBlank()) {
+            throw new IllegalArgumentException("El nombre del rol es obligatorio");
+        }
+        // HU-PA-04 E5: al menos un permiso seleccionado.
+        if (request.getPermissionIds() == null || request.getPermissionIds().isEmpty()) {
+            throw new IllegalArgumentException("Debe asignar al menos un permiso al rol");
+        }
+
+        // HU-PA-04 E3 / Bug 4: unicidad por TENANT, no global.
+        final Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+        final Long targetCompanyId = isPlatform ? null : tenantId;
+        if (!isPlatform && tenantId == null) {
+            throw new IllegalArgumentException(
+                "El usuario actual no pertenece a una empresa; no puede crear roles.");
+        }
+
+        String upper = request.getName().toUpperCase().trim();
+        if (roleRepository.findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull(upper, targetCompanyId).isPresent()) {
+            throw new IllegalArgumentException(
+                "Ya existe un rol con ese nombre en " + (targetCompanyId == null ? "el sistema" : "esta empresa") + ".");
+        }
+        if (!isPlatform && Role.SYSTEM_GLOBAL_NAMES.contains(upper)) {
+            throw new IllegalArgumentException("Ese nombre esta reservado para roles del sistema.");
+        }
+
+        Set<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds())
+                .stream().collect(Collectors.toSet());
+        // PA-RF-04 v3.0: validar que TODOS los permisos existan en el catalogo activo
+        // (Permission tiene @Where(deleted_at IS NULL), asi que findAllById ya excluye
+        // soft-deleted; si faltan ids, no estan en el catalogo activo).
+        if (permissions.size() != new java.util.HashSet<>(request.getPermissionIds()).size()) {
+            throw new IllegalArgumentException("Uno o mas permisos no existen en el catalogo activo.");
+        }
+
+        Role role = Role.builder()
+                .name(upper)
+                .description(request.getDescription())
+                .companyId(targetCompanyId)
+                .permissions(permissions)
+                .status(Status.ACTIVE)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        // saveAndFlush: al ser createRole/createRoleReturningId @Transactional (PA-RF-04
+        // ACID), un save() simple difiere el INSERT al commit y role.getId() queda
+        // null (Role usa generacion por secuencia). El flush fuerza el INSERT y
+        // asigna el id dentro de la transaccion (necesario para auditoria + respuesta).
+        role = roleRepository.saveAndFlush(role);
+        auditPublisher.publishCreate(AuditModule.PA, "Role", role.getId(),
+                "Role creado: " + role.getName() + " (companyId=" + role.getCompanyId() + ")");
+        return role;
     }
 
     /**
@@ -753,6 +765,13 @@ public class RoleService {
         // puede asignar permisos a roles de su empresa (PLATFORM_ADMIN bypass).
         assertRoleAccessible(role);
 
+        // PA-RF-05 v3.0 (Control de Cambios PA): el rol no debe estar bloqueado
+        // por operacion administrativa (estado ACTIVE) para editar sus permisos.
+        if (role.getStatus() != Status.ACTIVE) {
+            throw new IllegalArgumentException(
+                "El rol no esta activo (estado " + role.getStatus() + "). Reactivelo antes de editar sus permisos.");
+        }
+
         Set<Permission> permissions = new HashSet<>(
                 permissionRepository.findAllById(request.getPermissionIds())
         );
@@ -814,6 +833,12 @@ public class RoleService {
             // QA Bloque BC (2026-05-17): bloqueo cross-tenant. Antes del IF
             // (porque la TenantIsolationException debe propagar como 404).
             assertRoleAccessible(role);
+
+            // PA-RF-05 v3.0 (Control de Cambios PA): el rol debe estar ACTIVE.
+            if (role.getStatus() != Status.ACTIVE) {
+                return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                    "El rol no esta activo (estado " + role.getStatus() + "). Reactivelo antes de editar sus permisos.")));
+            }
 
             if (role.getPermissions().isEmpty()) {
                 return ResponseEntity.badRequest().body(
@@ -974,6 +999,93 @@ public class RoleService {
 
     private String parseStatus(Status status) {
         return status.name();
+    }
+
+    /**
+     * PA-RF-04 v3.0 (Control de Cambios PA, 2026-05-29): catalogo de permisos
+     * agrupado por modulo (arbol modulo -> permisos) + {@code catalogVersion}.
+     * El frontend lo consume para pintar el selector de permisos al crear/editar
+     * un rol. {@code catalogVersion} cambia cuando el catalogo de permisos cambia
+     * (se computa con el total + el id maximo), lo que permite al cliente detectar
+     * que su arbol esta desactualizado.
+     */
+    @Transactional
+    public Map<String, Object> getPermissionCatalog() {
+        List<Permission> all = permissionRepository.findAll();
+        java.util.Map<Long, java.util.Map<String, Object>> byModule = new java.util.LinkedHashMap<>();
+        long maxId = 0L;
+        for (Permission p : all) {
+            if (p.getId() != null && p.getId() > maxId) maxId = p.getId();
+            ModuleEntity m = p.getModule();
+            Long moduleId = (m != null) ? m.getId() : -1L;
+            String moduleName = (m != null) ? m.getName() : "(sin modulo)";
+            java.util.Map<String, Object> entry = byModule.computeIfAbsent(moduleId, k -> {
+                java.util.Map<String, Object> e = new java.util.LinkedHashMap<>();
+                e.put("moduleId", moduleId);
+                e.put("module", moduleName);
+                e.put("permissions", new java.util.ArrayList<java.util.Map<String, Object>>());
+                return e;
+            });
+            @SuppressWarnings("unchecked")
+            java.util.List<java.util.Map<String, Object>> perms =
+                    (java.util.List<java.util.Map<String, Object>>) entry.get("permissions");
+            java.util.Map<String, Object> pm = new java.util.LinkedHashMap<>();
+            pm.put("id", p.getId());
+            pm.put("code", p.getCode());
+            pm.put("name", p.getName());
+            // El modelo de permisos NO tiene "submodulo"; se expone la accion (type)
+            // como el nivel mas fino del arbol modulo -> accion.
+            pm.put("action", p.getType() != null ? p.getType().name() : null);
+            perms.add(pm);
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("catalogVersion", "cat-" + all.size() + "-" + maxId);
+        result.put("modules", new java.util.ArrayList<>(byModule.values()));
+        return result;
+    }
+
+    /** PA-RF-04 v3.0: solo la version actual del catalogo (para incluir en respuestas). */
+    public String currentCatalogVersion() {
+        try {
+            List<Permission> all = permissionRepository.findAll();
+            long maxId = all.stream().map(Permission::getId)
+                    .filter(java.util.Objects::nonNull).max(Long::compareTo).orElse(0L);
+            return "cat-" + all.size() + "-" + maxId;
+        } catch (Exception e) {
+            return "cat-0-0";
+        }
+    }
+
+    /**
+     * PA-RF-03 v3.0 (Control de Cambios PA, 2026-05-29): listado REST paginado de
+     * roles. Aplica el mismo aislamiento multi-tenant + filtro soft-delete +
+     * diferenciacion de tipo (via {@link #toRequest}) que el listado DataTable,
+     * pero con parametros REST (page/size/search/sort/dir).
+     */
+    @Transactional
+    public Page<RoleRequest> listRolesPaged(int page, int size, String search, String sort, String dir) {
+        String safeSort = java.util.List.of("id", "name", "createdAt", "status").contains(sort) ? sort : "id";
+        org.springframework.data.domain.Sort sortObj = org.springframework.data.domain.Sort.by(
+                "desc".equalsIgnoreCase(dir) ? org.springframework.data.domain.Sort.Direction.DESC
+                                             : org.springframework.data.domain.Sort.Direction.ASC,
+                safeSort);
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100), sortObj);
+
+        final Long tenantId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        final boolean isPlatform = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+
+        Specification<Role> spec = (root, q, cb) -> cb.isNull(root.get("deletedAt"));
+        if (!isPlatform) {
+            if (tenantId == null) {
+                return Page.<Role>empty(pageable).map(this::toRequest);
+            }
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("companyId"), tenantId));
+        }
+        if (search != null && !search.isBlank()) {
+            final String like = "%" + search.trim().toUpperCase() + "%";
+            spec = spec.and((root, q, cb) -> cb.like(cb.upper(root.get("name")), like));
+        }
+        return roleRepository.findAll(spec, pageable).map(this::toRequest);
     }
 
     /**

@@ -314,6 +314,16 @@ public class AccountingAccountService {
                 throw new IllegalArgumentException(dependency);
             }
 
+            // QA CFG (2026-06-02): solo se eliminan cuentas contables en estado
+            // INACTIVE (mismo prerrequisito que el catalogo PUC). Antes solo se
+            // validaba motivo + dependencias, asi que una cuenta ACTIVA sin
+            // dependencias se eliminaba directo. Ahora se exige inactivarla primero.
+            if (accountingAccount.getStatus() != AccountStatus.INACTIVE) {
+                throw new IllegalArgumentException(
+                        "La cuenta contable debe estar en estado inactiva antes de eliminarla. "
+                        + "Cambie el estado a INACTIVE y reintente la operacion.");
+            }
+
             // Borrado Lógico: Marcar como eliminada e inactiva
             accountingAccount.setDeletedAt(LocalDateTime.now());
             accountingAccount.setStatus(AccountStatus.INACTIVE);

@@ -24,8 +24,20 @@ public class BalanceGeneralDTO {
     /** Total de pasivos (clase 2 PUC). */
     private BigDecimal totalPasivos;
 
-    /** Total de patrimonio (clase 3 PUC). */
+    /**
+     * Total de patrimonio (clase 3 PUC) YA AJUSTADO con el Resultado del Ejercicio.
+     * HU-CG-09 E1: cuando no existe asiento de cierre, el resultado acumulado
+     * (ingresos - gastos - costos) se incorpora al patrimonio para que la ecuacion
+     * contable cuadre (NIC 1).
+     */
     private BigDecimal totalPatrimonio;
+
+    /**
+     * HU-CG-09 E1: Resultado del Ejercicio acumulado (ingresos - gastos - costos)
+     * incorporado al patrimonio. Positivo = utilidad, negativo = perdida.
+     * Es 0 cuando ya se ejecuto el asiento de cierre (las clases 4/5/6/7 quedan en 0).
+     */
+    private BigDecimal resultadoEjercicio;
 
     /** Indica si la ecuacion contable esta balanceada: Activos = Pasivos + Patrimonio. */
     private Boolean isBalanced;

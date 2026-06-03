@@ -11,4 +11,7 @@ import java.util.List;
 public interface LogIntegrityExecutionRepository extends JpaRepository<LogIntegrityExecution, Long> {
 
     List<LogIntegrityExecution> findTop50ByOrderByExecutedAtDesc();
+
+    /** QA Auditoria (2026-06-02): marcador del re-baseline (se corre una sola vez). */
+    boolean existsByTriggerSource(String triggerSource);
 }

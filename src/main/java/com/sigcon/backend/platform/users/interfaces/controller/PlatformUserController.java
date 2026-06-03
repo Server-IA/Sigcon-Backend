@@ -148,12 +148,56 @@ public class PlatformUserController {
      * QA Bloque PA Bug 65 (HU-PA-PLAT-07 E4, 2026-05-09): desactivar PLATFORM_ADMIN
      * con safeguard. Si es el unico activo, bloquea con HTTP 409.
      */
+    /**
+     * PA-RF-PLAT-07 v3.0 (Control de Cambios PA, 2026-05-29): consultar un
+     * PLATFORM_ADMIN / usuario por id (operacion de consulta del ciclo de vida).
+     */
+    @GetMapping("/platform-admin/{id}")
+    @Operation(summary = "PA-RF-PLAT-07: consultar usuario/PLATFORM_ADMIN por id")
+    public ResponseEntity<?> getPlatformAdmin(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(service.getPlatformAdmin(id));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false, "code", 400, "message", ex.getMessage()));
+        }
+    }
+
+    /**
+     * PA-RF-PLAT-07 v3.0: reactivar un PLATFORM_ADMIN desactivado. El motivo es
+     * opcional al activar.
+     */
+    @PostMapping("/platform-admin/{id}/activate")
+    @Operation(summary = "PA-RF-PLAT-07: reactivar PLATFORM_ADMIN secundario")
+    public ResponseEntity<?> activatePlatformAdmin(
+            @PathVariable Long id,
+            @RequestBody(required = false) java.util.Map<String, Object> body) {
+        String reason = body == null ? null : (String) body.get("reason");
+        try {
+            return ResponseEntity.ok(service.activatePlatformAdmin(id,
+                    reason == null || reason.isBlank() ? "(sin motivo)" : reason.trim()));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false, "code", 400, "message", ex.getMessage()));
+        }
+    }
+
     @org.springframework.web.bind.annotation.DeleteMapping("/platform-admin/{id}")
     @Operation(summary = "HU-PA-PLAT-07 E4: desactivar PLATFORM_ADMIN secundario",
-               description = "Bloquea con HTTP 409 si seria el ultimo PLATFORM_ADMIN activo.")
-    public ResponseEntity<?> deactivatePlatformAdmin(@PathVariable Long id) {
+               description = "Bloquea con HTTP 409 si seria el ultimo PLATFORM_ADMIN activo. "
+                           + "PA-RF-PLAT-07 v3.0: requiere motivo (minimo 10 caracteres).")
+    public ResponseEntity<?> deactivatePlatformAdmin(
+            @PathVariable Long id,
+            @RequestBody(required = false) java.util.Map<String, Object> body) {
+        // PA-RF-PLAT-07 v3.0: motivo obligatorio para desactivar.
+        String reason = body == null ? null : (String) body.get("reason");
+        if (reason == null || reason.trim().length() < 10) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false, "code", 400,
+                "message", "El motivo de desactivacion es obligatorio (minimo 10 caracteres)."));
+        }
         try {
-            service.deactivatePlatformAdmin(id);
+            service.deactivatePlatformAdmin(id, reason.trim());
             return ResponseEntity.ok(Map.of("success", true,
                     "message", "PLATFORM_ADMIN desactivado"));
         } catch (IllegalStateException ex) {

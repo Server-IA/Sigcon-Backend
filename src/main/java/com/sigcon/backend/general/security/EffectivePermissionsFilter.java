@@ -314,6 +314,8 @@ public class EffectivePermissionsFilter extends OncePerRequestFilter {
             Map.entry("READ_AP_PAYMENT",          List.of("AP.PAGOS.VER")),
             Map.entry("CREATE_AP_PAYMENT",        List.of("AP.PAGOS.CREAR")),
             Map.entry("RECONCILE_AP_PAYMENT",     List.of("AP.PAGOS.CONCILIAR")),
+            // RF-34 (Notas Tecnicas CXP): reversar pago a proveedor.
+            Map.entry("REVERSE_PAYMENT",          List.of("AP.PAGOS.REVERSAR")),
             Map.entry("READ_AP_ADVANCE",          List.of("AP.ANTICIPOS.VER")),
             Map.entry("CREATE_AP_ADVANCE",        List.of("AP.ANTICIPOS.CREAR")),
             Map.entry("READ_AP_NOTE",             List.of("AP.NOTAS.VER")),

@@ -25,14 +25,20 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
 
     /**
      * BNK-HU-065: lectura cruda de TODA la cadena para verificacion de integridad.
-     * Query NATIVO: bypasea el @Filter de tenant (la verificacion es global). Ordena
-     * por empresa y luego por id, de modo que cada cadena por tenant queda contigua
-     * y en orden de insercion. Columnas: id, company_id, previous_hash, hash,
-     * timestamp, action, entity_type, entity_id, user_id.
+     * Query NATIVO: bypasea el @Filter de tenant (la verificacion es global).
+     *
+     * <p>QA Auditoria (2026-06-02): ordena por id ASC (UNA sola cadena global). El
+     * insert encadena globalmente ({@code getLastHash} = ultimo por id, sin tenant),
+     * asi que la verificacion DEBE recorrer la misma cadena global. Antes ordenaba
+     * por company_id+id y reseteaba a GENESIS en cada cambio de empresa, lo que
+     * rompia el encadenamiento en cada frontera de tenant (los registros de
+     * distintas empresas se intercalan en la cadena global) -> falso RUPTURA.
+     * Columnas: id, company_id, previous_hash, hash, timestamp, action,
+     * entity_type, entity_id, user_id.
      */
     @Query(value = "SELECT id, company_id, previous_hash, hash, timestamp, action, "
             + "entity_type, entity_id, user_id FROM audit_logs "
-            + "ORDER BY company_id ASC NULLS FIRST, id ASC", nativeQuery = true)
+            + "ORDER BY id ASC", nativeQuery = true)
     List<Object[]> findAllForIntegrityCheck();
 
     /** Ultimos N eventos para el dashboard. */
@@ -73,4 +79,9 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>,
 
     /** Cuenta logs con legal_hold activo (para dashboard). */
     long countByLegalHoldTrue();
+
+    // QA Auditoria (2026-06-02): el legal hold masivo usa una Specification dinamica
+    // en RetentionService (findAll(spec)) en vez de un JPQL con `:param IS NULL`,
+    // que Postgres rechaza con "could not determine data type of parameter" cuando
+    // el enum llega null. JpaSpecificationExecutor ya esta disponible (extends).
 }

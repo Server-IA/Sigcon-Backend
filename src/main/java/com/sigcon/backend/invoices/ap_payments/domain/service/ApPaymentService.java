@@ -440,6 +440,116 @@ public class ApPaymentService {
     }
 
     /**
+     * RF-34 (Notas Tecnicas CXP, 2026-06-02): reversa MANUAL de un pago/abono
+     * por su id. Es el requisito habilitante para anular facturas con pagos
+     * parciales (RF-25). Transaccion atomica que:
+     * <ol>
+     *   <li>deshace el asiento del pago (delete si BORRADOR, reverse si CONTABILIZADO);</li>
+     *   <li>compensa el movimiento financiero (egreso) en BNK con un movimiento
+     *       inverso que restaura el saldo de la cuenta/caja;</li>
+     *   <li>restaura el saldo de la factura y recalcula su estado;</li>
+     *   <li>marca el pago como REVERSED preservando la fila para auditoria.</li>
+     * </ol>
+     *
+     * <p>Validaciones: el pago debe estar activo (no REVERSED), la factura NO
+     * puede estar SETTLED (la "des-liquidacion" de una factura liquidada requiere
+     * un flujo aparte que toca periodos cerrados; pendiente de reunion de
+     * viabilidad con el lider), el periodo contable del pago debe estar abierto
+     * y el motivo debe tener al menos 10 caracteres.
+     *
+     * @param paymentId id del pago a revertir
+     * @param reason    motivo de la reversion (minimo 10 caracteres)
+     * @return resumen de la reversion (estado de la factura, saldo, JE de reversion)
+     */
+    @Transactional
+    public ResponseEntity<?> reversePayment(Long paymentId, String reason) {
+        if (reason == null || reason.trim().length() < 10) {
+            throw new IllegalArgumentException(
+                    "El motivo de la reversion es obligatorio (minimo 10 caracteres).");
+        }
+        ApPayment target = paymentRepository.findById(paymentId)
+                .filter(p -> p.getDeletedAt() == null)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El pago no fue encontrado o ya fue revertido."));
+        if ("REVERSED".equalsIgnoreCase(target.getStatus())) {
+            throw new IllegalStateException("El pago ya se encuentra revertido.");
+        }
+        Invoices invoice = target.getInvoice();
+        if (invoice == null) {
+            throw new IllegalStateException("El pago no tiene factura asociada.");
+        }
+        if (invoice.getStatus() == StatusesInvoices.SETTLED) {
+            throw new IllegalStateException(
+                    "La factura esta liquidada (SETTLED). La reversion de un pago sobre una "
+                    + "factura liquidada requiere primero des-liquidarla; ese flujo no esta habilitado.");
+        }
+        // El periodo contable de la fecha del pago debe estar abierto.
+        accountingPeriodService.validatePeriodOpen(target.getPaymentDate());
+
+        // 1. Deshacer el asiento del pago: delete si BORRADOR, reverse (storno) si CONTABILIZADO.
+        Long reversalJeId = null;
+        if (target.getJournalEntryId() != null) {
+            try {
+                journalEntryService.deleteEntry(target.getJournalEntryId());
+            } catch (IllegalStateException posted) {
+                JournalEntryDTO rev = journalEntryService.reverseEntry(
+                        target.getJournalEntryId(),
+                        "Reversion manual pago #" + target.getId() + ": " + reason, "sistema");
+                reversalJeId = rev != null ? rev.getId() : null;
+            }
+        }
+
+        // 2. Compensar el movimiento financiero (egreso BNK) con un movimiento inverso.
+        if (target.getBankMovementId() != null) {
+            financialMovementRepository.findById(target.getBankMovementId()).ifPresent(orig -> {
+                FinancialMovement comp = FinancialMovement.builder()
+                        .bankAccount(orig.getBankAccount())
+                        .cash(orig.getCash())
+                        .movementDate(java.time.LocalDate.now())
+                        .amount(orig.getAmount().negate())
+                        .description("Reversion pago #" + target.getId()
+                                + " - compensa movimiento #" + orig.getId())
+                        .externalReference(target.getPaymentReference())
+                        .sourceType(FinancialMovementSourceType.MANUAL)
+                        .flowActivity(orig.getFlowActivity())
+                        .build();
+                financialMovementRepository.save(comp);
+            });
+        }
+
+        // 3. Restaurar saldo de la factura.
+        double restored = invoice.getBalanceDue() + target.getAmount().doubleValue();
+        invoice.setBalanceDue(restored);
+
+        // 4. Marcar el pago como revertido (preserva la fila para auditoria).
+        target.setStatus("REVERSED");
+        target.setDeletedAt(java.time.LocalDateTime.now());
+        paymentRepository.save(target);
+
+        // 5. Recalcular estado: si quedan abonos activos -> PARTIALLY_PAID, si no -> PENDING.
+        boolean hayAbonos = !paymentRepository.findByInvoiceIdAndDeletedAtIsNull(invoice.getId()).isEmpty();
+        invoice.setStatus(hayAbonos ? StatusesInvoices.PARTIALLY_PAID : StatusesInvoices.PENDING);
+        invoiceRepository.save(invoice);
+
+        auditPublisher.publishUpdate(AuditModule.AP, "ApPayment", target.getId(),
+                "Pago #" + target.getId() + " revertido manualmente. Factura "
+                + invoice.getResolutionInvoice() + ": saldo restaurado a $" + restored
+                + ", estado -> " + invoice.getStatus() + ". Motivo: " + reason);
+
+        log.info("Reverse manual pago id={} factura={} -> estado {} saldo {} (revJE={})",
+                target.getId(), invoice.getResolutionInvoice(), invoice.getStatus(), restored, reversalJeId);
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("paymentId", target.getId());
+        result.put("invoiceId", invoice.getId());
+        result.put("invoiceStatus", invoice.getStatus().name());
+        result.put("balanceDue", restored);
+        result.put("reversalJournalEntryId", reversalJeId);
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Pago revertido correctamente."), Optional.of(result)));
+    }
+
+    /**
      * Consulta pagos con paginacion y filtros DataTable.
      *
      * @param request parametros de busqueda y paginacion

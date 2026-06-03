@@ -68,6 +68,16 @@ public class MatchingEngineService {
     private static final BigDecimal UMBRAL_AGREGADO_DEFAULT = new BigDecimal("1000000");
     private static final int MAX_SUBSET = 8;
     private static final int MAX_POOL_AGREGADO = 20;
+
+    /**
+     * QA Bloque BNK (2026-06-03) Bug 1: un movimiento es candidato si NO está conciliado
+     * ni en el estado OFICIAL (committed por una sesión cerrada anterior) ni en el estado
+     * de TRABAJO de la sesión actual. El matching ya NO mira el estado oficial como bandera
+     * de trabajo: usa `estadoConciliacionSesion`.
+     */
+    private boolean disponible(FinancialMovement m) {
+        return !C_OK.equals(m.getEstadoConciliacion()) && !C_OK.equals(m.getEstadoConciliacionSesion());
+    }
     private static final int VENTANA_AGREGADO_DIAS = 5;
 
     private final FinancialMovementRepository movementRepository;
@@ -94,10 +104,10 @@ public class MatchingEngineService {
         // E1: candidatos. extracto = BANK_IMPORT no conciliado; libros = MANUAL no conciliado.
         List<FinancialMovement> extPool = new ArrayList<>(movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId, FinancialMovementSourceType.BANK_IMPORT)
-                .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
+                .stream().filter(this::disponible).toList());
         List<FinancialMovement> libPool = new ArrayList<>(movementRepository
                 .findByBankAccount_IdAndSourceType(bankAccountId, FinancialMovementSourceType.MANUAL)
-                .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
+                .stream().filter(this::disponible).toList());
         return runEngineCore(bankAccount, extPool, libPool, p, user, null);
     }
 
@@ -118,11 +128,11 @@ public class MatchingEngineService {
         List<FinancialMovement> extPool = new ArrayList<>(movementRepository
                 .findBySesionConciliacionIdOrderByMovementDateAscIdAsc(sesionId)
                 .stream().filter(m -> FinancialMovementSourceType.BANK_IMPORT.equals(m.getSourceType())
-                        && !C_OK.equals(m.getEstadoConciliacion())).toList());
+                        && disponible(m)).toList());
         List<FinancialMovement> libPool = new ArrayList<>(movementRepository
                 .findByBankAccountSourceTypeAndPeriod(bankAccount.getId(), FinancialMovementSourceType.MANUAL,
                         s.getPeriodStart(), s.getPeriodEnd())
-                .stream().filter(m -> !C_OK.equals(m.getEstadoConciliacion())).toList());
+                .stream().filter(this::disponible).toList());
         Map<String, Object> r = runEngineCore(bankAccount, extPool, libPool, p, user, sesionId);
         r.put("sesionConciliacionId", sesionId);
         return r;
@@ -325,7 +335,8 @@ public class MatchingEngineService {
                 .lado(lado)
                 .monto(m.getAmount())
                 .build());
-        m.setEstadoConciliacion(movEstado);
+        // Bug 1: estado de TRABAJO (no toca el oficial hasta el cierre).
+        m.setEstadoConciliacionSesion(movEstado);
         movementRepository.save(m);
     }
 
@@ -337,8 +348,8 @@ public class MatchingEngineService {
             if (E_CONFIRMADO.equals(emp.getEstado())) continue;
             for (EmparejamientoDetalle det : detalleRepository.findByEmparejamientoId(emp.getId())) {
                 movementRepository.findById(det.getFinancialMovementId()).ifPresent(m -> {
-                    if (!C_OK.equals(m.getEstadoConciliacion())) {
-                        m.setEstadoConciliacion(C_NO);
+                    if (!C_OK.equals(m.getEstadoConciliacionSesion())) {
+                        m.setEstadoConciliacionSesion(C_NO);
                         movementRepository.save(m);
                     }
                 });

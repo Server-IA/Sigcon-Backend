@@ -38,7 +38,11 @@ import com.sigcon.backend.third_parties.third_parties.domain.repository.ThirdPar
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
 import com.sigcon.backend.invoices.domain.repository.InvoiceRepository;
 import com.sigcon.backend.third_parties.commercial_data.domain.repository.CommercialDataRepository;
+import com.sigcon.backend.platform.tenant.TenantContext;
+import com.sigcon.backend.audit.domain.model.enums.AuditModule;
+import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.utils.DataTableRequest;
+import com.sigcon.backend.utils.DianVerificationDigit;
 import com.sigcon.backend.utils.DataTableResponse;
 import com.sigcon.backend.utils.DataTableSpecificationBuilder;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -105,6 +109,7 @@ public class ThirdPartyService {
     private final com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository salesInvoiceRepository;
     private final UserUtil userUtil;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditPublisher auditPublisher;
     private final DataTableSpecificationBuilder<ThirdParty> dataTableSpecificationBuilder = new DataTableSpecificationBuilder<>();
 
     /**
@@ -125,6 +130,8 @@ public class ThirdPartyService {
 
         validateRequiredFields(request);
         validateNitAndDvFormat(request.getNit(), request.getDv());
+        // PT-06: el DV debe corresponder al NIT (algoritmo DIAN) al crear.
+        validateDianDv(request.getNit().trim(), request.getDv().trim());
 
         // F-TER-005: Validar unicidad por NIT solamente (no NIT+DV)
         // El NIT es identificador tributario único por empresa/persona en Colombia
@@ -140,6 +147,10 @@ public class ThirdPartyService {
         TypeRegimen typeRegimen = resolveTypeRegimen(request.getTypeRegimenId());
         List<Withholding> withholdings = resolveWithholdings(request.getWithholdingIds());
         validateBlockingReason(status, request.getBlockingReason());
+        // PT-07: validar contactos (telefono/correo). PT-09: unicidad de razon
+        // social para persona juridica/sociedad.
+        validateContacts(request.getContacts());
+        validateBusinessNameUniqueness(request.getBusinessName(), typeOrganization, null);
 
         ThirdParty thirdParty = ThirdParty.builder()
                 .thirdPartyCode(generateThirdPartyCode())
@@ -174,6 +185,62 @@ public class ThirdPartyService {
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Tercero registrado exitosamente."),
                         Optional.of(toDto(thirdParty))));
+    }
+
+    /**
+     * PT-04 (TER-RF-10, 2026-06-02): lista los terceros dados de baja
+     * (eliminacion logica) del tenant actual, para que el usuario pueda
+     * consultarlos y reactivarlos.
+     */
+    public ResponseEntity<?> listDeleted() {
+        Long companyId = TenantContext.getCompanyId();
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (companyId != null) {
+            for (Object[] row : thirdPartyRepository.findDeletedByCompany(companyId)) {
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("id", row[0] == null ? null : ((Number) row[0]).longValue());
+                m.put("thirdPartyCode", row[1]);
+                m.put("nit", row[2]);
+                m.put("dv", row[3]);
+                m.put("businessName", row[4]);
+                m.put("deletedAt", row[5] == null ? null : row[5].toString());
+                result.add(m);
+            }
+        }
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(Optional.empty(), Optional.of(result)));
+    }
+
+    /**
+     * PT-04 (TER-RF-10): reactiva un tercero dado de baja. Valida que no exista
+     * otro tercero ACTIVO con el mismo NIT antes de restaurar (deleted_at = null)
+     * y registra la accion en auditoria.
+     */
+    @Transactional
+    public ResponseEntity<?> reactivate(Long id) {
+        Long companyId = TenantContext.getCompanyId();
+        if (companyId == null) {
+            throw new IllegalArgumentException("No hay empresa en contexto para reactivar el tercero.");
+        }
+        String nit = thirdPartyRepository.findDeletedNitById(id, companyId);
+        if (nit == null) {
+            throw new IllegalArgumentException("El tercero no existe o no se encuentra dado de baja.");
+        }
+        // No se permite reactivar si ya existe otro tercero activo con el mismo NIT.
+        if (thirdPartyRepository.existsByNitAndDeletedAtIsNull(nit)) {
+            throw new IllegalArgumentException("Ya existe un tercero activo con el mismo NIT");
+        }
+        int updated = thirdPartyRepository.reactivateById(id, companyId);
+        if (updated == 0) {
+            throw new IllegalArgumentException("No fue posible reactivar el tercero.");
+        }
+        ThirdParty tp = thirdPartyRepository.findById(id).orElse(null);
+        auditPublisher.publishUpdate(AuditModule.TER, "ThirdParty", id,
+                "Tercero reactivado (dado de baja -> activo) NIT=" + nit);
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Tercero reactivado exitosamente."),
+                        Optional.of(tp != null ? toDto(tp) : null)));
     }
 
     /**
@@ -225,7 +292,10 @@ public class ThirdPartyService {
         // HU-TER-07 E2/E3 (2026-04-27): procesamiento tolerante. Acumular
         // errores por fila en lugar de tirar excepcion al primer fallo.
         List<BulkThirdPartyUploadResponse.BulkRowError> errors = new ArrayList<>();
-        long codeSequence = thirdPartyRepository.count() + 1;
+        // BUG-01: semilla del consecutivo con MAX(sufijo)+1 (no count()+1),
+        // que se incrementa localmente por cada fila nueva del lote.
+        int bulkYear = LocalDate.now().getYear();
+        long codeSequence = nextThirdPartyCodeSequence(bulkYear);
 
         for (BulkThirdPartyRow row : rows) {
             try {
@@ -256,24 +326,34 @@ public class ThirdPartyService {
                 validateAllowedBulkStatus(status, row.line());
                 Set<ThirdPartyRoleCatalog> roles = resolveRolesByNames(row.thirdPartyType(), rolesByName, row.line());
                 Municipality municipality = resolveMunicipalityForBulk(row.municipality(), row.line());
+                // PT-05 (TER-RF-07): pais, tipo_organizacion y tipo_regimen obligatorios.
+                validateCountryForBulk(municipality, row.country(), row.line());
+                TypeOrganization typeOrganization = resolveTypeOrganizationForBulk(row.typeOrganization(), row.line());
+                TypeRegimen typeRegimen = resolveTypeRegimenForBulk(row.typeRegimen(), row.line());
+                String validatedDv = resolveBulkDv(normalizedNit, row.dv(), row.line());
 
                 if (existingByNit.isEmpty()) {
                     ThirdParty entity = ThirdParty.builder()
-                            .thirdPartyCode(String.format("TER%d%06d", LocalDate.now().getYear(), codeSequence++))
+                            .thirdPartyCode(String.format("TER%d%06d", bulkYear, codeSequence++))
                             .nit(normalizedNit)
-                            .dv(resolveBulkDv(row.dv(), row.line()))
+                            .dv(validatedDv)
                             .businessName(row.businessName().trim())
                             .roles(roles)
                             .status(status)
                             .municipality(municipality)
+                            .typeOrganization(typeOrganization)
+                            .typeRegimen(typeRegimen)
                             .build();
                     toCreate.add(entity);
                 } else {
                     ThirdParty entity = existingByNit.get(0);
                     entity.setBusinessName(row.businessName().trim());
+                    entity.setDv(validatedDv);
                     entity.setMunicipality(municipality);
                     entity.setStatus(status);
                     entity.setRoles(roles);
+                    entity.setTypeOrganization(typeOrganization);
+                    entity.setTypeRegimen(typeRegimen);
                     toUpdate.add(entity);
                 }
             } catch (IllegalArgumentException ex) {
@@ -283,6 +363,25 @@ public class ThirdPartyService {
                         .message(ex.getMessage())
                         .build());
             }
+        }
+
+        // PT-05 (TER-RF-07): validacion TOTAL (all-or-nothing). Si hay AL MENOS
+        // una fila con error, NO se persiste ningun registro del archivo y se
+        // devuelve el detalle de errores por fila. (Anula el comportamiento
+        // tolerante del Bloque AN; el documento v3.0 confirma esta regla.)
+        if (!errors.isEmpty()) {
+            BulkThirdPartyUploadResponse errorResponse = BulkThirdPartyUploadResponse.builder()
+                    .totalProcessed(rows.size())
+                    .created(0)
+                    .updated(0)
+                    .failed(errors.size())
+                    .errors(errors)
+                    .build();
+            return ResponseEntity.ok(
+                    SuccessRespondJson.getSuccessRespondMessage(
+                            Optional.of("No se importo ningun tercero: el archivo contiene "
+                                    + errors.size() + " fila(s) con errores. Corrija y vuelva a cargar."),
+                            Optional.of(errorResponse)));
         }
 
         if (!toCreate.isEmpty()) {
@@ -296,8 +395,8 @@ public class ThirdPartyService {
                 .totalProcessed(rows.size())
                 .created(toCreate.size())
                 .updated(toUpdate.size())
-                .failed(errors.size())
-                .errors(errors)
+                .failed(0)
+                .errors(List.of())
                 .build();
 
         return ResponseEntity.ok(
@@ -471,9 +570,18 @@ public class ThirdPartyService {
         String targetNit = request.getNit() != null ? request.getNit().trim() : thirdParty.getNit();
         String targetDv = request.getDv() != null ? request.getDv().trim() : thirdParty.getDv();
         validateNitAndDvFormat(targetNit, targetDv);
+        // PT-06: validar DIAN solo si cambia NIT o DV (no bloquear edicion de
+        // terceros legados con DV historico no calculado por algoritmo).
+        boolean nitOrDvChanged = !targetNit.equals(thirdParty.getNit())
+                || !targetDv.equals(thirdParty.getDv());
+        if (nitOrDvChanged) {
+            validateDianDv(targetNit, targetDv);
+        }
         if (thirdPartyRepository.existsByNitAndIdNotAndDeletedAtIsNull(targetNit, id)) {
             throw new IllegalArgumentException("TERC_011: El NIT + DV ya existe en el sistema.");
         }
+        // PT-07: validar contactos (telefono/correo) tambien al editar.
+        validateContacts(request.getContacts());
 
         if (request.getBusinessName() != null) {
             validateBusinessName(request.getBusinessName());
@@ -493,6 +601,9 @@ public class ThirdPartyService {
             TypeRegimen typeRegimen = resolveTypeRegimen(request.getTypeRegimenId());
             thirdParty.setTypeRegimen(typeRegimen);
         }
+        // PT-09: unicidad de razon social para persona juridica/sociedad, con los
+        // valores efectivos ya aplicados (excluyendo el propio tercero).
+        validateBusinessNameUniqueness(thirdParty.getBusinessName(), thirdParty.getTypeOrganization(), id);
         if (request.getWithholdingIds() != null) {
             List<Withholding> withholdings = resolveWithholdings(request.getWithholdingIds());
             syncWithholdingAssignments(thirdParty, withholdings);
@@ -795,7 +906,10 @@ public class ThirdPartyService {
                     getRowValue(values, canonicalHeaderIndexes, "municipality"),
                     getRowValue(values, canonicalHeaderIndexes, "status"),
                     getRowValue(values, canonicalHeaderIndexes, "third_party_type"),
-                    getRowValue(values, canonicalHeaderIndexes, "dv")));
+                    getRowValue(values, canonicalHeaderIndexes, "dv"),
+                    getRowValue(values, canonicalHeaderIndexes, "country"),
+                    getRowValue(values, canonicalHeaderIndexes, "type_organization"),
+                    getRowValue(values, canonicalHeaderIndexes, "type_regimen")));
         }
         return rows;
     }
@@ -868,7 +982,10 @@ public class ThirdPartyService {
                         getRowValue(rowMap, canonicalHeaderIndexes, "municipality"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "status"),
                         getRowValue(rowMap, canonicalHeaderIndexes, "third_party_type"),
-                        getRowValue(rowMap, canonicalHeaderIndexes, "dv")));
+                        getRowValue(rowMap, canonicalHeaderIndexes, "dv"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "country"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "type_organization"),
+                        getRowValue(rowMap, canonicalHeaderIndexes, "type_regimen")));
             }
             return rows;
         } catch (Exception ex) {
@@ -921,12 +1038,25 @@ public class ThirdPartyService {
             return "third_party_type";
         if (Set.of("dv", "digito_verificacion", "digito_de_verificacion").contains(normalized))
             return "dv";
+        // PT-05 (TER-RF-07): columnas obligatorias adicionales alineadas a la
+        // creacion manual.
+        if (Set.of("pais", "country").contains(normalized))
+            return "country";
+        if (Set.of("tipo_organizacion", "tipo_de_organizacion", "type_organization",
+                "tipoorganizacion").contains(normalized))
+            return "type_organization";
+        if (Set.of("tipo_regimen", "tipo_de_regimen", "type_regimen", "regimen",
+                "tiporegimen").contains(normalized))
+            return "type_regimen";
         return null;
     }
 
     private void validateRequiredHeaders(Set<String> foundHeaders) {
-        List<String> required = List.of("nit", "business_name", "municipality", "status",
-                "third_party_type");
+        // PT-05 (TER-RF-07): mismas columnas obligatorias que la creacion manual:
+        // NIT, DV, razon_social, rol, estado, pais, municipio, tipo_organizacion,
+        // tipo_regimen.
+        List<String> required = List.of("nit", "dv", "business_name", "municipality", "status",
+                "third_party_type", "country", "type_organization", "type_regimen");
         for (String key : required) {
             if (!foundHeaders.contains(key)) {
                 throw new IllegalArgumentException(
@@ -1096,15 +1226,36 @@ public class ThirdPartyService {
             throw new IllegalArgumentException(
                     "BULK_004: Error en linea " + row.line() + ": tipo_tercero es obligatorio.");
         }
+        // PT-05 (TER-RF-07): pais, tipo_organizacion y tipo_regimen son obligatorios.
+        if (row.country() == null || row.country().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": pais es obligatorio.");
+        }
+        if (row.typeOrganization() == null || row.typeOrganization().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": tipo_organizacion es obligatorio.");
+        }
+        if (row.typeRegimen() == null || row.typeRegimen().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + row.line() + ": tipo_regimen es obligatorio.");
+        }
     }
 
-    private String resolveBulkDv(String dv, int line) {
+    private String resolveBulkDv(String nit, String dv, int line) {
+        // PT-05 (TER-RF-07): DV obligatorio igual que en creacion manual (ya no
+        // se reemplaza por '0').
         if (dv == null || dv.trim().isEmpty()) {
-            return "0";
+            throw new IllegalArgumentException("BULK_004: Error en linea " + line + ": DV es obligatorio.");
         }
         String cleanDv = dv.trim();
         if (!cleanDv.matches("^\\d{1,2}$")) {
-            throw new IllegalArgumentException("BULK_004: Error en linea " + line + ": DV invalido.");
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": DV invalido. Solo numeros, 1-2 caracteres.");
+        }
+        // PT-05: el DV debe corresponder al NIT segun algoritmo DIAN (validacion local).
+        if (!DianVerificationDigit.isValid(nit, cleanDv)) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": el digito de verificacion no corresponde al NIT.");
         }
         return cleanDv;
     }
@@ -1378,6 +1529,77 @@ public class ThirdPartyService {
     }
 
     /**
+     * PT-05 (TER-RF-07): resuelve el tipo de organizacion del archivo de carga
+     * masiva por nombre o codigo (case-insensitive). Los catalogos son pequenos
+     * (PERSONA NATURAL / PERSONA JURIDICA), por eso se carga todo y se compara.
+     */
+    private TypeOrganization resolveTypeOrganizationForBulk(String value, int line) {
+        String v = value == null ? "" : value.trim();
+        if (v.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": tipo_organizacion es obligatorio.");
+        }
+        return typeOrganizationRepository.findAll().stream()
+                .filter(t -> matchesCatalogValue(v, t.getName(), t.getCode()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "BULK_004: Error en linea " + line + ": tipo_organizacion no valido."));
+    }
+
+    /**
+     * PT-05 (TER-RF-07): resuelve el tipo de regimen del archivo por nombre o
+     * codigo (case-insensitive).
+     */
+    private TypeRegimen resolveTypeRegimenForBulk(String value, int line) {
+        String v = value == null ? "" : value.trim();
+        if (v.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": tipo_regimen es obligatorio.");
+        }
+        return typeRegimenRepository.findAll().stream()
+                .filter(t -> matchesCatalogValue(v, t.getName(), t.getCode()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "BULK_004: Error en linea " + line + ": tipo_regimen no valido."));
+    }
+
+    /**
+     * PT-05 (TER-RF-07): valida que el pais del archivo corresponda al pais del
+     * municipio resuelto. El municipio ya determina el pais en el modelo; esta
+     * verificacion da significado a la columna obligatoria 'pais'.
+     */
+    private void validateCountryForBulk(Municipality municipality, String countryValue, int line) {
+        String v = countryValue == null ? "" : countryValue.trim();
+        if (v.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "BULK_004: Error en linea " + line + ": pais es obligatorio.");
+        }
+        Country country = municipality != null ? municipality.getCountry() : null;
+        if (country == null || country.getName() == null) {
+            return; // sin pais en el municipio no hay con que contrastar; se acepta
+        }
+        if (!matchesCatalogValue(v, country.getName(), country.getCode())) {
+            throw new IllegalArgumentException("BULK_004: Error en linea " + line
+                    + ": el pais no corresponde al municipio indicado.");
+        }
+    }
+
+    /**
+     * Compara un valor de archivo contra el nombre y el codigo de un catalogo,
+     * ignorando mayusculas y tolerando espacios vs guion bajo ("PERSONA NATURAL"
+     * == "PERSONA_NATURAL").
+     */
+    private boolean matchesCatalogValue(String value, String name, String code) {
+        if (value == null) {
+            return false;
+        }
+        String v = value.trim();
+        String vUnderscore = v.replace(' ', '_');
+        return (name != null && (name.equalsIgnoreCase(v) || name.equalsIgnoreCase(vUnderscore)))
+                || (code != null && (code.equalsIgnoreCase(v) || code.equalsIgnoreCase(vUnderscore)));
+    }
+
+    /**
      * Busca un tercero por ID o lanza excepcion si no existe.
      *
      * @param id ID del tercero a buscar
@@ -1394,7 +1616,24 @@ public class ThirdPartyService {
             throw new IllegalArgumentException("TERC_012: Formato de NIT invalido. Solo numeros, 10-15 caracteres.");
         }
         if (dv == null || !dv.matches("^\\d{1,2}$")) {
-            throw new IllegalArgumentException("TERC_012: Formato de DV invalido. Solo numeros, 1-2 caracteres.");
+            // PT-06 (TER-RF-02): mensaje literal del requerimiento.
+            throw new IllegalArgumentException("Formato de DV invalido. Solo numeros, 1-2 caracteres");
+        }
+    }
+
+    /**
+     * PT-06 (TER-RF-02, 2026-06-02): valida que el DV corresponda al NIT segun
+     * el algoritmo DIAN (validacion local, sin integracion externa). Se asume
+     * que el formato ya fue validado por {@link #validateNitAndDvFormat}.
+     *
+     * <p>En creacion se aplica SIEMPRE. En edicion solo se aplica si el NIT o el
+     * DV cambian respecto al valor almacenado, para no bloquear la edicion de
+     * terceros historicos cuyo DV no fue calculado con el algoritmo (datos
+     * legados/seed). Consistente con la validacion de la carga masiva (PT-05).
+     */
+    private void validateDianDv(String nit, String dv) {
+        if (!DianVerificationDigit.isValid(nit, dv)) {
+            throw new IllegalArgumentException("El digito de verificacion no corresponde al NIT ingresado");
         }
     }
 
@@ -1406,9 +1645,29 @@ public class ThirdPartyService {
      * asi que dos empresas pueden tener TER2026000001 sin colision.
      */
     private String generateThirdPartyCode() {
-        long sequence = thirdPartyRepository.count() + 1;
         int year = LocalDate.now().getYear();
-        return String.format("TER%d%06d", year, sequence);
+        return String.format("TER%d%06d", year, nextThirdPartyCodeSequence(year));
+    }
+
+    /**
+     * BUG-01 (TER-RF-02/07, 2026-06-02): siguiente consecutivo TER del tenant
+     * para el anio dado. Usa {@code MAX(sufijo)+1} (no {@code count()+1}) para
+     * NO colisionar con {@code uk_third_parties_company_code_active} cuando hay
+     * huecos por soft-delete o codigos de seed con prefijo distinto (CLI-*,
+     * PROV-*). El antipatron previo {@code count()+1} generaba un codigo que ya
+     * existia activo y la DataIntegrityViolationException resultante el handler
+     * la traducia, erroneamente, como "el tercero tiene registros asociados".
+     */
+    private long nextThirdPartyCodeSequence(int year) {
+        Long companyId = TenantContext.getCompanyId();
+        if (companyId == null) {
+            // Sin tenant (p.ej. PLATFORM_ADMIN) el insert fallara igual por
+            // company_id NOT NULL; devolvemos 1 sin consultar.
+            return 1L;
+        }
+        Integer max = thirdPartyRepository.findMaxThirdPartyCodeSequence(
+                companyId, String.format("TER%d%%", year));
+        return (max == null ? 0L : max.longValue()) + 1L;
     }
 
     private ThirdPartyDTO toDto(ThirdParty entity) {
@@ -1654,6 +1913,84 @@ public class ThirdPartyService {
         return value.trim();
     }
 
+    /**
+     * PT-07 (TER-RF-02/03, 2026-06-02): valida el formato de telefono y correo
+     * de los contactos del tercero. Las validaciones SOLO aplican cuando el
+     * usuario provee el dato (la seccion de contactos es opcional). Se invoca
+     * tanto en creacion como en edicion.
+     */
+    private void validateContacts(List<ThirdContactDTO> contacts) {
+        if (contacts == null || contacts.isEmpty()) {
+            return;
+        }
+        for (ThirdContactDTO c : contacts) {
+            if (c == null) {
+                continue;
+            }
+            String phone = c.getPhone() == null ? "" : c.getPhone().trim();
+            if (!phone.isEmpty() && !phone.matches("^\\d{7,12}$")) {
+                throw new IllegalArgumentException(
+                        "El telefono de contacto solo puede contener digitos y debe tener entre 7 y 12 caracteres");
+            }
+            String email = c.getEmail() == null ? "" : c.getEmail().trim();
+            if (!email.isEmpty()
+                    && (email.length() > 255 || !email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"))) {
+                throw new IllegalArgumentException(
+                        "El correo electronico del contacto no tiene un formato valido");
+            }
+        }
+    }
+
+    /**
+     * PT-09 (TER-RF-02/03, 2026-06-02): normaliza la razon social para comparar
+     * unicidad: minusculas, sin espacios al borde y colapsando espacios internos.
+     */
+    private String normalizeBusinessName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.trim().replaceAll("\\s+", " ").toLowerCase();
+    }
+
+    /**
+     * PT-09: determina si el tipo de organizacion corresponde a persona juridica
+     * o sociedad (donde aplica la unicidad de razon social). La persona natural
+     * queda excluida.
+     */
+    private boolean isLegalEntityType(TypeOrganization typeOrganization) {
+        if (typeOrganization == null) {
+            return false;
+        }
+        String n = (typeOrganization.getName() == null ? "" : typeOrganization.getName()).toUpperCase();
+        String c = (typeOrganization.getCode() == null ? "" : typeOrganization.getCode()).toUpperCase();
+        return n.contains("JURIDICA") || n.contains("JURÍDICA") || n.contains("SOCIEDAD")
+                || c.contains("JURIDICA") || c.contains("SOCIEDAD");
+    }
+
+    /**
+     * PT-09: si el tercero es persona juridica/sociedad, valida que no exista
+     * otro tercero activo del mismo tenant con la misma razon social normalizada.
+     *
+     * @param businessName      razon social a validar
+     * @param typeOrganization  tipo de organizacion efectivo del tercero
+     * @param excludeId         id a excluir (la propia entidad en edicion) o null
+     */
+    private void validateBusinessNameUniqueness(String businessName, TypeOrganization typeOrganization,
+            Long excludeId) {
+        if (!isLegalEntityType(typeOrganization) || businessName == null || businessName.isBlank()) {
+            return;
+        }
+        Long companyId = TenantContext.getCompanyId();
+        if (companyId == null) {
+            return;
+        }
+        String normalized = normalizeBusinessName(businessName);
+        if (thirdPartyRepository.countActiveByNormalizedBusinessName(companyId, normalized, excludeId) > 0) {
+            throw new IllegalArgumentException(
+                    "Ya existe un tercero activo con la misma razon social");
+        }
+    }
+
     private DataTableRequest normalizeDataTableRequest(DataTableRequest request) {
         DataTableRequest safe = request != null ? request : new DataTableRequest();
 
@@ -1679,6 +2016,9 @@ public class ThirdPartyService {
             String municipality,
             String status,
             String thirdPartyType,
-            String dv) {
+            String dv,
+            String country,
+            String typeOrganization,
+            String typeRegimen) {
     }
 }

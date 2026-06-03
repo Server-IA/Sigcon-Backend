@@ -83,6 +83,7 @@ public final class AuditLabels {
             Map.entry("IntegrationBatch", "Lote de integracion"), Map.entry("IntegrationTransfer", "Transferencia de integracion"),
             Map.entry("AuditLog", "Log de auditoria"), Map.entry("AuditRiskRule", "Regla de riesgo"),
             Map.entry("AuditRetentionPolicy", "Politica de retencion"), Map.entry("AuditPurgeRecord", "Registro de purga"),
+            Map.entry("AuditFinding", "Hallazgo de auditoria"),
             Map.entry("AccessDenied", "Acceso denegado"), Map.entry("FinancialStatement", "Estado financiero")
     );
 

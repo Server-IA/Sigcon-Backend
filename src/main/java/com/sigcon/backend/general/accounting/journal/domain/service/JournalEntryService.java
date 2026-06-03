@@ -138,7 +138,7 @@ public class JournalEntryService {
         int fiscalYear = entryDate.getYear();
         long nextNumber;
         try {
-            nextNumber = voucherSeriesService.consumeNext("JE");
+            nextNumber = assignNextJournalNumber(fiscalYear);
         } catch (IllegalStateException seriesEx) {
             // Re-lanza con mensaje original; controller lo convierte a 400.
             throw new IllegalStateException(seriesEx.getMessage(), seriesEx);
@@ -488,7 +488,8 @@ public class JournalEntryService {
         // recreate) corria los dos paths consecutivamente. Ahora ambos paths
         // comparten la misma fuente de verdad y respetan el lock JVM por
         // tipo de comprobante.
-        long nextNumber = voucherSeriesService.consumeNext("JE");
+        long nextNumber = assignNextJournalNumber(
+                original.getFiscalYear() != null ? original.getFiscalYear() : LocalDate.now().getYear());
 
         // Crear asiento de reversion con lineas espejo (debitos y creditos invertidos)
         JournalEntry reversal = JournalEntry.builder()
@@ -579,7 +580,7 @@ public class JournalEntryService {
         // el REV ya se persistio y la operacion principal NO se rollbackea.
         if (createCorrectionDraft) {
             try {
-                long correctionNumber = voucherSeriesService.consumeNext("JE");
+                long correctionNumber = assignNextJournalNumber(LocalDate.now().getYear());
                 JournalEntry correctionDraft = JournalEntry.builder()
                         .entryNumber(correctionNumber)
                         .fiscalYear(LocalDate.now().getYear())
@@ -1193,6 +1194,26 @@ public class JournalEntryService {
                 .createdAt(entry.getCreatedAt())
                 .auditLogId(entry.getAuditLogId()) // HU-AU-09 E5
                 .build();
+    }
+
+    /**
+     * Bug ACT-RF-01 (2026-06-01): asigna el siguiente numero de asiento de forma
+     * robusta. La serie 'JE' (voucher_series_config) puede quedar DESINCRONIZADA
+     * con el MAX(entry_number) real del tenant cuando seeds u otros flujos insertan
+     * asientos directamente sin consumir la serie; en ese caso {@code consumeNext}
+     * devolveria un numero que YA existe -> "duplicate key
+     * uk_journal_entries_company_fy_num" (sintoma reportado por QA como el opaco
+     * "Transaction silently rolled back" al registrar un activo a credito).
+     *
+     * <p>Antes de consumir, sincronizamos la serie al menos al MAX real del anio
+     * fiscal destino. Asi el numero asignado siempre es libre para ese anio.</p>
+     */
+    private long assignNextJournalNumber(int fiscalYear) {
+        Long dbMax = journalEntryRepository.findMaxEntryNumberByFiscalYear(fiscalYear);
+        if (dbMax != null) {
+            voucherSeriesService.syncToAtLeast("JE", dbMax);
+        }
+        return voucherSeriesService.consumeNext("JE");
     }
 
     /**

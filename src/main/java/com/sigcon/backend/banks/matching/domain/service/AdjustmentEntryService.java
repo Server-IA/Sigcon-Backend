@@ -266,7 +266,8 @@ public class AdjustmentEntryService {
         saveDetalle(emp, extractMov, "EXTRACTO");
         saveDetalle(emp, libros, "LIBROS");
 
-        extractMov.setEstadoConciliacion("CONCILIADO");
+        // QA Bloque BNK (2026-06-03) Bug 1: estado de TRABAJO; el oficial se commitea al cerrar.
+        extractMov.setEstadoConciliacionSesion("CONCILIADO");
         movementRepository.save(extractMov);
     }
 
@@ -321,7 +322,7 @@ public class AdjustmentEntryService {
         if (m.getSourceType() != FinancialMovementSourceType.BANK_IMPORT) {
             throw new IllegalArgumentException("Solo se generan ajustes para movimientos del extracto (importados del banco).");
         }
-        if ("CONCILIADO".equals(m.getEstadoConciliacion())) {
+        if ("CONCILIADO".equals(m.getEstadoConciliacionSesion()) || "CONCILIADO".equals(m.getEstadoConciliacion())) {
             throw new IllegalStateException("El movimiento #" + movId + " ya está conciliado.");
         }
         return m;

@@ -95,6 +95,33 @@ public class ApReportController {
     }
 
     /**
+     * RF-11 (Notas Tecnicas CXP, 2026-06-02): estado de cuenta del proveedor en PDF
+     * (iText7), reemplaza el window.print del frontend.
+     *
+     * @param thirdPartyId identificador del proveedor
+     * @return archivo PDF con el estado de cuenta
+     */
+    @Operation(summary = "Estado de cuenta proveedor (PDF)", description = "Genera el estado de cuenta del proveedor en formato PDF para descarga")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "PDF generado exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Proveedor no encontrado"),
+            @ApiResponse(responseCode = "500", description = "Error al generar el PDF")
+    })
+    @PostMapping("/supplier/{thirdPartyId}/pdf")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> getSupplierStatementPdf(@PathVariable Long thirdPartyId) {
+        try {
+            return reportService.generateSupplierStatementPdf(thirdPartyId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al generar el PDF: " + e.getMessage())));
+        }
+    }
+
+    /**
      * HU-AP-21 (2026-04-28): Reporte de Ordenes de Compra con filtros opcionales.
      */
     @Operation(summary = "Reporte de Ordenes de Compra",
@@ -116,6 +143,39 @@ public class ApReportController {
         } catch (java.time.format.DateTimeParseException e) {
             return ResponseEntity.badRequest().body(
                 ErrorRespondJson.getErrorRespondMessage(Optional.of("Formato fecha invalido (yyyy-MM-dd)")));
+        }
+    }
+
+    /**
+     * RF-11 (Notas Tecnicas CXP, 2026-06-02): reporte de Ordenes de Compra en PDF
+     * (iText7), reemplaza el window.print del frontend.
+     *
+     * @return archivo PDF con el reporte de OCs
+     */
+    @Operation(summary = "Reporte de Ordenes de Compra (PDF)",
+        description = "Genera el reporte de Ordenes de Compra en formato PDF para descarga")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "PDF generado exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Formato de fecha invalido"),
+        @ApiResponse(responseCode = "500", description = "Error al generar el PDF")
+    })
+    @PostMapping("/purchase-orders/pdf")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_REPORT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> getPurchaseOrdersReportPdf(
+            @RequestParam(required = false) Long thirdPartyId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo) {
+        try {
+            LocalDate from = (dateFrom != null && !dateFrom.isBlank()) ? LocalDate.parse(dateFrom) : null;
+            LocalDate to = (dateTo != null && !dateTo.isBlank()) ? LocalDate.parse(dateTo) : null;
+            return reportService.generatePurchaseOrdersReportPdf(thirdPartyId, status, from, to);
+        } catch (java.time.format.DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(
+                ErrorRespondJson.getErrorRespondMessage(Optional.of("Formato fecha invalido (yyyy-MM-dd)")));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of("Error al generar el PDF: " + e.getMessage())));
         }
     }
 }

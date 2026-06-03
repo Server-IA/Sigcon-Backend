@@ -291,9 +291,16 @@ public class ApAdvanceService {
         int safeLength = length <= 0 ? 20 : Math.min(length, 100);
         int page = start / safeLength;
 
+        // RF-28 (Notas Tecnicas CXP): ordenar por defecto por fecha ascendente
+        // (anticipos mas antiguos primero) para facilitar la deteccion visual de
+        // saldos antiguos sin aplicar. La tabla del frontend tiene el ordenamiento
+        // deshabilitado, asi que el orden lo define el backend.
+        org.springframework.data.domain.Sort sort =
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Order.asc("advanceDate"));
         Pageable pageable = length == -1
                 ? Pageable.unpaged()
-                : PageRequest.of(page, safeLength);
+                : PageRequest.of(page, safeLength, sort);
 
         Specification<ApAdvance> spec = specBuilder.build(request);
         Page<ApAdvanceDTO> data = advanceRepository.findAll(spec, pageable).map(this::toDTO);

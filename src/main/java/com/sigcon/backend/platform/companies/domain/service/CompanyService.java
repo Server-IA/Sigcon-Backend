@@ -15,6 +15,8 @@ import com.sigcon.backend.parametrization.users.domain.model.enums.Status;
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.repository.RoleRepository;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.parametrization.users.domain.service.PasswordPolicyService;
+import com.sigcon.backend.parametrization.users.domain.service.SessionService;
 import com.sigcon.backend.platform.companies.application.CompanyDTO;
 import com.sigcon.backend.platform.companies.application.CreateCompanyRequest;
 import com.sigcon.backend.platform.companies.application.CreateCompanyWithAdminRequest;
@@ -65,6 +67,8 @@ public class CompanyService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditPublisher auditPublisher;
+    private final PasswordPolicyService passwordPolicyService;
+    private final SessionService sessionService;
 
     /**
      * Publica un audit log de una operacion a nivel de plataforma sobre una empresa
@@ -217,32 +221,9 @@ public class CompanyService {
      */
     @Transactional
     public CompanyDTO create(CreateCompanyRequest request) {
-        // QA Bloque PA Bug 25 (HU-PA-10 E2, 2026-05-09): la unicidad del NIT debe
-        // incluir empresas soft-deleted. En Colombia el NIT es identificador fiscal
-        // y reusarlo aunque la empresa este "eliminada" abre riesgos contables. Si
-        // hay un soft-deleted con el mismo NIT, mensaje claro al PLATFORM_ADMIN
-        // para que reactive en lugar de duplicar.
-        if (companyRepository.existsByNitAndDeletedAtIsNull(request.getNit())) {
-            throw new IllegalArgumentException(
-                    "Ya existe una empresa con el NIT " + request.getNit());
-        }
-        if (companyRepository.existsByNit(request.getNit())) {
-            throw new IllegalArgumentException(
-                    "El NIT " + request.getNit() + " corresponde a una empresa eliminada. "
-                  + "Contacte al administrador de plataforma para reactivarla en lugar de crear una nueva.");
-        }
-        // QA Bloque PA Bug 58 (HU-PA-PLAT-01 E4, 2026-05-09): validar DV con
-        // algoritmo DIAN (Resolucion 12717/1972). Si el cliente envia dv y NO
-        // coincide con el calculado, rechazar.
-        if (request.getDv() != null && !request.getDv().isBlank()) {
-            String calculated = computeColombianDv(request.getNit());
-            if (calculated != null && !calculated.equals(request.getDv().trim())) {
-                throw new IllegalArgumentException(
-                        "El digito de verificacion (DV=" + request.getDv() + ") no coincide con el "
-                      + "calculado para NIT " + request.getNit() + " segun algoritmo DIAN. "
-                      + "DV correcto: " + calculated);
-            }
-        }
+        // Validacion de NIT + DV (HU-PA-10 E2 + HU-PA-PLAT-01 E4). Extraida a
+        // metodo reutilizable para compartirla con createWithAdmin (v3.0).
+        validateNitForCreate(request);
 
         Company c = Company.builder()
                 .nit(request.getNit())
@@ -255,6 +236,8 @@ public class CompanyService {
                 .companySize(request.getCompanySize())
                 .typeOrganizationId(request.getTypeOrganizationId())
                 .typeRegimenId(request.getTypeRegimenId())
+                .plan(request.getPlan())                      // PA-RF-10 punto 5
+                .regionalConfig(request.getRegionalConfig())  // PA-RF-10 punto 5
                 .status(CompanyStatus.ACTIVE)
                 .build();
 
@@ -350,95 +333,279 @@ public class CompanyService {
     }
 
     /**
-     * HU-PLAT-02 / HU-PA-10: crea empresa + primer usuario ADMIN_EMPRESA de esa empresa
-     * atomicamente. Valida NIT unico + email/username unicos. Si algo falla, rollback total.
-     *
-     * <p>QA Bloque PA Bug 24 (2026-05-09): el primer admin se asocia al rol
-     * {@code ADMIN_EMPRESA} del tenant recien creado (no al rol global {@code ADMIN}).
-     * Esto cumple HU-PA-10 E1 que exige aprovisionar los 6 roles predefinidos y
-     * asignar el primer admin como ADMIN_EMPRESA del tenant.
+     * HU-PLAT-02 / PA-RF-PLAT-01 v3.0 (Control de Cambios PA, 2026-05-29): crea
+     * empresa + primer usuario ADMIN_EMPRESA con MAQUINA DE ESTADOS de
+     * aprovisionamiento:
+     * <ol>
+     *   <li>Idempotencia: si llega un request con la misma Idempotency-Key ya
+     *       procesada, se devuelve el resultado original sin reprocesar (punto 2).</li>
+     *   <li>La empresa nace en estado PROVISIONING con un provisioningId unico (puntos 1/3).</li>
+     *   <li>Si todo el aprovisionamiento (recursos base + 9 roles + admin) termina
+     *       OK -> pasa a ACTIVE.</li>
+     *   <li>Si falla -> la empresa queda en estado ERROR (no solo rollback, punto 4),
+     *       visible para el PLATFORM_ADMIN para re-provisionar o eliminar.</li>
+     *   <li>La contrasena del primer admin se valida contra la politica de seguridad (punto 6).</li>
+     * </ol>
+     * El metodo NO es @Transactional: orquesta varias transacciones independientes
+     * (via {@code self()}) para poder dejar la empresa en ERROR si el aprovisionamiento
+     * falla DESPUES de haberla creado.
      */
-    @Transactional
     public CompanyDTO createWithAdmin(CreateCompanyWithAdminRequest req) {
+        return createWithAdmin(req, null);
+    }
+
+    /** Variante con Idempotency-Key (PA-RF-PLAT-01 punto 2). */
+    public CompanyDTO createWithAdmin(CreateCompanyWithAdminRequest req, String idempotencyKey) {
+        // PA-RF-PLAT-01 punto 2: idempotencia. Si esta key ya se proceso, devolver
+        // el resultado original sin crear nada nuevo.
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<Company> existing =
+                    companyRepository.findByIdempotencyKeyAndDeletedAtIsNull(idempotencyKey.trim());
+            if (existing.isPresent()) {
+                Company c = existing.get();
+                CompanyDTO dto = CompanyDTO.from(c);
+                userRepository.findAllByRoles_Name("ADMIN_EMPRESA").stream()
+                        .filter(u -> c.getId().equals(u.getCompanyId()))
+                        .findFirst()
+                        .ifPresent(u -> {
+                            dto.setAdminUserId(u.getId());
+                            dto.setAdminEmail(u.getEmail());
+                            dto.setAdminUsername(u.getUsername());
+                        });
+                log.info("PLAT-01 idempotente: Idempotency-Key ya procesada, companyId={}", c.getId());
+                return dto;
+            }
+        }
+
+        // Validaciones de unicidad ANTES de crear nada (para no dejar una empresa en
+        // ERROR por un duplicado evitable).
         if (userRepository.existsByEmailAndDeletedAtIsNull(req.getAdminEmail())) {
-            throw new IllegalArgumentException(
-                    "Ya existe un usuario con el email " + req.getAdminEmail());
+            throw new IllegalArgumentException("Ya existe un usuario con el email " + req.getAdminEmail());
         }
         if (userRepository.findByUsernameOrEmail(req.getAdminUsername(), req.getAdminEmail()).isPresent()) {
-            throw new IllegalArgumentException(
-                    "Ya existe un usuario con el username " + req.getAdminUsername());
+            throw new IllegalArgumentException("Ya existe un usuario con el username " + req.getAdminUsername());
         }
+        // PA-RF-PLAT-01 punto 5 (v3.0): los datos legales de la empresa son
+        // obligatorios en el alta atomica: direccion principal, correo corporativo
+        // y telefono principal. (El alta simple sin admin los mantiene opcionales.)
+        validateCompanyLegalData(req.getCompany());
+        // PA-RF-PLAT-01 punto 6: la contrasena del primer admin cumple la politica de seguridad.
+        passwordPolicyService.validateComplexity(req.getAdminPassword());
+        // Validar NIT/DV antes de crear (mismo criterio que create()).
+        validateNitForCreate(req.getCompany());
 
-        CompanyDTO created = create(req.getCompany());
+        // TX1 (committed): crear la empresa en PROVISIONING con provisioningId.
+        Company company = self().createCompanyInProvisioning(req.getCompany(), idempotencyKey);
+        Long companyId = company.getId();
+        String provisioningId = company.getProvisioningId();
 
-        // QA Bloque PA Bug 24 (HU-PA-10 E1): usar el rol ADMIN_EMPRESA del tenant
-        // recien creado (clonado por _seed_predefined_roles_for_tenant). Si no se
-        // resuelve, fallback al rol global ADMIN para no bloquear la transaccion.
+        try {
+            // TX2 (committed): aprovisionar recursos base + 9 roles + crear admin.
+            Long adminId = self().provisionAndCreateAdmin(companyId, req);
+            // TX3 (committed): marcar ACTIVE.
+            self().markCompanyActive(companyId);
+
+            Company refreshed = companyRepository.findById(companyId).orElse(company);
+            CompanyDTO dto = CompanyDTO.from(refreshed);
+            dto.setAdminUserId(adminId);
+            dto.setAdminEmail(req.getAdminEmail());
+            dto.setAdminUsername(req.getAdminUsername());
+            return dto;
+        } catch (Exception ex) {
+            // PA-RF-PLAT-01 punto 4: ante fallo, dejar la empresa en ERROR (no solo
+            // rollback). Asi el PLATFORM_ADMIN la ve y decide re-provisionar o borrar.
+            self().markCompanyError(companyId, ex.getMessage());
+            log.error("PLAT-01: aprovisionamiento fallo para companyId={} provisioningId={}: {}",
+                    companyId, provisioningId, ex.getMessage(), ex);
+            throw new IllegalStateException(
+                    "El aprovisionamiento de la empresa (id=" + companyId + ", provisioningId="
+                  + provisioningId + ") fallo y la empresa quedo en estado ERROR. Detalle: " + ex.getMessage(), ex);
+        }
+    }
+
+    /** TX1 del saga PLAT-01: crea la empresa en estado PROVISIONING. */
+    @Transactional
+    public Company createCompanyInProvisioning(CreateCompanyRequest request, String idempotencyKey) {
+        Company c = Company.builder()
+                .nit(request.getNit())
+                .dv(Optional.ofNullable(request.getDv()).orElse("0"))
+                .businessName(request.getBusinessName())
+                .legalRepresentative(request.getLegalRepresentative())
+                .email(request.getEmail())
+                .phone(request.getPhone())
+                .address(request.getAddress())
+                .companySize(request.getCompanySize())
+                .typeOrganizationId(request.getTypeOrganizationId())
+                .typeRegimenId(request.getTypeRegimenId())
+                .plan(request.getPlan())
+                .regionalConfig(request.getRegionalConfig())
+                .provisioningId(java.util.UUID.randomUUID().toString())
+                .idempotencyKey((idempotencyKey == null || idempotencyKey.isBlank()) ? null : idempotencyKey.trim())
+                .status(CompanyStatus.PROVISIONING)
+                .build();
+        c = companyRepository.save(c);
+        auditCompany(c.getId(), "CREATE",
+                "Empresa creada en PROVISIONING: " + c.getBusinessName() + " (NIT " + c.getNit()
+              + ", provisioningId=" + c.getProvisioningId() + ")");
+        return c;
+    }
+
+    /** TX2 del saga PLAT-01: aprovisiona recursos base + 9 roles + crea el admin inicial. */
+    @Transactional
+    public Long provisionAndCreateAdmin(Long companyId, CreateCompanyWithAdminRequest req) {
+        // HU-TENANT-04/05 + PA-RF-10: periodos + mapeos + cost-center + 9 roles predefinidos.
+        provisionTenantDefaults(companyId, LocalDate.now().getYear());
+
         Role adminRole = roleRepository
-                .findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull("ADMIN_EMPRESA", created.getId())
+                .findByNameIgnoreCaseAndCompanyIdAndDeletedAtIsNull("ADMIN_EMPRESA", companyId)
                 .orElseGet(() -> roleRepository.findByNameAndDeletedAtIsNull("ADMIN")
                         .orElseThrow(() -> new IllegalStateException(
-                                "Rol ADMIN_EMPRESA no encontrado para la empresa "
-                              + created.getId() + " (auto-provision fallo)")));
+                                "Rol ADMIN_EMPRESA no encontrado para la empresa " + companyId
+                              + " (auto-provision fallo)")));
 
+        String encoded = passwordEncoder.encode(req.getAdminPassword());
         User admin = User.builder()
                 .name(req.getAdminFirstName())
                 .lastname(req.getAdminLastName())
                 .email(req.getAdminEmail())
                 .username(req.getAdminUsername())
-                .password(passwordEncoder.encode(req.getAdminPassword()))
+                .password(encoded)
                 .roles(Set.of(adminRole))
                 .status(Status.ACTIVE)
-                .companyId(created.getId())
+                .companyId(companyId)
                 .platformRole(null)
                 .build();
         User savedAdmin = userRepository.save(admin);
+        // PA-RF-01: registrar la primera contrasena en el historial.
+        passwordPolicyService.record(savedAdmin.getId(), encoded);
         log.info("HU-PLAT-02: admin inicial creado para empresa id={}: username={} con rol={}",
-                created.getId(), admin.getUsername(), adminRole.getName());
-        // Auditar creacion del admin dentro del contexto de la nueva empresa.
-        TenantContext.runAs(created.getId(), false, () ->
+                companyId, savedAdmin.getUsername(), adminRole.getName());
+        TenantContext.runAs(companyId, false, () ->
                 auditPublisher.publishCreate(AuditModule.PA, "User", savedAdmin.getId(),
                         "Usuario " + adminRole.getName() + " inicial creado para empresa: "
                                 + savedAdmin.getUsername() + " (" + savedAdmin.getEmail() + ")"));
-        // QA Bloque PA Bug 56 (HU-PA-PLAT-01 E1, 2026-05-09): exponer el adminUserId
-        // en el campo extra del DTO para que el frontend pueda navegar al user creado.
-        // Como CompanyDTO no tenia el campo, lo agregamos como atributo @Transient en
-        // la respuesta via wrapper Map en el controller. Aca solo guardamos el id en
-        // un campo adicional del DTO devuelto.
-        created.setAdminUserId(savedAdmin.getId());
-        created.setAdminEmail(savedAdmin.getEmail());
-        created.setAdminUsername(savedAdmin.getUsername());
-        return created;
+        return savedAdmin.getId();
+    }
+
+    /** TX3 del saga PLAT-01: marca la empresa ACTIVE tras aprovisionamiento exitoso. */
+    @Transactional
+    public void markCompanyActive(Long companyId) {
+        Company c = companyRepository.findById(companyId)
+                .orElseThrow(() -> new IllegalArgumentException("Empresa no encontrada"));
+        c.setStatus(CompanyStatus.ACTIVE);
+        companyRepository.save(c);
+        auditCompany(companyId, "UPDATE",
+                "Empresa activada tras aprovisionamiento exitoso (PROVISIONING -> ACTIVE)");
+    }
+
+    /** PA-RF-PLAT-01 punto 4: marca la empresa en ERROR si el aprovisionamiento falla. */
+    @Transactional
+    public void markCompanyError(Long companyId, String reason) {
+        try {
+            Company c = companyRepository.findById(companyId).orElse(null);
+            if (c != null) {
+                c.setStatus(CompanyStatus.ERROR);
+                companyRepository.save(c);
+                auditCompany(companyId, "UPDATE",
+                        "Aprovisionamiento fallido (PROVISIONING -> ERROR): " + reason);
+            }
+        } catch (Exception e) {
+            log.error("No se pudo marcar ERROR la empresa {}: {}", companyId, e.getMessage());
+        }
+    }
+
+    /**
+     * PA-RF-PLAT-01 punto 5 (v3.0, Control de Cambios PA): los datos legales de la
+     * empresa son obligatorios al crear empresa + primer administrador. Antes solo
+     * eran razon social, NIT y DV; ahora tambien direccion principal, correo
+     * corporativo y telefono principal.
+     */
+    private void validateCompanyLegalData(CreateCompanyRequest request) {
+        if (request.getAddress() == null || request.getAddress().isBlank()) {
+            throw new IllegalArgumentException("La direccion principal de la empresa es obligatoria");
+        }
+        if (request.getEmail() == null || request.getEmail().isBlank()) {
+            throw new IllegalArgumentException("El correo corporativo de la empresa es obligatorio");
+        }
+        if (request.getPhone() == null || request.getPhone().isBlank()) {
+            throw new IllegalArgumentException("El telefono principal de la empresa es obligatorio");
+        }
+    }
+
+    /** Validacion de NIT + DV reutilizable (HU-PA-10 E2 + HU-PA-PLAT-01 E4). */
+    private void validateNitForCreate(CreateCompanyRequest request) {
+        if (companyRepository.existsByNitAndDeletedAtIsNull(request.getNit())) {
+            throw new IllegalArgumentException("Ya existe una empresa con el NIT " + request.getNit());
+        }
+        if (companyRepository.existsByNit(request.getNit())) {
+            throw new IllegalArgumentException(
+                    "El NIT " + request.getNit() + " corresponde a una empresa eliminada. "
+                  + "Contacte al administrador de plataforma para reactivarla en lugar de crear una nueva.");
+        }
+        if (request.getDv() != null && !request.getDv().isBlank()) {
+            String calculated = computeColombianDv(request.getNit());
+            if (calculated != null && !calculated.equals(request.getDv().trim())) {
+                throw new IllegalArgumentException(
+                        "El digito de verificacion (DV=" + request.getDv() + ") no coincide con el "
+                      + "calculado para NIT " + request.getNit() + " segun algoritmo DIAN. "
+                      + "DV correcto: " + calculated);
+            }
+        }
     }
 
     /** HU-PA-RF-63: desactivar empresa (usuarios no podran loguearse). Wrapper legacy. */
     @Transactional
     public CompanyDTO deactivate(Long id) {
-        return deactivate(id, "(legacy: sin motivo, retro-compat)", true);
+        return deactivate(id, "(legacy: sin motivo, retro-compat)", true, null);
+    }
+
+    /** Wrapper sin IP (retro-compat). */
+    @Transactional
+    public CompanyDTO deactivate(Long id, String reason, boolean force) {
+        return deactivate(id, reason, force, null);
     }
 
     /**
-     * QA Bloque PA Bug 59-62 (HU-PA-PLAT-03 E1+E3+E4+E5, 2026-05-09): version
-     * enriquecida con:
-     *  - E3: motivo obligatorio (validado en el controller con minimo 30 chars).
-     *  - E4: chequea jobs activos antes de desactivar. Si hay y force=false, lanza
-     *        IllegalStateException -> 409.
-     *  - E5: audit log con previousStatus + reason + affectedUsersCount.
-     *  - E1: mass-blacklist de tokens activos de los users de la empresa.
+     * PA-RF-PLAT-03 v3.0 (Control de Cambios PA, 2026-05-29): desactivacion
+     * endurecida:
+     *  - punto 4: no permite desactivar la ULTIMA empresa ACTIVE.
+     *  - punto 5: no permite desactivar empresas en PROVISIONING/ERROR.
+     *  - punto 3: registra la IP del PLATFORM_ADMIN ejecutor en auditoria.
+     *  - punto 7: revoca las sesiones activas (refresh tokens) de los usuarios de
+     *    la empresa y retorna la cantidad en {@code invalidatedSessions}.
+     *  - jobs en ejecucion (force=false) -> IllegalStateException (409).
      */
     @Transactional
-    public CompanyDTO deactivate(Long id, String reason, boolean force) {
+    public CompanyDTO deactivate(Long id, String reason, boolean force, String executorIp) {
         Company c = companyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Empresa no encontrada"));
 
         if (c.getStatus() == CompanyStatus.INACTIVE) {
             log.info("Empresa ya estaba INACTIVE: id={}", id);
-            return CompanyDTO.from(c);
+            CompanyDTO already = CompanyDTO.from(c);
+            already.setInvalidatedSessions(0);
+            return already;
+        }
+
+        // PA-RF-PLAT-03 punto 5: no desactivar empresas en estados transitorios.
+        if (c.getStatus() == CompanyStatus.PROVISIONING || c.getStatus() == CompanyStatus.ERROR) {
+            throw new IllegalArgumentException(
+                "No se puede desactivar una empresa en estado " + c.getStatus()
+              + ". Espere a que finalice el aprovisionamiento, repare con re-provision o eliminela.");
+        }
+
+        // PA-RF-PLAT-03 punto 4: no desactivar la unica empresa ACTIVE de la plataforma.
+        long otherActive = companyRepository.findByStatusAndDeletedAtIsNull(CompanyStatus.ACTIVE)
+                .stream().filter(x -> !x.getId().equals(id)).count();
+        if (otherActive == 0) {
+            throw new IllegalArgumentException(
+                "No se puede desactivar la unica empresa ACTIVE de la plataforma. "
+              + "Debe quedar al menos una empresa activa.");
         }
 
         CompanyStatus previousStatus = c.getStatus();
 
-        // QA Bloque PA Bug 61 (HU-PA-PLAT-03 E4): chequear jobs en ejecucion
+        // QA Bloque PA Bug 61 (HU-PA-PLAT-03 E4): chequear jobs en ejecucion.
         if (!force) {
             java.util.List<String> blocking = checkRunningJobsFor(id);
             if (!blocking.isEmpty()) {
@@ -448,7 +615,6 @@ public class CompanyService {
             }
         }
 
-        // Affected users count (para audit)
         Number affectedNum = (Number) jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM users WHERE company_id=? AND deleted_at IS NULL",
             Number.class, id);
@@ -456,25 +622,40 @@ public class CompanyService {
 
         c.setStatus(CompanyStatus.INACTIVE);
         companyRepository.save(c);
-        log.info("Empresa desactivada: id={} previousStatus={} affectedUsers={} reason={}",
-                id, previousStatus, affectedCount, reason);
 
-        // QA Bloque PA Bug 59 (HU-PA-PLAT-03 E1): blacklist tokens activos.
-        // El cutoff se persiste en una TX SEPARADA via @Transactional(REQUIRES_NEW)
-        // en setJwtInvalidationCutoff() para que un fallo aqui NO rompa el deactivate.
+        // PA-RF-PLAT-03 punto 7: revocar sesiones activas (refresh tokens) de los
+        // usuarios de la empresa y contar cuantas se invalidaron.
+        int invalidatedSessions = 0;
+        try {
+            java.util.List<Long> userIds = jdbcTemplate.queryForList(
+                "SELECT id FROM users WHERE company_id=? AND deleted_at IS NULL", Long.class, id);
+            invalidatedSessions = sessionService.revokeAllForUsers(userIds);
+        } catch (Exception ex) {
+            log.warn("revokeAllForUsers fallo para companyId={}: {}", id, ex.getMessage());
+        }
+
+        log.info("Empresa desactivada: id={} previousStatus={} affectedUsers={} invalidatedSessions={} reason={}",
+                id, previousStatus, affectedCount, invalidatedSessions, reason);
+
+        // QA Bloque PA Bug 59 (HU-PA-PLAT-03 E1): cutoff de JWT (access tokens) a nivel empresa.
         try {
             self().setJwtInvalidationCutoff(id);
         } catch (Exception ex) {
             log.debug("Set JWT_INVALIDATION_CUTOFF fallo para companyId={}: {}", id, ex.getMessage());
         }
 
-        // QA Bloque PA Bug 62 (HU-PA-PLAT-03 E5): audit enriquecido
+        // PA-RF-PLAT-03 puntos 3/7: audit enriquecido con IP del ejecutor + invalidatedSessions.
         auditCompany(id, "UPDATE",
                 "Empresa desactivada: " + c.getBusinessName()
                 + " | previousStatus=" + previousStatus
                 + " | affectedUsersCount=" + affectedCount
+                + " | invalidatedSessions=" + invalidatedSessions
+                + " | executorIp=" + executorIp
                 + " | reason=" + reason);
-        return CompanyDTO.from(c);
+
+        CompanyDTO dto = CompanyDTO.from(c);
+        dto.setInvalidatedSessions(invalidatedSessions);
+        return dto;
     }
 
     /**
@@ -508,15 +689,29 @@ public class CompanyService {
         return blocking;
     }
 
+    /** Wrapper legacy sin motivo/IP. */
     @Transactional
     public CompanyDTO activate(Long id) {
+        return activate(id, "(legacy: sin motivo)", null);
+    }
+
+    /**
+     * PA-RF-PLAT-03 v3.0 (Control de Cambios PA, 2026-05-29): reactiva una empresa.
+     * Ahora exige motivo (punto 1) y registra la IP del ejecutor (punto 3).
+     */
+    @Transactional
+    public CompanyDTO activate(Long id, String reason, String executorIp) {
         Company c = companyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Empresa no encontrada"));
+        CompanyStatus previousStatus = c.getStatus();
         c.setStatus(CompanyStatus.ACTIVE);
         companyRepository.save(c);
-        log.info("Empresa re-activada: id={}", id);
+        log.info("Empresa re-activada: id={} previousStatus={} reason={}", id, previousStatus, reason);
         auditCompany(id, "UPDATE",
-                "Empresa re-activada: " + c.getBusinessName());
+                "Empresa re-activada: " + c.getBusinessName()
+                + " | previousStatus=" + previousStatus
+                + " | executorIp=" + executorIp
+                + " | reason=" + reason);
         return CompanyDTO.from(c);
     }
 
@@ -565,18 +760,7 @@ public class CompanyService {
      * @return digito de verificacion como String "0".."9", o null si nit invalido
      */
     static String computeColombianDv(String nit) {
-        if (nit == null) return null;
-        String n = nit.trim();
-        if (n.isEmpty() || !n.chars().allMatch(Character::isDigit)) return null;
-        int[] factors = {3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71};
-        int sum = 0;
-        for (int i = 0; i < n.length(); i++) {
-            int digit = n.charAt(n.length() - 1 - i) - '0';
-            int factor = (i < factors.length) ? factors[i] : 0;
-            sum += digit * factor;
-        }
-        int mod = sum % 11;
-        int dv = (mod >= 2) ? (11 - mod) : mod;
-        return String.valueOf(dv);
+        // Fuente unica de verdad: com.sigcon.backend.utils.DianVerificationDigit.
+        return com.sigcon.backend.utils.DianVerificationDigit.compute(nit);
     }
 }

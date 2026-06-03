@@ -83,6 +83,21 @@ public class PayrollConceptController {
         return service.update(id, req);
     }
 
+    @Operation(summary = "Activar/Inactivar concepto",
+            description = "Cambia solo el estado (ACTIVE/INACTIVE) sin exigir cuentas PUC ni "
+                    + "coherencia de calculo. Para editar datos del concepto use PUT.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Estado actualizado"),
+            @ApiResponse(responseCode = "400", description = "Estado invalido o concepto inexistente")
+    })
+    @PreAuthorize("hasAuthority('PERM_NOM.CONCEPTOS.EDITAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> changeStatus(
+            @Parameter(description = "ID del concepto", example = "1") @PathVariable Long id,
+            @Parameter(description = "Nuevo estado", example = "INACTIVE") @RequestParam String status) {
+        return service.changeStatus(id, status);
+    }
+
     @Operation(summary = "Eliminar concepto (soft delete)")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Concepto eliminado"),

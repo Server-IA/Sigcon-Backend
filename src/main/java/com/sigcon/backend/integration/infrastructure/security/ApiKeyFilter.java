@@ -74,6 +74,8 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     };
 
     private final ParameterRepository parameterRepository;
+    // PA-RF-28 (Pendientes PA): claves gestionadas (tabla api_keys, hash SHA-256).
+    private final com.sigcon.backend.integration.apikeys.domain.service.ApiKeyService apiKeyService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -148,6 +150,20 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         boolean matchesTest = testAvailable && constantTimeEquals(providedKey, testKeyOpt.get());
 
         if (!matchesProd && !matchesTest) {
+            // PA-RF-28: si la key global legacy no coincide, intentar contra las
+            // claves GESTIONADAS (tabla api_keys, por hash SHA-256). Es ADITIVO:
+            // el flujo AAEF con la clave global de AgroFusion sigue intacto y, de
+            // forma adicional, se aceptan las claves emitidas con ciclo de vida.
+            if (apiKeyService.validateAndTouch(providedKey)) {
+                request.setAttribute(AAEF_KEY_TIER_ATTR, TIER_PRODUCTION);
+                var managedAuth = new UsernamePasswordAuthenticationToken(
+                        "agrofusion-api-key-managed", null,
+                        List.of(new SimpleGrantedAuthority("ROLE_AGROFUSION_API_KEY")));
+                SecurityContextHolder.getContext().setAuthentication(managedAuth);
+                log.debug("AAEF auth OK con API Key gestionada (api_keys)");
+                chain.doFilter(request, response);
+                return;
+            }
             log.warn("Intento de autenticacion con API Key invalida desde {}",
                     request.getRemoteAddr());
             // HU-INT-RF-01 E3: mensaje generico para no revelar si la key existe

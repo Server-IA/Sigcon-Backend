@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -81,5 +82,25 @@ public class ThirdPartyBankAccountController {
             @PathVariable Long thirdPartyId,
             @PathVariable Long linkId) {
         return thirdPartyBankAccountService.unlinkBankAccount(linkId);
+    }
+
+    /**
+     * PATCH /api/v1/third-parties/{thirdPartyId}/bank-accounts/{linkId}/primary
+     * PT-02 (TER-RF-05): marca una cuenta vinculada como principal del tercero
+     * sin desvincularla. Desmarca automaticamente la principal anterior.
+     */
+    @Operation(summary = "Marcar cuenta bancaria como principal",
+            description = "PT-02 (TER-RF-05): establece una cuenta vinculada como principal del tercero. "
+                    + "Desmarca automaticamente la cuenta principal anterior (solo una principal por tercero).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Cuenta marcada como principal"),
+            @ApiResponse(responseCode = "400", description = "TPBA_004: Vinculacion no existe")
+    })
+    @PatchMapping("/{linkId}/primary")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_THIRD_PARTIES') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> setAsPrimary(
+            @PathVariable Long thirdPartyId,
+            @PathVariable Long linkId) {
+        return thirdPartyBankAccountService.setAsPrimary(linkId);
     }
 }

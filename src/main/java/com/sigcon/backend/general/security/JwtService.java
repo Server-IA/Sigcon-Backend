@@ -31,6 +31,15 @@ public class JwtService {
     }
 
     public String generateToken(UserDetails userDetails) {
+        return generateToken(userDetails, java.util.Collections.emptyMap());
+    }
+
+    /**
+     * PA-RF-01 v3.0 (Control de Cambios PA, 2026-05-29): genera el access token
+     * incluyendo claims adicionales (ej. {@code sessionId} para correlacionar el
+     * token con la sesion activa y permitir logout/revocacion por sesion).
+     */
+    public String generateToken(UserDetails userDetails, Map<String, Object> additionalClaims) {
         Map<String, Object> extraClaims = new HashMap<>();
 
         List<String> authorities = userDetails.getAuthorities()
@@ -64,6 +73,10 @@ public class JwtService {
 
         extraClaims.put("authorities", authorities);
 
+        if (additionalClaims != null && !additionalClaims.isEmpty()) {
+            extraClaims.putAll(additionalClaims);
+        }
+
         return generateToken(extraClaims, userDetails);
     }
 
@@ -73,6 +86,12 @@ public class JwtService {
 
                 .setClaims(extraClaims)
                 .setSubject(userDetails.getUsername())
+                // PA-RF-27 (Pendientes PA): identificador unico del token (claim jti).
+                // setId va DESPUES de setClaims (que reemplaza el mapa completo) para
+                // que no se sobreescriba. El logout almacena este jti + la expiracion
+                // en blacklisted_tokens, lo que permite al job de limpieza purgar
+                // entradas ya vencidas en lugar de acumularlas indefinidamente.
+                .setId(java.util.UUID.randomUUID().toString())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 240)) // 30 minutes
                 .signWith(getSignInKey(), SignatureAlgorithm.HS256)
@@ -103,8 +122,48 @@ public class JwtService {
         return getClaim(token,Claims::getSubject);
     }
 
+    /**
+     * PA-RF-01 v3.0: lee el claim {@code sessionId} del token (o null si no
+     * existe / el token es invalido). Usado por logout para revocar la sesion
+     * exacta del usuario.
+     */
+    public String getSessionId(String token){
+        try {
+            Object v = getAllClaims(token).get("sessionId");
+            return v == null ? null : v.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private Date getExpirationDate (String token){
         return getClaim(token,Claims::getExpiration);
+    }
+
+    /**
+     * PA-RF-27 (Pendientes PA): lee el claim {@code jti} del token (o null si no
+     * existe / el token es invalido). Usado por logout para guardar el id del
+     * token en la blacklist y por el job de limpieza para identificarlo.
+     */
+    public String getJti(String token){
+        try {
+            return getClaim(token, Claims::getId);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * PA-RF-27 (Pendientes PA): fecha de expiracion del token (o null si el
+     * token es invalido). La blacklist guarda este valor para que el scheduler
+     * purgue las entradas vencidas.
+     */
+    public Date getExpiration(String token){
+        try {
+            return getExpirationDate(token);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private boolean tokenExpired (String token){

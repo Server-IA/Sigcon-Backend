@@ -24,4 +24,9 @@ public class AuditLogDTO {
     private String hash;
     private String previousHash;
     private Long journalEntryId;
+    /** HU-AU-08 / HU-AU-10 E7: marcador de retencion legal activa. */
+    private Boolean legalHold;
+    private String legalHoldReason;
+    /** HU-AU-10 E2: fecha hasta la que se conserva el registro. */
+    private LocalDateTime retentionUntil;
 }

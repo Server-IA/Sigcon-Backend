@@ -16,9 +16,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.jpa.domain.Specification;
+
+import jakarta.persistence.criteria.Predicate;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,6 +126,81 @@ public class RetentionService {
         log.setLegalHoldReason(null);
         logRepository.save(log);
         return ResponseEntity.ok(Map.of("logId", logId, "legalHold", false));
+    }
+
+    /**
+     * QA Auditoria (2026-06-02): legal hold MASIVO. Aplica retencion legal a todos
+     * los logs que coinciden con los criterios (modulo y/o severidad y/o rango de
+     * fechas = periodo contable). Ej.: "todos los registros del modulo CG" o "todo
+     * el periodo 2026-01". Requiere motivo. Respeta el aislamiento por tenant.
+     */
+    @Transactional
+    public ResponseEntity<?> setLegalHoldBulk(String moduleStr, String severityStr,
+                                              LocalDateTime from, LocalDateTime to, String reason) {
+        if (reason == null || reason.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Debe indicar la razon del legal hold masivo"));
+        }
+        AuditModule module = parseEnum(AuditModule.class, moduleStr);
+        AuditSeverity severity = parseEnum(AuditSeverity.class, severityStr);
+        if (module == null && severity == null && from == null && to == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Debe especificar al menos un criterio (modulo, severidad o rango de fechas)"));
+        }
+        List<AuditLog> logs = logRepository.findAll(bulkSpec(module, severity, from, to));
+        int affected = 0;
+        for (AuditLog l : logs) {
+            if (Boolean.TRUE.equals(l.getLegalHold())) continue; // ya marcado
+            l.setLegalHold(true);
+            l.setLegalHoldReason(reason);
+            affected++;
+        }
+        logRepository.saveAll(logs);
+        return ResponseEntity.ok(Map.of(
+                "affected", affected, "matched", logs.size(), "legalHold", true, "reason", reason));
+    }
+
+    /** QA Auditoria (2026-06-02): liberar legal hold masivo por criterios. */
+    @Transactional
+    public ResponseEntity<?> releaseLegalHoldBulk(String moduleStr, String severityStr,
+                                                  LocalDateTime from, LocalDateTime to) {
+        AuditModule module = parseEnum(AuditModule.class, moduleStr);
+        AuditSeverity severity = parseEnum(AuditSeverity.class, severityStr);
+        List<AuditLog> logs = logRepository.findAll(bulkSpec(module, severity, from, to));
+        int affected = 0;
+        for (AuditLog l : logs) {
+            if (!Boolean.TRUE.equals(l.getLegalHold())) continue;
+            l.setLegalHold(false);
+            l.setLegalHoldReason(null);
+            affected++;
+        }
+        logRepository.saveAll(logs);
+        return ResponseEntity.ok(Map.of("affected", affected, "matched", logs.size(), "legalHold", false));
+    }
+
+    private static <E extends Enum<E>> E parseEnum(Class<E> type, String value) {
+        if (value == null || value.isBlank()) return null;
+        try { return Enum.valueOf(type, value.trim().toUpperCase()); }
+        catch (Exception e) { return null; }
+    }
+
+    /**
+     * QA Auditoria (2026-06-02): Specification dinamica para el legal hold masivo.
+     * Solo agrega predicados para los criterios presentes (evita el `:param IS NULL`
+     * que Postgres rechaza con "could not determine data type of parameter" cuando
+     * el enum llega null). Excluye los logs ya purgados.
+     */
+    private Specification<AuditLog> bulkSpec(AuditModule module, AuditSeverity severity,
+                                             LocalDateTime from, LocalDateTime to) {
+        return (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isNull(root.get("archivedAt")));
+            if (module != null)   ps.add(cb.equal(root.get("module"), module));
+            if (severity != null) ps.add(cb.equal(root.get("severity"), severity));
+            if (from != null)     ps.add(cb.greaterThanOrEqualTo(root.get("timestamp"), from));
+            if (to != null)       ps.add(cb.lessThanOrEqualTo(root.get("timestamp"), to));
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
     }
 
     // ─── Purga programada (HU-AU-10 E2/E3/E4/E5/E6) ────────

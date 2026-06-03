@@ -35,6 +35,7 @@ import com.sigcon.backend.audit.domain.model.enums.AuditSeverity;
 import com.sigcon.backend.audit.domain.service.AuditPublisher;
 import com.sigcon.backend.general.accounting.dian_reports.application.DianReportResponse;
 import com.sigcon.backend.general.accounting.dian_reports.application.DianReportRow;
+import com.sigcon.backend.platform.tenant.TenantContext;
 import com.sigcon.backend.utils.export.ReportContextResolver;
 import com.sigcon.backend.utils.export.ReportHeaderBuilder;
 
@@ -89,6 +90,25 @@ public class DianReportService {
     @Autowired(required = false)
     private AuditPublisher auditPublisher;
 
+    /**
+     * QA CXP (2026-06-02): la Informacion Exogena es por EMPRESA. Las queries
+     * nativas de este servicio NO respetan el {@code @Filter} multi-tenant de
+     * Hibernate, asi que hay que filtrar explicitamente por {@code company_id};
+     * de lo contrario el reporte mezcla los pagos/ingresos/saldos de TODAS las
+     * empresas (fuga de datos cross-tenant + declaracion DIAN incorrecta).
+     * Resuelve la empresa del contexto actual y exige que exista (un
+     * PLATFORM_ADMIN sin empresa no puede generar exogena de una empresa).
+     */
+    private Long requireCompanyId() {
+        Long companyId = TenantContext.getCompanyId();
+        if (companyId == null) {
+            throw new IllegalStateException(
+                "No hay empresa en el contexto. La Informacion Exogena se genera "
+                + "por empresa; inicie sesion con un usuario de la empresa.");
+        }
+        return companyId;
+    }
+
     // ────────────────────────────────────────────────────────────
     // F1001 - Pagos y retenciones
     // ────────────────────────────────────────────────────────────
@@ -103,6 +123,7 @@ public class DianReportService {
     @SuppressWarnings("unchecked")
     public DianReportResponse generateF1001(int year) {
         log.info("Generando F1001 para anio {}", year);
+        Long companyId = requireCompanyId();
 
         // Agrega ap_payments + invoices por tercero. Usamos SQL nativo
         // para garantizar coherencia con las columnas reales de BD.
@@ -114,12 +135,18 @@ public class DianReportService {
                    + "JOIN invoices i ON i.id = p.invoice_id AND i.deleted_at IS NULL "
                    + "JOIN third_parties t ON t.id = i.third_party_id AND t.deleted_at IS NULL "
                    + "WHERE p.deleted_at IS NULL "
+                   // QA CXP (2026-06-02): filtro multi-tenant obligatorio (la query
+                   // nativa NO respeta el @Filter de Hibernate). Sin esto la exogena
+                   // mezclaba los pagos de TODAS las empresas.
+                   + "  AND p.company_id = :companyId "
+                   + "  AND i.company_id = :companyId "
                    + "  AND EXTRACT(YEAR FROM p.payment_date) = :year "
                    + "GROUP BY t.id, t.nit, t.dv, t.business_name "
                    + "ORDER BY t.business_name";
 
         List<Object[]> records = em.createNativeQuery(sql)
                 .setParameter("year", year)
+                .setParameter("companyId", companyId)
                 .getResultList();
 
         List<DianReportRow> rows = new ArrayList<>();
@@ -180,6 +207,7 @@ public class DianReportService {
     @SuppressWarnings("unchecked")
     public DianReportResponse generateF1007(int year) {
         log.info("Generando F1007 para anio {}", year);
+        Long companyId = requireCompanyId();
 
         String sql = "SELECT t.id, t.nit, t.dv, t.business_name, "
                    + "  COALESCE(SUM(s.subtotal),0) AS ingreso_bruto, "
@@ -188,11 +216,15 @@ public class DianReportService {
                    + "     JOIN sales_invoices si ON si.id = n.invoice_id "
                    + "     WHERE n.note_type='CREDIT' AND n.deleted_at IS NULL "
                    + "       AND si.third_party_id = t.id "
+                   + "       AND si.company_id = :companyId "
                    + "       AND EXTRACT(YEAR FROM si.invoice_date) = :year "
                    + "  ),0) AS devoluciones "
                    + "FROM sales_invoices s "
                    + "JOIN third_parties t ON t.id = s.third_party_id AND t.deleted_at IS NULL "
                    + "WHERE s.deleted_at IS NULL "
+                   // QA CXP (2026-06-02): filtro multi-tenant obligatorio (query nativa
+                   // no respeta @Filter). Sin esto mezclaba ingresos de TODAS las empresas.
+                   + "  AND s.company_id = :companyId "
                    + "  AND s.status <> 'VOIDED' "
                    + "  AND EXTRACT(YEAR FROM s.invoice_date) = :year "
                    + "GROUP BY t.id, t.nit, t.dv, t.business_name "
@@ -200,6 +232,7 @@ public class DianReportService {
 
         List<Object[]> records = em.createNativeQuery(sql)
                 .setParameter("year", year)
+                .setParameter("companyId", companyId)
                 .getResultList();
 
         List<DianReportRow> rows = new ArrayList<>();
@@ -246,12 +279,16 @@ public class DianReportService {
     @SuppressWarnings("unchecked")
     public DianReportResponse generateF1008(int year) {
         log.info("Generando F1008 para anio {}", year);
+        Long companyId = requireCompanyId();
 
         String sql = "SELECT t.id, t.nit, t.dv, t.business_name, "
                    + "  COALESCE(SUM(s.balance_due),0) AS saldo_cxc "
                    + "FROM sales_invoices s "
                    + "JOIN third_parties t ON t.id = s.third_party_id AND t.deleted_at IS NULL "
                    + "WHERE s.deleted_at IS NULL "
+                   // QA CXP (2026-06-02): filtro multi-tenant obligatorio (query nativa
+                   // no respeta @Filter). Sin esto mezclaba saldos CxC de TODAS las empresas.
+                   + "  AND s.company_id = :companyId "
                    + "  AND s.balance_due > 0 "
                    + "  AND s.status IN ('ISSUED','PARTIALLY_PAID','OVERDUE') "
                    + "  AND EXTRACT(YEAR FROM s.invoice_date) <= :year "
@@ -261,6 +298,7 @@ public class DianReportService {
 
         List<Object[]> records = em.createNativeQuery(sql)
                 .setParameter("year", year)
+                .setParameter("companyId", companyId)
                 .getResultList();
 
         List<DianReportRow> rows = new ArrayList<>();

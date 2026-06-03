@@ -50,6 +50,9 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    // H-01 (PA-RF-01, Pendientes PA 2026-05-30): politica de contrasena tambien al
+    // crear/editar usuarios (antes solo se aplicaba en reset por token).
+    private final PasswordPolicyService passwordPolicyService;
     private final PermissionRepository permissionRepository;
     private final ParameterRepository parameterRepository;
     private final UserParameterRepository userParameterRepository;
@@ -209,6 +212,10 @@ public class UserService {
                             "Ninguno de los roles solicitados existe en esta empresa: " + notFound)));
         }
 
+        // H-01 (PA-RF-01): validar politica de complejidad al CREAR usuario. Sin
+        // historial (usuario nuevo). Lanza IllegalArgumentException -> HTTP 400.
+        passwordPolicyService.validateComplexity(request.getPassword());
+
         User user = User.builder()
                 .name(request.getName())
                 .lastname(request.getLastname())
@@ -220,6 +227,8 @@ public class UserService {
                 .roles(resolvedRoles)
                 .build();
         userRepository.save(user);
+        // H-01: registrar la contrasena inicial en el historial (evita reutilizarla).
+        passwordPolicyService.record(user.getId(), user.getPassword());
         // HU-PA-08 audit: incluir roles asignados en la descripcion
         String rolesStr = resolvedRoles.stream().map(Role::getName).sorted().collect(Collectors.joining(", "));
         auditPublisher.publishCreate(AuditModule.PA, "User", user.getId(),
@@ -453,12 +462,18 @@ public class UserService {
             user.setAvatar(resolveAvatarFilename(request.getAvatar(), user.getAvatar()));
         }
 
+        boolean __pwdChanged = false;
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            // H-01 (PA-RF-01 / PA-RF-29): politica de complejidad + no reutilizar las
+            // ultimas 5 al cambiar la contrasena propia desde Perfil.
+            passwordPolicyService.assertAllowedForUser(user.getId(), user.getPassword(), request.getPassword());
             user.setPassword(passwordEncoder.encode(request.getPassword()));
+            __pwdChanged = true;
         }
 
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
+        if (__pwdChanged) passwordPolicyService.record(user.getId(), user.getPassword());
         auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(), "User actualizado id=" + user.getId());
 
         UserDTO userDTO = new UserDTO();
@@ -510,16 +525,24 @@ public class UserService {
         // email al editar. Antes el endpoint hacia setEmail sin validar y permitia
         // duplicados que rompian el login con "Query did not return a unique result".
         if (request.getEmail() != null && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
-            if (userRepository.existsByEmailAndIdNotAndDeletedAtIsNull(request.getEmail(), id)) {
+            // PA-RF-09 punto 5 (v3.0): unicidad GLOBAL del email incluyendo usuarios
+            // inactivos y eliminados logicamente (no se permite reutilizar emails de
+            // cuentas soft-deleted).
+            if (userRepository.existsByEmailIncludingDeleted(request.getEmail(), id)) {
                 return ResponseEntity.badRequest().body(
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(
-                                "Ya existe un usuario con ese email en el sistema")));
+                                "Ya existe un usuario con ese email en el sistema (incluyendo cuentas inactivas o eliminadas).")));
             }
             user.setEmail(request.getEmail());
         }
 
+        boolean __pwdChanged = false;
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            // H-01 (PA-RF-01 / PA-RF-09): politica de complejidad + no reutilizar las
+            // ultimas 5 al cambiar la contrasena de un usuario desde administracion.
+            passwordPolicyService.assertAllowedForUser(user.getId(), user.getPassword(), request.getPassword());
             user.setPassword(passwordEncoder.encode(request.getPassword()));
+            __pwdChanged = true;
         }
 
         if (request.getStatus() != null) {
@@ -569,6 +592,31 @@ public class UserService {
                         ErrorRespondJson.getErrorRespondMessage(Optional.of(
                                 "Ninguno de los roles solicitados existe en esta empresa: " + notFound)));
             }
+
+            // PA-RF-09 puntos 2/3 (v3.0, Control de Cambios PA): salvaguardas al
+            // cambiar roles cuando el usuario PIERDE el rol ADMIN_EMPRESA.
+            java.util.Set<String> newRoleNames = resolvedRoles.stream()
+                    .map(Role::getName).map(String::toUpperCase).collect(Collectors.toSet());
+            boolean hadAdmin = previousRoles.stream().anyMatch(r -> "ADMIN_EMPRESA".equalsIgnoreCase(r));
+            boolean losingAdmin = hadAdmin && !newRoleNames.contains("ADMIN_EMPRESA");
+            if (losingAdmin) {
+                // Auto-proteccion: un administrador no puede quitarse a SI MISMO el rol admin.
+                Long currentUserId = null;
+                try { currentUserId = userUtil.getUser().getId(); } catch (Exception ignore) { /* sin contexto */ }
+                if (currentUserId != null && currentUserId.equals(user.getId())) {
+                    return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Un administrador no puede remover sus propios permisos administrativos.")));
+                }
+                // Salvaguarda: no remover el ultimo ADMIN_EMPRESA activo de la empresa.
+                if (user.getCompanyId() != null) {
+                    long otherAdmins = userRepository.countActiveAdminEmpresaUsersInCompanyExcludingUser(
+                            user.getCompanyId(), user.getId());
+                    if (otherAdmins == 0) {
+                        return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                                "No se permite remover el ultimo rol ADMIN_EMPRESA activo de la empresa.")));
+                    }
+                }
+            }
             user.setRoles(resolvedRoles);
         }
 
@@ -592,12 +640,17 @@ public class UserService {
         }
 
         userRepository.save(user);
+        if (__pwdChanged) passwordPolicyService.record(user.getId(), user.getPassword());
         // HU-PA-09 audit: incluir cambios clave (email + roles) para trazabilidad
         String rolesAfter = user.getRoles().stream().map(Role::getName).sorted().collect(Collectors.joining(", "));
+        // PA-RF-09 punto 1 (v3.0): persistir el motivo opcional de la modificacion.
+        String reasonSuffix = (request.getReason() != null && !request.getReason().isBlank())
+                ? " | motivo=\"" + request.getReason().trim() + "\"" : "";
         auditPublisher.publishUpdate(AuditModule.PA, "User", user.getId(),
                 "User actualizado id=" + user.getId() + " | email=" + user.getEmail()
                 + " | roles=[" + rolesAfter + "]"
-                + (rolesChanged || statusChanged ? " | session_invalidated=true" : ""));
+                + (rolesChanged || statusChanged ? " | session_invalidated=true" : "")
+                + reasonSuffix);
 
         // QA Bloque PA Bug 48 (HU-PA-20 E3): notif al desactivar
         if (notificationService != null && previousStatus == Status.ACTIVE && user.getStatus() == Status.INACTIVE) {
@@ -671,7 +724,7 @@ public class UserService {
      * @param id ID del usuario a eliminar
      * @return 200 si la eliminacion fue exitosa; 400 si hay violacion de reglas; 404 si no existe
      */
-    public ResponseEntity<?> deleteUser(Long id) {
+    public ResponseEntity<?> deleteUser(Long id, String reason) {
         Optional<User> userOpt = userRepository.findById(id);
 
         if (userOpt.isEmpty()) {
@@ -701,9 +754,23 @@ public class UserService {
                             Optional.of("No se puede eliminar un usuario con rol ADMIN")));
         }
 
+        // PA-RF-30 (Pendientes PA 2026-05-30): si se informa un motivo de
+        // desactivacion, debe tener al menos 30 caracteres. El frontend de
+        // administracion lo exige antes de confirmar la baja del usuario; el
+        // borrado de la cuenta propia (Perfil) no lo envia y queda opcional.
+        String reasonTrim = reason == null ? null : reason.trim();
+        if (reasonTrim != null && !reasonTrim.isEmpty() && reasonTrim.length() < 30) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "El motivo de desactivacion debe tener al menos 30 caracteres.")));
+        }
+
         user.setDeletedAt(LocalDateTime.now());
         userRepository.save(user);
-        auditPublisher.publishDelete(AuditModule.PA, "User", user.getId(), "User eliminado id=" + user.getId());
+        String reasonSuffix = (reasonTrim != null && !reasonTrim.isEmpty())
+                ? " | motivo=\"" + reasonTrim + "\"" : "";
+        auditPublisher.publishDelete(AuditModule.PA, "User", user.getId(),
+                "User eliminado id=" + user.getId() + reasonSuffix);
 
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Usuario eliminado correctamente"),

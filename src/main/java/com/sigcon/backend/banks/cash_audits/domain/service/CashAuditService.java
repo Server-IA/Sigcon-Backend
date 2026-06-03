@@ -20,6 +20,7 @@ import com.sigcon.backend.banks.cash_audits.application.ApproveCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.CashAuditDTO;
 import com.sigcon.backend.banks.cash_audits.application.CreateCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.DeleteCashAuditRequest;
+import com.sigcon.backend.banks.cash_audits.application.UpdateCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.application.VoidCashAuditRequest;
 import com.sigcon.backend.banks.cash_audits.domain.model.CashAudit;
 import com.sigcon.backend.banks.cash_audits.domain.model.enums.CashAuditStatus;
@@ -131,6 +132,64 @@ public class CashAuditService {
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Arqueo de caja registrado exitosamente."),
+                        Optional.of(toDTO(saved))));
+    }
+
+    /**
+     * Modifica un arqueo de caja en estado BORRADOR, RECHAZADO o ABIERTO
+     * (BNK-HU-030: "Registrar y modificar arqueos de caja"). Solo se permiten
+     * cambiar la fecha del arqueo, el saldo fisico contado y las notas; el saldo
+     * del sistema y la diferencia se recalculan automaticamente. Un arqueo en
+     * REVISION/APROBADO/CERRADO/ANULADO no puede modificarse. Si estaba RECHAZADO,
+     * al editarlo vuelve a BORRADOR para poder reenviarlo a revision.
+     *
+     * @param id      identificador del arqueo
+     * @param request nuevos datos (fecha, saldo fisico, notas)
+     * @return respuesta con el arqueo actualizado
+     */
+    @Transactional
+    public ResponseEntity<?> update(Long id, UpdateCashAuditRequest request) {
+        Optional<CashAudit> optAudit = cashAuditRepository.findById(id);
+        if (optAudit.isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of("El arqueo no fue encontrado.")));
+        }
+
+        CashAudit audit = optAudit.get();
+
+        // Solo es editable mientras no haya pasado a revision/aprobacion.
+        CashAuditStatus st = audit.getStatus();
+        if (st != CashAuditStatus.BORRADOR && st != CashAuditStatus.RECHAZADO
+                && st != CashAuditStatus.ABIERTO) {
+            return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                            "Solo se pueden modificar arqueos en estado BORRADOR o RECHAZADO. "
+                            + "El arqueo actual esta en estado " + st + ".")));
+        }
+
+        // Recalcular saldo del sistema y diferencia con el saldo fisico nuevo.
+        Cash cash = audit.getCash();
+        BigDecimal systemBalance = (cash != null && cash.getCurrentBalance() != null)
+                ? cash.getCurrentBalance() : BigDecimal.ZERO;
+        BigDecimal difference = request.getPhysicalBalance().subtract(systemBalance);
+
+        audit.setAuditDate(request.getAuditDate());
+        audit.setSystemBalance(systemBalance);
+        audit.setPhysicalBalance(request.getPhysicalBalance());
+        audit.setDifference(difference);
+        audit.setNotes(request.getNotes());
+        // RECHAZADO -> vuelve a BORRADOR tras corregir, para poder reenviarlo.
+        if (st == CashAuditStatus.RECHAZADO) {
+            audit.setStatus(CashAuditStatus.BORRADOR);
+        }
+
+        CashAudit saved = cashAuditRepository.save(audit);
+        auditPublisher.publishUpdate(AuditModule.BNK, "CashAudit", saved.getId(),
+                "Arqueo de caja modificado id=" + saved.getId() + " diferencia=" + difference);
+
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Arqueo de caja actualizado exitosamente."),
                         Optional.of(toDTO(saved))));
     }
 

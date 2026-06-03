@@ -93,27 +93,29 @@ public class FinancialStatementService {
     public ResponseEntity<?> getBalanceGeneral(Integer year, Integer month) {
         log.info("Generando Balance General acumulado hasta {}-{}", year, String.format("%02d", month));
 
-        // QA Bloque AS-CG (2026-05-25): si el anio solicitado no tiene comprobantes
-        // POSTED/REVERSED para este tenant, el Balance General aparece en 0 (no se
-        // arrastran los saldos acumulados del anio anterior al consultar un periodo
-        // inexistente o sin movimientos como 2027).
-        if (!journalEntryRepository.hasPostedEntriesInYear(year, JournalEntryStatus.POSTED)) {
+        // HU-CG-09 E2 (Alta): el Balance General es ACUMULATIVO; debe arrastrar los
+        // saldos de todos los periodos anteriores. Antes un guard por anio
+        // (hasPostedEntriesInYear) devolvia 0 cuando el anio consultado no tenia
+        // comprobantes propios (ej. 2027), ignorando los saldos historicos de 2026.
+        // Ahora se consultan los asientos acumulados HASTA el periodo (todos los anios
+        // previos incluidos) y solo se devuelve 0 si no existe historia contable alguna.
+        List<JournalEntry> entries = soloVivos(journalEntryRepository.findPostedUpToPeriod(
+                year, month, JournalEntryStatus.POSTED));
+
+        if (entries.isEmpty()) {
             BalanceGeneralDTO vacio = BalanceGeneralDTO.builder()
                     .totalActivos(BigDecimal.ZERO)
                     .totalPasivos(BigDecimal.ZERO)
                     .totalPatrimonio(BigDecimal.ZERO)
+                    .resultadoEjercicio(BigDecimal.ZERO)
                     .isBalanced(true)
                     .details(new ArrayList<>())
                     .build();
             return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
-                    Optional.of("El periodo " + year + "-" + String.format("%02d", month)
-                            + " no tiene comprobantes registrados."),
+                    Optional.of("No existen comprobantes contabilizados hasta " + year + "-"
+                            + String.format("%02d", month) + "."),
                     Optional.of(vacio)));
         }
-
-        // Obtener todos los asientos POSTED hasta el periodo (HU-CG-10 E3: sin reversados)
-        List<JournalEntry> entries = soloVivos(journalEntryRepository.findPostedUpToPeriod(
-                year, month, JournalEntryStatus.POSTED));
 
         // Agrupar por clase PUC
         Map<AccountClass, Map<Long, AccountAccumulator>> classMap = new LinkedHashMap<>();
@@ -122,9 +124,23 @@ public class FinancialStatementService {
         // Calcular totales por clase de balance (1=Activos, 2=Pasivos, 3=Patrimonio)
         BigDecimal totalActivos = calculateClassTotal(classMap.get(AccountClass.ASSET), true);
         BigDecimal totalPasivos = calculateClassTotal(classMap.get(AccountClass.LIABILITY), false);
-        BigDecimal totalPatrimonio = calculateClassTotal(classMap.get(AccountClass.EQUITY), false);
+        BigDecimal patrimonioClase3 = calculateClassTotal(classMap.get(AccountClass.EQUITY), false);
 
-        // Verificar ecuacion contable
+        // HU-CG-09 E1 (Media): incorporar el Resultado del Ejercicio al patrimonio.
+        // Mientras no se ejecute el asiento de cierre, el resultado (ingresos - gastos -
+        // costos) permanece en las cuentas de clase 4/5/6/7 y el balance NO cuadra. Se
+        // calcula el resultado acumulado y se suma al patrimonio (NIC 1). Es AUTO-CORRECTIVO:
+        // tras el cierre, las clases 4/5/6/7 quedan en 0 y este ajuste vale 0 (el resultado
+        // ya esta dentro de la clase 3 via el asiento de cierre).
+        BigDecimal ingresos = calculateClassTotal(classMap.get(AccountClass.REVENUE), false);
+        BigDecimal gastos = calculateClassTotal(classMap.get(AccountClass.EXPENSE), true);
+        BigDecimal costos = calculateClassTotal(classMap.get(AccountClass.COST_OF_SALES), true)
+                .add(calculateClassTotal(classMap.get(AccountClass.PRODUCTION_COST), true));
+        BigDecimal resultadoEjercicio = ingresos.subtract(gastos).subtract(costos);
+
+        BigDecimal totalPatrimonio = patrimonioClase3.add(resultadoEjercicio);
+
+        // Verificar ecuacion contable con el resultado ya incorporado
         boolean isBalanced = totalActivos.compareTo(totalPasivos.add(totalPatrimonio)) == 0;
 
         // Construir detalle
@@ -133,10 +149,33 @@ public class FinancialStatementService {
         addClassDetail(details, "PASIVOS", classMap.get(AccountClass.LIABILITY), false);
         addClassDetail(details, "PATRIMONIO", classMap.get(AccountClass.EQUITY), false);
 
+        // HU-CG-09 E1: agregar la linea sintetica del Resultado del Ejercicio dentro del
+        // PATRIMONIO (solo si aporta algo). Hace visible y trazable el ajuste.
+        if (resultadoEjercicio.compareTo(BigDecimal.ZERO) != 0) {
+            details.stream()
+                    .filter(c -> "PATRIMONIO".equals(c.getClassName()))
+                    .findFirst()
+                    .ifPresent(patClass -> {
+                        if (patClass.getAccounts() == null) {
+                            patClass.setAccounts(new ArrayList<>());
+                        }
+                        patClass.getAccounts().add(BalanceGeneralDTO.AccountDetailDTO.builder()
+                                .accountId(null)
+                                .pucCode("3605")
+                                .accountName("Resultado del Ejercicio (sin asiento de cierre)")
+                                .balance(resultadoEjercicio)
+                                .build());
+                        patClass.setTotal(patClass.getTotal() == null
+                                ? resultadoEjercicio
+                                : patClass.getTotal().add(resultadoEjercicio));
+                    });
+        }
+
         BalanceGeneralDTO result = BalanceGeneralDTO.builder()
                 .totalActivos(totalActivos)
                 .totalPasivos(totalPasivos)
                 .totalPatrimonio(totalPatrimonio)
+                .resultadoEjercicio(resultadoEjercicio)
                 .isBalanced(isBalanced)
                 .details(details)
                 .build();
@@ -182,6 +221,36 @@ public class FinancialStatementService {
         BigDecimal utilidadBruta = totalIngresos.subtract(totalCostos);
         BigDecimal utilidadNeta = totalIngresos.subtract(totalGastos).subtract(totalCostos);
 
+        // HU-CG-10: clasificacion financiera granular NIC 1 por subgrupo PUC.
+        // Cada cuenta de ingreso/gasto se asigna a una categoria por su codigo PUC
+        // (Decreto 2650/1993) — la granularidad ya esta codificada en el plan de cuentas,
+        // no requiere parametrizacion adicional.
+        Map<Long, AccountAccumulator> revAccts = classMap.get(AccountClass.REVENUE);
+        Map<Long, AccountAccumulator> expAccts = classMap.get(AccountClass.EXPENSE);
+
+        BigDecimal ingresosOperacionales = sumWhere(revAccts, false, c -> c.startsWith("41"));
+        BigDecimal ingresosFinancieros   = sumWhere(revAccts, false, c -> c.startsWith("4210"));
+        // Otros ingresos = clase 4 que NO sea operacional (41) ni financiero (4210)
+        BigDecimal otrosIngresos = sumWhere(revAccts, false,
+                c -> !c.startsWith("41") && !c.startsWith("4210"));
+
+        BigDecimal gastosAdministracion = sumWhere(expAccts, true, c -> c.startsWith("51"));
+        BigDecimal gastosVentas         = sumWhere(expAccts, true, c -> c.startsWith("52"));
+        BigDecimal gastosFinancieros    = sumWhere(expAccts, true, c -> c.startsWith("5305"));
+        BigDecimal impuestoRenta        = sumWhere(expAccts, true, c -> c.startsWith("54"));
+        // Otros gastos = clase 5 que NO sea admin (51), ventas (52), financiero (5305) ni impuesto (54)
+        BigDecimal otrosGastos = sumWhere(expAccts, true,
+                c -> !c.startsWith("51") && !c.startsWith("52")
+                        && !c.startsWith("5305") && !c.startsWith("54"));
+
+        // Subtotales NIC 1
+        BigDecimal utilidadBrutaOperacional = ingresosOperacionales.subtract(totalCostos);
+        BigDecimal utilidadOperacional = utilidadBrutaOperacional
+                .subtract(gastosAdministracion).subtract(gastosVentas);
+        BigDecimal utilidadAntesImpuestos = utilidadOperacional
+                .add(ingresosFinancieros).add(otrosIngresos)
+                .subtract(gastosFinancieros).subtract(otrosGastos);
+
         List<BalanceGeneralDTO.ClassDetailDTO> details = new ArrayList<>();
         addClassDetail(details, "INGRESOS", classMap.get(AccountClass.REVENUE), false);
         addClassDetail(details, "GASTOS", classMap.get(AccountClass.EXPENSE), true);
@@ -194,6 +263,17 @@ public class FinancialStatementService {
                 .totalCostos(totalCostos)
                 .utilidadBruta(utilidadBruta)
                 .utilidadNeta(utilidadNeta)
+                .ingresosOperacionales(ingresosOperacionales)
+                .ingresosFinancieros(ingresosFinancieros)
+                .otrosIngresos(otrosIngresos)
+                .gastosAdministracion(gastosAdministracion)
+                .gastosVentas(gastosVentas)
+                .gastosFinancieros(gastosFinancieros)
+                .otrosGastos(otrosGastos)
+                .impuestoRenta(impuestoRenta)
+                .utilidadBrutaOperacional(utilidadBrutaOperacional)
+                .utilidadOperacional(utilidadOperacional)
+                .utilidadAntesImpuestos(utilidadAntesImpuestos)
                 .details(details)
                 .build();
 
@@ -598,6 +678,26 @@ public class FinancialStatementService {
     private BigDecimal calculateClassTotal(Map<Long, AccountAccumulator> accounts, boolean debitNature) {
         if (accounts == null || accounts.isEmpty()) return BigDecimal.ZERO;
         return accounts.values().stream()
+                .map(acc -> debitNature
+                        ? acc.totalDebit.subtract(acc.totalCredit)
+                        : acc.totalCredit.subtract(acc.totalDebit))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * HU-CG-10: suma el saldo de las cuentas de un mapa cuyo codigo PUC cumple el
+     * predicado. Usado para la clasificacion financiera granular NIC 1 del Estado de
+     * Resultados (ingresos/gastos por subgrupo PUC). null-safe.
+     *
+     * @param accounts     cuentas acumuladas (de REVENUE o EXPENSE)
+     * @param debitNature  true para gastos/costos (debito - credito), false para ingresos
+     * @param codeMatches  predicado sobre el codigo PUC (ej. empieza por "51")
+     */
+    private BigDecimal sumWhere(Map<Long, AccountAccumulator> accounts, boolean debitNature,
+                                java.util.function.Predicate<String> codeMatches) {
+        if (accounts == null || accounts.isEmpty()) return BigDecimal.ZERO;
+        return accounts.values().stream()
+                .filter(acc -> acc.pucCode != null && codeMatches.test(acc.pucCode))
                 .map(acc -> debitNature
                         ? acc.totalDebit.subtract(acc.totalCredit)
                         : acc.totalCredit.subtract(acc.totalDebit))

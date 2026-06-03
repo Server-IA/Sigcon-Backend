@@ -109,10 +109,19 @@ public class FinancialMovement {
     @Column(name = "cuenta_puc_sugerida", length = 20)
     private String cuentaPucSugerida;
 
-    // BNK-HU-069: estado de conciliación del movimiento.
+    // BNK-HU-069: estado de conciliación OFICIAL del movimiento (la "trazabilidad
+    // actual del sistema" que leen DIAN/TRM/otros módulos). Solo se actualiza cuando
+    // la conciliación se CIERRA + FIRMA (commit). NO se toca mientras la sesión está abierta.
     // NO_CONCILIADO | EN_REVISION | CONCILIADO (el estado PENDIENTE de libros se mapea a NO_CONCILIADO).
     @Column(name = "estado_conciliacion", length = 20)
     private String estadoConciliacion;
+
+    // QA Bloque BNK (2026-06-03) Bug 1: estado de conciliación de TRABAJO, aislado dentro
+    // del entorno de conciliación. El motor de matching y el emparejamiento manual escriben
+    // aquí (no en `estadoConciliacion`) mientras la sesión está abierta. Al cerrar la sesión,
+    // este valor se commitea al estado oficial.
+    @Column(name = "estado_conciliacion_sesion", length = 20)
+    private String estadoConciliacionSesion;
 
     // Conciliación I1 (mapeo por R4): sesión rica (SesionConciliacion) bajo la que
     // se importó este movimiento de extracto. Nullable — los movimientos de libro o
@@ -141,6 +150,7 @@ public class FinancialMovement {
     protected void onCreate() {
         if (this.companyId == null) this.companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
         if (this.estadoConciliacion == null) this.estadoConciliacion = "NO_CONCILIADO";
+        if (this.estadoConciliacionSesion == null) this.estadoConciliacionSesion = "NO_CONCILIADO";
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;

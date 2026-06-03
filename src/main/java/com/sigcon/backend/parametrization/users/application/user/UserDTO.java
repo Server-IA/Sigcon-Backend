@@ -41,4 +41,7 @@ public class UserDTO {
     private Set<String> roles;
     private List<PermissionDTO> permissions;
     private List<ParameterDTO> parameters;
+
+    /** PA-RF-09 punto 1 (v3.0, Control de Cambios PA): motivo opcional de la modificacion administrativa. */
+    private String reason;
 }

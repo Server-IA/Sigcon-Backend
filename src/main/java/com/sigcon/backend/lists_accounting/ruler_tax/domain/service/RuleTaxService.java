@@ -216,6 +216,18 @@ public class RuleTaxService {
                         + "(" + usedBy + " cuenta(s) contable(s) la usan).")));
             }
 
+            // QA CFG (2026-06-02): solo se eliminan reglas tributarias en estado
+            // INACTIVE (mismo prerrequisito que el catalogo PUC y las cuentas
+            // contables). Antes una regla ACTIVA sin dependencias se eliminaba
+            // directo; ahora se exige inactivarla primero.
+            if (taxRulerEntity.getStatus()
+                    != com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax.INACTIVE) {
+                return ResponseEntity.badRequest().body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "La regla tributaria debe estar en estado inactiva antes de eliminarla. "
+                        + "Cambie el estado a INACTIVE y reintente la operacion.")));
+            }
+
             // Soft delete en vez de eliminación física
             taxRulerEntity.setDeletedAt(java.time.LocalDateTime.now());
             taxRulerEntity.setStatus(com.sigcon.backend.lists_accounting.ruler_tax.domain.model.enums.StatusRulerTax.INACTIVE);

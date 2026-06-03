@@ -30,23 +30,54 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody AuthRequest request) {
-        return authService.login(request);
+    public ResponseEntity<?> login(@RequestBody AuthRequest request,
+                                   jakarta.servlet.http.HttpServletRequest http) {
+        // PA-RF-01 v3.0: pasar IP (X-Forwarded-For o remote addr) y User-Agent
+        // a la capa de servicio para registrarlos en la sesion activa.
+        return authService.login(request, clientIp(http), http.getHeader("User-Agent"));
+    }
+
+    /**
+     * PA-RF-01 v3.0 (Control de Cambios PA, 2026-05-29): renueva el access token
+     * a partir del refresh token entregado en el login.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(
+            @RequestBody com.sigcon.backend.parametrization.users.application.auth.RefreshTokenRequest request) {
+        return authService.refresh(request);
+    }
+
+    /** Extrae la IP real del cliente respetando proxy (X-Forwarded-For, primer hop). */
+    private static String clientIp(jakarta.servlet.http.HttpServletRequest http) {
+        String xff = http.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            return (comma > 0 ? xff.substring(0, comma) : xff).trim();
+        }
+        return http.getRemoteAddr();
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody AuthRequest request) {
+    public ResponseEntity<?> forgotPassword(@RequestBody AuthRequest request,
+                                            jakarta.servlet.http.HttpServletRequest http) {
         try {
-            authService.sendResetPasswordLink(request);
-            return ResponseEntity.ok(
-                    SuccessRespondJson.getSuccessRespondMessage(
-                            Optional.of("Se ha enviado un enlace para restablecer la contraseña."), Optional.empty()));
+            authService.sendResetPasswordLink(request, clientIp(http));
         } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
             throw __tie;
+        } catch (com.sigcon.backend.parametrization.users.application.auth.TooManyRequestsException tmr) {
+            // PA-RF-02 punto 2 (v3.0): rate limit excedido -> 429.
+            return ResponseEntity.status(429).body(
+                    ErrorRespondJson.getErrorRespondMessage(Optional.of(tmr.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(
-                    ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+            // PA-RF-02 punto 1 (v3.0): ANTI-ENUMERACION. Ningun error interno debe
+            // revelarse; el servicio ya traga el caso "email no existe" y los
+            // errores de envio de correo, asi que esto es solo una red de seguridad.
         }
+        // Respuesta generica identica exista o no el email (anti-enumeracion).
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Si el correo está registrado, se ha enviado un enlace para restablecer la contraseña."),
+                        Optional.empty()));
     }
 
     @PostMapping("/reset-password")
@@ -59,15 +90,20 @@ public class AuthController {
         } catch (com.sigcon.backend.platform.tenant.TenantIsolationException __tie) {
             throw __tie;
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(
+            // PA-RF-02 (v3.0): los errores de reset (token invalido/expirado,
+            // contrasena que no cumple la politica, reutilizacion) son errores
+            // del cliente -> HTTP 400 (antes 500).
+            return ResponseEntity.badRequest().body(
                     ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader,
+                                    jakarta.servlet.http.HttpServletRequest http) {
         String token = authHeader.replace("Bearer ", "");
-        return authService.logout(token);
+        // PA-RF-27 punto 5: pasar la IP del cliente para que quede en el audit del LOGOUT.
+        return authService.logout(token, clientIp(http));
     }
 
     /**

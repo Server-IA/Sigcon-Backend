@@ -66,6 +66,10 @@ public class PayrollConceptService {
         if (conceptRepository.existsByCodeAndDeletedAtIsNull(req.getCode())) {
             throw new IllegalArgumentException("Ya existe un concepto con code " + req.getCode());
         }
+        // HAL-02: coherencia del tipo de calculo (porcentaje vs valor fijo).
+        validateCalculationCoherence(req);
+        // HAL-03: cuentas PUC debito + credito obligatorias y activas.
+        requireAccountsAssigned(req.getAccountingAccountDebitId(), req.getAccountingAccountCreditId());
         validateAccounts(req.getAccountingAccountDebitId(), req.getAccountingAccountCreditId());
         PayrollConcept c = PayrollConcept.builder()
                 .code(req.getCode())
@@ -91,6 +95,10 @@ public class PayrollConceptService {
     public ResponseEntity<?> update(Long id, CreatePayrollConceptRequest req) {
         PayrollConcept c = conceptRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Concepto no encontrado"));
+        // HAL-02: coherencia del tipo de calculo (porcentaje vs valor fijo).
+        validateCalculationCoherence(req);
+        // HAL-03: cuentas PUC debito + credito obligatorias y activas.
+        requireAccountsAssigned(req.getAccountingAccountDebitId(), req.getAccountingAccountCreditId());
         validateAccounts(req.getAccountingAccountDebitId(), req.getAccountingAccountCreditId());
 
         // QA Nomina (2026-05-25) ERR-NOM-003: capturar snapshot ANTERIOR para que la
@@ -141,7 +149,84 @@ public class PayrollConceptService {
         return ResponseEntity.ok("Concepto eliminado");
     }
 
+    /**
+     * HAL-05/HAL-06 soporte: cambia SOLO el estado (ACTIVE/INACTIVE) de un concepto
+     * sin exigir cuentas PUC ni coherencia de calculo. Necesario porque los conceptos
+     * legales precargados pueden no tener cuentas asignadas y deben poder
+     * activarse/inactivarse sin abrir el formulario completo.
+     */
+    @Transactional
+    public ResponseEntity<?> changeStatus(Long id, String status) {
+        if (status == null || !(status.equals("ACTIVE") || status.equals("INACTIVE"))) {
+            throw new IllegalArgumentException("Estado invalido. Use ACTIVE o INACTIVE.");
+        }
+        PayrollConcept c = conceptRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Concepto no encontrado"));
+        String old = c.getStatus();
+        c.setStatus(status);
+        PayrollConcept saved = conceptRepository.save(c);
+        auditPublisher.publishUpdate(AuditModule.NOM, "PayrollConcept", saved.getId(),
+                "Concepto " + saved.getCode() + " "
+                        + ("ACTIVE".equals(status) ? "activado" : "inactivado"),
+                "{\"status\":\"" + jsonSafe(old) + "\"}",
+                "{\"status\":\"" + jsonSafe(status) + "\"}");
+        return ResponseEntity.ok(PayrollConceptDTO.from(saved));
+    }
+
     // ======== Helpers ========
+
+    /**
+     * HAL-02: valida que la configuracion del concepto sea coherente con su base de
+     * calculo. Un concepto de valor fijo (FIXED) NO admite porcentaje; un concepto
+     * porcentual (IBC/SALARY) requiere porcentaje valido (0-100) y no admite monto fijo.
+     * CUSTOM no se restringe (formula libre).
+     */
+    private void validateCalculationCoherence(CreatePayrollConceptRequest req) {
+        String base = req.getBaseCalculation() != null ? req.getBaseCalculation().toUpperCase() : "";
+        java.math.BigDecimal pct = req.getPercentage();
+        java.math.BigDecimal fixed = req.getFixedAmount();
+        boolean hasPct = pct != null && pct.signum() != 0;
+        boolean hasFixed = fixed != null && fixed.signum() != 0;
+
+        if (hasPct && (pct.signum() < 0 || pct.compareTo(new java.math.BigDecimal("100")) > 0)) {
+            throw new IllegalArgumentException("El porcentaje debe estar entre 0 y 100.");
+        }
+        switch (base) {
+            case "FIXED" -> {
+                if (hasPct) {
+                    throw new IllegalArgumentException(
+                            "El concepto '" + req.getCode() + "' es de valor fijo (base de calculo FIJO) "
+                            + "y no admite porcentaje. El salario base y otros valores absolutos se "
+                            + "definen por empleado, no como un porcentaje de una base.");
+                }
+            }
+            case "IBC", "SALARY" -> {
+                if (!hasPct) {
+                    throw new IllegalArgumentException(
+                            "El concepto '" + req.getCode() + "' usa base de calculo porcentual "
+                            + "(IBC/Salario) y requiere un porcentaje valido entre 0 y 100.");
+                }
+                if (hasFixed) {
+                    throw new IllegalArgumentException(
+                            "El concepto '" + req.getCode() + "' es porcentual (IBC/Salario) y no debe "
+                            + "tener monto fijo. Use porcentaje o cambie la base de calculo a FIJO.");
+                }
+            }
+            default -> { /* CUSTOM u otros: formula libre, sin restriccion */ }
+        }
+    }
+
+    /**
+     * HAL-03: exige que el concepto tenga asignadas las cuentas PUC debito y credito.
+     * (La activacion/inactivacion via changeStatus NO pasa por aqui.)
+     */
+    private void requireAccountsAssigned(Long debitId, Long creditId) {
+        if (debitId == null || creditId == null) {
+            throw new IllegalArgumentException(
+                    "Debe asignar las cuentas PUC debito y credito (activas) al concepto antes de guardar. "
+                    + "Seleccionelas en Listas Contables.");
+        }
+    }
 
     /**
      * HU-NOM-02 E3: valida que las cuentas PUC asignadas esten ACTIVE.

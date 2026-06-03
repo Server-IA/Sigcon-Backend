@@ -596,6 +596,63 @@ public class PayrollService {
         return toDTO(r);
     }
 
+    /**
+     * HAL-07 + HAL-01 (NOM-RF-03 E2): anade una linea de concepto a un recibo en BORRADOR.
+     *
+     * <p>El concepto debe estar ACTIVO. Asi cualquier concepto activo —incluidos los
+     * personalizados creados por el admin— queda disponible para incluirse en la
+     * liquidacion (NOM-RF-02). El tipo de linea (devengado/deduccion/aporte) se toma del
+     * tipo del concepto. Recalcula los totales del recibo.
+     */
+    @Transactional
+    public PayrollReceiptDTO addLine(Long receiptId, String conceptCode, BigDecimal amount) {
+        PayrollReceipt r = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new IllegalArgumentException("Recibo no encontrado"));
+        if (!"DRAFT".equals(r.getStatus())) {
+            throw new IllegalStateException(
+                    "Solo se pueden anadir conceptos a recibos en BORRADOR. "
+                    + "Estado actual: " + r.getStatus()
+                    + ". Para correcciones post-aprobacion use Nomina Complementaria.");
+        }
+        if (conceptCode == null || conceptCode.isBlank()) {
+            throw new IllegalArgumentException("Debe seleccionar un concepto.");
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("El monto del concepto debe ser mayor a cero.");
+        }
+        PayrollConcept concept = conceptRepository
+                .findByCodeAndDeletedAtIsNull(conceptCode.toUpperCase().trim())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El concepto '" + conceptCode + "' no existe."));
+        if (!"ACTIVE".equals(concept.getStatus())) {
+            throw new IllegalArgumentException(
+                    "El concepto '" + concept.getCode() + "' esta inactivo y no puede agregarse. "
+                    + "Activelo en Conceptos de nomina.");
+        }
+        // No duplicar un concepto que ya esta en el recibo
+        List<PayrollLine> existing = lineRepository
+                .findByReceiptIdAndDeletedAtIsNullOrderByLineOrder(receiptId);
+        boolean dup = existing.stream()
+                .anyMatch(l -> concept.getCode().equalsIgnoreCase(l.getConceptCode()));
+        if (dup) {
+            throw new IllegalArgumentException(
+                    "El concepto '" + concept.getCode() + "' ya esta incluido en este recibo. "
+                    + "Edite la linea existente en lugar de agregarla de nuevo.");
+        }
+        int nextOrder = existing.stream().mapToInt(l -> l.getLineOrder() != null ? l.getLineOrder() : 0)
+                .max().orElse(0) + 1;
+        PayrollLine line = buildLine(concept.getCode(), concept.getName(),
+                concept.getConceptType(), amount, nextOrder);
+        line.setReceiptId(receiptId);
+        lineRepository.save(line);
+        recomputeTotals(r);
+        receiptRepository.save(r);
+        auditPublisher.publishCreate(AuditModule.NOM, "PayrollLine", line.getId(),
+                "Concepto " + concept.getCode() + " agregado al recibo #" + receiptId
+                + " por " + amount);
+        return toDTO(r);
+    }
+
     /** Recalcula totalEarnings, totalDeductions, totalEmployer y netPay desde las lineas activas. */
     private void recomputeTotals(PayrollReceipt r) {
         List<PayrollLine> lines = lineRepository

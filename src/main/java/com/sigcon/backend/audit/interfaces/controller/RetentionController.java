@@ -132,6 +132,46 @@ public class RetentionController {
     }
 
     @Operation(
+        summary = "Legal hold MASIVO (QA Auditoria 2026-06-02)",
+        description = "Aplica retencion legal a TODOS los logs que coinciden con los criterios: "
+                    + "modulo, severidad y/o rango de fechas (= periodo contable). Ej.: todos los "
+                    + "registros del modulo CG, o todo 2026-01. Requiere motivo. Respeta el tenant.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Legal hold masivo aplicado (affected/matched)"),
+        @ApiResponse(responseCode = "400", description = "Sin motivo o sin criterios"),
+        @ApiResponse(responseCode = "403", description = "Sin permisos")
+    })
+    @PreAuthorize("hasAnyAuthority('PERM_LEGAL_HOLD','TEMP_PERM_LEGAL_HOLD','TEMP_LEGAL_HOLD','PERM_AU.RETENCION.LEGAL_HOLD','TEMP_PERM_AU.RETENCION.LEGAL_HOLD','TEMP_AU.RETENCION.LEGAL_HOLD','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    @PostMapping("/legal-hold/bulk")
+    public ResponseEntity<?> setLegalHoldBulk(@RequestBody Map<String, String> body) {
+        return service.setLegalHoldBulk(
+                body.get("module"), body.get("severity"),
+                parseDt(body.get("dateFrom")), parseDt(body.get("dateTo")),
+                body.get("reason"));
+    }
+
+    @Operation(summary = "Liberar legal hold MASIVO por criterios (QA Auditoria 2026-06-02)")
+    @PreAuthorize("hasAnyAuthority('PERM_LEGAL_HOLD','TEMP_PERM_LEGAL_HOLD','TEMP_LEGAL_HOLD','PERM_AU.RETENCION.LEGAL_HOLD','TEMP_PERM_AU.RETENCION.LEGAL_HOLD','TEMP_AU.RETENCION.LEGAL_HOLD','ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN','ROLE_ADMIN')")
+    @PostMapping("/legal-hold/bulk/release")
+    public ResponseEntity<?> releaseLegalHoldBulk(@RequestBody Map<String, String> body) {
+        return service.releaseLegalHoldBulk(
+                body.get("module"), body.get("severity"),
+                parseDt(body.get("dateFrom")), parseDt(body.get("dateTo")));
+    }
+
+    /** Parsea "yyyy-MM-dd" o "yyyy-MM-ddTHH:mm:ss" a LocalDateTime (null si vacio). */
+    private static java.time.LocalDateTime parseDt(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            String t = s.trim();
+            if (t.length() == 10) t = t + "T00:00:00"; // solo fecha
+            return java.time.LocalDateTime.parse(t);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Operation(
         summary = "Ejecutar purga manual (HU-AU-10 E3/E4)",
         description = "Dispara inmediatamente la purga de logs con retencion vencida + sin "
                     + "legal hold + sin archived_at. Genera AuditPurgeRecord con hash SHA-256 "

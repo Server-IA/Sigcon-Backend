@@ -131,12 +131,27 @@ public class GlobalExceptionHandler {
         // );
         // }
 
-        // ERR-MNT-TER-003: Mensaje descriptivo en vez de genérico
+        // ERR-MNT-TER-003 + BUG-01 (TER, 2026-06-02): mensaje descriptivo que
+        // corresponde a la CAUSA REAL. Antes, cualquier violacion con
+        // 'third_part'/'tercero' se traducia como "tiene registros asociados"
+        // (dependencia), incluso cuando era una violacion de UNICIDAD en un
+        // INSERT (creacion). Ahora distinguimos: violacion de llave unica =
+        // duplicidad; violacion de llave foranea = dependencia.
+        boolean isUniqueViolation = rootMessage != null && (rootMessage.contains("duplicate key")
+                || rootMessage.contains("unique constraint") || rootMessage.contains("llave duplicada")
+                || rootMessage.contains("restricción de unicidad") || rootMessage.contains("ya existe la llave"));
+        boolean isForeignKeyViolation = rootMessage != null && (rootMessage.contains("foreign key")
+                || rootMessage.contains("llave foránea") || rootMessage.contains("clave foránea"));
         String descriptiveMessage = "Error de integridad de datos.";
         if (rootMessage != null) {
-            if (rootMessage.contains("third_part") || rootMessage.contains("tercero"))
-                descriptiveMessage = "No es posible realizar esta operación porque el tercero tiene registros asociados en otros módulos. Verifique y retire las dependencias antes de continuar.";
-            else if (rootMessage.contains("compan") || rootMessage.contains("empresa"))
+            if (rootMessage.contains("third_part") || rootMessage.contains("tercero")) {
+                if (isUniqueViolation)
+                    descriptiveMessage = "Ya existe un tercero con el mismo NIT o código en esta empresa.";
+                else if (isForeignKeyViolation)
+                    descriptiveMessage = "No es posible realizar esta operación porque el tercero tiene registros asociados en otros módulos. Verifique y retire las dependencias antes de continuar.";
+                else
+                    descriptiveMessage = "No se pudo completar la operación sobre el tercero por una restricción de integridad de datos.";
+            } else if (rootMessage.contains("compan") || rootMessage.contains("empresa"))
                 descriptiveMessage = "No es posible realizar esta operación porque la empresa tiene registros asociados.";
             else if (rootMessage.contains("cost_center") || rootMessage.contains("centro"))
                 descriptiveMessage = "No es posible realizar esta operación porque el centro de costo tiene registros asociados.";

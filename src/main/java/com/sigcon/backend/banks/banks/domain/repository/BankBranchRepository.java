@@ -14,6 +14,14 @@ public interface BankBranchRepository extends JpaRepository<BankBranch, Long>, J
 
     boolean existsByAddressAndIdNotAndDeletedAtIsNull(String address, Long id);
 
+    // BNK-RF-26 (QA Bloque BNK 2026-06-03): no permitir dos sucursales con la misma
+    // dirección y ciudad (municipio) para el mismo banco.
+    boolean existsByBank_IdAndMunicipality_IdAndAddressIgnoreCaseAndDeletedAtIsNull(
+            Long bankId, Long municipalityId, String address);
+
+    boolean existsByBank_IdAndMunicipality_IdAndAddressIgnoreCaseAndIdNotAndDeletedAtIsNull(
+            Long bankId, Long municipalityId, String address, Long id);
+
     Optional<BankBranch> findByIdAndDeletedAtIsNull(Long id);
 
     List<BankBranch> findByBankIdAndDeletedAtIsNull(Long bankId);

@@ -97,8 +97,8 @@ public class PartidaConciliatoriaService {
         int creadas = 0;
         List<String> alertas = new ArrayList<>();
         for (FinancialMovement m : movementRepository.findAllByBankAccountIdOrdered(bankAccountId)) {
-            // Solo movimientos del extracto sin conciliar.
-            if (!C_NO.equals(m.getEstadoConciliacion())) continue;
+            // Solo movimientos del extracto sin conciliar (estado de TRABAJO de la sesión — Bug 1).
+            if (!C_NO.equals(m.getEstadoConciliacionSesion())) continue;
             AdjMap map = mapFor(m.getTipoMovimiento(), bankPuc, m.getCuentaPucSugerida(), aplicaGmf);
             if (map.gmfExento) {
                 alertas.add("Movimiento #" + m.getId() + " (" + m.getMovementDate()

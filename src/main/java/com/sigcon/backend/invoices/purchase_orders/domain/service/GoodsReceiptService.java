@@ -68,6 +68,12 @@ public class GoodsReceiptService {
     private final GoodsReceiptInvoiceLinkRepository receiptInvoiceLinkRepository;
 
     /**
+     * RF-18 (Notas Tecnicas CXP, 2026-06-02): secuencia por empresa para los
+     * consecutivos de recepcion (RC) y devolucion (DV), reemplaza countAll()+1.
+     */
+    private final com.sigcon.backend.general.accounting.series.domain.service.VoucherSeriesService voucherSeriesService;
+
+    /**
      * QA-BLOQUE-AY HU-AP-21 (2026-05-05): repositorio de devoluciones para
      * generar consecutivo unico por empresa (DV-{año}{6dig}).
      */
@@ -75,6 +81,9 @@ public class GoodsReceiptService {
     private com.sigcon.backend.invoices.purchase_orders.domain.repository.GoodsReturnRepository goodsReturnRepository;
 
     private final DataTableSpecificationBuilder<GoodsReceipt> specBuilder = new DataTableSpecificationBuilder<>();
+
+    /** RF-21/32 (Notas Tecnicas CXP): listado paginado de devoluciones (DV-). */
+    private final DataTableSpecificationBuilder<com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn> returnSpecBuilder = new DataTableSpecificationBuilder<>();
 
     /**
      * Registra una nueva recepcion de bienes/servicios.
@@ -520,9 +529,16 @@ public class GoodsReceiptService {
             receiptLineRepository.save(line);
         }
 
-        // Generar codigo de devolucion DV-{año}{6dig}
-        long count = goodsReturnRepository != null ? goodsReturnRepository.count() : 0L;
-        String returnNumber = String.format("DV-%d%06d", java.time.Year.now().getValue(), count + 1);
+        // Generar codigo de devolucion DV-{año}{6dig}.
+        // RF-18 (Notas Tecnicas CXP, 2026-06-02): consecutivo por EMPRESA via
+        // secuencia atomica (VoucherSeriesService), en vez de count()+1.
+        Long companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (companyId != null && goodsReturnRepository != null) {
+            long maxExisting = goodsReturnRepository.findMaxReturnSequence(companyId);
+            voucherSeriesService.syncToAtLeast("DV", maxExisting);
+        }
+        long retSeq = voucherSeriesService.consumeNext("DV");
+        String returnNumber = String.format("DV-%d%06d", java.time.Year.now().getValue(), retSeq);
 
         com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn gr =
                 com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn.builder()
@@ -808,8 +824,16 @@ public class GoodsReceiptService {
      * @return numero de recepcion generado
      */
     private String generateReceiptNumber() {
-        long count = receiptRepository.countAll() + 1;
-        return String.format("RC-%d%06d", Year.now().getValue(), count);
+        // RF-18 (Notas Tecnicas CXP, 2026-06-02): consecutivo por EMPRESA via
+        // secuencia atomica (VoucherSeriesService), en vez de countAll()+1 global.
+        // Self-heal: sincroniza la serie al MAX real de la empresa antes de consumir.
+        Long companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (companyId != null) {
+            long maxExisting = receiptRepository.findMaxReceiptSequence(companyId);
+            voucherSeriesService.syncToAtLeast("RC", maxExisting);
+        }
+        long seq = voucherSeriesService.consumeNext("RC");
+        return String.format("RC-%d%06d", Year.now().getValue(), seq);
     }
 
     /**
@@ -837,6 +861,28 @@ public class GoodsReceiptService {
             // LazyInitializationException
         }
 
+        // RF-19 (Notas Tecnicas CXP, 2026-06-02): cantidad de facturas distintas
+        // asociadas (campo legacy invoiceId + enlaces N:M). La columna "Factura
+        // Asociada" muestra "Multiple" cuando hay mas de una.
+        java.util.Set<Long> invoiceIds = new java.util.HashSet<>();
+        if (receipt.getInvoiceId() != null) {
+            invoiceIds.add(receipt.getInvoiceId());
+        }
+        try {
+            receiptInvoiceLinkRepository.findByReceiptIdAndDeletedAtIsNull(receipt.getId())
+                    .forEach(l -> {
+                        if (l.getInvoiceId() != null) {
+                            invoiceIds.add(l.getInvoiceId());
+                        }
+                    });
+        } catch (Exception ignore) {
+            // defensivo: si falla la consulta de enlaces, conservamos el legacy
+        }
+        int linkedCount = invoiceIds.size();
+        String invoiceLabel = linkedCount == 0 ? null
+                : linkedCount > 1 ? "Multiple"
+                : "#" + invoiceIds.iterator().next();
+
         return GoodsReceiptDTO.builder()
                 .id(receipt.getId())
                 .purchaseOrderId(poId)
@@ -845,6 +891,8 @@ public class GoodsReceiptService {
                 .receiptDate(receipt.getReceiptDate())
                 .status(receipt.getStatus())
                 .invoiceId(receipt.getInvoiceId())
+                .linkedInvoiceCount(linkedCount)
+                .invoiceLabel(invoiceLabel)
                 .notes(receipt.getNotes())
                 .lines(lineDTOs)
                 .build();
@@ -873,6 +921,94 @@ public class GoodsReceiptService {
                 .purchaseOrderLineId(poLineId)
                 .description(description)
                 .quantityReceived(line.getQuantityReceived())
+                .build();
+    }
+
+    // ===================== RF-21/32: listado de devoluciones (DV-) =====================
+
+    /**
+     * RF-21/32 (Notas Tecnicas CXP, 2026-06-02): listado paginado e independiente
+     * de devoluciones de mercancia (DV-) de la empresa, con su consecutivo, la
+     * recepcion origen y el motivo. Antes solo se reutilizaba el listado de
+     * recepciones; ahora las devoluciones tienen su propia vista.
+     *
+     * @param request parametros DataTable
+     * @return listado paginado de devoluciones
+     */
+    public ResponseEntity<?> getReturns(DataTableRequest request) {
+        int draw = request != null ? request.getDraw() : 0;
+        if (goodsReturnRepository == null) {
+            return ResponseEntity.ok(DataTableResponse.from(Page.empty(), draw));
+        }
+        int start = request != null ? Math.max(0, request.getStart()) : 0;
+        int length = request != null ? request.getLength() : 20;
+        int safeLength = length <= 0 ? 20 : Math.min(length, 100);
+        int page = start / safeLength;
+        Pageable pageable = length == -1 ? Pageable.unpaged() : PageRequest.of(page, safeLength);
+        Specification<com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn> spec =
+                returnSpecBuilder.build(request);
+        Page<com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO> data =
+                goodsReturnRepository.findAll(spec, pageable).map(this::toReturnDTO);
+        return ResponseEntity.ok(DataTableResponse.from(data, draw));
+    }
+
+    /**
+     * RF-21/32: detalle de una devolucion por id, con sus lineas devueltas.
+     *
+     * @param id identificador de la devolucion
+     * @return devolucion encontrada
+     * @throws IllegalArgumentException si no existe
+     */
+    public ResponseEntity<?> getReturnById(Long id) {
+        if (goodsReturnRepository == null) {
+            throw new IllegalArgumentException("La devolucion no fue encontrada");
+        }
+        com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn gr =
+                goodsReturnRepository.findById(id)
+                        .orElseThrow(() -> new IllegalArgumentException("La devolucion no fue encontrada"));
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Devolucion encontrada"), Optional.of(toReturnDTO(gr))));
+    }
+
+    /** RF-21/32: convierte una GoodsReturn a su DTO de respuesta. */
+    private com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO toReturnDTO(
+            com.sigcon.backend.invoices.purchase_orders.domain.model.GoodsReturn gr) {
+        String receiptNumber = null;
+        Long receiptId = null;
+        try {
+            if (gr.getReceipt() != null) {
+                receiptId = gr.getReceipt().getId();
+                receiptNumber = gr.getReceipt().getReceiptNumber();
+            }
+        } catch (Exception e) {
+            // LazyInitializationException
+        }
+
+        List<com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO.Line> lineDTOs = List.of();
+        try {
+            if (gr.getLines() != null) {
+                lineDTOs = gr.getLines().stream()
+                        .map(l -> com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO.Line.builder()
+                                .goodsReceiptLineId(l.getGoodsReceiptLine() != null
+                                        ? l.getGoodsReceiptLine().getId() : null)
+                                .quantityReturned(l.getQuantityReturned())
+                                .notes(l.getNotes())
+                                .build())
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            // LazyInitializationException
+        }
+
+        return com.sigcon.backend.invoices.purchase_orders.application.GoodsReturnDTO.builder()
+                .id(gr.getId())
+                .returnNumber(gr.getReturnNumber())
+                .receiptId(receiptId)
+                .receiptNumber(receiptNumber)
+                .returnDate(gr.getReturnDate())
+                .reason(gr.getReason())
+                .createdAt(gr.getCreatedAt())
+                .lines(lineDTOs)
                 .build();
     }
 }

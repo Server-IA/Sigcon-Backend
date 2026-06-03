@@ -269,7 +269,19 @@ public class CashService {
         cash.setAlternateResponsible(alternateResponsible);
         cash.setOperationSchedule(request.getOperationSchedule());
         cash.setCurrency(currency);
-        cash.setInitialBalance(request.getInitialBalanace());
+        // QA BNK (2026-06-02) #2: al editar el saldo inicial hay que ajustar el
+        // saldo ACTUAL por la misma diferencia, si no el listado ("Saldo Actual" =
+        // currentBalance) muestra el valor viejo y el cambio "no se refleja". Se
+        // preserva el delta de movimientos: nuevo_actual = actual + (nuevo_inicial -
+        // viejo_inicial). Sin movimientos, actual == inicial, asi que queda igual al nuevo.
+        java.math.BigDecimal oldInitial = cash.getInitialBalance() != null
+                ? cash.getInitialBalance() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal newInitial = request.getInitialBalanace() != null
+                ? request.getInitialBalanace() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal currentBal = cash.getCurrentBalance() != null
+                ? cash.getCurrentBalance() : oldInitial;
+        cash.setInitialBalance(newInitial);
+        cash.setCurrentBalance(currentBal.add(newInitial.subtract(oldInitial)));
         cash.setInitialBalanceDate(request.getInitialBalanceDay());
         cash.setCashCreationDate(request.getCashCreationDate());
         cash.setMaxLimit(request.getMaxLimit());

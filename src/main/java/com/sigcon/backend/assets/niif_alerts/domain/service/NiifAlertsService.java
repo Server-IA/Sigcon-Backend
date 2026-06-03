@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.Year;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -453,6 +454,29 @@ public class NiifAlertsService {
         List<Map<String, Object>> result = new ArrayList<>();
 
         for (Assets asset : activeAssets) {
+            // Bug ACT-RF-08 (2026-06-01): filtrar por anio fiscal. Antes el fiscalYear
+            // se ignoraba (solo se usaba para el badge "revisado"), por lo que poner
+            // 2033 cargaba los activos de 2026. Reglas:
+            //   1) No se revisa un anio fiscal FUTURO (Y > anio actual): la revision
+            //      anual NIC 16 se hace al cierre de un ejercicio ya transcurrido.
+            //   2) El activo debe haber existido en Y (acquisitionDate.year <= Y) y
+            //      seguir dentro de su vida util ese anio (no totalmente depreciado
+            //      antes de Y).
+            if (fiscalYear != null) {
+                if (fiscalYear > Year.now().getValue()) {
+                    continue; // anio futuro -> no revisable
+                }
+                if (asset.getAcquisitionDate() != null) {
+                    int acqYear = asset.getAcquisitionDate().getYear();
+                    Integer life = asset.getUsefulLifeMonths();
+                    int endYear = (life != null && life > 0)
+                            ? asset.getAcquisitionDate().plusMonths(life - 1).getYear()
+                            : acqYear;
+                    if (fiscalYear < acqYear || fiscalYear > endYear) {
+                        continue; // fuera de la ventana de vida util -> no revisable este anio
+                    }
+                }
+            }
             Map<String, Object> assetData = new LinkedHashMap<>();
             assetData.put("id", asset.getId());
             assetData.put("code", asset.getAssetCode());

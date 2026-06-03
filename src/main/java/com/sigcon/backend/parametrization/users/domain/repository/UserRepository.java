@@ -61,4 +61,34 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     boolean existsByEmailAndIdNotAndDeletedAtIsNull(String email, Long id);
 
     Optional<User> findByUsernameOrEmail(String username, String email);
+
+    /**
+     * PA-RF-09 punto 5 (v3.0, Control de Cambios PA): unicidad GLOBAL del email
+     * incluyendo usuarios inactivos y eliminados logicamente (no se permite
+     * reutilizar emails de cuentas soft-deleted). Excluye el propio usuario editado.
+     */
+    @org.springframework.data.jpa.repository.Query(value =
+        "SELECT COUNT(*) > 0 FROM users WHERE LOWER(email) = LOWER(:email) AND id <> :excludeId",
+        nativeQuery = true)
+    boolean existsByEmailIncludingDeleted(
+        @org.springframework.data.repository.query.Param("email") String email,
+        @org.springframework.data.repository.query.Param("excludeId") Long excludeId);
+
+    /**
+     * PA-RF-09 punto 2 (v3.0): cuenta usuarios ACTIVE con rol ADMIN_EMPRESA en una
+     * empresa, excluyendo un usuario. Si es 0 al removerle el admin a ese usuario,
+     * la empresa quedaria sin administrador.
+     */
+    @org.springframework.data.jpa.repository.Query(value =
+        "SELECT COUNT(DISTINCT u.id) FROM users u " +
+        "JOIN users_roles ur ON ur.user_id = u.id " +
+        "JOIN roles r ON r.id = ur.role_id " +
+        "WHERE u.company_id = :companyId AND u.deleted_at IS NULL " +
+        "  AND u.status = 'ACTIVE' " +
+        "  AND r.deleted_at IS NULL AND UPPER(r.name) = 'ADMIN_EMPRESA' " +
+        "  AND u.id <> :userId",
+        nativeQuery = true)
+    long countActiveAdminEmpresaUsersInCompanyExcludingUser(
+        @org.springframework.data.repository.query.Param("companyId") Long companyId,
+        @org.springframework.data.repository.query.Param("userId") Long userId);
 }

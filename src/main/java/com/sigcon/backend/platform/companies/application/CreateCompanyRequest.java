@@ -22,7 +22,11 @@ public class CreateCompanyRequest {
     private String dv;
 
     @NotBlank(message = "La razon social es obligatoria")
-    @Size(max = 200)
+    @Size(max = 200, message = "La razon social no puede superar 200 caracteres")
+    // Pendientes PA 2026-05-30: caracteres permitidos = letras, numeros, espacios y
+    // los simbolos & . ( ) /. (?U) habilita \p{L}/\p{N} Unicode (acentos, enie).
+    @Pattern(regexp = "(?U)^[\\p{L}\\p{N} &.()/]+$",
+            message = "La razon social solo admite letras, numeros, espacios y los simbolos & . ( ) /")
     @Schema(example = "ACME Agroindustria SAS", requiredMode = Schema.RequiredMode.REQUIRED)
     private String businessName;
 
@@ -47,4 +51,12 @@ public class CreateCompanyRequest {
 
     private Long typeOrganizationId;
     private Long typeRegimenId;
+
+    // PA-RF-10 v3.0 (Control de Cambios PA, 2026-05-29): plan + configuracion regional.
+    @Size(max = 50)
+    @Schema(example = "PYME", description = "Plan contratado (PA-RF-10)")
+    private String plan;
+
+    @Schema(description = "Configuracion regional inicial: zona horaria, moneda, locale, etc. (PA-RF-10)")
+    private String regionalConfig;
 }

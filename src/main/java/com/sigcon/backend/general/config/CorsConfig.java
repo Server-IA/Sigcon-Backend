@@ -43,10 +43,16 @@ public class CorsConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
 
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        // PA-RNF-11 (Pendientes PA 2026-05-30): headers requeridos por el contrato.
+        // X-API-Key (AAEF), Idempotency-Key (alta de empresa) y X-Requested-With.
+        config.setAllowedHeaders(List.of(
+                "Authorization", "Content-Type", "Accept",
+                "X-API-Key", "Idempotency-Key", "X-Requested-With"));
 
 
         config.setAllowCredentials(true);
+        // PA-RNF-11: cache del preflight (OPTIONS) por 1 hora para reducir round-trips.
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();

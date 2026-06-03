@@ -32,6 +32,14 @@ public class PasswordResetToken {
 
     private boolean used;
 
+    // PA-RF-02 v3.0 (Control de Cambios PA, 2026-05-29): trazabilidad de la
+    // solicitud de recuperacion. Columnas creadas por Hibernate ddl-auto.
+    @Column(name = "ip_address", length = 64)
+    private String ipAddress;
+
+    @Column(name = "device_id", length = 200)
+    private String deviceId;
+
     public boolean isExpired() {
         return LocalDateTime.now().isAfter(this.expiryDate);
     }

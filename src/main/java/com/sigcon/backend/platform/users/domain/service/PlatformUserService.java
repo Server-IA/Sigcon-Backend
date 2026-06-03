@@ -2,6 +2,8 @@ package com.sigcon.backend.platform.users.domain.service;
 
 import com.sigcon.backend.parametrization.users.domain.model.User;
 import com.sigcon.backend.parametrization.users.domain.repository.UserRepository;
+import com.sigcon.backend.parametrization.users.domain.service.PasswordPolicyService;
+import com.sigcon.backend.parametrization.users.domain.service.SessionService;
 import com.sigcon.backend.platform.companies.domain.repository.CompanyRepository;
 import com.sigcon.backend.platform.tenant.TenantContext;
 import com.sigcon.backend.platform.users.application.PlatformUserDTO;
@@ -46,6 +48,8 @@ public class PlatformUserService {
     private final PasswordEncoder passwordEncoder;
     private final AuditPublisher auditPublisher;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final PasswordPolicyService passwordPolicyService;
+    private final SessionService sessionService;
 
     /**
      * HU-PA-PLAT-04 E1/E2/E3: listado global de usuarios con filtros
@@ -151,9 +155,12 @@ public class PlatformUserService {
     public PlatformUserDTO createPlatformAdmin(String name, String lastname, String email,
                                                 String username, String password) {
         if (email == null || email.isBlank() || username == null || username.isBlank()
-                || password == null || password.length() < 6) {
-            throw new IllegalArgumentException("name/email/username/password (min 6) son obligatorios");
+                || password == null || password.isBlank()) {
+            throw new IllegalArgumentException("name/email/username/password son obligatorios");
         }
+        // PA-RF-01 punto 3 / PA-RF-PLAT-07 (v3.0): la contrasena del nuevo
+        // PLATFORM_ADMIN debe cumplir la politica de seguridad.
+        passwordPolicyService.validateComplexity(password);
         // HU-PA-PLAT-07 E2: email unico cross-tenant
         if (userRepository.existsByEmailAndDeletedAtIsNull(email)) {
             // E2: si el email ya existe en una empresa, mensaje exclusividad
@@ -179,6 +186,8 @@ public class PlatformUserService {
                 .platformRole("PLATFORM_ADMIN")
                 .build();
         User saved = userRepository.save(u);
+        // PA-RF-01: registrar la primera contrasena en el historial.
+        passwordPolicyService.record(saved.getId(), saved.getPassword());
         log.info("PLATFORM_ADMIN secundario creado: id={} email={}", saved.getId(), saved.getEmail());
         auditPublisher.publishCreate(AuditModule.PA, "User", saved.getId(),
                 "PLATFORM_ADMIN secundario creado: " + saved.getEmail());
@@ -198,8 +207,13 @@ public class PlatformUserService {
             throw new IllegalArgumentException("El usuario no es PLATFORM_ADMIN");
         }
         if (email != null && !email.isBlank() && !email.equalsIgnoreCase(u.getEmail())) {
-            if (userRepository.existsByEmailAndIdNotAndDeletedAtIsNull(email, userId)) {
-                throw new IllegalArgumentException("Ya existe un usuario con ese email en el sistema");
+            // PA-RF-PLAT-07 punto 4 (v3.0): al cambiar el correo de un PLATFORM_ADMIN
+            // se valida unicidad GLOBAL del email, incluyendo usuarios inactivos y
+            // eliminados logicamente (mismo criterio que PA-RF-09 punto 5). No se
+            // permite reutilizar emails de cuentas soft-deleted.
+            if (userRepository.existsByEmailIncludingDeleted(email, userId)) {
+                throw new IllegalArgumentException(
+                        "Ya existe un usuario con ese email en el sistema (incluye cuentas inactivas o eliminadas)");
             }
             u.setEmail(email.trim().toLowerCase());
         }
@@ -214,14 +228,25 @@ public class PlatformUserService {
     /**
      * QA Bloque PA Bug 65 (HU-PA-PLAT-07 E4): desactivar PLATFORM_ADMIN con safeguard.
      */
+    /** Wrapper legacy sin motivo. */
     @Transactional
     public void deactivatePlatformAdmin(Long userId) {
+        deactivatePlatformAdmin(userId, "(legacy: sin motivo)");
+    }
+
+    /**
+     * PA-RF-PLAT-07 v3.0 (Control de Cambios PA, 2026-05-29): desactivar
+     * PLATFORM_ADMIN con motivo + safeguard del ultimo activo + efecto inmediato
+     * sobre sus sesiones (punto 5).
+     */
+    @Transactional
+    public void deactivatePlatformAdmin(Long userId, String reason) {
         User u = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         if (u.getPlatformRole() == null) {
             throw new IllegalArgumentException("El usuario no es PLATFORM_ADMIN");
         }
-        // HU-PA-PLAT-07 E4: contar PLATFORM_ADMIN activos distintos al actual
+        // HU-PA-PLAT-07 E4: safeguard del ultimo PLATFORM_ADMIN activo.
         long activeOthers = userRepository.findAll((root, q, cb) -> cb.and(
             cb.isNotNull(root.get("platformRole")),
             cb.equal(root.get("status"), com.sigcon.backend.parametrization.users.domain.model.enums.Status.ACTIVE),
@@ -234,10 +259,44 @@ public class PlatformUserService {
               + "Cree otro antes de desactivar este");
         }
         u.setStatus(com.sigcon.backend.parametrization.users.domain.model.enums.Status.INACTIVE);
+        // PA-RF-PLAT-07 punto 5: efecto inmediato sobre las sesiones activas.
+        u.setSessionInvalidatedAt(java.time.LocalDateTime.now());
         userRepository.save(u);
-        log.info("PLATFORM_ADMIN desactivado: id={} email={}", u.getId(), u.getEmail());
+        int revoked = sessionService.revokeAllForUser(userId);
+        log.info("PLATFORM_ADMIN desactivado: id={} email={} ({} sesiones revocadas) reason={}",
+                u.getId(), u.getEmail(), revoked, reason);
         auditPublisher.publishUpdate(AuditModule.PA, "User", u.getId(),
-                "PLATFORM_ADMIN desactivado: " + u.getEmail());
+                "PLATFORM_ADMIN desactivado: " + u.getEmail()
+              + " | invalidatedSessions=" + revoked + " | reason=" + reason);
+    }
+
+    /** PA-RF-PLAT-07 v3.0: reactivar un PLATFORM_ADMIN previamente desactivado. */
+    @Transactional
+    public PlatformUserDTO activatePlatformAdmin(Long userId, String reason) {
+        User u = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        if (u.getPlatformRole() == null) {
+            throw new IllegalArgumentException("El usuario no es PLATFORM_ADMIN");
+        }
+        u.setStatus(com.sigcon.backend.parametrization.users.domain.model.enums.Status.ACTIVE);
+        userRepository.save(u);
+        log.info("PLATFORM_ADMIN reactivado: id={} email={}", u.getId(), u.getEmail());
+        auditPublisher.publishUpdate(AuditModule.PA, "User", u.getId(),
+                "PLATFORM_ADMIN reactivado: " + u.getEmail() + " | reason=" + reason);
+        return toDto(u);
+    }
+
+    /** PA-RF-PLAT-07 v3.0: consultar un usuario (PLATFORM_ADMIN o de empresa) por id. */
+    @Transactional(readOnly = true)
+    public PlatformUserDTO getPlatformAdmin(Long userId) {
+        User u = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        PlatformUserDTO dto = toDto(u);
+        if (u.getCompanyId() != null) {
+            companyRepository.findById(u.getCompanyId())
+                    .ifPresent(c -> dto.setCompanyName(c.getBusinessName()));
+        }
+        return dto;
     }
 
     private PlatformUserDTO toDto(User u) {
@@ -263,12 +322,19 @@ public class PlatformUserService {
         if (user.getDeletedAt() != null) {
             throw new IllegalArgumentException("Usuario eliminado");
         }
-        user.setPassword(passwordEncoder.encode(newPassword));
+        // PA-RF-01 punto 3 (v3.0): politica de seguridad + no reutilizar ultimas 5.
+        passwordPolicyService.assertAllowedForUser(user.getId(), user.getPassword(), newPassword);
+        String encoded = passwordEncoder.encode(newPassword);
+        user.setPassword(encoded);
         user.setFailedLoginAttempts(0);
         user.setLockedUntil(null);
+        // PA-RF-PLAT-07 punto 5 (v3.0): efecto inmediato sobre las sesiones.
+        user.setSessionInvalidatedAt(java.time.LocalDateTime.now());
         userRepository.save(user);
-        log.info("PLATFORM_ADMIN reseteo contrasenia de usuario id={} email={}",
-                user.getId(), user.getEmail());
+        passwordPolicyService.record(user.getId(), encoded);
+        int revokedSessions = sessionService.revokeAllForUser(user.getId());
+        log.info("PLATFORM_ADMIN reseteo contrasenia de usuario id={} email={} ({} sesiones revocadas)",
+                user.getId(), user.getEmail(), revokedSessions);
         // HU-PA-PLAT-04 E4: evidencia inmutable del cambio de credenciales.
         // Se registra en la bitacora de la empresa a la que pertenece el usuario
         // (o sin tenant si es un PLATFORM_ADMIN, donde el log caera en el tenant

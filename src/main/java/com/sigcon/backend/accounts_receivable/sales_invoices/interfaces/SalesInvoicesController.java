@@ -61,7 +61,10 @@ public class SalesInvoicesController {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
         try {
-            SalesInvoice invoice = service.createSalesInvoice(request);
+            // HU-AR-01A E1: la creacion manual deja la factura en BORRADOR
+            // (disponible para su confirmacion). El flujo AAEF usa la sobrecarga
+            // que emite de inmediato.
+            SalesInvoice invoice = service.createSalesInvoice(request, false);
             return service.getById(invoice.getId());
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest()
@@ -118,6 +121,27 @@ public class SalesInvoicesController {
                                     @RequestBody CreateSalesInvoiceRequest request) {
         try {
             return service.update(id, request);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * HU-AR-01A E1: emite (confirma) una factura que estaba en borrador.
+     * Cambia DRAFT -> ISSUED y genera el asiento contable de venta.
+     */
+    @Operation(summary = "Emitir factura de venta",
+               description = "Confirma una factura en borrador (DRAFT -> ISSUED) y genera su asiento contable. A partir de la emision la factura no puede eliminarse, solo anularse.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Factura emitida"),
+        @ApiResponse(responseCode = "400", description = "No se puede emitir (no esta en borrador o periodo cerrado)")
+    })
+    @PostMapping("/{id}/issue")
+    @PreAuthorize("hasAuthority('PERM_UPDATE_SALES_INVOICE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> issueInvoice(@PathVariable Long id) {
+        try {
+            return service.issueInvoice(id);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));

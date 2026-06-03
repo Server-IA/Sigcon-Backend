@@ -12,4 +12,12 @@ public interface AuditRiskRuleRepository extends JpaRepository<AuditRiskRule, Lo
      * {@code RiskRuleService} para evaluar la severidad de un evento.
      */
     List<AuditRiskRule> findByEnabledTrueOrderByPriorityDesc();
+
+    /**
+     * AU-RF-03 (QA 2026-06-02): reglas activas ordenadas por prioridad DESC y,
+     * a igual prioridad, por created_at DESC. Asi el desempate entre prioridades
+     * iguales lo gana la regla mas reciente (la primera que matchea en el
+     * recorrido del clasificador).
+     */
+    List<AuditRiskRule> findByEnabledTrueOrderByPriorityDescCreatedAtDesc();
 }

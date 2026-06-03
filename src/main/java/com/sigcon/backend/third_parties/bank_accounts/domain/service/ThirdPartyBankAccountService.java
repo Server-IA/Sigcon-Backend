@@ -107,10 +107,16 @@ public class ThirdPartyBankAccountService {
         }
 
         // 4. Crear la vinculacion
+        boolean markPrimary = request.getIsPrimary() != null && request.getIsPrimary();
+        // PT-02 (TER-RF-05, 2026-06-02): al marcar como principal, desmarcar la
+        // cuenta principal anterior del tercero (solo una principal por tercero).
+        if (markPrimary) {
+            unmarkOtherPrimaries(thirdPartyId, null);
+        }
         ThirdPartyBankAccount link = ThirdPartyBankAccount.builder()
                 .thirdParty(thirdParty)
                 .bankAccount(bankAccount)
-                .isPrimary(request.getIsPrimary() != null ? request.getIsPrimary() : false)
+                .isPrimary(markPrimary)
                 .build();
 
         ThirdPartyBankAccount saved = thirdPartyBankAccountRepository.save(link);
@@ -163,9 +169,49 @@ public class ThirdPartyBankAccountService {
                         Optional.empty()));
     }
 
+    /**
+     * PT-02 (TER-RF-05, 2026-06-02): marca una vinculacion existente como cuenta
+     * principal del tercero sin necesidad de desvincular/re-vincular. Desmarca
+     * automaticamente la cuenta principal anterior (solo una principal por
+     * tercero).
+     *
+     * @param linkId ID de la vinculacion a marcar como principal
+     * @return la vinculacion actualizada
+     */
+    public ResponseEntity<?> setAsPrimary(Long linkId) {
+        ThirdPartyBankAccount link = thirdPartyBankAccountRepository.findById(linkId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "TPBA_004: La vinculacion de cuenta bancaria no existe."));
+        Long thirdPartyId = link.getThirdParty().getId();
+        unmarkOtherPrimaries(thirdPartyId, linkId);
+        link.setIsPrimary(true);
+        ThirdPartyBankAccount saved = thirdPartyBankAccountRepository.save(link);
+        auditPublisher.publishUpdate(AuditModule.TER, "ThirdPartyBankAccount", link.getId(),
+                "Cuenta bancaria marcada como principal id=" + link.getId());
+        return ResponseEntity.ok(
+                SuccessRespondJson.getSuccessRespondMessage(
+                        Optional.of("Cuenta bancaria marcada como principal"),
+                        Optional.of(toDTO(saved))));
+    }
+
     // =========================================================================
     // METODOS PRIVADOS
     // =========================================================================
+
+    /**
+     * PT-02: desmarca como principal todas las cuentas activas del tercero,
+     * excepto la indicada por {@code exceptLinkId} (puede ser null).
+     */
+    private void unmarkOtherPrimaries(Long thirdPartyId, Long exceptLinkId) {
+        for (ThirdPartyBankAccount l : thirdPartyBankAccountRepository
+                .findByThirdPartyIdAndDeletedAtIsNull(thirdPartyId)) {
+            if ((exceptLinkId == null || !l.getId().equals(exceptLinkId))
+                    && Boolean.TRUE.equals(l.getIsPrimary())) {
+                l.setIsPrimary(false);
+                thirdPartyBankAccountRepository.save(l);
+            }
+        }
+    }
 
     private ThirdPartyBankAccountDTO toDTO(ThirdPartyBankAccount entity) {
         return ThirdPartyBankAccountDTO.builder()

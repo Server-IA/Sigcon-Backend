@@ -165,15 +165,26 @@ public class CompanyController {
         @ApiResponse(responseCode = "403", description = "Usuario no es PLATFORM_ADMIN")
     })
     public ResponseEntity<?> createWithAdmin(
-            @Valid @RequestBody CreateCompanyWithAdminRequest request) {
+            @Valid @RequestBody CreateCompanyWithAdminRequest request,
+            @Parameter(description = "PA-RF-PLAT-01 punto 2: clave de idempotencia. Reenviar el mismo "
+                     + "request con la misma clave devuelve el resultado original sin reprocesar.")
+            @org.springframework.web.bind.annotation.RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey) {
         try {
-            CompanyDTO dto = companyService.createWithAdmin(request);
+            CompanyDTO dto = companyService.createWithAdmin(request, idempotencyKey);
             // QA Bloque PA Bug 56 (HU-PA-PLAT-01 E1): retornar 201 con company + adminUserId.
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(java.util.Map.of(
                     "success", false,
                     "code", 400,
+                    "message", ex.getMessage()));
+        } catch (IllegalStateException ex) {
+            // PA-RF-PLAT-01 punto 4 (v3.0): el aprovisionamiento fallo y la empresa
+            // quedo en estado ERROR (no se hizo rollback de la empresa).
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of(
+                    "success", false,
+                    "code", 500,
                     "message", ex.getMessage()));
         }
     }
@@ -220,9 +231,9 @@ public class CompanyController {
     public ResponseEntity<?> deactivate(
             @Parameter(description = "ID de la empresa", example = "2")
             @PathVariable Long id,
-            @RequestBody(required = false) java.util.Map<String, Object> body) {
-        // QA Bloque PA Bug 60 (HU-PA-PLAT-03 E3, 2026-05-09): motivo obligatorio
-        // minimo 30 chars al desactivar para auditoria.
+            @RequestBody(required = false) java.util.Map<String, Object> body,
+            jakarta.servlet.http.HttpServletRequest http) {
+        // PA-RF-PLAT-03 puntos 1/2 (v3.0): motivo obligatorio entre 30 y 500 caracteres.
         String reason = body == null ? null : (String) body.get("reason");
         if (reason == null || reason.trim().length() < 30) {
             return ResponseEntity.badRequest().body(java.util.Map.of(
@@ -230,11 +241,23 @@ public class CompanyController {
                 "code", 400,
                 "message", "El motivo de desactivacion es obligatorio y debe tener al menos 30 caracteres."));
         }
+        if (reason.trim().length() > 500) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "success", false,
+                "code", 400,
+                "message", "El motivo de desactivacion no puede superar 500 caracteres."));
+        }
         // QA Bloque PA Bug 61 (HU-PA-PLAT-03 E4): force=true para confirmar incluso
         // si hay jobs en ejecucion. Default false retorna 409 con la lista.
         boolean force = body != null && Boolean.TRUE.equals(body.get("force"));
         try {
-            return ResponseEntity.ok(companyService.deactivate(id, reason, force));
+            return ResponseEntity.ok(companyService.deactivate(id, reason.trim(), force, clientIp(http)));
+        } catch (IllegalArgumentException ex) {
+            // PA-RF-PLAT-03 puntos 4/5: ultima empresa ACTIVE / estado PROVISIONING-ERROR.
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "success", false,
+                "code", 400,
+                "message", ex.getMessage()));
         } catch (IllegalStateException ex) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(java.util.Map.of(
                 "success", false,
@@ -253,10 +276,43 @@ public class CompanyController {
         @ApiResponse(responseCode = "400", description = "Empresa no existe"),
         @ApiResponse(responseCode = "403", description = "Usuario no es PLATFORM_ADMIN")
     })
-    public ResponseEntity<CompanyDTO> activate(
+    public ResponseEntity<?> activate(
             @Parameter(description = "ID de la empresa", example = "2")
-            @PathVariable Long id) {
-        return ResponseEntity.ok(companyService.activate(id));
+            @PathVariable Long id,
+            @RequestBody(required = false) java.util.Map<String, Object> body,
+            jakarta.servlet.http.HttpServletRequest http) {
+        // PA-RF-PLAT-03 puntos 1/2 (v3.0): motivo obligatorio tambien al activar (30-500).
+        String reason = body == null ? null : (String) body.get("reason");
+        if (reason == null || reason.trim().length() < 30) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "success", false,
+                "code", 400,
+                "message", "El motivo de activacion es obligatorio y debe tener al menos 30 caracteres."));
+        }
+        if (reason.trim().length() > 500) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "success", false,
+                "code", 400,
+                "message", "El motivo de activacion no puede superar 500 caracteres."));
+        }
+        try {
+            return ResponseEntity.ok(companyService.activate(id, reason.trim(), clientIp(http)));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "success", false,
+                "code", 400,
+                "message", ex.getMessage()));
+        }
+    }
+
+    /** Extrae la IP real del cliente respetando proxy (X-Forwarded-For, primer hop). */
+    private static String clientIp(jakarta.servlet.http.HttpServletRequest http) {
+        String xff = http.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            return (comma > 0 ? xff.substring(0, comma) : xff).trim();
+        }
+        return http.getRemoteAddr();
     }
 
     /**

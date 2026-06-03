@@ -21,6 +21,8 @@ import com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesI
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoiceStatus;
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceLineRepository;
 import com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository;
+import com.sigcon.backend.accounts_receivable.payments.domain.repository.ArPaymentRepository;
+import com.sigcon.backend.accounts_receivable.credit_debit_notes.domain.repository.ArNoteRepository;
 import com.sigcon.backend.assets.assets.domain.model.Assets;
 import com.sigcon.backend.assets.assets.domain.repository.AssetsRepository;
 import com.sigcon.backend.general.accounting.AccountingPeriodService;
@@ -72,6 +74,10 @@ public class SalesInvoiceService {
     private final PaymentFormRepository paymentFormRepository;
     private final AssetsRepository assetsRepository;
     private final AccountingAccountRepository accountingAccountRepository;
+    // QA CxC Bug 3: validar que una factura en borrador no tenga dinero asociado
+    // (cobros / notas) antes de permitir su eliminacion.
+    private final ArPaymentRepository arPaymentRepository;
+    private final ArNoteRepository arNoteRepository;
     private final AccountingPeriodService accountingPeriodService;
     private final JournalEntryService journalEntryService;
     private final SalesTaxEngine salesTaxEngine;
@@ -93,8 +99,27 @@ public class SalesInvoiceService {
      * @param request datos de la factura
      * @return factura creada con totales calculados
      */
+    /**
+     * Compatibilidad: el flujo de integracion AAEF (AaefBatchProcessor) crea la
+     * factura ya EMITIDA (ISSUED) porque AgroFusion envia documentos confirmados
+     * y listos para contabilizar. El flujo manual (controller /fv) usa la
+     * sobrecarga con {@code issueImmediately=false} para dejar la factura en
+     * BORRADOR (HU-AR-01A E1: "la deja disponible para su confirmacion").
+     */
     @Transactional
     public SalesInvoice createSalesInvoice(CreateSalesInvoiceRequest request) {
+        return createSalesInvoice(request, true);
+    }
+
+    /**
+     * HU-AR-01A E1: registra una factura de venta. Si {@code issueImmediately}
+     * es {@code true} la factura queda EMITIDA (ISSUED) y se genera su asiento
+     * contable de inmediato (flujo AAEF). Si es {@code false} la factura queda
+     * en BORRADOR (DRAFT) "disponible para su confirmacion": no consume aun el
+     * flujo contable (el asiento se genera al emitirla) y puede eliminarse.
+     */
+    @Transactional
+    public SalesInvoice createSalesInvoice(CreateSalesInvoiceRequest request, boolean issueImmediately) {
         // Validar tercero existente
         ThirdParty thirdParty = thirdPartyRepository.findById(request.getThirdPartyId())
                 .orElseThrow(() -> new IllegalArgumentException("El cliente (tercero) no existe"));
@@ -172,7 +197,8 @@ public class SalesInvoiceService {
                 .paymentForm(paymentForm)
                 .resolutionNumber(request.getResolutionNumber())
                 .notes(request.getNotes())
-                .status(SalesInvoiceStatus.ISSUED)
+                // HU-AR-01A E1: borrador en flujo manual; emitida en AAEF.
+                .status(issueImmediately ? SalesInvoiceStatus.ISSUED : SalesInvoiceStatus.DRAFT)
                 .createdBy(safeUserId())
                 .lines(new ArrayList<>())
                 .build();
@@ -245,11 +271,16 @@ public class SalesInvoiceService {
         invoice.setBalanceDue(totalAmount);
         invoice = salesInvoiceRepository.save(invoice);
 
-        // AR-01A: generar asiento contable de venta (partida doble)
-        generateJournalEntry(invoice, thirdParty);
+        // AR-01A: el asiento contable de venta (partida doble) se genera al
+        // EMITIR la factura. En el flujo AAEF (issueImmediately) se genera de
+        // una vez; en el flujo manual (borrador) se difiere hasta issueInvoice.
+        if (issueImmediately) {
+            generateJournalEntry(invoice, thirdParty);
+        }
 
         auditPublisher.publishCreate(AuditModule.AR, "SalesInvoice", invoice.getId(),
-                "Factura de venta creada: " + invoiceNumber + " total $" + totalAmount);
+                "Factura de venta creada: " + invoiceNumber + " total $" + totalAmount
+                + (issueImmediately ? " (emitida)" : " (borrador)"));
 
         // HU-AR-01A E4: publicar evento Spring para que CG/INT/AU puedan
         // reaccionar (auditoria forensica adicional, integraciones futuras).
@@ -555,6 +586,46 @@ public class SalesInvoiceService {
     }
 
     /**
+     * HU-AR-01A E1: emite (confirma) una factura que estaba en BORRADOR.
+     * Cambia el estado DRAFT -> ISSUED, valida que el periodo contable este
+     * abierto y genera el asiento contable de venta si aun no existia. A partir
+     * de la emision la factura tiene consecutivo fiscal comprometido: ya no se
+     * puede eliminar (solo anular) y admite registro de cobros.
+     *
+     * @param id identificador de la factura
+     * @return la factura emitida
+     */
+    @Transactional
+    public ResponseEntity<?> issueInvoice(Long id) {
+        SalesInvoice invoice = salesInvoiceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("La factura de venta no fue encontrada"));
+
+        if (invoice.getStatus() != SalesInvoiceStatus.DRAFT) {
+            throw new IllegalStateException(
+                    "Solo se pueden emitir facturas en estado Borrador (estado actual: "
+                    + invoice.getStatus().toLabelEs() + ").");
+        }
+
+        // Validar periodo abierto de la fecha de la factura.
+        accountingPeriodService.validatePeriodOpen(invoice.getInvoiceDate());
+
+        // Generar el asiento contable de venta si aun no existia (las facturas
+        // en borrador no generan asiento hasta su emision).
+        if (invoice.getJournalEntryId() == null) {
+            generateJournalEntry(invoice, invoice.getThirdParty());
+        }
+
+        invoice.setStatus(SalesInvoiceStatus.ISSUED);
+        invoice = salesInvoiceRepository.save(invoice);
+        auditPublisher.publishUpdate(AuditModule.AR, "SalesInvoice", invoice.getId(),
+                "Factura de venta emitida: " + invoice.getInvoiceNumber());
+
+        log.info("Factura {} emitida (DRAFT -> ISSUED)", invoice.getInvoiceNumber());
+        return ResponseEntity.ok(SuccessRespondJson.getSuccessRespondMessage(
+                Optional.of("Factura emitida correctamente"), Optional.of(toDto(invoice))));
+    }
+
+    /**
      * AR-06: Anula una factura de venta emitida.
      * Cambia el estado a VOIDED y reversa el asiento contable asociado si existia.
      * Solo permite anular facturas ISSUED u OVERDUE sin pagos.
@@ -712,12 +783,42 @@ public class SalesInvoiceService {
         // y reversa el asiento contable, preservando el consecutivo.
         if (invoice.getStatus() != SalesInvoiceStatus.DRAFT) {
             throw new IllegalStateException(
-                    "No se puede eliminar una factura ya emitida (estado: " + invoice.getStatus()
+                    "No se puede eliminar una factura ya emitida (estado: "
+                    + invoice.getStatus().toLabelEs()
                     + "). El consecutivo fiscal debe preservarse. "
                     + "Use la opcion de Anular para revertir la factura y generar nota credito.");
         }
 
+        // QA CxC Bug 3: aunque una factura en borrador no deberia tener
+        // movimientos de dinero, validamos defensivamente que no existan cobros
+        // ni notas credito/debito asociadas. Eliminar una factura con dinero
+        // vinculado haria "desaparecer" ese dinero del sistema.
+        if (!arPaymentRepository.findByInvoiceIdAndDeletedAtIsNull(id).isEmpty()) {
+            throw new IllegalStateException(
+                    "No se puede eliminar la factura porque tiene cobros registrados. "
+                    + "Reverse los cobros antes de eliminarla.");
+        }
+        if (!arNoteRepository.findByInvoiceIdAndDeletedAtIsNull(id).isEmpty()) {
+            throw new IllegalStateException(
+                    "No se puede eliminar la factura porque tiene notas credito/debito asociadas.");
+        }
+
+        // Limpiar el asiento contable en borrador asociado (si existia) para no
+        // dejar un comprobante huerfano. Si ya estuviera contabilizado, no se
+        // elimina y se exige anular (no deberia ocurrir en una factura DRAFT).
+        if (invoice.getJournalEntryId() != null) {
+            try {
+                journalEntryService.deleteEntry(invoice.getJournalEntryId());
+            } catch (IllegalStateException ex) {
+                throw new IllegalStateException(
+                        "No se puede eliminar la factura: su comprobante contable ya esta "
+                        + "contabilizado. Use la opcion de Anular.", ex);
+            }
+        }
+
         salesInvoiceRepository.deleteById(id);
+        auditPublisher.publishDelete(AuditModule.AR, "SalesInvoice", id,
+                "Factura de venta eliminada (borrador): " + invoice.getInvoiceNumber());
         return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(
                         Optional.of("Factura eliminada correctamente"), Optional.empty()));

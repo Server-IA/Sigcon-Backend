@@ -56,6 +56,14 @@ public class CommercialDataHistory {
     @Column(name = "changed_by")
     private Long changedBy;
 
+    /**
+     * PT-03 (TER-RF-11/12, 2026-06-02): motivo del cambio (o justificacion de
+     * eliminacion) ingresado por el usuario. Se persiste en cada registro del
+     * historial para trazabilidad funcional.
+     */
+    @Column(name = "change_reason", columnDefinition = "TEXT")
+    private String changeReason;
+
     /** Fecha y hora del cambio */
     @Column(name = "changed_at", nullable = false)
     @CreationTimestamp

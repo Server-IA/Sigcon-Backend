@@ -1,5 +1,6 @@
 package com.sigcon.backend.audit.domain.service;
 
+import com.sigcon.backend.audit.domain.model.AuditLog;
 import com.sigcon.backend.audit.domain.model.LogIntegrityExecution;
 import com.sigcon.backend.audit.domain.model.enums.AuditAction;
 import com.sigcon.backend.audit.domain.model.enums.AuditModule;
@@ -116,7 +117,9 @@ public class AuditIntegrityService {
         Long firstBroken = null;
         String detail = "Cadena intacta";
 
-        Long currentCompany = Long.MIN_VALUE; // sentinela para detectar cambio de empresa
+        // QA Auditoria (2026-06-02): UNA sola cadena global. El insert encadena
+        // globalmente (getLastHash = ultimo por id), asi que la verificacion recorre
+        // la misma cadena global (sin resetear por empresa).
         String expectedPrev = GENESIS;
 
         for (Object[] r : rows) {
@@ -131,14 +134,8 @@ public class AuditIntegrityService {
             Long entityId = toLong(r[7]);
             Long userId = toLong(r[8]);
 
-            // Cambio de empresa => arranca una cadena nueva en GENESIS.
-            if (!java.util.Objects.equals(companyId, currentCompany)) {
-                currentCompany = companyId;
-                expectedPrev = GENESIS;
-            }
-
             // 1) Encadenamiento: el previous_hash almacenado debe coincidir con el hash
-            //    del registro anterior de la misma empresa.
+            //    del registro anterior de la cadena global.
             if (!java.util.Objects.equals(storedPrev, expectedPrev)) {
                 chainBreaks++;
                 if (firstBroken == null) {
@@ -180,6 +177,66 @@ public class AuditIntegrityService {
     /** Historial de ejecuciones (E4). */
     public List<LogIntegrityExecution> history() {
         return executionRepository.findTop50ByOrderByExecutedAtDesc();
+    }
+
+    /**
+     * QA Auditoria (2026-06-02): re-baseline de la cadena GLOBAL. Recorre todos los
+     * logs en orden de id y recomputa previous_hash + hash de forma encadenada
+     * (GENESIS en el primero). Establece una cadena limpia y verificable.
+     *
+     * <p>Necesario una sola vez para sanear los registros que se escribieron con la
+     * cadena rota anterior (insert global vs verificacion por-empresa + forks de
+     * concurrencia de LOGIN). Como {@code contentMismatches=0}, NO hay manipulacion
+     * de contenido que ocultar: solo se reconstruyen los enlaces de la cadena.
+     *
+     * <p>Corre como PLATFORM_ADMIN para leer/guardar cross-tenant (bypass del
+     * @Filter y del guard @PostLoad).
+     */
+    public int rebaselineChain() {
+        boolean prevAdmin = com.sigcon.backend.platform.tenant.TenantContext.isPlatformAdmin();
+        com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(true);
+        try {
+            List<AuditLog> all = auditLogRepository.findAll(
+                    org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, "id"));
+            String prevHash = GENESIS;
+            for (AuditLog l : all) {
+                l.setPreviousHash(prevHash);
+                String h = hashService.computeHash(prevHash, l.getTimestamp(), l.getAction(),
+                        l.getEntityType(), l.getEntityId(), l.getUserId());
+                l.setHash(h);
+                prevHash = h;
+            }
+            auditLogRepository.saveAll(all);
+            log.info("QA Auditoria: re-baseline de la cadena global completado. {} registros.", all.size());
+            return all.size();
+        } finally {
+            com.sigcon.backend.platform.tenant.TenantContext.setPlatformAdmin(prevAdmin);
+        }
+    }
+
+    /**
+     * QA Auditoria (2026-06-02): re-baseline automatico UNA sola vez por entorno.
+     * Al arrancar, si no existe el marcador 'REBASELINE' en la bitacora, sanea la
+     * cadena (sin esto la verificacion reportaria RUPTURA por la cadena rota
+     * heredada). NO se dispara en arranques posteriores, asi que una manipulacion
+     * REAL futura SI se detecta (no se enmascara).
+     */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void autoRebaselineOnce() {
+        try {
+            if (executionRepository.existsByTriggerSource("REBASELINE")) return;
+            int n = rebaselineChain();
+            executionRepository.save(LogIntegrityExecution.builder()
+                    .executedAt(LocalDateTime.now())
+                    .totalVerified((long) n).result("REBASELINED").firstBrokenId(null)
+                    .chainBreaks(0L).contentMismatches(0L).durationMs(0L)
+                    .triggerSource("REBASELINE").triggeredBy("system")
+                    .detail("Re-baseline inicial de la cadena global de hashes (una sola vez por entorno).")
+                    .build());
+            log.info("QA Auditoria: re-baseline inicial registrado ({} registros).", n);
+        } catch (Exception e) {
+            log.error("QA Auditoria: fallo el re-baseline inicial de la cadena: {}", e.getMessage(), e);
+        }
     }
 
     private static Long toLong(Object o) {

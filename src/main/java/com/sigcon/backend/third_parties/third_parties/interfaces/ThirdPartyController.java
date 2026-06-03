@@ -176,6 +176,29 @@ public class ThirdPartyController {
                 return thirdPartyService.delete(id, request);
         }
 
+        @GetMapping("/deleted")
+        @Operation(summary = "Listar terceros dados de baja", description = "PT-04 (TER-RF-10): lista los terceros eliminados logicamente del tenant para su consulta y posible reactivacion.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Listado obtenido correctamente"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_VIEW_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+        public ResponseEntity<?> listDeleted() {
+                return thirdPartyService.listDeleted();
+        }
+
+        @PostMapping("/{id}/reactivate")
+        @Operation(summary = "Reactivar tercero dado de baja", description = "PT-04 (TER-RF-10): restaura un tercero eliminado logicamente. Valida que no exista otro tercero activo con el mismo NIT.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Tercero reactivado correctamente"),
+                        @ApiResponse(responseCode = "400", description = "NIT ya usado por otro tercero activo o tercero no dado de baja"),
+                        @ApiResponse(responseCode = "403", description = "Sin permisos")
+        })
+        @PreAuthorize("hasAuthority('PERM_UPDATE_THIRD_PARTY') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+        public ResponseEntity<?> reactivate(@PathVariable Long id) {
+                return thirdPartyService.reactivate(id);
+        }
+
         @GetMapping("/{id}/history")
         @Operation(summary = "Historial de cambios", description = "TER-03: Consulta el historial de modificaciones realizadas sobre un tercero.")
         @ApiResponses({

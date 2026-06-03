@@ -34,6 +34,16 @@ public class CompanyDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // PA-RF-PLAT-01 / PA-RF-10 v3.0 (Control de Cambios PA, 2026-05-29)
+    @Schema(description = "Id de aprovisionamiento (PA-RF-PLAT-01)")
+    private String provisioningId;
+    @Schema(description = "Plan contratado (PA-RF-10)")
+    private String plan;
+    @Schema(description = "Configuracion regional inicial (PA-RF-10)")
+    private String regionalConfig;
+    @Schema(description = "PA-RF-PLAT-03 punto 7: cantidad de sesiones invalidadas al desactivar")
+    private Integer invalidatedSessions;
+
     /**
      * QA Bloque PA Bug 56 (HU-PA-PLAT-01 E1, 2026-05-09): id del usuario admin
      * creado en el flujo with-admin. Solo se popula en {@link CompanyService#createWithAdmin}.
@@ -85,6 +95,9 @@ public class CompanyDTO {
                 .status(c.getStatus())
                 .createdAt(c.getCreatedAt())
                 .updatedAt(c.getUpdatedAt())
+                .provisioningId(c.getProvisioningId())
+                .plan(c.getPlan())
+                .regionalConfig(c.getRegionalConfig())
                 .build();
     }
 }

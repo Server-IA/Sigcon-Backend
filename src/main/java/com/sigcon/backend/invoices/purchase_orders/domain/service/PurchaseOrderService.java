@@ -55,6 +55,13 @@ public class PurchaseOrderService {
     private final AuditPublisher auditPublisher;
 
     /**
+     * RF-15 (Notas Tecnicas CXP, 2026-06-02): secuencia por empresa para el
+     * consecutivo de OC (reemplaza countAll()+1 global). Atomica (synchronized)
+     * frente a concurrencia.
+     */
+    private final com.sigcon.backend.general.accounting.series.domain.service.VoucherSeriesService voucherSeriesService;
+
+    /**
      * QA-BLOQUE-AY HU-AP-17 E1+E5+E6 (2026-05-05): inyeccion opcional para no
      * acoplar el modulo si Notifications no esta cargado. Se usa para
      * publicar PO_APPROVED / PO_REJECTED / PO_PENDING_APPROVAL.
@@ -326,10 +333,13 @@ public class PurchaseOrderService {
             throw new IllegalStateException("Solo se pueden aprobar ordenes en estado pendiente (PENDING)");
         }
 
-        // AP-18 E5: Validar nivel de aprobacion requerido segun monto.
-        //   Umbral SUPERVISOR: >100M COP requiere rol SUPERVISOR, DIRECTOR o ADMIN
-        //   Umbral DIRECTOR:   >500M COP requiere rol DIRECTOR o ADMIN
-        // Los roles ADMIN/SUPERADMIN tienen bypass completo (override).
+        // AP-RF-17 v2.0 (Notas Tecnicas CXP, 2026-06-02): nivel de aprobacion por monto,
+        // mapeado a ROLES REALES del sistema (decision Opcion B del lider):
+        //   > $100M COP: requiere CONTADOR, TESORERO o ADMIN_EMPRESA (supervisores funcionales).
+        //   > $500M COP: requiere ADMIN_EMPRESA (nivel administrador/director).
+        //   ADMIN_EMPRESA (y los roles de plataforma) tienen bypass completo.
+        // Antes se chequeaban roles "SUPERVISOR"/"DIRECTOR" que NO existen en el sistema, por
+        // lo que ni CONTADOR/TESORERO ni siquiera ADMIN_EMPRESA podian aprobar OC de alto monto.
         java.math.BigDecimal THRESHOLD_SUPERVISOR = new java.math.BigDecimal("100000000"); // 100M COP
         java.math.BigDecimal THRESHOLD_DIRECTOR = new java.math.BigDecimal("500000000");   // 500M COP
 
@@ -337,19 +347,24 @@ public class PurchaseOrderService {
                 .map(r -> r.getName() == null ? "" : r.getName().toUpperCase())
                 .collect(java.util.stream.Collectors.toSet());
 
-        boolean isAdmin = roleNames.contains("ADMIN") || roleNames.contains("SUPERADMIN");
-        boolean isDirector = roleNames.contains("DIRECTOR");
-        boolean isSupervisor = roleNames.contains("SUPERVISOR");
+        // Nivel director: ADMIN_EMPRESA + roles de plataforma/legacy admin (bypass total).
+        boolean isDirectorLevel = roleNames.contains("ADMIN_EMPRESA")
+                || roleNames.contains("ADMIN")
+                || roleNames.contains("SUPERADMIN")
+                || roleNames.contains("PLATFORM_ADMIN");
+        // Nivel supervisor: CONTADOR, TESORERO o cualquier nivel director.
+        boolean isSupervisorLevel = isDirectorLevel
+                || roleNames.contains("CONTADOR")
+                || roleNames.contains("TESORERO");
 
         if (order.getTotalAmount() != null) {
-            if (order.getTotalAmount().compareTo(THRESHOLD_DIRECTOR) > 0 && !isAdmin && !isDirector) {
+            if (order.getTotalAmount().compareTo(THRESHOLD_DIRECTOR) > 0 && !isDirectorLevel) {
                 throw new IllegalStateException(
-                        "El monto de la orden supera $500M COP. Se requiere aprobacion de nivel DIRECTOR.");
+                        "El monto de la orden supera $500M COP. Se requiere aprobacion de nivel ADMINISTRADOR.");
             }
-            if (order.getTotalAmount().compareTo(THRESHOLD_SUPERVISOR) > 0
-                    && !isAdmin && !isDirector && !isSupervisor) {
+            if (order.getTotalAmount().compareTo(THRESHOLD_SUPERVISOR) > 0 && !isSupervisorLevel) {
                 throw new IllegalStateException(
-                        "El monto de la orden supera $100M COP. Se requiere aprobacion de nivel SUPERVISOR o superior.");
+                        "El monto de la orden supera $100M COP. Se requiere aprobacion de nivel CONTADOR/TESORERO o superior.");
             }
         }
 
@@ -459,8 +474,18 @@ public class PurchaseOrderService {
      * @return numero de orden generado
      */
     private String generateOrderNumber() {
-        long count = orderRepository.countAll() + 1;
-        return String.format("OC-%d%06d", Year.now().getValue(), count);
+        // RF-15 (Notas Tecnicas CXP, 2026-06-02): consecutivo por EMPRESA via
+        // secuencia atomica (VoucherSeriesService), en vez de countAll()+1 global
+        // que colisionaba en concurrencia y mezclaba empresas. Self-heal: sincroniza
+        // la serie al MAX real de la empresa antes de consumir (cubre seeds que
+        // insertaron OCs sin pasar por la serie).
+        Long companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (companyId != null) {
+            long maxExisting = orderRepository.findMaxOrderSequence(companyId);
+            voucherSeriesService.syncToAtLeast("OC", maxExisting);
+        }
+        long seq = voucherSeriesService.consumeNext("OC");
+        return String.format("OC-%d%06d", Year.now().getValue(), seq);
     }
 
     /**

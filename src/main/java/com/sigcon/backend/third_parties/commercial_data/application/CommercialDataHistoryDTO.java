@@ -23,4 +23,6 @@ public class CommercialDataHistoryDTO {
     private String newValue;
     private Long changedBy;
     private LocalDateTime changedAt;
+    /** PT-03 (TER-RF-12): motivo del cambio / justificacion de eliminacion. */
+    private String changeReason;
 }

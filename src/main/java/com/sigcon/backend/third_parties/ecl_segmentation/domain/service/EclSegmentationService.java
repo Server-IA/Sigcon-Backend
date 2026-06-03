@@ -1,6 +1,9 @@
 package com.sigcon.backend.third_parties.ecl_segmentation.domain.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -46,8 +49,9 @@ public class EclSegmentationService {
     private final EclSegmentationHistoryRepository eclSegmentationHistoryRepository; 
     private final ThirdPartyRepository thirdPartyRepository;
     private final AuditPublisher auditPublisher;
-    //si al final si se requiere datos del modulo Accounts Receivable aui se inyectara su repositorio
-    //private final ArRepository arRepository;
+    // PT-01 (TER-RF-08, 2026-06-02): integracion real con Cuentas por Cobrar
+    // para obtener los dias de mora del cliente.
+    private final com.sigcon.backend.accounts_receivable.sales_invoices.domain.repository.SalesInvoiceRepository salesInvoiceRepository;
 
     /*
     Terceros-RF-08 -- Flujo 1,2 y 3: Calcular y persistir Segmento automatico de un cliente.  
@@ -358,10 +362,38 @@ public class EclSegmentationService {
      *         .orElse(ArDataDTO.builder().clientId(clientId).dataAvailable(false).build());
      */
     private ArDataDTO getArData(Long clientId) {
-        // Stub: dataAvailable=false simula que el módulo AR aún no existe
+        // PT-01 (TER-RF-08): integracion real con Cuentas por Cobrar. Se toma la
+        // cartera ABIERTA del cliente (balanceDue > 0, no anulada/pagada). Si no
+        // hay cartera abierta, no hay datos AR -> el llamador persiste PENDING.
+        List<com.sigcon.backend.accounts_receivable.sales_invoices.domain.model.SalesInvoice> open =
+                salesInvoiceRepository.findOpenInvoicesByThirdParty(clientId);
+        if (open == null || open.isEmpty()) {
+            return ArDataDTO.builder()
+                    .clientId(clientId)
+                    .dataAvailable(false)
+                    .build();
+        }
+        LocalDate today = LocalDate.now();
+        int maxOverdueDays = 0;
+        BigDecimal overdueAmount = BigDecimal.ZERO;
+        for (var inv : open) {
+            if (inv.getDueDate() != null && inv.getDueDate().isBefore(today)) {
+                int days = (int) ChronoUnit.DAYS.between(inv.getDueDate(), today);
+                if (days > maxOverdueDays) {
+                    maxOverdueDays = days;
+                }
+                if (inv.getBalanceDue() != null) {
+                    overdueAmount = overdueAmount.add(inv.getBalanceDue());
+                }
+            }
+        }
+        // Hay cartera abierta -> datos AR disponibles. overdueDays = mayor mora
+        // entre las facturas (0 si todas estan dentro del plazo -> LOW).
         return ArDataDTO.builder()
                 .clientId(clientId)
-                .dataAvailable(false)
+                .overdueDays(maxOverdueDays)
+                .overdueAmount(overdueAmount)
+                .dataAvailable(true)
                 .build();
     }
 

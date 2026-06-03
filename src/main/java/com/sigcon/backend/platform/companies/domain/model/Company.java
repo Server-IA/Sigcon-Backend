@@ -127,8 +127,31 @@ public class Company {
     @Column(name = "module_order", columnDefinition = "TEXT")
     private String moduleOrder;
 
+    // ---------- PA-RF-PLAT-01 / PA-RF-10 v3.0 (Control de Cambios PA, 2026-05-29) ----------
+
+    /** Id unico de aprovisionamiento (UUID) para trazabilidad (PA-RF-PLAT-01 punto 1). */
+    @Column(name = "provisioning_id", length = 64)
+    private String provisioningId;
+
+    /** Clave de idempotencia del request de creacion (header Idempotency-Key, PA-RF-PLAT-01 punto 2). */
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
+    /** Plan contratado de la empresa (etiqueta libre, PA-RF-10 punto 5). */
+    @Column(name = "plan", length = 50)
+    private String plan;
+
+    /** Configuracion regional inicial (JSON o etiqueta, PA-RF-10 punto 5). */
+    @Column(name = "regional_config", columnDefinition = "TEXT")
+    private String regionalConfig;
+
     public enum CompanyStatus {
         ACTIVE,
-        INACTIVE
+        INACTIVE,
+        // PA-RF-PLAT-01 v3.0: estados intermedios del aprovisionamiento atomico.
+        // La empresa nace en PROVISIONING; pasa a ACTIVE si todo el aprovisionamiento
+        // termina OK, o a ERROR si falla (no se hace rollback de la empresa).
+        PROVISIONING,
+        ERROR
     }
 }

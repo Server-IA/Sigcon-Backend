@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sigcon.backend.invoices.ap_payments.application.CreateApPaymentRequest;
+import com.sigcon.backend.invoices.ap_payments.application.ReverseApPaymentRequest;
 import com.sigcon.backend.invoices.ap_payments.domain.service.ApPaymentService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -93,5 +94,39 @@ public class ApPaymentController {
     @PreAuthorize("hasAuthority('PERM_READ_AP_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
     public ResponseEntity<?> getPaymentsByInvoice(@PathVariable Long invoiceId) {
         return paymentService.getPaymentsByInvoice(invoiceId);
+    }
+
+    /**
+     * RF-34 (Notas Tecnicas CXP): reversa manualmente un pago/abono. Deshace el
+     * asiento contable, compensa el movimiento financiero en BNK y restaura el
+     * saldo de la factura. Requiere motivo (minimo 10 caracteres). No aplica a
+     * facturas liquidadas (SETTLED).
+     *
+     * @param id            id del pago a revertir
+     * @param request       motivo de la reversion
+     * @param bindingResult resultado de validacion
+     * @return resumen de la reversion o error de negocio
+     */
+    @Operation(summary = "Reversar pago (RF-34)",
+            description = "Reversa manualmente un pago/abono: deshace el asiento, compensa el movimiento BNK y "
+                    + "restaura el saldo de la factura. Requiere motivo (>=10 caracteres). No aplica a facturas liquidadas.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Pago revertido correctamente"),
+            @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
+    })
+    @PostMapping("/{id}/reverse")
+    @PreAuthorize("hasAuthority('PERM_REVERSE_PAYMENT') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> reversePayment(@PathVariable Long id,
+                                            @Valid @RequestBody ReverseApPaymentRequest request,
+                                            BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
+        }
+        try {
+            return paymentService.reversePayment(id, request.getReason());
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
     }
 }

@@ -35,8 +35,20 @@ public class GoodsReceiptDTO {
     /** Estado de la recepcion. */
     private String status;
 
-    /** ID de la factura vinculada (three-way match). */
+    /** ID de la factura vinculada (three-way match, campo legacy 1:1). */
     private Long invoiceId;
+
+    /**
+     * RF-19 (Notas Tecnicas CXP, 2026-06-02): cantidad de facturas distintas
+     * asociadas a la recepcion (legacy invoiceId + enlaces N:M).
+     */
+    private Integer linkedInvoiceCount;
+
+    /**
+     * RF-19: etiqueta para la columna "Factura Asociada":
+     * null si no tiene factura, "#{id}" si tiene una, "Multiple" si tiene varias.
+     */
+    private String invoiceLabel;
 
     /** Observaciones de la recepcion. */
     private String notes;

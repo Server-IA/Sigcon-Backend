@@ -58,6 +58,15 @@ public class BankBranchService {
                 Bank bank = getBankOrThrow(request.getBankId());
                 Municipality municipality = getMunicipalityOrThrow(request.getMunicipalityId());
 
+                // BNK-RF-26 (QA Bloque BNK 2026-06-03): la dirección no debe estar duplicada para
+                // el mismo banco y la misma ciudad (municipio).
+                String dir = request.getAddress() != null ? request.getAddress().trim() : "";
+                if (bankBranchRepository.existsByBank_IdAndMunicipality_IdAndAddressIgnoreCaseAndDeletedAtIsNull(
+                                bank.getId(), municipality.getId(), dir)) {
+                        throw new IllegalArgumentException(
+                                "Ya existe una localidad registrada para este banco con la misma dirección y municipio");
+                }
+
                 Optional<BankBranch> existingBranch = bankBranchRepository.findByBankIdAndMainBranchTrueAndDeletedAtIsNull(bank.getId());
 
                 // QA Bloque AU (2026-05-06) — Bug 1: la primera sucursal de un
@@ -166,6 +175,18 @@ public class BankBranchService {
                 }
 
                 BankBranch branch = getBranchOrThrow(id);
+
+                // BNK-RF-26 (QA Bloque BNK 2026-06-03): al editar, validar que la dirección+ciudad
+                // resultante no choque con OTRA sucursal del mismo banco.
+                Long targetMunId = request.getMunicipalityId() != null
+                        ? request.getMunicipalityId() : branch.getMunicipality().getId();
+                String targetDir = request.getAddress() != null
+                        ? request.getAddress().trim() : branch.getAddress();
+                if (bankBranchRepository.existsByBank_IdAndMunicipality_IdAndAddressIgnoreCaseAndIdNotAndDeletedAtIsNull(
+                                branch.getBank().getId(), targetMunId, targetDir, id)) {
+                        throw new IllegalArgumentException(
+                                "Ya existe una localidad registrada para este banco con la misma dirección y municipio");
+                }
 
                 Optional<BankBranch> existingMainBranch =
                         bankBranchRepository.findByBankIdAndMainBranchTrueAndDeletedAtIsNull(

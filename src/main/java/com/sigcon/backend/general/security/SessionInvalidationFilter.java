@@ -73,20 +73,33 @@ public class SessionInvalidationFilter extends OncePerRequestFilter {
                     Optional<User> opt = userRepository.findByUsernameOrEmail(username, username);
                     if (opt.isPresent()) {
                         User u = opt.get();
-                        // QA Bloque AV (HU-PA-11 E4 + HU-PA-12 E4, 2026-05-14):
-                        // sessionInvalidatedAt YA NO expulsa la sesion en
-                        // cambios ordinarios de permisos del rol. El
-                        // EffectivePermissionsFilter recomputa authorities en
-                        // cada request, asi el usuario permanece en sesion y
-                        // sus permisos se actualizan dinamicamente.
-                        //
-                        // Esta columna se mantiene por compat (la usa
-                        // JwtService.validateToken para tokens enviados a otros
-                        // endpoints) pero AQUI dejamos pasar. El unico path que
-                        // expulsa ahora es el cutoff a nivel EMPRESA (cuando
-                        // PLATFORM_ADMIN desactiva la empresa), abajo.
-                        // Razon: una empresa desactivada SI requiere expulsion
-                        // inmediata; un cambio de rol/permisos NO.
+                        // PA-RF-02 punto 4 + HU-PA-07 (v3.0, Control de Cambios PA):
+                        // expulsar la sesion si el token (iat) es ANTERIOR a
+                        // users.session_invalidated_at. Este campo SOLO lo setean
+                        // eventos sensibles:
+                        //   - reset de contrasena (AuthService.resetPassword)
+                        //   - cambio de status BLOCKED/INACTIVE (UserService.update)
+                        // Los cambios de rol/permisos NO lo setean (QA Bloque AV,
+                        // 2026-05-14): esos se recomputan en caliente via
+                        // EffectivePermissionsFilter sin expulsar. Asi conservamos
+                        // el fix de AV (cambiar rol no expulsa) y a la vez forzamos
+                        // re-login cuando cambian las credenciales o se bloquea la
+                        // cuenta.
+                        java.time.LocalDateTime inv = u.getSessionInvalidatedAt();
+                        if (inv != null && iat != null) {
+                            long invEpoch = inv.atZone(ZoneId.systemDefault()).toEpochSecond();
+                            if (iat.getEpochSecond() < invEpoch) {
+                                SecurityContextHolder.clearContext();
+                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                response.setContentType("application/json;charset=UTF-8");
+                                response.getWriter().write(
+                                    "{\"success\":false,\"code\":401,"
+                                  + "\"message\":\"Su sesion fue invalidada (cambio de credenciales o de "
+                                  + "estado de la cuenta). Inicie sesion nuevamente.\","
+                                  + "\"error\":\"SESSION_INVALIDATED\"}");
+                                return;
+                            }
+                        }
 
                         // QA Bloque PA Bug 83 (HU-PA-PLAT-03 E1, 2026-05-11): tambien
                         // validar el cutoff a nivel EMPRESA. CompanyService.deactivate()
