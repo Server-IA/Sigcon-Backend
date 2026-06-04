@@ -681,9 +681,11 @@ public class InvoiceService {
         if (jePosted) {
             if (request.getInvoiceDate() != null
                     && !request.getInvoiceDate().equals(invoice.getInvoiceDate())) {
+                // QA CXP error 3 (Bloque DU, 2026-06-04 / HU-AP-02 E2): el mensaje se
+                // limita a la causa. Se retira el sufijo "Use una correccion contable
+                // (ajuste)..." por pedido del reporte de QA.
                 throw new IllegalStateException(
-                    "No se puede modificar la fecha de emision porque la factura ya fue contabilizada en Contabilidad General. "
-                    + "Use una correccion contable (ajuste) en lugar de editar la factura.");
+                    "No se puede modificar la fecha de emision porque la factura ya fue contabilizada en Contabilidad General.");
             }
             if (request.getResolutionInvoice() != null
                     && !request.getResolutionInvoice().equals(invoice.getResolutionInvoice())) {
@@ -1605,6 +1607,26 @@ public class InvoiceService {
                 String msg = e.getCause() != null && e.getCause().getMessage() != null
                         ? e.getCause().getMessage() : e.getMessage();
                 if (msg == null) msg = e.toString();
+                // QA CXP error 1 (Bloque DU, 2026-06-04): un proveedor o una cuenta
+                // contable de OTRA empresa dispara el guard de aislamiento @PostLoad
+                // ("Recurso fuera del tenant actual"). En multi-empresa los IDs son
+                // POR EMPRESA (no globales): traducir a un mensaje accionable para que
+                // el usuario use IDs de su propia empresa.
+                boolean crossTenant = false;
+                for (Throwable t = e; t != null; t = t.getCause()) {
+                    if (t instanceof com.sigcon.backend.platform.tenant.TenantIsolationException
+                            || "Recurso fuera del tenant actual".equals(t.getMessage())) {
+                        crossTenant = true;
+                        break;
+                    }
+                }
+                if (crossTenant) {
+                    String tpId = safeCell(groupRows.get(0), 0);
+                    msg = "Una o mas referencias de esta fila no pertenecen a esta empresa "
+                        + "(proveedor id=" + tpId + " o alguna cuenta contable). En multi-empresa "
+                        + "los IDs son por empresa: verifique que el proveedor exista en su listado "
+                        + "de Terceros y que las cuentas existan en su Plan de Cuentas de la empresa actual.";
+                }
                 errors.add(com.sigcon.backend.invoices.application.BulkImportResultDTO.RowError.builder()
                         .row(rowNum).message(msg).build());
                 log.warn("RF-22 factura (fila {}) fallo: {}", rowNum, msg);

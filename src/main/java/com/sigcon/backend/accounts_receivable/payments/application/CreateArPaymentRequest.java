@@ -5,6 +5,7 @@ import java.time.LocalDate;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -48,6 +49,9 @@ public class CreateArPaymentRequest {
     /** ID del movimiento bancario que origino el cobro. */
     private Long bankMovementId;
 
-    /** Observaciones adicionales. */
+    // QA CXC Bug 2 (2026-06-03 / IEEE AR-RF-02): las notas del cobro son
+    // opcionales y admiten maximo 500 caracteres.
+    /** Observaciones adicionales (opcional, maximo 500 caracteres). */
+    @Size(max = 500, message = "Las notas no pueden superar los 500 caracteres")
     private String notes;
 }

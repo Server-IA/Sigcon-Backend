@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,8 +32,11 @@ public class CreateArNoteRequest {
     @NotNull(message = "El monto de la nota es obligatorio")
     private BigDecimal amount;
 
-    /** Razon o justificacion de la nota. */
+    // QA CXC Bug 4 (2026-06-03 / IEEE AR-RF-07): la razon/justificacion admite
+    // maximo 500 caracteres.
+    /** Razon o justificacion de la nota (maximo 500 caracteres). */
     @NotBlank(message = "La razon de la nota es obligatoria")
+    @Size(max = 500, message = "La razon no puede superar los 500 caracteres")
     private String reason;
 
     /**

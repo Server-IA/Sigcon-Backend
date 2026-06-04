@@ -7,6 +7,7 @@ import com.sigcon.backend.accounts_receivable.dian.resolutions.domain.model.Dian
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -39,5 +40,7 @@ public class DianResolutionRequest {
 
     private DianResolutionStatus status;
 
+    // QA CXC Bug 5 (2026-06-03 / IEEE AR-RF-17): las notas admiten maximo 500.
+    @Size(max = 500, message = "Las notas no pueden superar los 500 caracteres")
     private String notes;
 }

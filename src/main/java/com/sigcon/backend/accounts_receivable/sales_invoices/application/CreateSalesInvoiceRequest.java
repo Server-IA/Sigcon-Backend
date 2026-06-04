@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -48,7 +49,10 @@ public class CreateSalesInvoiceRequest {
     @Schema(description = "Numero de resolucion DIAN", example = "18760000001")
     private String resolutionNumber;
 
-    @Schema(description = "Notas u observaciones")
+    // QA CXC Bug 1 (2026-06-03 / IEEE AR-RF-01A): las notas de la factura
+    // admiten maximo 1000 caracteres.
+    @Schema(description = "Notas u observaciones (maximo 1000 caracteres)")
+    @Size(max = 1000, message = "Las notas no pueden superar los 1000 caracteres")
     private String notes;
 
     @Schema(description = "Lineas de detalle de la factura")

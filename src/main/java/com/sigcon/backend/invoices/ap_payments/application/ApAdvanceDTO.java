@@ -25,4 +25,6 @@ public class ApAdvanceDTO {
     private String status;
     private Long appliedInvoiceId;
     private BigDecimal appliedAmount;
+    /** AP-RF-05 E6: monto aun disponible del anticipo (amount - appliedAmount). */
+    private BigDecimal availableAmount;
 }

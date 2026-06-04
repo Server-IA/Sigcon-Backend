@@ -137,6 +137,39 @@ public class ArchivoSoporteService {
                 "Soporte eliminado tras retención vencida. Acta: " + acta);
     }
 
+    /**
+     * QA BNK (2026-06-04): descarta (soft-delete) los soportes CSV de extracto cuyo
+     * hash coincide con un extracto importado de una conciliación en BORRADOR que se
+     * está eliminando, para permitir VOLVER A SUBIR el mismo documento y rehacer la
+     * conciliación. Solo aplica a soportes {@code CSV_MOVIMIENTOS} de la cuenta; NO
+     * toca informes de conciliación cerrada ni otros soportes.
+     *
+     * <p>Por el dedup BNK-CON-002 (un archivo no puede importarse dos veces en la misma
+     * cuenta), cada hash existe en a lo sumo un import por cuenta, así que el match por
+     * hash es inequívoco. Solo se invoca al eliminar un BORRADOR; las conciliaciones
+     * cerradas conservan su retención de 10 años (BNK-HU-063) intacta.
+     *
+     * @return cantidad de soportes descartados.
+     */
+    @Transactional
+    public int discardDraftCsvSoportes(Long bankAccountId, java.util.Collection<String> hashes) {
+        if (bankAccountId == null || hashes == null || hashes.isEmpty()) return 0;
+        java.util.Set<String> set = new java.util.HashSet<>(hashes);
+        int n = 0;
+        for (ArchivoSoporte a : repository
+                .findByBankAccountIdAndDeletedAtIsNullOrderByUploadedAtDesc(bankAccountId)) {
+            if (!"CSV_MOVIMIENTOS".equals(a.getTipo())) continue;
+            if (a.getHashSha256() == null || !set.contains(a.getHashSha256())) continue;
+            a.setDeletedAt(LocalDateTime.now());
+            repository.save(a);
+            auditPublisher.publishDelete(AuditModule.BNK, "ArchivoSoporte", a.getId(),
+                    "Soporte CSV de extracto descartado al eliminar la conciliación en BORRADOR "
+                            + "(permite re-subir el mismo documento). hash=" + a.getHashSha256());
+            n++;
+        }
+        return n;
+    }
+
     /** BNK-HU-063 E6: reporte de retención y backup. */
     public Map<String, Object> retentionReport() {
         Map<String, Object> r = new HashMap<>();

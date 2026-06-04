@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sigcon.backend.invoices.ap_payments.application.ApplyAdvanceRequest;
 import com.sigcon.backend.invoices.ap_payments.application.CreateApAdvanceRequest;
+import com.sigcon.backend.invoices.ap_payments.application.VoidApAdvanceRequest;
 import com.sigcon.backend.invoices.ap_payments.domain.service.ApAdvanceService;
 import com.sigcon.backend.utils.DataTableRequest;
 import com.sigcon.backend.utils.ErrorRespondJson;
@@ -106,5 +108,60 @@ public class ApAdvanceController {
             return ResponseEntity.badRequest()
                     .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
         }
+    }
+
+    /**
+     * AP-RF-05 E7: anula un anticipo (solo si esta en estado PENDIENTE).
+     * Reversa el asiento contable y libera los fondos.
+     */
+    @Operation(summary = "Anular anticipo", description = "Anula un anticipo PENDIENTE; reversa el asiento y libera fondos. Un anticipo aplicado debe revertirse primero sobre la factura")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Anticipo anulado"),
+            @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
+    })
+    @PostMapping("/{id}/void")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AP_ADVANCE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> voidAdvance(@PathVariable Long id,
+                                         @RequestBody(required = false) VoidApAdvanceRequest request) {
+        try {
+            return advanceService.voidAdvance(id, request != null ? request.getReason() : null);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * AP-RF-05 E7: revierte una aplicacion del anticipo sobre su factura destino,
+     * restaurando el saldo de la factura y la disponibilidad del anticipo.
+     */
+    @Operation(summary = "Revertir aplicacion de anticipo", description = "Revierte una aplicacion del anticipo, restaurando el saldo de la factura destino")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Aplicacion revertida"),
+            @ApiResponse(responseCode = "400", description = "Error de validacion o regla de negocio")
+    })
+    @PostMapping("/{id}/applications/{applicationId}/reverse")
+    @PreAuthorize("hasAuthority('PERM_CREATE_AP_ADVANCE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> reverseApplication(@PathVariable Long id,
+                                                @PathVariable Long applicationId,
+                                                @RequestBody(required = false) VoidApAdvanceRequest request) {
+        try {
+            return advanceService.reverseApplication(id, applicationId,
+                    request != null ? request.getReason() : null);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+        }
+    }
+
+    /**
+     * AP-RF-05 E6: lista las aplicaciones (a facturas) de un anticipo.
+     */
+    @Operation(summary = "Listar aplicaciones de anticipo", description = "Devuelve las aplicaciones del anticipo a facturas (para el detalle)")
+    @ApiResponses({ @ApiResponse(responseCode = "200", description = "Aplicaciones del anticipo") })
+    @GetMapping("/{id}/applications")
+    @PreAuthorize("hasAuthority('PERM_READ_AP_ADVANCE') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
+    public ResponseEntity<?> getApplications(@PathVariable Long id) {
+        return advanceService.getApplications(id);
     }
 }

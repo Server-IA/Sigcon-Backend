@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,7 +32,10 @@ public class CreateArAdvanceRequest {
     @NotNull(message = "La fecha del anticipo es obligatoria")
     private LocalDate advanceDate;
 
-    /** Referencia del anticipo. */
+    // QA CXC Bug 3 (2026-06-03 / IEEE AR-RF-09): la referencia admite maximo
+    // 100 caracteres.
+    /** Referencia del anticipo (opcional, maximo 100 caracteres). */
+    @Size(max = 100, message = "La referencia no puede superar los 100 caracteres")
     private String advanceReference;
 
     /** ID del movimiento bancario origen. */
@@ -43,6 +47,8 @@ public class CreateArAdvanceRequest {
     /** ID de la caja destino (si aplica). */
     private Long cashId;
 
-    /** Observaciones adicionales. */
+    // QA CXC Bug 3 (2026-06-03 / IEEE AR-RF-09): las notas admiten maximo 500.
+    /** Observaciones adicionales (opcional, maximo 500 caracteres). */
+    @Size(max = 500, message = "Las notas no pueden superar los 500 caracteres")
     private String notes;
 }

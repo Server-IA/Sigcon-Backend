@@ -397,22 +397,23 @@ public class CommercialDataService {
      * TER-12: Compara valores anteriores y nuevos para generar registros de historial.
      */
     /**
-     * PT-03 (TER-RF-11, 2026-06-02): valida el limite de credito y la moneda.
-     * El limite no es obligatorio (decision de negocio pendiente), pero si se
-     * informa debe ser mayor que cero; y cuando hay limite de credito la moneda
-     * es obligatoria.
+     * TER-RF-11/12 (doc QA v2, 2026-06-03 / Imagen 3): valida el limite de
+     * credito y la moneda. El limite de credito AHORA ES OBLIGATORIO, numerico
+     * y mayor que cero, tanto en creacion como en actualizacion. Cuando hay
+     * limite de credito la moneda es obligatoria. (Antes el limite era opcional;
+     * el doc v2 lo confirma como obligatorio.)
      */
     private void validateCreditLimitAndCurrency(CommercialDataRequest request) {
         BigDecimal limit = request.getLimitCredit();
-        if (limit != null) {
-            if (limit.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException(
-                        "El limite de credito debe ser mayor que cero");
-            }
-            if (request.getCurrencyId() == null) {
-                throw new IllegalArgumentException(
-                        "Debe seleccionar la moneda cuando registra un limite de credito");
-            }
+        if (limit == null) {
+            throw new IllegalArgumentException("Debe diligenciar el límite de crédito");
+        }
+        if (limit.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("El límite de crédito debe ser mayor que cero");
+        }
+        if (request.getCurrencyId() == null) {
+            throw new IllegalArgumentException(
+                    "Debe seleccionar la moneda cuando registra un limite de credito");
         }
     }
 

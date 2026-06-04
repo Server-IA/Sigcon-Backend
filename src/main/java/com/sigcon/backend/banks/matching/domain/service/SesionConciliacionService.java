@@ -50,6 +50,9 @@ public class SesionConciliacionService {
     private final EmparejamientoRepository emparejamientoRepo;
     private final EmparejamientoDetalleRepository emparejamientoDetalleRepo;
     private final FinancialMovementRepository movementRepo;
+    // QA BNK (2026-06-04): al eliminar un BORRADOR se descarta su soporte CSV conservado
+    // para permitir re-subir el mismo documento (caso 2 del reporte BNK).
+    private final com.sigcon.backend.banks.archivos_soporte.domain.service.ArchivoSoporteService archivoSoporteService;
     private final BankAccountRepository bankAccountRepo;
     private final AccountingPeriodRepository periodRepo;
     private final JournalEntryRepository journalRepo;
@@ -153,17 +156,42 @@ public class SesionConciliacionService {
             emp.setDeletedAt(LocalDateTime.now());
             emparejamientoRepo.save(emp);
         }
+        // QA BNK (2026-06-04) Caso 2: al eliminar el BORRADOR también se descarta el
+        // EXTRACTO importado de esa sesión (movimientos BANK_IMPORT) y su soporte CSV
+        // conservado, para poder VOLVER A SUBIR el mismo documento y rehacer la
+        // conciliación (el dedup BNK-CON-002 quedaría bloqueado de lo contrario).
+        // Solo aplica a BORRADOR: las sesiones cerradas no llegan aquí (se lanza
+        // excepción arriba), por lo que su conservación legal de 10 años queda intacta.
+        // FinancialMovement no tiene soft-delete y no hay FK de BD hacia esa tabla, así
+        // que el hard-delete del extracto abandonado es seguro. Solo se borra el lado
+        // EXTRACTO (BANK_IMPORT); los movimientos de libros (MANUAL) son contables y NO
+        // se tocan (solo se revierten a NO_CONCILIADO arriba).
+        int extractosDescartados = 0;
+        java.util.Set<String> hashesExtracto = new java.util.HashSet<>();
+        for (FinancialMovement bm : movementRepo
+                .findBySesionConciliacionIdOrderByMovementDateAscIdAsc(sesionId)) {
+            if (bm.getSourceType() == FinancialMovementSourceType.BANK_IMPORT) {
+                if (bm.getImportFileHash() != null) hashesExtracto.add(bm.getImportFileHash());
+                movementRepo.delete(bm);
+                extractosDescartados++;
+            }
+        }
+        int soportesDescartados = archivoSoporteService
+                .discardDraftCsvSoportes(s.getBankAccountId(), hashesExtracto);
         s.setDeletedAt(LocalDateTime.now());
         sesionRepo.save(s);
         auditPublisher.publish(AuditAction.DELETE, AuditModule.BNK, AuditSeverity.MEDIUM,
                 "SesionConciliacion", sesionId,
                 "Sesión de conciliación en BORRADOR eliminada (período "
                 + s.getPeriodStart() + " → " + s.getPeriodEnd() + "). Movimientos revertidos a NO_CONCILIADO: "
-                + movRevertidos, null, null, null);
+                + movRevertidos + ". Extracto importado descartado: " + extractosDescartados
+                + ". Soportes CSV descartados: " + soportesDescartados, null, null, null);
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("deleted", true);
         r.put("id", sesionId);
         r.put("movimientosRevertidos", movRevertidos);
+        r.put("extractosDescartados", extractosDescartados);
+        r.put("soportesDescartados", soportesDescartados);
         return r;
     }
 

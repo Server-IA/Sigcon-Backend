@@ -381,6 +381,18 @@ public class ParameterService {
             return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondJson(bindingResult));
         }
 
+        // BUG-PA (2026-06-03 / Imagen 1): los parametros son por-empresa
+        // (parameters.company_id NOT NULL, auto-inyectado en @PrePersist desde
+        // TenantContext). Si no hay empresa activa en el contexto (p.ej. un
+        // administrador de plataforma sin empresa), antes la restriccion NOT NULL
+        // estallaba y el error SQL crudo se exponia en la UI. Ahora devolvemos un
+        // mensaje funcional claro y nunca dejamos persistir sin empresa.
+        Long companyId = com.sigcon.backend.platform.tenant.TenantContext.getCompanyId();
+        if (companyId == null) {
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                "No hay una empresa activa en el contexto. Inicie sesión dentro de una empresa para gestionar parámetros.")));
+        }
+
         try {
             if (parameterRepository.existsByNameAndCategoryAndDeletedAtIsNull(request.getName(), request.getCategory())) {
                 return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of("El parámetro con el nombre " + request.getName() + " y categoría " + request.getCategory() + " ya existe")));
@@ -388,14 +400,20 @@ public class ParameterService {
 
             request.setId(null);
             request.setDeletedAt(null);
+            request.setCompanyId(companyId); // asegurar el tenant explicitamente
 
             Parameter saved = parameterRepository.save(request);
             auditPublisher.publishCreate(AuditModule.PA, "Parameter", request.getId(), "Parameter creado id=" + request.getId());
             return ResponseEntity.ok(
                 SuccessRespondJson.getSuccessRespondMessage(Optional.of("Parámetro creado correctamente"), Optional.of(saved)));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // No exponer el SQL crudo en la UI (doc QA criterio #4).
+            return ResponseEntity.badRequest().body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                "No fue posible crear el parámetro. Verifique la empresa activa e intente nuevamente.")));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(e.getMessage())));
+                    .body(ErrorRespondJson.getErrorRespondMessage(Optional.of(
+                        "No fue posible crear el parámetro. Intente nuevamente.")));
         }
     }
 

@@ -22,7 +22,12 @@ public class CommercialDataRequest {
     private Long thirdPartyId;
     @NotNull(message = "Debe diligenciar todos los campos obligatorios")
     private Long paymentTermId;
-    @Positive(message = "el limite de credito debe de ser un valor positivo")
+    // TER-RF-11/12 (doc QA v2, 2026-06-03 / Imagen 3): el limite de credito es
+    // OBLIGATORIO, numerico y mayor que cero. Antes solo tenia @Positive (que
+    // acepta null), por lo que un campo vacio convertido a null pasaba la
+    // validacion. Ahora @NotNull lo hace obligatorio en creacion y actualizacion.
+    @NotNull(message = "Debe diligenciar el límite de crédito")
+    @Positive(message = "El límite de crédito debe ser mayor que cero")
     private BigDecimal limitCredit;
     private RiskSegmentation riskLevel;
 

@@ -55,28 +55,53 @@ public class PayrollReportController {
                 .body(pdf);
     }
 
-    @Operation(summary = "Reporte PILA CSV del periodo (HU-NOM-06 E2)",
-            description = "Genera archivo CSV compatible con operadores PILA de seguridad social "
-                    + "(Decreto 1772/1994, Ley 100/1993). Incluye por empleado: NIT empresa, DOC "
-                    + "empleado, IBC, aportes empleado (4% salud + 4% pension) y empresa (8.5% + "
-                    + "12% + 2% SENA + 3% ICBF + 4% caja). Solo recibos APROBADOS o CERRADOS.")
+    @Operation(summary = "Reporte PILA del periodo en CSV / TXT plano / XLSX (HU-NOM-06 E2)",
+            description = "Genera el archivo PILA compatible con operadores de seguridad social "
+                    + "(Decreto 1772/1994, Ley 100/1993) en el formato indicado por el parametro "
+                    + "'format' (csv | txt | xlsx; por defecto csv). Incluye por empleado: NIT "
+                    + "empresa, DOC empleado, IBC, aportes empleado (4% salud + 4% pension) y "
+                    + "empresa (8.5% + 12% + 2% SENA + 3% ICBF + 4% caja). Solo recibos APROBADOS "
+                    + "o CERRADOS.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "CSV UTF-8 con header PILA")
+            @ApiResponse(responseCode = "200", description = "Archivo PILA en el formato solicitado")
     })
     @PreAuthorize("hasAuthority('PERM_NOM.PILA.GENERAR') or hasAnyAuthority('ROLE_ADMIN_EMPRESA','PLATFORM_ADMIN')")
-    @GetMapping(value = "/pila", produces = "text/csv")
+    @GetMapping(value = "/pila")
     public ResponseEntity<byte[]> pila(
             @Parameter(description = "Año del periodo", required = true, example = "2026")
             @RequestParam Integer year,
             @Parameter(description = "Mes del periodo (1-12)", required = true, example = "4")
-            @RequestParam Integer month) {
-        byte[] csv = service.generatePilaCsv(year, month);
+            @RequestParam Integer month,
+            @Parameter(description = "Formato de descarga: csv | txt | xlsx", example = "xlsx")
+            @RequestParam(required = false, defaultValue = "csv") String format) {
+        // NOM-5 (2026-06-04): PILA en CSV (default), TXT plano y XLSX (Excel).
+        String fmt = format == null ? "csv" : format.trim().toLowerCase();
+        byte[] body;
+        String mime;
+        String ext;
+        switch (fmt) {
+            case "txt":
+                body = service.generatePilaTxt(year, month);
+                mime = "text/plain; charset=utf-8";
+                ext = "txt";
+                break;
+            case "xlsx":
+                body = service.generatePilaXlsx(year, month);
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                ext = "xlsx";
+                break;
+            default:
+                body = service.generatePilaCsv(year, month);
+                mime = "text/csv; charset=utf-8";
+                ext = "csv";
+                break;
+        }
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("text/csv"))
+                .contentType(MediaType.parseMediaType(mime))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=pila-" + year + "-"
-                                + String.format("%02d", month) + ".csv")
-                .body(csv);
+                                + String.format("%02d", month) + "." + ext)
+                .body(body);
     }
 
     @Operation(summary = "Resumen contable del periodo (HU-NOM-06 E3)",

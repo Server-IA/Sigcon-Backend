@@ -6,6 +6,7 @@ import java.util.List;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,7 +24,10 @@ public class CreateSalesInvoiceLineRequest {
     @Schema(description = "ID del item/producto", example = "1")
     private Long itemId;
 
-    @Schema(description = "Descripcion del item", example = "Servicio de consultoria")
+    // QA CXC Bug 1 (2026-06-03 / IEEE AR-RF-01A): la descripcion de cada linea
+    // admite maximo 500 caracteres.
+    @Schema(description = "Descripcion del item (maximo 500 caracteres)", example = "Servicio de consultoria")
+    @Size(max = 500, message = "La descripcion de la linea no puede superar los 500 caracteres")
     private String description;
 
     @Schema(description = "Cantidad", example = "1.0")

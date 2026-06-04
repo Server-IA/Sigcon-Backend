@@ -20,6 +20,7 @@ import com.sigcon.backend.nomina.domain.repository.EmployeeRepository;
 import com.sigcon.backend.nomina.domain.repository.PayrollLineRepository;
 import com.sigcon.backend.nomina.domain.repository.PayrollReceiptRepository;
 import com.sigcon.backend.lists_accounting.cost_centers.domain.repository.CostCenterRepository;
+import com.sigcon.backend.utils.export.SimpleTableExporter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,12 +30,14 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -100,7 +103,9 @@ public class PayrollReportService {
             header.addCell(cell("Período: " + r.getPeriodYear() + "-"
                     + String.format("%02d", r.getPeriodMonth())));
             header.addCell(cell("Días trabajados: " + r.getDaysWorked()));
-            header.addCell(cell("Tipo periodo: " + r.getPeriodType()));
+            // NOM-4 (2026-06-04): el comprobante mostraba el enum crudo en ingles
+            // ("Tipo periodo: MONTHLY"). Se traduce al espaniol para el usuario final.
+            header.addCell(cell("Tipo periodo: " + periodTypeLabel(r.getPeriodType())));
             doc.add(header);
 
             // Devengados
@@ -215,6 +220,121 @@ public class PayrollReportService {
         return bytes;
     }
 
+    // NOM-5 (2026-06-04): PILA tambien en .txt (plano) y .xlsx (Excel) ademas
+    // del CSV. Los 3 formatos comparten los mismos registros (buildPilaRecords).
+    private static final List<String> PILA_HEADERS = List.of(
+            "NIT_EMPRESA", "DOC_EMPLEADO", "NOMBRE", "IBC",
+            "SALUD_EMP_4", "PENSION_EMP_4", "SALUD_EMPR_8_5", "PENSION_EMPR_12",
+            "SENA_2", "ICBF_3", "CAJA_4", "TOTAL_APORTES");
+
+    /** Columnas de monto (indice &ge; 3) -> celda numerica en XLSX. */
+    private static final int PILA_FIRST_AMOUNT_COL = 3;
+
+    /**
+     * Construye los registros PILA del periodo. Solo recibos APROBADOS o
+     * CERRADOS. Cada fila es un {@code String[]} con los montos como decimales
+     * planos ({@code toPlainString}).
+     */
+    private List<String[]> buildPilaRecords(Integer year, Integer month) {
+        List<PayrollReceipt> receipts = receiptRepository
+                .findByPeriodYearAndPeriodMonthAndDeletedAtIsNull(year, month).stream()
+                .filter(r -> "APPROVED".equals(r.getStatus()) || "CLOSED".equals(r.getStatus()))
+                .collect(Collectors.toList());
+
+        String companyNit = Optional.ofNullable(systemInfoService.getCompanyNit()).orElse("");
+        List<String[]> rows = new ArrayList<>();
+
+        for (PayrollReceipt r : receipts) {
+            Optional<Employee> empOpt = employeeRepository.findById(r.getEmployeeId());
+            if (empOpt.isEmpty()) continue;
+            Employee emp = empOpt.get();
+            BigDecimal ibc = r.getTotalEarnings();
+
+            BigDecimal salud4 = pct(ibc, "4.00");
+            BigDecimal pension4 = pct(ibc, "4.00");
+            BigDecimal salud85 = pct(ibc, "8.50");
+            BigDecimal pension12 = pct(ibc, "12.00");
+            BigDecimal sena2 = pct(ibc, "2.00");
+            BigDecimal icbf3 = pct(ibc, "3.00");
+            BigDecimal caja4 = pct(ibc, "4.00");
+            BigDecimal total = salud4.add(pension4).add(salud85).add(pension12)
+                    .add(sena2).add(icbf3).add(caja4);
+
+            rows.add(new String[]{
+                    companyNit,
+                    emp.getDocumentNumber(),
+                    escape(emp.getFullName()),
+                    ibc.toPlainString(),
+                    salud4.toPlainString(), pension4.toPlainString(),
+                    salud85.toPlainString(), pension12.toPlainString(),
+                    sena2.toPlainString(), icbf3.toPlainString(),
+                    caja4.toPlainString(), total.toPlainString()
+            });
+        }
+        return rows;
+    }
+
+    private void auditPila(Integer year, Integer month, String format, int count) {
+        auditPublisher.publish(AuditAction.EXPORT, AuditModule.NOM, AuditSeverity.LOW,
+                "PilaReport", null,
+                "Reporte PILA exportado (" + format + "): periodo=" + year + "-" + month
+                        + " recibos=" + count,
+                null, null, null);
+    }
+
+    /**
+     * NOM-5: PILA en archivo plano de texto (.txt). Registros delimitados por
+     * '|' (sin BOM), legible y parseable por operadores que consumen formato
+     * plano.
+     */
+    @Transactional(readOnly = true)
+    public byte[] generatePilaTxt(Integer year, Integer month) {
+        List<String[]> rows = buildPilaRecords(year, month);
+        StringBuilder txt = new StringBuilder();
+        txt.append(String.join("|", PILA_HEADERS)).append('\n');
+        for (String[] row : rows) {
+            String[] safe = new String[row.length];
+            for (int i = 0; i < row.length; i++) {
+                safe[i] = row[i] == null ? ""
+                        : row[i].replace('|', ' ').replace('\n', ' ').replace('\r', ' ');
+            }
+            txt.append(String.join("|", safe)).append('\n');
+        }
+        auditPila(year, month, "TXT", rows.size());
+        return txt.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * NOM-5: PILA en Excel (.xlsx) via Apache POI. Las columnas de monto (IBC y
+     * aportes) se escriben como celdas numericas reales (no texto) para que
+     * Excel permita operar sin la advertencia "numero almacenado como texto".
+     */
+    @Transactional(readOnly = true)
+    public byte[] generatePilaXlsx(Integer year, Integer month) {
+        List<String[]> rows = buildPilaRecords(year, month);
+        List<Function<String[], Object>> cols = new ArrayList<>();
+        for (int i = 0; i < PILA_HEADERS.size(); i++) {
+            final int idx = i;
+            if (idx >= PILA_FIRST_AMOUNT_COL) {
+                cols.add(row -> safeDouble(row[idx]));   // celda numerica
+            } else {
+                cols.add(row -> row[idx]);                // celda de texto
+            }
+        }
+        byte[] xlsx = SimpleTableExporter.toXlsx(
+                "PILA " + year + "-" + String.format("%02d", month),
+                PILA_HEADERS, cols, rows);
+        auditPila(year, month, "XLSX", rows.size());
+        return xlsx;
+    }
+
+    /** Convierte un decimal plano a Double para celda numerica; si falla, deja el texto. */
+    private static Object safeDouble(String v) {
+        if (v == null || v.isBlank()) return null;
+        try { return Double.parseDouble(v); }
+        catch (NumberFormatException e) { return v; }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // HU-NOM-06 E3: resumen contable por periodo (JSON)
     // ─────────────────────────────────────────────────────────────
@@ -299,5 +419,16 @@ public class PayrollReportService {
     private String escape(String s) {
         if (s == null) return "";
         return s.replace(";", ",");
+    }
+
+    /** NOM-4: traduce el enum de tipo de periodo al espaniol para el comprobante. */
+    private String periodTypeLabel(String periodType) {
+        if (periodType == null) return "-";
+        switch (periodType) {
+            case "MONTHLY":  return "Mensual";
+            case "BIWEEKLY": return "Quincenal";
+            case "WEEKLY":   return "Semanal";
+            default:          return periodType;
+        }
     }
 }
